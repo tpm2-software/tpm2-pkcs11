@@ -1,0 +1,70 @@
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# Debug files
+*.dSYM/
+*.su
+
+# Automake
+Makefile.in
+aclocal.m4
+autom4te.cache
+compile
+config.guess
+config.sub
+configure
+depcomp
+install-sh
+ltmain.sh
+missing
+Makefile
+config.log
+config.status
+libtool
+.deps
+.dirstamp
+.libs
+*.gz
+
+# Generated
+src_vars.mk
+AUTHORS
+*.pc
+
+# Test
+test-driver
+test-suite.log
+
+# Git
+*.orig
+*.diff
+*.patch
+
+nbproject/

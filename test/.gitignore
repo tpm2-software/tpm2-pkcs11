@@ -1,0 +1,5 @@
+# Test Artifacts
+*.trs
+*.log
+test_pkcs11
+test_twist

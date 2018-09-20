@@ -1,0 +1,6 @@
+Name: tpm2-pkcs11
+Description: TPM2 PKCS#11 library.
+URL: https://github.com/tpm2-software/<todo>
+Version: @VERSION@
+Cflags: -I@includedir@
+Libs: -ltss2-esys -L@libdir@

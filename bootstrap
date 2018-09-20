@@ -1,0 +1,29 @@
+#!/bin/sh
+set -e
+
+# generate list of source files for use in Makefile.am
+# if you add new source files, you must run ./bootstrap again
+src_listvar () {
+    basedir=$1
+    suffix=$2
+    var=$3
+
+    find "${basedir}" -maxdepth 1 -name "${suffix}" | LC_ALL=C sort | tr '\n' ' ' | (printf "${var} = " && cat)
+    echo ""
+}
+
+VARS_FILE=src_vars.mk
+AUTORECONF=${AUTORECONF:-autoreconf}
+
+echo "Generating file lists: ${VARS_FILE}"
+(
+  src_listvar "src" "*.c" "LIB_PKCS11_C"
+  src_listvar "src" "*.h" "LIB_PKCS11_H"
+  printf "LIB_PKCS11_SRC = \$(LIB_PKCS11_C) \$(LIB_PKCS11_H)\n"
+
+  src_listvar "src/lib" "*.c" "LIB_PKCS11_INTERNAL_LIB_C"
+  src_listvar "src/lib" "*.h" "LIB_PKCS11_INTERNAL_LIB_H"
+  printf "LIB_PKCS11_INTERNAL_LIB_SRC = \$(LIB_PKCS11_INTERNAL_LIB_C) \$(LIB_PKCS11_INTERNAL_LIB_H)\n"
+) > ${VARS_FILE}
+
+${AUTORECONF} --install --sym
