@@ -25,6 +25,7 @@ in known package managers are likely too old.
 1. [CMocka](https://cmocka.org/)
 2. [TPM2.0 Simulator v194](https://sourceforge.net/projects/ibmswtpm2/files/ibmtpm974.tar.gz/download): **Tested with version 974**
 3. [netstat](https://sourceforge.net/projects/net-tools/)
+4. [tpm2-abrmd](https://github.com/tpm2-software/tpm2-abrmd)
 
 ## Step 2 - Bootstrapping
 
