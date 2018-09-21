@@ -101,7 +101,7 @@ check_PROGRAMS += \
     test/integration/pkcs-login-logout.int \
     test/integration/pkcs-sign-verify.int
 
-TESTS_XFAIL=test/unit/test_pkcs11
+XFAIL_TESTS=test/unit/test_pkcs11
 
 INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=test/integration/scripts/create_pkcs_store.sh
 test_integration_pkcs_open_close_session_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
