@@ -56,7 +56,7 @@ that *are outside of normal autoconf/automake options*, which are documented [he
     ```sh
     export PATH="/home/wcrobert/workspace/tpm2-tools/tools:/home/wcrobert/workspace/tpm2-pkcs11/tools:$HOME/workspace/ibmtpm974/src:$PATH"
     ```
-    ** Normally ** only tpm2-tools, IBM TPM Simulator and tpm2-ptool need to be added to `PATH`. Most other things, like CMocka and netstat, are already
+    **Normally** only tpm2-tools, IBM TPM Simulator and tpm2-ptool need to be added to `PATH`. Most other things, like CMocka and netstat, are already
     installed and thus on `PATH`. Your results will very based on what you build from source and/or install in non-standard locations.
 3. `--disable-dlclose` - Works around a [dlclose(3)](https://linux.die.net/man/3/dlclose) issue as documented in this
     [commit](https://github.com/tpm2-software/tpm2-tools/commit/130582559d7c51d18e3ce82803c30bc161d9c34d).
