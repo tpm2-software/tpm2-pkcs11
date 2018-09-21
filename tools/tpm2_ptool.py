@@ -595,7 +595,7 @@ class InitCommand(Command):
             default="")
 
     def __call__(self, args):
-        path = args['path']
+        path = os.path.expanduser(args['path'])
         if not os.path.exists(path):
             os.mkdir(path)
         elif not os.path.isdir(path):
@@ -855,7 +855,7 @@ class AddKeyCommand(Command):
 
     def __call__(self, args):
 
-        path = args['path']
+        path = os.path.expanduser(args['path'])
 
         label = args['label']
 
