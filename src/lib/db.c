@@ -824,12 +824,14 @@ static char *db_get_path(void) {
     int rc;
     char *path;
 
+    const char *fmt = "%s/"DB_NAME;
     char *base_path = getenv(PKCS11_STORE_ENV_VAR);
     if (!base_path) {
+        fmt = ".tpm2_pkcs11/"DB_NAME;
         base_path = getenv("HOME");
     }
 
-    rc = asprintf(&path, "%s/"DB_NAME, base_path);
+    rc = asprintf(&path, fmt, base_path);
     UNUSED(rc);
 
     if (!path) {
