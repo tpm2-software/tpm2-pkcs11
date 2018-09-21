@@ -9,3 +9,6 @@ as the cryptographic token.
 
 * [Building](BUILDING.md) - How to get it to build
 * [Initializing](INITIALIZING.md) - How to configure it
+
+# Example Usages
+* [SSH](SSH.md) - How to configure and use it with SSH.
