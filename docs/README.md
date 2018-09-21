@@ -7,4 +7,5 @@ as the cryptographic token.
 
 # Navigation
 
-* [Building](BUILDING.md)
+* [Building](BUILDING.md) - How to get it to build
+* [Initializing](INITIALIZING.md) - How to configure it
