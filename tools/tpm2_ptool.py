@@ -333,7 +333,7 @@ class Db(object):
         placeholders = ', '.join('?' * len(token))
         sql = 'INSERT INTO tokens ({}) VALUES ({})'.format(columns, placeholders)
         c = self._conn.cursor()
-        c.execute(sql, token.values())
+        c.execute(sql, list(token.values()))
 
         return c.lastrowid
 
@@ -360,7 +360,7 @@ class Db(object):
         placeholders = ', '.join('?' * len(sealobjects))
         sql = 'INSERT INTO sealobjects ({}) VALUES ({})'.format(columns, placeholders)
         c = self._conn.cursor()
-        c.execute(sql, sealobjects.values())
+        c.execute(sql, list(sealobjects.values()))
 
         return c.lastrowid
 
@@ -381,7 +381,7 @@ class Db(object):
         placeholders = ', '.join('?' * len(pobject))
         sql = 'INSERT INTO pobjects ({}) VALUES ({})'.format(columns, placeholders)
         c = self._conn.cursor()
-        c.execute(sql, pobject.values())
+        c.execute(sql, list(pobject.values()))
 
         return c.lastrowid
 
@@ -398,7 +398,7 @@ class Db(object):
         placeholders = ', '.join('?' * len(sobject))
         sql = 'INSERT INTO sobjects ({}) VALUES ({})'.format(columns, placeholders)
         c = self._conn.cursor()
-        c.execute(sql, sobject.values())
+        c.execute(sql, list(sobject.values()))
         return  c.lastrowid
 
     def addwrapping(self, tokid, priv, pub):
@@ -413,7 +413,7 @@ class Db(object):
         placeholders = ', '.join('?' * len(wrapping))
         sql = 'INSERT INTO wrappingobjects ({}) VALUES ({})'.format(columns, placeholders)
         c = self._conn.cursor()
-        c.execute(sql, wrapping.values())
+        c.execute(sql, list(wrapping.values()))
         return  c.lastrowid
 
     def addtertiary(self, sid, priv, pub, objauth, attrs, mech):
@@ -430,7 +430,7 @@ class Db(object):
         placeholders = ', '.join('?' * len(sobject))
         sql = 'INSERT INTO tobjects ({}) VALUES ({})'.format(columns, placeholders)
         c = self._conn.cursor()
-        c.execute(sql, sobject.values())
+        c.execute(sql, list(sobject.values()))
         return  c.lastrowid
 
     def commit(self):
