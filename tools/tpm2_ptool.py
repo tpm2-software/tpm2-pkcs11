@@ -1161,7 +1161,7 @@ def main():
     commandlets = commandlet.get()
 
     # for each commandlet, instantiate and set up their options
-    for n, c in commandlets.iteritems():
+    for n, c in commandlets.items():
         p = subparser.add_parser(n, help=c.__doc__)
         p.set_defaults(which=n)
         # Instantiate
