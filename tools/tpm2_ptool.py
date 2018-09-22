@@ -92,9 +92,9 @@ class AESCipher:
 
         ciphertext = encryptor.update(plaintext) + encryptor.finalize()
 
-        iv = binascii.hexlify(iv)
-        ciphertext = binascii.hexlify(ciphertext)
-        tag = binascii.hexlify(encryptor.tag)
+        iv = binascii.hexlify(iv).decode()
+        ciphertext = binascii.hexlify(ciphertext).decode()
+        tag = binascii.hexlify(encryptor.tag).decode()
         return ':'.join((iv, tag, ciphertext))
 
     def decrypt(self, ciphertext):
@@ -122,7 +122,7 @@ class Tpm2(object):
     def createprimary(self, ownerauth, objauth):
         ctx = os.path.join(self._tmp, "context.out")
         cmd = ['tpm2_createprimary',
-                    '-p', 'hex:%s' % objauth,
+                    '-p', 'hex:%s' % objauth.decode(),
                     '-o', ctx]
 
         if ownerauth and len(ownerauth) > 0:
@@ -156,7 +156,7 @@ class Tpm2(object):
         ctx = os.path.join(self._tmp, uuid.uuid4().hex + '.out')
 
         #tpm2_load -C $file_primary_key_ctx  -u $file_load_key_pub  -r $file_load_key_priv -n $file_load_key_name -o $file_load_key_ctx
-        cmd = ['tpm2_load', '-C', str(pctx), '-P', 'hex:' + pauth,'-u', pub, '-r', priv, '-n', '/dev/null', '-o', ctx]
+        cmd = ['tpm2_load', '-C', str(pctx), '-P', 'hex:' + pauth.decode(),'-u', pub, '-r', priv, '-n', '/dev/null', '-o', ctx]
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         stdout, stderr = p.communicate()
         rc = p.wait()
@@ -167,7 +167,7 @@ class Tpm2(object):
     def unseal(self, ctx, auth):
 
         # tpm2_unseal -Q -c $file_unseal_key_ctx
-        cmd = ['tpm2_unseal', '-c', ctx, '-p', 'hex:'+auth]
+        cmd = ['tpm2_unseal', '-c', ctx, '-p', 'hex:'+auth.decode()]
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         stdout, stderr = p.communicate()
         rc = p.wait()
@@ -177,7 +177,7 @@ class Tpm2(object):
 
     def _encryptdecrypt(self, ctx, auth, data, decrypt=False):
 
-        cmd = ['tpm2_encryptdecrypt', '-c', ctx, '-p', 'hex:' + auth]
+        cmd = ['tpm2_encryptdecrypt', '-c', ctx, '-p', 'hex:' + auth.decode()]
 
         if decrypt:
             cmd.extend(['-D'])
@@ -209,10 +209,10 @@ class Tpm2(object):
         cmd = ['tpm2_create', '-C', str(phandle), '-u', pub, '-r', priv]
 
         if pauth and len(pauth) > 0:
-            cmd.extend(['-P', 'hex:%s' % pauth])
+            cmd.extend(['-P', 'hex:%s' % pauth.decode()])
 
         if objauth and len(objauth) > 0:
-            cmd.extend(['-p', 'hex:%s' % objauth])
+            cmd.extend(['-p', 'hex:%s' % objauth.decode()])
 
         if objattrs != None:
             cmd.extend(['-A', objattrs])
@@ -615,7 +615,7 @@ class InitCommand(Command):
                 try:
                     tpm2 = Tpm2(d, path)
 
-                    pobjkey = hash_pass(pobjpin)
+                    pobjkey = hash_pass(pobjpin.encode())
                     pobjauthhash = hash_pass(rand_str(32))
 
                     ctx = tpm2.createprimary(ownerauth, pobjauthhash['hash'])
@@ -760,7 +760,7 @@ class AddTokenCommand(Command):
 
             iters = pobject['pobjauthiters']
             salt = binascii.unhexlify(pobject['pobjauthsalt'])
-            pobjkey = hash_pass(pobjpin, salt=salt, iters=iters)
+            pobjkey = hash_pass(pobjpin.encode(), salt=salt, iters=iters)
 
             c = AESCipher(pobjkey['rhash'])
             pobjauthhash = c.decrypt(pobject['pobjauth'])
@@ -773,8 +773,8 @@ class AddTokenCommand(Command):
                 wrappingobjauth = hash_pass(os.urandom(32))
 
                 # We generate one auth for the sosealobj and the usersealobj
-                sosealauth = hash_pass(sopin)
-                usersealauth = hash_pass(userpin)
+                sosealauth = hash_pass(sopin.encode())
+                usersealauth = hash_pass(userpin.encode())
 
                 # Now we generate the two seal objects, using the sealauths as their
                 # auth values and sealing the wrappingobjauth value to it.
@@ -790,8 +790,8 @@ class AddTokenCommand(Command):
 
                 # Now we need to protect the primaryobject auth in a way where SO and USER can access the value.
                 # When a "pkcs11" admin generates a token, they give the auth value to SO and USER.
-                sopobjkey = hash_pass(sopin)
-                userpobjkey = hash_pass(userpin)
+                sopobjkey = hash_pass(sopin.encode())
+                userpobjkey = hash_pass(userpin.encode())
 
                 sopobjauth = AESCipher(sopobjkey['rhash']).encrypt(pobjauthhash)
 
@@ -887,7 +887,7 @@ class AddKeyCommand(Command):
                     pinpobjauth = token['userpobjauth']
 
                 pinpobjauthkeysalt = binascii.unhexlify(pinpobjauthkeysalt)
-                pinpobjauthkey = hash_pass(pin, iters=pinpobjauthkeyiters, salt=pinpobjauthkeysalt)
+                pinpobjauthkey = hash_pass(pin.encode(), iters=pinpobjauthkeyiters, salt=pinpobjauthkeysalt)
 
                 pinpobjauth = AESCipher(pinpobjauthkey['rhash']).decrypt(pinpobjauth)
 
@@ -907,7 +907,7 @@ class AddKeyCommand(Command):
                     iters = sealobject['userauthiters']
 
                 salt = binascii.unhexlify(salt)
-                sealauth = hash_pass(pin, iters, salt)['hash']
+                sealauth = hash_pass(pin.encode(), iters, salt)['hash']
 
                 # Load the so sealobject using the PARENTS AUTH (primaryobject)
                 sealctx = tpm2.load(pobj['handle'], pinpobjauth, sealpriv, sealpub)
@@ -1078,7 +1078,7 @@ class VerifyCommand(Command):
                 sopobjauthkeysalt = token['sopobjauthkeysalt']
                 sopobjauthkeysalt = binascii.unhexlify(sopobjauthkeysalt)
 
-                sopobjauthkey = hash_pass(sopin, salt=sopobjauthkeysalt, iters=sopobjauthkeyiters)
+                sopobjauthkey = hash_pass(sopin.encode(), salt=sopobjauthkeysalt, iters=sopobjauthkeyiters)
 
                 sopobjauth = AESCipher(sopobjauthkey['rhash']).decrypt(token['sopobjauth'])
 
@@ -1090,7 +1090,7 @@ class VerifyCommand(Command):
                 sosealauthsalt = sealobj['soauthsalt']
                 sosealauthsalt = binascii.unhexlify(sosealauthsalt)
 
-                sosealauth = hash_pass(sopin, salt=sosealauthsalt, iters=sosealauthiters)
+                sosealauth = hash_pass(sopin.encode(), salt=sosealauthsalt, iters=sosealauthiters)
 
                 wrappingkeyauth = tpm2.unseal(sosealctx, sosealauth['hash'])
                 pobjauth = sopobjauth
@@ -1104,7 +1104,7 @@ class VerifyCommand(Command):
                 userpobjauthkeysalt = token['userpobjauthkeysalt']
                 userpobjauthkeysalt = binascii.unhexlify(userpobjauthkeysalt)
 
-                userpobjauthkey = hash_pass(userpin, salt=userpobjauthkeysalt, iters=userpobjauthkeyiters)
+                userpobjauthkey = hash_pass(userpin.encode(), salt=userpobjauthkeysalt, iters=userpobjauthkeyiters)
 
                 userpobjauth = AESCipher(userpobjauthkey['rhash']).decrypt(token['userpobjauth'])
 
@@ -1116,7 +1116,7 @@ class VerifyCommand(Command):
                 usersealauthsalt = sealobj['userauthsalt']
                 usersealauthsalt = binascii.unhexlify(usersealauthsalt)
 
-                usersealauth = hash_pass(userpin, salt=usersealauthsalt, iters=usersealauthiters)
+                usersealauth = hash_pass(userpin.encode(), salt=usersealauthsalt, iters=usersealauthiters)
 
                 wrappingkeyauth = tpm2.unseal(usersealctx, usersealauth['hash'])
                 pobjauth = userpobjauth
