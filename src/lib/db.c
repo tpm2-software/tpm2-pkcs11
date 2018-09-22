@@ -175,7 +175,7 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
     /* base10 encoded big integers */
     case CKA_PUBLIC_EXPONENT: {
 
-        BIGNUM *bn;
+        BIGNUM *bn = NULL;
         rc = BN_dec2bn(&bn, value);
         if (!rc) {
             LOGE("Could not convert key \"%s\" value \"%s\" to big integer",
@@ -188,7 +188,7 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
     /* base16 encoded big integers */
     case CKA_MODULUS: {
 
-        BIGNUM *bn;
+        BIGNUM *bn = NULL;
         rc = BN_hex2bn(&bn, value);
         if (!rc) {
             LOGE("Could not convert key \"%s\" value \"%s\" to big integer",
