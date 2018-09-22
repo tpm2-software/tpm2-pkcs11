@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
+
 import argparse
 import binascii
 import copy
@@ -624,7 +626,7 @@ class InitCommand(Command):
 
                     pid = db.addprimary(handle, pobjauth, pobjkey['salt'], pobjkey['iters'])
 
-                    print "Created a primary object of id: %d" % pid
+                    print("Created a primary object of id: %d" % pid)
 
                 except Exception as e:
                     if handle != None:
@@ -821,7 +823,7 @@ class AddTokenCommand(Command):
 
                 db.commit()
 
-        print "Created token: %s" % label
+        print("Created token: %s" % label)
 
 @commandlet("addkey")
 class AddKeyCommand(Command):
@@ -989,7 +991,7 @@ class AddKeyCommand(Command):
 
                 db.commit()
 
-                print "Added key: %d" % (tokid)
+                print("Added key: %d" % (tokid))
 
 @commandlet("rmtoken")
 class RmTokenCommand(Command):
@@ -1056,7 +1058,7 @@ class VerifyCommand(Command):
         userpin = args['userpin']
         path = args['path']
 
-        print 'Verifying label: "%s"' % label
+        print('Verifying label: "%s"' % label)
 
         pobj = db.getprimary(token['pid'])
         sealobj = db.getsealobject(token['id'])
@@ -1093,7 +1095,7 @@ class VerifyCommand(Command):
                 wrappingkeyauth = tpm2.unseal(sosealctx, sosealauth['hash'])
                 pobjauth = sopobjauth
 
-                print "SO pin valid!"
+                print("SO pin valid!")
 
             if userpin != None:
                 # load the seal object under the primary object using the AES/GCM software protected
@@ -1119,7 +1121,7 @@ class VerifyCommand(Command):
                 wrappingkeyauth = tpm2.unseal(usersealctx, usersealauth['hash'])
                 pobjauth = userpobjauth
 
-                print "USER pin valid!"
+                print("USER pin valid!")
 
 
             wrappingkeyctx = tpm2.load(pobj['handle'], pobjauth, wrappingkey['priv'], wrappingkey['pub'])
@@ -1131,7 +1133,7 @@ class VerifyCommand(Command):
             sobjauth = binascii.unhexlify(sobj['objauth'])
             sobjauth = tpm2.decrypt(wrappingkeyctx, wrappingkeyauth, sobjauth)
 
-            print "Secondary object verified(%d), auth: %s" % (sobj['id'], sobjauth)
+            print("Secondary object verified(%d), auth: %s" % (sobj['id'], sobjauth))
 
             tobjs = db.gettertiary(token['id'])
 
@@ -1139,7 +1141,7 @@ class VerifyCommand(Command):
                 tobjctx = tpm2.load(sobjctx, sobjauth, tobj['priv'], tobj['pub'])
                 tobjauth = binascii.unhexlify(tobj['objauth'])
                 tobjauth = tpm2._encryptdecrypt(wrappingkeyctx, wrappingkeyauth, tobjauth, decrypt=True)
-                print "Tertiary object verified(%d), auth: %s" % (tobj['id'], tobjauth)
+                print("Tertiary object verified(%d), auth: %s" % (tobj['id'], tobjauth))
 
     def __call__(self, args):
         if args['userpin'] == None and args['sopin'] == None:
