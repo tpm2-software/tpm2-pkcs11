@@ -172,7 +172,7 @@ class Tpm2(object):
         stdout, stderr = p.communicate()
         rc = p.wait()
         if rc:
-            raise RuntimeError("Could not execute tpm2_load: %s", stderr)
+            raise RuntimeError("Could not execute tpm2_unseal: %s", stderr)
         return stdout
 
     def _encryptdecrypt(self, ctx, auth, data, decrypt=False):
@@ -186,7 +186,7 @@ class Tpm2(object):
         stdout, stderr = p.communicate(input=data)
         rc = p.wait()
         if rc:
-            raise RuntimeError("Could not execute tpm2_load: %s", stderr)
+            raise RuntimeError("Could not execute tpm2_encryptdecrypt: %s", stderr)
         return stdout
 
     def encrypt(self, ctx, auth, data):
