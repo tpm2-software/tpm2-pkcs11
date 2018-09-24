@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 
+echo "SETUP SCRIPT - DBUS_SESSION_BUS_ADDRESS: $DBUS_SESSION_BUS_ADDRESS"
+echo "SETUP SCRIPT - TPM2TOOLS_TCTI: $TPM2TOOLS_TCTI"
+
+echo "---- DBUS SERVICE LISTING ----"
+dbus-send --session --dest=org.freedesktop.DBus --type=method_call --print-reply /org/freedesktop/DBus org.freedesktop.DBus.ListNames
+echo "---- END ----"
+
 usage_error ()
 {
     echo "$0: $*" >&1
