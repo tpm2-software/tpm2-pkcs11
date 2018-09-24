@@ -1,0 +1,9 @@
+sudo: required
+language: c
+services:
+- docker
+compiler:
+- gcc
+- clang
+script:
+  - ./.ci/travis.run
