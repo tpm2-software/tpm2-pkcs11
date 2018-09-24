@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+echo "DBUS_SESSION_BUS_ADDRESS: $DBUS_SESSION_BUS_ADDRESS"
+
 # Set the pkcs11 store
 mkdir $HOME/tmp 2>/dev/null
 export TPM2_PKCS11_STORE=$HOME/tmp
