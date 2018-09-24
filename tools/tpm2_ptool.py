@@ -786,7 +786,7 @@ class AddTokenCommand(Command):
                                                     sosealauth['hash'], seal=wrappingobjauth['hash'])
 
                 # Now we create the wrappingbject, with algorithm aes256
-                wrappingobjpriv, wrappingobjpub, wrappingobjpubdata = tpm2.create(pobject['handle'], pobjauthhash, wrappingobjauth['hash'], alg='aes256cfb')
+                wrappingobjpriv, wrappingobjpub, wrappingobjpubdata = tpm2.create(pobject['handle'], pobjauthhash, wrappingobjauth['hash'], alg='aes128cfb')
 
                 # Now we need to protect the primaryobject auth in a way where SO and USER can access the value.
                 # When a "pkcs11" admin generates a token, they give the auth value to SO and USER.
@@ -807,7 +807,7 @@ class AddTokenCommand(Command):
                 encsobjauth = binascii.hexlify(encsobjauth)
 
                 objattrs="restricted|decrypt|fixedtpm|fixedparent|sensitivedataorigin|userwithauth"
-                sobjpriv, sobjpub, sobjpubdata = tpm2.create(pobject['handle'], pobjauthhash, sobjauth, objattrs=objattrs, alg='aes256')
+                sobjpriv, sobjpub, sobjpubdata = tpm2.create(pobject['handle'], pobjauthhash, sobjauth, objattrs=objattrs, alg='aes128')
 
                 # If this succeeds, we update the token table
                 tokid = db.addtoken(pobject['id'], label, sopobjkey, sopobjauth, userpobjkey, userpobjauth)
