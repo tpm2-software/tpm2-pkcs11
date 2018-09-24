@@ -198,7 +198,7 @@ class Tpm2(object):
     def _move(self, path):
         b = os.path.basename(path)
         n = os.path.join(self._final, b)
-        os.rename(path, n)
+        shutil.move(path, n)
         return n
 
     def create(self, phandle, pauth, objauth, objattrs=None, seal=None, alg=None):
