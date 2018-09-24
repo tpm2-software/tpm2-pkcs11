@@ -41,12 +41,8 @@ AM_LDFLAGS      = $(EXTRA_LDFLAGS) $(CODE_COVERAGE_LIBS) $(TSS2_SYS_LIBS) \
 include src_vars.mk
 
 EXTRA_DIST = \
-    CHANGELOG.md \
-    CONTRIBUTING.md \
-    INSTALL.md \
     LICENSE \
-    README.md \
-    RELEASE.md
+    docs
 
 # Generate the AUTHORS file from git log
 AUTHORS :
@@ -70,7 +66,7 @@ CLEANFILES += $(nodist_pkgconfig_DATA)
 libtpm2_pkcs11 = src/libtpm2_pkcs11.la
 lib_LTLIBRARIES = $(libtpm2_pkcs11)
 nodist_pkgconfig_DATA += lib/tpm2-pkcs11.pc
-EXTRA_DIST += lib/pkcs11.map lib/tpm2-pkcs11.pc.in
+EXTRA_DIST += lib/tpm2-pkcs11.map lib/tpm2-pkcs11.pc.in
 
 if HAVE_LD_VERSION_SCRIPT
 src_libtpm2_pkcs11_la_LDFLAGS = -Wl,--version-script=$(srcdir)/lib/tpm2-pkcs11.map
