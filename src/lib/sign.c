@@ -193,7 +193,10 @@ CK_RV sign_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigned 
     }
 
     tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
-    if (opdata->do_hash) {
+    /*
+     * Double checking of opdata to silence scan-build
+     */
+    if (opdata && opdata->do_hash) {
 
         // TODO dynamically get hash buffer size based on alg;
         hash_len = utils_get_halg_size(opdata->mtype);
