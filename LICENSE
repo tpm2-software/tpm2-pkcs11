@@ -1,9 +1,11 @@
 With the exception of some files:
-- src/pkcs11.h
+- src/pkcs11.h 
 - src/lib/pkcs11t.h
 - m4/ld-version-script.m4
 
-all other files are licensed as follows:
+Those files respect the license as documented in the respective file.
+
+All other files are licensed under BSD-2 clause as follows:
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -27,8 +29,11 @@ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
 THE POSSIBILITY OF SUCH DAMAGE.
 
-The Files:
-- twist.c, twist.h and and test_twist all eminent from:
-    - https://bitbucket.org/billcroberts/twist/src/master/
+Note that
+- lib/twist.c
+- lib/twist.h
+- test/unit/test_twist
+
+all eminent from https://bitbucket.org/billcroberts/twist/src/master/
 Those files, the copyright is retained by William Roberts however
-the source is relicensed from Apache 2.0 or BSD3.
+the source is relicensed from Apache 2.0, to BSD2 by the author.
