@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: BSD-2 */
 /***********************************************************************
  * Copyright (c) 2018, Intel Corporation
  *
