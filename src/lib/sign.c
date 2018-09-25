@@ -264,7 +264,7 @@ session_out:
 
     free(hash);
 
-    if (!opdata->do_hash) {
+    if (opdata && !opdata->do_hash) {
         twist_free(opdata->buffer);
     }
     session_ctx_opdata_set(ctx, operation_sign, NULL);
