@@ -27,7 +27,6 @@ from cryptography.hazmat.primitives.ciphers import (
     Cipher, algorithms, modes
 )
 from subprocess import Popen, PIPE
-from werkzeug.exceptions import SecurityError
 
 DEFAULT_STORE_PATH = os.path.join(os.environ.get("HOME"), ".tpm2_pkcs11") if os.environ.get("HOME") else os.get_cwd()
 
