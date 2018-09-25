@@ -38,7 +38,6 @@ void tobject_free(tobject *tobj) {
 
     free(tobj->atributes.attrs);
 
-    i = 0;
     for (i=0; i < tobj->mechanisms.count; i++) {
         CK_MECHANISM_PTR m = &tobj->mechanisms.mech[i];
         if (m->pParameter) {
