@@ -961,7 +961,9 @@ static bool encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_MEC
 
     *data_out = twistbin_new(tpm_data_out.buffer, tpm_data_out.size);
     if (!*data_out) {
-        twist_free(*iv_out);
+        if (iv_out) {
+            twist_free(*iv_out);
+        }
         return false;
     }
 
