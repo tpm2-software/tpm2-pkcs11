@@ -280,7 +280,7 @@ out:
 
 CK_RV tpm_stirrandom(tpm_ctx *ctx, unsigned char *seed, unsigned long seed_len) {
 
-    TSS2_RC rc;
+    TSS2_RC rc = TSS2_TCTI_RC_GENERAL_FAILURE;;
 
     lock_tcti();
 
