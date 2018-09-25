@@ -167,6 +167,12 @@ in
         TABRMD_NAME="com.intel.tss2.Tabrmd${SIM_PORT_DATA}"
         TABRMD_OPTS="${TABRMD_OPTS} --dbus-name=${TABRMD_NAME}"
         TABRMD_OPTS="${TABRMD_OPTS} --tcti=${TABRMD_TCTI}:port=${SIM_PORT_DATA}"
+
+		# if the user is root, the daemon won't start without --allow-root option
+        if [ $UID -eq 0 ]; then
+            TABRMD_OPTS="--allow-root ${TABRMD_OPTS}"
+        fi
+
         TABRMD_TEST_TCTI_CONF="${TABRMD_TEST_TCTI_CONF},bus_name=${TABRMD_NAME}"
         ;;
     "device")
