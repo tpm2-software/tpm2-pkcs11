@@ -450,10 +450,22 @@ int init_tobjects(unsigned sid, tobject **head) {
         if (!*head) {
             *head = t;
             cur = &t->l;
-        } else {
-            cur->next = &t->l;
-            cur = cur->next;
+            continue;
         }
+
+        /*
+         * This check as been added to silence a false positive from scan-build:
+         * ../src/lib/db.c:454:23: warning: Access to field 'next' results in a dereference of a null pointer (loaded from variable 'cur')
+         *   cur->next = &t->l;
+         *   ~~~       ^
+         */
+        if (!cur) {
+            LOGE("Linked list not initialized properly");
+            goto error;
+        }
+
+        cur->next = &t->l;
+        cur = cur->next;
     }
 
     rc = SQLITE_OK;
