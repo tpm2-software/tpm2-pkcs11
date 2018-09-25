@@ -196,17 +196,15 @@ CK_RV sign_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigned 
     if (opdata->do_hash) {
 
         // TODO dynamically get hash buffer size based on alg;
-        const size_t size = utils_get_halg_size(opdata->mtype);
+        hash_len = utils_get_halg_size(opdata->mtype);
 
-        CK_BYTE_PTR h = malloc(size);
-        if (!h) {
+        hash = malloc(hash_len);
+        if (!hash) {
             LOGE("oom");
             rv = CKR_HOST_MEMORY;
             goto session_out;
         }
 
-        hash_len = size;
-        hash = h;
         rv = tpm_hash_final(tpm, opdata->sequence_handle, hash, &hash_len);
         if (rv != CKR_OK) {
             goto session_out;
@@ -228,10 +226,10 @@ CK_RV sign_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigned 
             goto session_out;
         }
 
-        unsigned long keysize = a->ulValueLen;
+        hash_len = a->ulValueLen;
 
-        CK_BYTE *h = malloc(keysize);
-        if (!h) {
+        hash = malloc(hash_len);
+        if (!hash_len) {
             LOGE("oom");
             rv = CKR_HOST_MEMORY;
             goto session_out;
@@ -239,16 +237,12 @@ CK_RV sign_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigned 
 
         /* Apply the PKCS1.5 padding */
         unsigned int len = twist_len(opdata->buffer);
-        int rc = RSA_padding_add_PKCS1_type_1(h, keysize,
+        int rc = RSA_padding_add_PKCS1_type_1(hash, hash_len,
                 (unsigned char *)opdata->buffer, len);
         if (!rc) {
             LOGE("Applying RSA padding failed");
             goto session_out;
         }
-
-        /* assign it to the data to be signed */
-        hash_len = keysize;
-        hash = h;
 
         rv = tpm_rsa_decrypt(tpm, opdata->tobj, opdata->mtype, hash, hash_len, signature, signature_len);
         if (rv != CKR_OK) {
@@ -264,6 +258,9 @@ CK_RV sign_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigned 
     rv = CKR_OK;
 
 session_out:
+
+    free(hash);
+
     if (!opdata->do_hash) {
         twist_free(opdata->buffer);
     }
