@@ -39,7 +39,7 @@ twist aes256_gcm_decrypt(const twist key, const twist objauth) {
 
     char *tag = strchr(objcopy, ':');
     if (!tag) {
-        LOGE("Could not find :");
+        LOGE("Could not find : to split tag");
         goto out;
     }
     *tag = '\0';
@@ -47,7 +47,7 @@ twist aes256_gcm_decrypt(const twist key, const twist objauth) {
 
     char *ctext = strchr(tag, ':');
     if (!ctext) {
-        LOGE("Could not find :");
+        LOGE("Could not find : to split ctext");
         goto out;
     }
     *ctext = '\0';
