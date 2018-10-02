@@ -106,7 +106,6 @@ test_integration_pkcs_open_close_session_int_LDADD   = $(TESTS_LDADD)
 test_integration_pkcs_open_close_session_int_SOURCES = test/integration/pkcs-open-close-session.int.c \
     test/integration/main-test.c test/integration/test.h
 
-#INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=test/integration/scripts/create_pkcs_store.sh
 test_integration_pkcs_find_objects_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_find_objects_int_LDADD   = $(TESTS_LDADD)
 test_integration_pkcs_find_objects_int_SOURCES = test/integration/pkcs-find-objects.int.c \

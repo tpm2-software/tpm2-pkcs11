@@ -31,6 +31,28 @@ static struct {
     sqlite3 *db;
 } global;
 
+static int str_to_bool(const char *val, bool *res) {
+
+    if (!strcasecmp(val, "yes")
+     || !strcasecmp(val, "true")
+     || !strcasecmp(val, "1")
+     || !strcasecmp(val, "y")) {
+        *res = true;
+        return 0;
+    }
+
+    if (!strcasecmp(val, "no")
+     || !strcasecmp(val, "false")
+     || !strcasecmp(val, "0")
+     || !strcasecmp(val, "n")) {
+        *res = false;
+        return 0;
+    }
+
+    LOGE("Could not convert \"%s\" to bool.", val);
+    return 1;
+}
+
 static int str_to_ul(const char *val, size_t *res) {
 
     errno=0;
@@ -275,6 +297,21 @@ static bool parse_mech(const char *key, const char *value, size_t index, void *u
     }
 
     return true;
+}
+
+static bool parse_token_config(const char *key, const char *value, size_t index, void *userdata) {
+
+    UNUSED(index);
+
+    token *t = (token *)userdata;
+
+    if(!strcmp(key, "sym-support")) {
+        return !str_to_bool(value, &t->config.sym_support);
+    } else {
+        LOGE("Unknown token config key: \"%s\"", key);
+    }
+
+    return false;
 }
 
 CK_RV parse_generic_kvp_line(const char *kvplines,
@@ -775,6 +812,18 @@ CK_RV db_get_tokens(token **t, size_t *len) {
                 t->sopobjauth = twist_new((char *)sqlite3_column_text(stmt, i));
                 goto_oom(t->sopobjauth, error);
 
+            } else if (!strcmp(name, "config")) {
+                const char *config = (const char *)sqlite3_column_text(stmt, i);
+                CK_RV rv = parse_generic_kvp_line(config, t, NULL,
+                        parse_token_config);
+                if (rv != CKR_OK) {
+                    if (rv == CKR_HOST_MEMORY) {
+                        goto_oom(NULL, error);
+                    }
+                    LOGE("Could not parse token config, got: \"%s\"", config);
+                    goto error;
+                }
+
             } else {
                 LOGE("Unknown key: %s", name);
                 goto error;
@@ -786,9 +835,19 @@ CK_RV db_get_tokens(token **t, size_t *len) {
             goto error;
         }
 
-        rc = init_wrappingobject(t->id, &t->wrappingobject);
-        if (rc != SQLITE_OK) {
-            goto error;
+        /*
+         * If we're using the TPM to wrap objects, get the wrapping objet
+         * details.
+         *
+         * Note: the other case of SW, where the wrapping object auth value
+         * is the key, the assignment occurs later when the key is unsealed
+         * via login.
+         */
+        if (t->config.sym_support) {
+            rc = init_wrappingobject(t->id, &t->wrappingobject);
+            if (rc != SQLITE_OK) {
+                goto error;
+            }
         }
 
         rc = init_sealobjects(t->id, &t->sealobject);
@@ -820,8 +879,8 @@ error:
 
 }
 
-
 CK_RV db_init(void) {
+
     return db_new(&global.db);
 }
 

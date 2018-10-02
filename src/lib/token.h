@@ -35,6 +35,11 @@ struct token {
     sobject sobject;
 
     tobject *tobjects;
+
+    struct {
+        bool sym_support; /* use TPM for unwrapping if true else use software */
+    } config;
+
 };
 
 void token_free(token *t);
