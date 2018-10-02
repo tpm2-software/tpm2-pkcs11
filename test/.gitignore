@@ -1,5 +1,6 @@
 # Test Artifacts
 *.trs
 *.log
+*.pid
 test_pkcs11
 test_twist
