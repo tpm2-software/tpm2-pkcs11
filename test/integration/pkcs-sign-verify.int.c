@@ -196,7 +196,12 @@ int test_invoke() {
 
     CK_SESSION_HANDLE handle;
 
-    rv = C_OpenSession(slots[0], CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL,
+    if (count < 2) {
+        LOGE("Slot count is not 2, expected 2 slots");
+        exit(1);
+    }
+
+    rv = C_OpenSession(slots[1], CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL,
             NULL, &handle);
     if (rv == CKR_OK)
         LOGV("C_OpenSession was successful");

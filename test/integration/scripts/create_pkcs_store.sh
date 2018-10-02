@@ -57,20 +57,22 @@ tpm2_ptool.py init --pobj-pin=mypobjpin --path=$TPM2_PKCS11_STORE
 
 # add 2 tokens
 tpm2_ptool.py addtoken --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=myuserpin --label=label --path $TPM2_PKCS11_STORE
-tpm2_ptool.py addtoken --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=myuserpin --label=label1 --path $TPM2_PKCS11_STORE
+tpm2_ptool.py addtoken --wrap=software --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=myuserpin --label=wrap-sw --path $TPM2_PKCS11_STORE
 
 # add 2 aes keys under token 1
-echo "Adding 2 AES 256 keys"
-for i in `seq 0 1`; do
-  tpm2_ptool.py addkey --algorithm=aes256 --label=label --userpin=myuserpin --path=$TPM2_PKCS11_STORE
-done;
-echo "Added AES Keys"
+for t in "label" "wrap-sw"; do
+	echo "Adding 2 AES 256 keys under token \"$t\""
+	for i in `seq 0 1`; do
+	  tpm2_ptool.py addkey --algorithm=aes256 --label="$t" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+	done;
+	echo "Added AES Keys"
 
-echo "Adding 2 RSA 2048 keys"
-for i in `seq 0 1`; do
-  tpm2_ptool.py addkey --algorithm=rsa2048 --label=label --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+	echo "Adding 2 RSA 2048 keys under token \"$t\""
+	for i in `seq 0 1`; do
+	  tpm2_ptool.py addkey --algorithm=rsa2048 --label="$t" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+	done;
+	echo "Added RSA Keys"
 done;
-echo "Added RSA Keys"
 
 echo "RUN COMMAND BELOW BEFORE make check"
 echo "export TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"

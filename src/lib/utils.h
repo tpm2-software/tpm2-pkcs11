@@ -40,6 +40,8 @@ twist utils_pdkdf2_hmac_sha256(const twist pin, const twist salt, int iterations
 
 twist decrypt(const twist pin, const twist salt, unsigned iters, const twist objauth);
 
+twist aes256_gcm_decrypt(const twist key, const twist objauth);
+
 /**
  * Retrieves the size in bytes of a hash algorithm
  * @param mttype

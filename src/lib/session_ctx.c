@@ -14,6 +14,7 @@
 #include "session_ctx.h"
 #include "tpm.h"
 #include "twist.h"
+#include "utils.h"
 
 struct session_ctx {
     tpm_ctx *ctx;
@@ -128,15 +129,17 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
 
     // Evict the wrapping object
     wrappingobject *wobj = &tok->wrappingobject;
-    bool result = tpm_flushcontext(tpm, wobj->handle);
-    assert(result);
+    if (tok->config.sym_support) {
+        bool result = tpm_flushcontext(tpm, wobj->handle);
+        assert(result);
+    }
     twist_free(wobj->objauth);
     wobj->objauth = NULL;
     wobj->handle = 0;
 
     // Evict the secondary object
     pobject *pobj = &tok->pobject;
-    result = tpm_flushcontext(tpm, sobj->handle);
+    bool result = tpm_flushcontext(tpm, sobj->handle);
     assert(result);
     twist_free(sobj->objauth);
     sobj->objauth = NULL;
@@ -228,17 +231,30 @@ CK_RV session_ctx_login(session_ctx *ctx, twist pin, int usertype) {
         goto error;
     }
 
-    wobj->objauth = twistbin_unhexlify(wobjauth);
-    twist_free(wobjauth);
-    if (!wobj->objauth) {
-        LOGE("Could not unhexlify wrapping object auth");
-        goto error;
-    }
+    /*
+     * If SW objauth unwrapping is enabled, we use the
+     * unsealed value as the key, else we use the TPM
+     * wrapping key directly.
+     *
+     * The SW version of unsealed auth shall remain in
+     * hex form where as the direct form shouldn't.
+     *
+     */
+    if (t->config.sym_support) {
+        wobj->objauth = twistbin_unhexlify(wobjauth);
+        twist_free(wobjauth);
+        if (!wobj->objauth) {
+            LOGE("Could not unhexlify wrapping object auth");
+            goto error;
+        }
 
-    /* load the wrapping key */
-    res = tpm_loadobj(tpm, t->pobject.handle, dpobjauth, wobj->pub, wobj->priv, &wobj->handle);
-    if (!res) {
-        goto error;
+        /* load the wrapping key */
+        res = tpm_loadobj(tpm, t->pobject.handle, dpobjauth, wobj->pub, wobj->priv, &wobj->handle);
+        if (!res) {
+            goto error;
+        }
+    } else {
+        wobj->objauth = wobjauth;
     }
 
     /* load the secondary object */
@@ -256,6 +272,47 @@ error:
     twist_free(sealobjauth);
 
     return rv;
+}
+
+CK_RV unwrap_objauth(token *tok, tpm_ctx *tpm, wrappingobject *wobj, twist objauth, twist *unwrapped_auth) {
+
+    twist tmp;
+    if (tok->config.sym_support) {
+        twist sobjauthraw = twistbin_unhexlify(objauth);
+        if (!sobjauthraw) {
+            LOGE("unhexlify objauth failed: %u-%s", twist_len(objauth), objauth);
+            return CKR_HOST_MEMORY;
+        }
+
+        bool result = tpm_decrypt_handle(tpm, wobj->handle, wobj->objauth, CKM_AES_NULL,
+                NULL, sobjauthraw, &tmp, NULL);
+        if (!result) {
+            LOGE("tpm_decrypt_handle failed");
+            twist_free(sobjauthraw);
+            return CKR_GENERAL_ERROR;
+        }
+    } else {
+        twist swkey = twistbin_unhexlify(wobj->objauth);
+        if (!swkey) {
+            return CKR_GENERAL_ERROR;
+        }
+        tmp = aes256_gcm_decrypt(swkey, objauth);
+        twist_free(swkey);
+        if (!tmp) {
+            return CKR_GENERAL_ERROR;
+        }
+    }
+
+    twist sobjauthraw = twistbin_unhexlify(tmp);
+    twist_free(tmp);
+    if (!sobjauthraw) {
+        LOGE("unhexlify failed");
+        return CKR_HOST_MEMORY;
+    }
+
+    *unwrapped_auth = sobjauthraw;
+
+    return CKR_OK;
 }
 
 CK_RV session_ctx_load_object(session_ctx *ctx, CK_OBJECT_HANDLE key, tobject **loaded_tobj) {
@@ -288,27 +345,19 @@ CK_RV session_ctx_load_object(session_ctx *ctx, CK_OBJECT_HANDLE key, tobject **
         sobject *sobj = &tok->sobject;
         wrappingobject *wobj = &tok->wrappingobject;
 
-        // Decrypt the secondary object auth to load the tertiary key under the secondary key
-        twist sobjauthraw = twistbin_unhexlify(sobj->objauth);
-        if (!sobjauthraw) {
-            return CKR_HOST_MEMORY;
+        /*
+         * Decrypt the secondary object auth value with either
+         * the TPM wrapping key, or in the case of lack of TPM
+         * support use Software.
+         */
+        twist sobjauthraw = NULL;
+        CK_RV rv = unwrap_objauth(tok, tpm, wobj, sobj->objauth, &sobjauthraw);
+        if (rv != CKR_OK) {
+            LOGE("Error unwrapping secondary object auth");
+            return rv;
         }
 
-        twist sobjauth;
-        bool result = tpm_decrypt_handle(tpm, wobj->handle, wobj->objauth, CKM_AES_NULL,
-                NULL, sobjauthraw, &sobjauth, NULL);
-        twist_free(sobjauthraw);
-        if (!result) {
-            return CKR_GENERAL_ERROR;
-        }
-
-        sobjauthraw = twistbin_unhexlify(sobjauth);
-        twist_free(sobjauth);
-        if (!sobjauthraw) {
-            return CKR_HOST_MEMORY;
-        }
-
-        result = tpm_loadobj(
+        bool result = tpm_loadobj(
                 tpm,
                 tok->sobject.handle, sobjauthraw,
                 tobj->pub, tobj->priv,
@@ -318,23 +367,11 @@ CK_RV session_ctx_load_object(session_ctx *ctx, CK_OBJECT_HANDLE key, tobject **
             return CKR_GENERAL_ERROR;
         }
 
-        twist tobjauthraw = twistbin_unhexlify(tobj->objauth);
-        if (!tobjauthraw) {
-            return CKR_HOST_MEMORY;
-        }
-
-        twist tobjauth;
-        result = tpm_decrypt_handle(tpm, wobj->handle, wobj->objauth,
-                CKM_AES_NULL, NULL, tobjauthraw, &tobjauth, NULL);
-        twist_free(tobjauthraw);
-        if (!result) {
-            return CKR_GENERAL_ERROR;
-        }
-
-        tobj->unsealed_auth = twistbin_unhexlify(tobjauth);
-        twist_free(tobjauth);
-        if (!tobj->unsealed_auth) {
-            return CKR_HOST_MEMORY;
+        rv = unwrap_objauth(tok, tpm, wobj, tobj->objauth,
+                &tobj->unsealed_auth);
+        if (rv != CKR_OK) {
+            LOGE("Error unwrapping tertiary object auth");
+            return rv;
         }
 
         *loaded_tobj = tobj;
