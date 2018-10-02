@@ -846,9 +846,16 @@ class AddTokenCommand(Command):
                 # If the TPM supports encryptdecrypt we create the wrapping object in the TPM,
                 # else we use the sealed auth value as the key.
                 #
+                # We also need to adjust the key sizes for the wrapping key and secondary object to be the maximum
+                # value reported by the TPM.
+                #
+                fixed_properties = tpm2.getcap('properties-fixed')
+                y = yaml.load(fixed_properties)
+                sym_size = y['TPM2_PT_CONTEXT_SYM_SIZE']['value']
+
                 if sym_support:
                     # Now we create the wrappingbject, with algorithm aes256
-                    wrappingobjpriv, wrappingobjpub, wrappingobjpubdata = tpm2.create(pobject['handle'], pobjauthhash, wrappingobjauth['hash'], alg='aes256cfb')
+                    wrappingobjpriv, wrappingobjpub, wrappingobjpubdata = tpm2.create(pobject['handle'], pobjauthhash, wrappingobjauth['hash'], alg='aes{}cfb'.format(sym_size))
                     wrappingctx = tpm2.load(pobject['handle'], pobjauthhash, wrappingobjpriv, wrappingobjpub)
 
                 # Now we need to protect the primaryobject auth in a way where SO and USER can access the value.
@@ -873,7 +880,7 @@ class AddTokenCommand(Command):
                     encsobjauth = AESCipher(wrappingobjauth['rhash']).encrypt(sobjauth)
 
                 objattrs="restricted|decrypt|fixedtpm|fixedparent|sensitivedataorigin|userwithauth"
-                sobjpriv, sobjpub, sobjpubdata = tpm2.create(pobject['handle'], pobjauthhash, sobjauth, objattrs=objattrs, alg='aes256')
+                sobjpriv, sobjpub, sobjpubdata = tpm2.create(pobject['handle'], pobjauthhash, sobjauth, objattrs=objattrs, alg='aes{}'.format(sym_size))
 
                 # If this succeeds, we update the token table
                 config = [ { 'sym-support' : sym_support} ]
