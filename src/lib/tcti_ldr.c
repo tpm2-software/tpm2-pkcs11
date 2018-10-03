@@ -168,49 +168,40 @@ tcti_conf tcti_get_config(void) {
     };
 
     /* no tcti config supplied, get it from env */
-    char *optstr = getenv (TPM2_PKCS11_TCTI);
-    if (!optstr) {
+    char *env_conf_string = getenv(TPM2_PKCS11_TCTI);
+    if (!env_conf_string) {
         /* nothing user supplied, use default */
         return conf;
     }
 
-    char *split = strchr(optstr, ':');
+    char *conf_string = malloc(strlen(env_conf_string) + 1);
+    strcpy(conf_string, env_conf_string);
+
+    char *split = strchr(conf_string, ':');
     if (!split) {
         /* --tcti=device */
-        conf.name = fixup_name(optstr);
-        return conf;
+        conf.name = fixup_name(conf_string);
+    } else {
+        /*
+         * If it has a ":", it could be either one of the following:
+         * case A: --tcti=:               --> default name and default (null) config
+         * case B: --tcti=:/dev/foo       --> default name, custom config
+         * case C: --tcti=device:         --> custom name, default (null) config
+         * case D: --tcti=device:/dev/foo --> custom name, custom config
+         */
+        split[0] = '\0';
+
+        /* Case C, D */
+        if (conf_string[0]) {
+            conf.name = fixup_name(conf_string);
+        }
+
+        /* Case B, D */
+        if (split[1]) {
+            conf.opts = &split[1]; 
+        }
     }
 
-    /*
-     * If it has a ":", it could be either one of the following:
-     * case A: --tcti=:               --> default name and default (null) config
-     * case B: --tcti=:/dev/foo       --> default name, custom config
-     * case C: --tcti=device:         --> custom name, default (null) config
-     * case D: --tcti=device:/dev/foo --> custom name, custom config
-     */
-
-    split[0] = '\0';
-
-    /* Case A */
-    if (!optstr[0] && !split[1]) {
-        return conf;
-    }
-
-    /* Case B */
-    if (!optstr[0]) {
-        conf.opts = &split[1];
-        return conf;
-    }
-
-    /* Case C */
-    if (!split[1]) {
-        conf.name = fixup_name(optstr);
-        return conf;
-    }
-
-    /* Case D */
-    conf.name = fixup_name(optstr);
-    conf.opts = &split[1];
     return conf;
 }
 
