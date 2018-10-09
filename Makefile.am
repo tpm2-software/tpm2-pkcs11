@@ -65,7 +65,6 @@ CLEANFILES += $(nodist_pkgconfig_DATA)
 
 ### PKCS#11 Library Definition ###
 libtpm2_pkcs11 = src/libtpm2_pkcs11.la
-lib_LTLIBRARIES = $(libtpm2_pkcs11)
 nodist_pkgconfig_DATA += lib/tpm2-pkcs11.pc
 EXTRA_DIST += lib/tpm2-pkcs11.map lib/tpm2-pkcs11.pc.in
 
@@ -74,6 +73,19 @@ src_libtpm2_pkcs11_la_LDFLAGS = -Wl,--version-script=$(srcdir)/lib/tpm2-pkcs11.m
 endif # HAVE_LD_VERSION_SCRIPT
 src_libtpm2_pkcs11_la_LIBADD = $(AM_LDFLAGS) -ldl
 src_libtpm2_pkcs11_la_SOURCES = $(LIB_PKCS11_SRC) $(LIB_PKCS11_INTERNAL_LIB_SRC)
+
+if HAVE_P11KIT
+  # Use P11 kit library module install location
+  p11libdir=$(P11_MODULE_PATH)
+  p11lib_LTLIBRARIES = $(libtpm2_pkcs11)
+
+  # Use P11 kit module config file install location
+  p11configdir=$(P11_CONFIGS_PATH)
+  p11config_DATA = $(top_srcdir)/misc/p11-kit/tpm2_pkcs11.module
+else
+  # Use standard install location when P11Kit is not found
+  lib_LTLIBRARIES = $(libtpm2_pkcs11)
+endif
 
 # test harness configuration
 TEST_EXTENSIONS = .int
