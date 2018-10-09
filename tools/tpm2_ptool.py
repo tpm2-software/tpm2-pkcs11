@@ -781,6 +781,8 @@ class AddTokenCommand(Command):
         label = args['label']
         pid = args['pid']
 
+        path = os.path.expanduser(args['path'])
+
         with Db(path) as db:
 
             tpm2 = None
