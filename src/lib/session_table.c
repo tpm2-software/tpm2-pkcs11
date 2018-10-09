@@ -26,7 +26,7 @@ CK_RV session_table_new(session_table **t) {
         return CKR_HOST_MEMORY;
     }
 
-    CK_RV rv = mutex_create(x->lock);
+    CK_RV rv = mutex_create(&x->lock);
     if (rv != CKR_OK) {
         session_table_free(x);
         return rv;
