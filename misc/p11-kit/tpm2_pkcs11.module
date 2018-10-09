@@ -1,0 +1,3 @@
+module: libtpm2_pkcs11.so
+
+critical: no

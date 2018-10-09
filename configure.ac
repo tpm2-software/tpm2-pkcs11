@@ -109,6 +109,39 @@ AS_IF([test "$unit" != "no"],
        [unit_test_checks],
        [])
 
+# If P11 kit is installed we want to detect it and install
+# the module config file and change the library install location.
+AC_DEFUN([do_p11kit_config], [
+
+  PKG_CHECK_VAR([P11_MODULE_PATH], [p11-kit-1], [p11_module_path])
+  AC_MSG_CHECKING([p11 module path])
+  AS_IF([test "x$P11_MODULE_PATH" = "x"], [
+    AC_MSG_FAILURE([Unable to identify p11 module path.])
+  ])
+  AC_MSG_RESULT([$P11_MODULE_PATH])
+
+  PKG_CHECK_VAR([P11_CONFIGS_PATH], [p11-kit-1], [p11_module_configs])
+  AC_MSG_CHECKING([p11 configs path])
+  AS_IF([test "x$P11_CONFIGS_PATH" = "x"], [
+    AC_MSG_FAILURE([Unable to identify p11 configs path.])
+  ])
+  AC_MSG_RESULT([$P11_CONFIGS_PATH])
+])
+
+# if P11 kit is installed set havep11kit=$enableval then:
+# 1. execute function do_p11kit_config
+# 2. set the makefile flag HAVE_P11_KIT
+PKG_CHECK_MODULES([P11KIT],
+                  [p11-kit-1],
+                  [have_p11kit=yes],
+                  [have_p11kit=no])
+
+AS_IF([test "x$have_p11kit" = "xyes"], [
+  do_p11kit_config
+])
+
+AM_CONDITIONAL([HAVE_P11KIT], [test "x$have_p11kit" = "xyes"])
+
 AC_ARG_ENABLE([hardening],
   [AS_HELP_STRING([--enable-hardening],
     [Enable compiler and linker options to frustrate memory corruption exploits @<:@yes@:>@])],
