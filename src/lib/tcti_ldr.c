@@ -174,6 +174,10 @@ tcti_conf tcti_get_config(void) {
         return conf;
     }
 
+    static char buf[1024];
+    snprintf(buf, sizeof(buf), "%s", optstr);
+    optstr = buf;
+
     char *split = strchr(optstr, ':');
     if (!split) {
         /* --tcti=device */
