@@ -9,6 +9,7 @@
 #include <assert.h>
 
 #include "pkcs11.h"
+#include "utils.h"
 
 /**
  * Set's the mutex handlers. The mutex handlers default to internal
@@ -63,12 +64,18 @@ CK_RV mutex_lock(void *mutex);
  */
 CK_RV mutex_unlock(void *mutex);
 
-static inline void mutex_lock_fatal(void **mutex) {
-    assert(mutex_lock(mutex) == CKR_OK);
+static inline void mutex_lock_fatal(void *mutex) {
+
+    CK_RV rv = mutex_lock(mutex);
+    assert(rv == CKR_OK);
+    UNUSED(rv);
 }
 
-static inline void mutex_unlock_fatal(void **mutex) {
-    assert(mutex_unlock(mutex) == CKR_OK);
+static inline void mutex_unlock_fatal(void *mutex) {
+
+    CK_RV rv = mutex_unlock(mutex);
+    assert(rv == CKR_OK);
+    UNUSED(rv);
 }
 
 #endif /* SRC_PKCS11_MUTEX_H_ */

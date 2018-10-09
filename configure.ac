@@ -31,6 +31,10 @@ AC_INIT([tpm2-pkcs11],
         [https://github.com/tpm2-software/<todo>])
 
 AC_CONFIG_MACRO_DIR([m4])
+
+AX_IS_RELEASE([dash-version])
+AX_CHECK_ENABLE_DEBUG([no])
+
 AC_PROG_CC
 LT_INIT()
 AM_INIT_AUTOMAKE([foreign
