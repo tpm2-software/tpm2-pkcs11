@@ -45,13 +45,43 @@ void mutex_set_handlers(CK_CREATEMUTEX create,
 }
 
 static CK_RV default_mutex_create(void **mutex) {
+
+    int rc;
+
     pthread_mutex_t *p = calloc(1, sizeof(pthread_mutex_t));
     if (!p) {
         LOGE("oom");
         return CKR_HOST_MEMORY;
     }
 
-    int rc = pthread_mutex_init(p, NULL);
+    pthread_mutexattr_t *attr = NULL;
+/*
+ * When NOT NOT DEBUGGING, ie when building in DEBUG mode
+ * (autotools uses NDEBUG for this, hence the double
+ * negative) enable error checking mutexes to prevent
+ * double locks and have assert() cause an abort().
+ */
+#ifndef NDEBUG
+    pthread_mutexattr_t __attr;
+    attr = &__attr;
+
+    rc = pthread_mutexattr_init(attr);
+    if (rc) {
+        LOGE("Failed to initialize pthread attribute: %s\n",
+                strerror(rc));
+        free(p);
+        return CKR_GENERAL_ERROR;
+    }
+
+    rc = pthread_mutexattr_settype(attr, PTHREAD_MUTEX_ERRORCHECK);
+    if (rc) {
+        LOGE("Could not set attribute type: %s", strerror(rc));
+        free(p);
+        return CKR_GENERAL_ERROR;
+    }
+#endif
+
+    rc = pthread_mutex_init(p, attr);
     if (rc) {
         LOGE("Could not initialize mutex: %s", strerror(rc));
         free(p);

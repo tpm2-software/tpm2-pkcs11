@@ -118,6 +118,7 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
             if (tobj->handle) {
                 bool result = tpm_flushcontext(tpm, tobj->handle);
                 assert(result);
+                UNUSED(result);
 
                 twist_free(tobj->objauth);
                 tobj->objauth = NULL;
@@ -132,6 +133,7 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
     if (tok->config.sym_support) {
         bool result = tpm_flushcontext(tpm, wobj->handle);
         assert(result);
+        UNUSED(result);
     }
     twist_free(wobj->objauth);
     wobj->objauth = NULL;
@@ -141,6 +143,8 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
     pobject *pobj = &tok->pobject;
     bool result = tpm_flushcontext(tpm, sobj->handle);
     assert(result);
+    UNUSED(result);
+
     twist_free(sobj->objauth);
     sobj->objauth = NULL;
     sobj->handle = 0;

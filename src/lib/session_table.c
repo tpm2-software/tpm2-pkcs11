@@ -5,6 +5,7 @@
  */
 #include <stdlib.h>
 
+#include "assert.h"
 #include "mutex.h"
 #include "pkcs11.h"
 #include "session_ctx.h"
