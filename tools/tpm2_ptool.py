@@ -23,6 +23,7 @@ import yaml
 from base64 import b64decode
 from base64 import b64encode
 from cryptography.hazmat.backends import default_backend
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers import (
     Cipher, algorithms, modes
 )
@@ -795,7 +796,10 @@ class AddTokenCommand(Command):
             pobjkey = hash_pass(pobjpin.encode(), salt=salt, iters=iters)
 
             c = AESCipher(pobjkey['rhash'])
-            pobjauthhash = c.decrypt(pobject['pobjauth'])
+            try:
+                pobjauthhash = c.decrypt(pobject['pobjauth'])
+            except InvalidTag:
+                sys.exit('Invalid --pobj-pin, please enter the correct pin')
 
             with TemporaryDirectory() as d:
                 tpm2 = Tpm2(d, path)
