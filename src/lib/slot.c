@@ -65,6 +65,8 @@ CK_RV slot_get_list (unsigned char token_present, CK_SLOT_ID *slot_list, unsigne
         slot_list[i] = global.token[i].id;
     }
 
+    *count = global.token_cnt;
+
     return CKR_OK;
 }
 
