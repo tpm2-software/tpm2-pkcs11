@@ -108,7 +108,9 @@ check_PROGRAMS += \
     test/integration/pkcs-open-close-session.int \
     test/integration/pkcs-get-mechanism.int \
     test/integration/pkcs-login-logout.int \
-    test/integration/pkcs-sign-verify.int
+    test/integration/pkcs-sign-verify.int \
+    test/integration/pkcs-initialize-finalize.int \
+    test/integration/pkcs-misc.int
 
 XFAIL_TESTS=test/unit/test_pkcs11
 
@@ -138,6 +140,16 @@ test_integration_pkcs_sign_verify_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
 test_integration_pkcs_sign_verify_int_SOURCES = test/integration/pkcs-sign-verify.int.c \
     test/integration/main-test.c test/integration/test.h
 
+test_integration_pkcs_initialize_finalize_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_initialize_finalize_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_initialize_finalize_int_SOURCES = test/integration/pkcs-initialize-finalize.int.c \
+    test/integration/main-test.c test/integration/test.h
+
+test_integration_pkcs_misc_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_misc_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_misc_int_SOURCES = test/integration/pkcs-misc.int.c \
+    test/integration/main-test.c test/integration/test.h
+
 endif
 # END INTEGRATION
 
@@ -165,12 +177,7 @@ noinst_LTLIBRARIES = $(libtpm2_test_pkcs11) $(libtpm2_test_internal)
 
 TESTS = $(check_PROGRAMS)
 check_PROGRAMS += \
-    test/unit/test_pkcs11 \
     test/unit/test_twist
-
-test_unit_test_pkcs11_CFLAGS   = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
-test_unit_test_pkcs11_LDADD    = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
-test_unit_test_pkcs11_SOURCES  = test/unit/test_pkcs11.c
 
 test_unit_test_twist_CFLAGS    = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
 test_unit_test_twist_LDADD     = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
