@@ -29,7 +29,7 @@ static inline int min(size_t a, size_t b) {
 }
 
 static inline void str_padded_copy(unsigned char * dst, const unsigned char * src, size_t dst_len) {
-    memset(dst, ' ', dst_len - 1);
+    memset(dst, ' ', dst_len);
     memcpy(dst, src, min(strlen((char *)(src)), dst_len));
 }
 
