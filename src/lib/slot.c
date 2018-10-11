@@ -71,6 +71,9 @@ CK_RV slot_get_list (unsigned char token_present, CK_SLOT_ID *slot_list, unsigne
 }
 
 CK_RV slot_get_info (CK_SLOT_ID slot_id, CK_SLOT_INFO *info) {
+    const unsigned char manufacturerID[] = "foo";
+    const unsigned char slotDescription[] = "bar";
+
 
     check_pointer(info);
     check_slot_id(slot_id);
@@ -84,8 +87,8 @@ CK_RV slot_get_info (CK_SLOT_ID slot_id, CK_SLOT_INFO *info) {
     info->hardwareVersion.major =
     info->hardwareVersion.minor = 42;
 
-    snprintf((char *)info->manufacturerID, sizeof(info->manufacturerID), " %s", "foo");
-    snprintf((char *)info->slotDescription, sizeof(info->slotDescription), " %s", "bar");
+    str_padded_copy(info->manufacturerID, manufacturerID, sizeof(info->manufacturerID));
+    str_padded_copy(info->slotDescription, slotDescription, sizeof(info->slotDescription));
 
     info->flags = CKF_TOKEN_PRESENT | CKF_HW_SLOT;
 
