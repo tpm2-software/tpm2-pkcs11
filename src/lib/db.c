@@ -3,13 +3,14 @@
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
  */
-#define _GNU_SOURCE
 #include <errno.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+#include <linux/limits.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -890,44 +891,45 @@ CK_RV db_destroy(void) {
 
 #define DB_NAME "tpm2_pkcs11.sqlite3"
 #define PKCS11_STORE_ENV_VAR "TPM2_PKCS11_STORE"
-static char *db_get_path(void) {
+CK_RV db_get_path(char path[PATH_MAX]) {
 
     int rc;
-    char *path;
 
-    const char *fmt = "%s/"DB_NAME;
+    const char *fmt = "%s/%s";
     char *base_path = getenv(PKCS11_STORE_ENV_VAR);
     if (!base_path) {
-        fmt = ".tpm2_pkcs11/"DB_NAME;
+        fmt = "%s/.tpm2_pkcs11/%s";
         base_path = getenv("HOME");
     }
 
-    rc = asprintf(&path, fmt, base_path);
-    UNUSED(rc);
-
-    if (!path) {
-        return NULL;
+    rc = snprintf(path, PATH_MAX, fmt, base_path, DB_NAME);
+    if (rc >= PATH_MAX) {
+        LOGE("Completed DB path was over-length, got %d expected less than %lu",
+                rc, PATH_MAX);
+        return CKR_GENERAL_ERROR;
     }
 
     struct stat sb;
     rc = stat(path, &sb);
     if (rc) {
-        LOGE("Could not stat db \""DB_NAME"\" under store \"%s\", error: %s", base_path,
+        LOGV("Could not stat db \""DB_NAME"\" under store \"%s\", error: %s", base_path,
                 strerror(errno));
-        LOGE("Consider exporting "PKCS11_STORE_ENV_VAR" to point to a valid store sirectory");
-        free(path);
-        return NULL;
+        LOGV("Consider exporting "PKCS11_STORE_ENV_VAR" to point to a valid store directory");
+        return CKR_TOKEN_NOT_PRESENT;
     }
 
-    return path;
+    return CKR_OK;
 }
 
 CK_RV db_new(sqlite3 **db) {
 
-    char *path = db_get_path();
+    char path[PATH_MAX];
+    CK_RV rv = db_get_path(path);
+    if (rv != CKR_OK) {
+        return rv;
+    }
 
     int rc = sqlite3_open(path, db);
-    free(path);
     if (rc != SQLITE_OK) {
         LOGE("Cannot open database: %s\n", sqlite3_errmsg(*db));
         return CKR_GENERAL_ERROR;
