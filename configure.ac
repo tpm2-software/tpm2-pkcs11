@@ -128,7 +128,7 @@ AC_DEFUN([do_p11kit_config], [
   AC_MSG_RESULT([$P11_CONFIGS_PATH])
 ])
 
-# if P11 kit is installed set havep11kit=$enableval then:
+# set havep11kit based on if P11kit is installed, then:
 # 1. execute function do_p11kit_config
 # 2. set the makefile flag HAVE_P11_KIT
 PKG_CHECK_MODULES([P11KIT],
