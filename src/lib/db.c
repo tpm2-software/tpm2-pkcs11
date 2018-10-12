@@ -232,6 +232,16 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
             return false;
         }
     } break;
+
+    case CKA_LABEL: {
+
+        a->ulValueLen = strlen(value);
+        a->pValue = strdup(value);
+        if (!a->pValue) {
+            LOGE("oom");
+            return false;
+        }
+    } break;
     default:
         LOGE("Unknown key, got: \"%s\"", key);
         return false;
