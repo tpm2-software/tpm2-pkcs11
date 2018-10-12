@@ -74,6 +74,11 @@ void sealobject_free(sealobject *sealobj) {
 tobject *object_attr_filter(tobject *tobj, CK_ATTRIBUTE_PTR templ, unsigned long count) {
 
     unsigned long i;
+    // If ulCount is set to 0 all items match automatically.
+    if (count == 0) {
+	    return tobj;
+    }
+
     for (i=0; i < count; i++) {
         CK_ATTRIBUTE_PTR search = &templ[i];
 
@@ -136,10 +141,12 @@ void free_object_find_data(object_find_data *fd) {
 }
 
 CK_RV object_find_init(CK_SESSION_HANDLE session, CK_ATTRIBUTE_PTR templ, unsigned long count) {
-
     check_is_init();
-    check_pointer(templ);
-    check_num(count);
+
+    // if count is 0 template is not used and all objects are requested so templ can be NULL.
+    if (count > 0) {
+        check_pointer(templ);
+    }
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
