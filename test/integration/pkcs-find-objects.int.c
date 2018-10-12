@@ -187,6 +187,39 @@ static void test_find_objects_by_label(CK_SESSION_HANDLE hSession) {
     LOGV("\"%s\" Test Passed!", __func__);
 }
 
+static void test_find_objects_via_empty_template(CK_SESSION_HANDLE hSession) {
+
+    CK_RV rv = C_FindObjectsInit(hSession, NULL, 0);
+    if(rv != CKR_OK){
+        LOGE("C_FindObjectsInit failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    /*
+     * There are 4 keys in the test db with
+     */
+    unsigned long count;
+    CK_OBJECT_HANDLE objhandles[6];
+    rv = C_FindObjects(hSession, objhandles, ARRAY_LEN(objhandles), &count);
+    if(rv != CKR_OK){
+        LOGE("C_FindObjects failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    if(count != 4){
+        LOGE("C_FindObjects failed! Expected count=1, Actual count=%d", count);
+        exit(1);
+    }
+
+    rv = C_FindObjectsFinal(hSession);
+    if(rv != CKR_OK){
+        LOGE("C_FindObjectsFinal failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    LOGV("\"%s\" Test Passed!", __func__);
+}
+
 int test_invoke() {
 
     CK_RV rv = C_Initialize(NULL);
@@ -214,6 +247,7 @@ int test_invoke() {
     test_find_objects_aes_good(handle);
     test_sign_verify_CKM_RSA_PKCS(handle);
     test_find_objects_by_label(handle);
+    test_find_objects_via_empty_template(handle);
 
     rv = C_CloseSession(handle);
     if (rv == CKR_OK)
