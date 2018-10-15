@@ -648,7 +648,7 @@ class InitCommand(Command):
         if not use_existing_primary and args['primary_auth'] != None:
             sys.exit('Cannot specify "--primary-auth" without "--primary-handle"')
 
-        path = os.path.expanduser(args['path'])
+        path = args['path']
         if not os.path.exists(path):
             os.mkdir(path)
         elif not os.path.isdir(path):
@@ -826,7 +826,7 @@ class AddTokenCommand(Command):
         label = args['label']
         pid = args['pid']
 
-        path = os.path.expanduser(args['path'])
+        path = args['path']
 
         with Db(path) as db:
 
@@ -982,7 +982,7 @@ class AddKeyCommand(Command):
 
     def __call__(self, args):
 
-        path = os.path.expanduser(args['path'])
+        path = args['path']
 
         label = args['label']
 
@@ -1313,6 +1313,7 @@ def main():
             c.generate_options(g)
             g.add_argument(
             '--path',
+            type=os.path.expanduser,
             help='The location of the store directory.',
             default=DEFAULT_STORE_PATH)
 
