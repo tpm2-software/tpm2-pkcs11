@@ -3,7 +3,7 @@
 In order to use the tpm2-pkcs11 library, you need to initialize a store. The store contains
 metadata for the library on what tokens and subordinate objects to expose.
 
-To facilitate creating this store, a tool called [tpm2-ptool](../tools/tpm2-ptool.py) exists.
+To facilitate creating this store, a tool called [tpm2-ptool](../tools/tpm2_ptool.py) exists.
 
 The store itself defaults to `$HOME/.tpm2_pkcs11` unless specified via the environment variable
 `TPM2_PKCS11_STORE`.
