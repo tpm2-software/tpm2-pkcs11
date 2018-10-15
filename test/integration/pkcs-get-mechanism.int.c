@@ -4,12 +4,7 @@
  * All rights reserved.
  */
 /* SPDX-License-Identifier: BSD-2 */
-/***********************************************************************
- * Copyright (c) 2017-2018, Intel Corporation
- *
- * All rights reserved.
- ***********************************************************************/
-#include <stdio.h>
+
 #include <stdlib.h>
 #include <string.h>
 #include <sqlite3.h>
