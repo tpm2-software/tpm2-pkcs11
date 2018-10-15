@@ -55,11 +55,18 @@ set -e
 # init
 tpm2_ptool.py init --pobj-pin=mypobjpin --path=$TPM2_PKCS11_STORE
 
-# add 2 tokens
+# Test the existing primary object init functionality
+tpm2_createprimary -p foopass -o primary.ctx
+handle=`tpm2_evictcontrol -a o -c primary.ctx | cut -d\: -f2-2 | sed 's/^ *//g'`
+
+tpm2_ptool.py init --pobj-pin=anotherpobjpin --primary-handle=$handle --primary-auth=foopass --path=$TPM2_PKCS11_STORE
+
+# add 3 tokens
 tpm2_ptool.py addtoken --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=myuserpin --label=label --path $TPM2_PKCS11_STORE
 tpm2_ptool.py addtoken --wrap=software --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=myuserpin --label=wrap-sw --path $TPM2_PKCS11_STORE
+tpm2_ptool.py addtoken --pid=2 --pobj-pin=anotherpobjpin --sopin=anothersopin --userpin=anotheruserpin --label=import-primary --path $TPM2_PKCS11_STORE
 
-# add 2 aes keys under token 1
+# add 2 aes and 2 rsa keys under tokens 1 and 2
 for t in "label" "wrap-sw"; do
 	echo "Adding 2 AES 256 keys under token \"$t\""
 	for i in `seq 0 1`; do
@@ -73,6 +80,9 @@ for t in "label" "wrap-sw"; do
 	done;
 	echo "Added RSA Keys"
 done;
+
+# add 1 aes key under label "import-primary"
+tpm2_ptool.py addkey --algorithm=aes128 --label="import-primary" --userpin=anotheruserpin --path=$TPM2_PKCS11_STORE
 
 echo "RUN COMMAND BELOW BEFORE make check"
 echo "export TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
