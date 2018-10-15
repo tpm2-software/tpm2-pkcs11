@@ -619,8 +619,35 @@ class InitCommand(Command):
             '--owner-auth',
             help='The authorization password for adding a primary object to the owner hierarchy.\n',
             default="")
+        group_parser.add_argument(
+            '--primary-handle',
+            nargs='?',
+            type=InitCommand.str_to_int,
+            action=InitCommand.make_action(primary=True),
+            help='Use an existing primary key object, defaults to 0x81000001.')
+        group_parser.add_argument(
+            '--primary-auth',
+            help='Authorization value for existing primary key object, defaults to an empty auth value.')
+
+    @staticmethod
+    def str_to_int(arg):
+        return int(arg, 0)
+
+    @staticmethod
+    def make_action(**kwargs):
+        class customAction(argparse.Action):
+            def __call__(self, parser, args, values, option_string=None):
+                args.__dict__.update(kwargs)
+                setattr(args, self.dest, values)
+        return customAction
 
     def __call__(self, args):
+
+        use_existing_primary = 'primary' in args and args['primary']
+
+        if not use_existing_primary and args['primary_auth'] != None:
+            sys.exit('Cannot specify "--primary-auth" without "--primary-handle"')
+
         path = os.path.expanduser(args['path'])
         if not os.path.exists(path):
             os.mkdir(path)
@@ -640,17 +667,34 @@ class InitCommand(Command):
                     tpm2 = Tpm2(d, path)
 
                     pobjkey = hash_pass(pobjpin.encode())
-                    pobjauthhash = hash_pass(rand_str(32))
 
-                    ctx = tpm2.createprimary(ownerauth, pobjauthhash['hash'])
-                    handle = Tpm2.evictcontrol(ownerauth, ctx)
+                    if not use_existing_primary:
+                        pobjauth = hash_pass(rand_str(32))['hash']
+                        ctx = tpm2.createprimary(ownerauth, pobjauth)
+                        handle = Tpm2.evictcontrol(ownerauth, ctx)
+                    else:
+                        # get the primary object auth value and convert it to hex
+                        pobjauth = args['primary_auth'] if args['primary_auth'] != None else ""
+                        pobjauth = binascii.hexlify(pobjauth)
+
+                        handle = args['primary_handle']
+                        if handle == None:
+                            handle = 0x81000001
+
+                        # verify handle is persistent
+                        output = tpm2.getcap('handles-persistent')
+                        y = yaml.load(output)
+                        if handle not in y:
+                            sys.exit('Handle 0x%x is not persistent' % (handle))
+
 
                     c = AESCipher(pobjkey['rhash'])
-                    pobjauth = c.encrypt(pobjauthhash['hash'])
+                    pobjauth = c.encrypt(pobjauth)
 
                     pid = db.addprimary(handle, pobjauth, pobjkey['salt'], pobjkey['iters'])
 
-                    print("Created a primary object of id: %d" % pid)
+                    action_word = "Added" if use_existing_primary else "Created"
+                    print("%s a primary object of id: %d" % (action_word, pid))
 
                 except Exception as e:
                     if handle != None:
