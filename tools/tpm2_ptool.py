@@ -80,6 +80,7 @@ CKK_AES = 0x1f
 CKM_RSA_PKCS_OAEP = 9
 CKM_AES_CBC = 0x1082
 
+CKA_LABEL = 0x3
 CKA_ID = 0x102
 CKA_MODULUS = 0x120
 CKA_PUBLIC_EXPONENT = 0x122
@@ -455,6 +456,13 @@ class Db(object):
         c = self._conn.cursor()
         c.execute(sql, list(tobject.values()))
         return  c.lastrowid
+
+    def updatetertiaryattrs(self, id, attrs):
+
+        x = list_dict_to_kvp(attrs)
+        sql = 'UPDATE tobjects SET attrs=? WHERE id=?'
+        c = self._conn.cursor()
+        c.execute(sql, (x, id))
 
     def commit(self):
         self._conn.commit()
@@ -969,6 +977,9 @@ class AddKeyCommand(Command):
             choices=[ 'rsa1024', 'rsa2048', 'aes128', 'aes256' ],
             required=True)
         group_parser.add_argument(
+            '--key-label',
+            help='The key label to identify the key. Defaults to an integer value')
+        group_parser.add_argument(
             '--id',
             help='The key id. Defaults to a random 8 bytes of hex.\n',
             default=binascii.hexlify(os.urandom(8)))
@@ -985,6 +996,7 @@ class AddKeyCommand(Command):
         path = args['path']
 
         label = args['label']
+        keylabel= args['key_label']
 
         id = args['id']
 
@@ -1125,12 +1137,29 @@ class AddKeyCommand(Command):
                         { CKM_AES_CBC : "" },
                     ]
 
+                # Add keylabel for ALL objects if set
+                if keylabel is not None:
+                    attrs.append({CKA_LABEL : keylabel})
+
                 # Store to database
-                tokid = db.addtertiary(sobj['id'], tertiarypriv, tertiarypub, encobjauth, attrs, mech)
+                id = db.addtertiary(sobj['id'], tertiarypriv, tertiarypub, encobjauth, attrs, mech)
+
+                # if the keylabel is not set, use the tertiary object id as the keylabel
+                # Normally we would use a transaction to make this atomic, but Pythons
+                # sqlite3 transaction handling is quite odd. So when the keylabel is None, just insert
+                # into the db without that attribute, retrieve the primary key, and then issue an
+                # update. A possible race exists if someone is looking for the key by label between
+                # these operations.
+                # See:
+                #   - https://stackoverflow.com/questions/107005/predict-next-auto-inserted-row-id-sqlite
+                if keylabel is None:
+                    keylabel = str(id)
+                    attrs.append({CKA_LABEL : keylabel})
+                    db.updatetertiaryattrs(id, attrs)
 
                 db.commit()
 
-                print("Added key: %d" % (tokid))
+                print('Added key as label: "{keylabel}"'.format(keylabel=keylabel))
 
 @commandlet("rmtoken")
 class RmTokenCommand(Command):
