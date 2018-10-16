@@ -149,6 +149,44 @@ static void test_find_objects_aes_good(CK_SESSION_HANDLE hSession) {
     LOGV("test_find_objects_aes_good Test Passed!");
 }
 
+static void test_find_objects_by_label(CK_SESSION_HANDLE hSession) {
+
+    char key_label[] = "mykeylabel";
+    CK_ATTRIBUTE tmpl[] = {
+      {CKA_LABEL, key_label, sizeof(key_label) - 1},
+    };
+
+    CK_RV rv = C_FindObjectsInit(hSession, tmpl, ARRAY_LEN(tmpl));
+    if(rv != CKR_OK){
+        LOGE("C_FindObjectsInit failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    /*
+     * There is only one key in the test db with the label "mykeylabel"
+     */
+    unsigned long count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(hSession, objhandles, ARRAY_LEN(objhandles), &count);
+    if(rv != CKR_OK){
+        LOGE("C_FindObjects failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    if(count != 1){
+        LOGE("C_FindObjects failed! Expected count=1, Actual count=%d", count);
+        exit(1);
+    }
+
+    rv = C_FindObjectsFinal(hSession);
+    if(rv != CKR_OK){
+        LOGE("C_FindObjectsFinal failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    LOGV("\"%s\" Test Passed!", __func__);
+}
+
 int test_invoke() {
 
     CK_RV rv = C_Initialize(NULL);
@@ -175,6 +213,7 @@ int test_invoke() {
 
     test_find_objects_aes_good(handle);
     test_sign_verify_CKM_RSA_PKCS(handle);
+    test_find_objects_by_label(handle);
 
     rv = C_CloseSession(handle);
     if (rv == CKR_OK)
