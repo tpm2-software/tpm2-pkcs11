@@ -80,6 +80,7 @@ CKK_AES = 0x1f
 CKM_RSA_PKCS_OAEP = 9
 CKM_AES_CBC = 0x1082
 
+CKA_LABEL = 0x3
 CKA_ID = 0x102
 CKA_MODULUS = 0x120
 CKA_PUBLIC_EXPONENT = 0x122
@@ -969,6 +970,10 @@ class AddKeyCommand(Command):
             choices=[ 'rsa1024', 'rsa2048', 'aes128', 'aes256' ],
             required=True)
         group_parser.add_argument(
+            '--keylabel',
+            help='The key label to identify the key. Defaults to testkey\n',
+            default="testkey")
+        group_parser.add_argument(
             '--id',
             help='The key id. Defaults to a random 8 bytes of hex.\n',
             default=binascii.hexlify(os.urandom(8)))
@@ -985,6 +990,7 @@ class AddKeyCommand(Command):
         path = args['path']
 
         label = args['label']
+        keylabel= args['keylabel']
 
         id = args['id']
 
@@ -1103,6 +1109,7 @@ class AddKeyCommand(Command):
 
                 if alg.startswith('rsa'):
                     attrs = [
+                        {  CKA_LABEL           : keylabel        },
                         {  CKA_KEY_TYPE        : CKK_RSA         },
                         {  CKA_CLASS           : CKO_PRIVATE_KEY },
                         {  CKA_CLASS           : CKO_PUBLIC_KEY  },
