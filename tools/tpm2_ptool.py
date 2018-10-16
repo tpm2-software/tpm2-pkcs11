@@ -440,7 +440,7 @@ class Db(object):
         return  c.lastrowid
 
     def addtertiary(self, sid, priv, pub, objauth, attrs, mech):
-        sobject = {
+        tobject = {
             'sid'          : sid,
             'pub'          : pub,
             'priv'         : priv,
@@ -449,11 +449,11 @@ class Db(object):
             'mech'         : list_dict_to_kvp(mech),
         }
 
-        columns = ', '.join(sobject.keys())
-        placeholders = ', '.join('?' * len(sobject))
+        columns = ', '.join(tobject.keys())
+        placeholders = ', '.join('?' * len(tobject))
         sql = 'INSERT INTO tobjects ({}) VALUES ({})'.format(columns, placeholders)
         c = self._conn.cursor()
-        c.execute(sql, list(sobject.values()))
+        c.execute(sql, list(tobject.values()))
         return  c.lastrowid
 
     def commit(self):
