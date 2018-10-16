@@ -325,7 +325,7 @@ class Db(object):
 
     def getwrapping(self, tokid):
         c = self._conn.cursor()
-        c.execute("SELECT * from wrappingobjects WHERE id=?", (tokid, ))
+        c.execute("SELECT * from wrappingobjects WHERE tokid=?", (tokid, ))
         x = c.fetchone()
         return x
 
