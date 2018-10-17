@@ -35,7 +35,7 @@ void session_destroy(void) {
 
 static CK_RV check_max_sessions(bool is_rw) {
 
-    unsigned long cnt = session_table_get_cnt(global.s_table, is_rw);
+    unsigned long cnt = session_table_get_cnt_unlocked(global.s_table, is_rw);
     return (cnt > MAX_NUM_OF_SESSIONS) ?
         CKR_SESSION_COUNT : CKR_OK;
 }

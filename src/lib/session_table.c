@@ -58,9 +58,13 @@ void session_table_unlock(session_table *t) {
     mutex_unlock_fatal(t->lock);
 }
 
+unsigned long session_table_get_cnt_unlocked(session_table *t, bool is_rw) {
+    return is_rw ? t->rw_cnt : t->cnt;
+}
+
 unsigned long session_table_get_cnt(session_table *t, bool is_rw) {
     session_table_lock(t);
-    unsigned long tmp = is_rw ? t->rw_cnt : t->cnt;
+    unsigned long tmp = session_table_get_cnt_unlocked(t, is_rw);
     session_table_unlock(t);
     return tmp;
 }

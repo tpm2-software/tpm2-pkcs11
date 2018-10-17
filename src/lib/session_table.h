@@ -18,6 +18,7 @@ void session_table_unlock(session_table *t);
 void session_table_lock(session_table *t);
 
 unsigned long session_table_get_cnt(session_table *t, bool is_rw);
+unsigned long session_table_get_cnt_unlocked(session_table *t, bool is_rw);
 
 CK_RV session_table_new_ctx_unlocked(session_table *t,
         CK_SESSION_HANDLE *handle, token *tok, bool is_rw);
