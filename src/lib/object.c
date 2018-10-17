@@ -367,7 +367,8 @@ CK_RV object_get_attributes(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, 
 
             /* buffer allocated, the size should be right */
             if (found->ulValueLen != t->ulValueLen) {
-                return CKR_BUFFER_TOO_SMALL;
+                rv = CKR_BUFFER_TOO_SMALL;
+                goto out;
             }
 
             memcpy(t->pValue, found->pValue, t->ulValueLen);
