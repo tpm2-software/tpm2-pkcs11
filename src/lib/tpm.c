@@ -178,11 +178,11 @@ static struct {
 } global;
 
 static void lock_tcti(void) {
-    mutex_lock_fatal(&global.tcti_mutex);
+    mutex_lock_fatal(global.tcti_mutex);
 }
 
 static void unlock_tcti(void) {
-    mutex_unlock_fatal(&global.tcti_mutex);
+    mutex_unlock_fatal(global.tcti_mutex);
 }
 
 CK_RV tpm_init(void) {
