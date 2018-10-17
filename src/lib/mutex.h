@@ -8,6 +8,7 @@
 
 #include <assert.h>
 
+#include "log.h"
 #include "pkcs11.h"
 #include "utils.h"
 
@@ -64,18 +65,35 @@ CK_RV mutex_lock(void *mutex);
  */
 CK_RV mutex_unlock(void *mutex);
 
-static inline void mutex_lock_fatal(void *mutex) {
+static inline void _mutex_lock_fatal(void *mutex) {
 
     CK_RV rv = mutex_lock(mutex);
     assert(rv == CKR_OK);
     UNUSED(rv);
 }
 
-static inline void mutex_unlock_fatal(void *mutex) {
+static inline void _mutex_unlock_fatal(void *mutex) {
 
     CK_RV rv = mutex_unlock(mutex);
     assert(rv == CKR_OK);
     UNUSED(rv);
 }
 
+#ifndef NDEBUG
+/*
+ * debugging lock macros, the LOGV is on the top line to report lineno correctly
+ */
+#define mutex_lock_fatal(mutex) do { LOGV("LOCK(%p)-attempt", mutex); \
+        _mutex_lock_fatal(mutex); \
+        LOGV("LOCK(%p)-aquired", mutex); \
+    } while (0)
+
+#define mutex_unlock_fatal(mutex) do { LOGV("UNLOCK(%p)-attempt", mutex); \
+        _mutex_unlock_fatal(mutex); \
+        LOGV("UNLOCK(%p)-released", mutex); \
+    } while (0)
+#else
+#define mutex_lock_fatal(mutex) _mutex_lock_fatal(mutex)
+#define mutex_unlock_fatal(mutex) _mutex_unlock_fatal(mutex)
+#endif
 #endif /* SRC_PKCS11_MUTEX_H_ */
