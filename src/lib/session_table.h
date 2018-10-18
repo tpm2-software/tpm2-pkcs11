@@ -28,5 +28,6 @@ session_ctx *session_table_lookup(session_table *t, CK_SESSION_HANDLE handle);
 CK_RV session_table_free_ctx_unlocked(session_table *t, CK_SESSION_HANDLE handle);
 CK_RV session_table_free_ctx(session_table *t, CK_SESSION_HANDLE handle);
 void session_table_free_ctx_all(session_table *t);
+void session_table_update_ctx_state(session_table *t, token *tok, session_ctx_state state);
 
 #endif /* SRC_PKCS11_SESSION_TABLE_H_ */

@@ -3,6 +3,7 @@
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
  */
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "assert.h"
@@ -10,6 +11,7 @@
 #include "pkcs11.h"
 #include "session_ctx.h"
 #include "session_table.h"
+#include "token.h"
 #include "utils.h"
 
 struct session_table {
@@ -160,4 +162,20 @@ unlock:
     session_table_unlock(t);
 
     return ctx;
+}
+
+void session_table_update_ctx_state(session_table *t, token *tok, session_ctx_state state) {
+    session_table_lock(t);
+
+    unsigned i;
+    for (i=0; i < ARRAY_LEN(t->table); i++) {
+        CK_SESSION_HANDLE handle = i;
+        session_ctx *ctx = *session_table_lookup_unlocked(t, handle);
+
+        if (ctx && session_ctx_get_token(ctx) == tok) {
+            session_ctx_state_set(ctx, state);
+        }
+    }
+
+    session_table_unlock(t);
 }
