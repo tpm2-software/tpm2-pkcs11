@@ -365,13 +365,18 @@ CK_RV object_get_attributes(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, 
                 continue;
             }
 
-            /* buffer allocated, the size should be right */
-            if (found->ulValueLen != t->ulValueLen) {
+            /* The found attribute should fit inside the one to copy to */
+            if (found->ulValueLen > t->ulValueLen) {
                 rv = CKR_BUFFER_TOO_SMALL;
                 goto out;
             }
 
-            memcpy(t->pValue, found->pValue, t->ulValueLen);
+            t->ulValueLen = found->ulValueLen;
+            memcpy(t->pValue, found->pValue, found->ulValueLen);
+       } else {
+           /* If it's not found it defaults to empty. */
+           t->pValue = NULL;
+           t->ulValueLen = 0;
        }
     }
 
