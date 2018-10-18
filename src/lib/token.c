@@ -85,8 +85,11 @@ CK_RV token_get_info (CK_SLOT_ID slot_id, struct _CK_TOKEN_INFO *info) {
 
     // Support Flags
     info->flags = CKF_RNG
-        | CKF_LOGIN_REQUIRED
-        | CKF_TOKEN_INITIALIZED;
+        | CKF_LOGIN_REQUIRED;
+
+    if (t->config.is_initialized) {
+        info->flags |= CKF_TOKEN_INITIALIZED;
+    }
 
     // Identification
     str_padded_copy(info->label, t->label, sizeof(info->label));
