@@ -87,6 +87,10 @@ token *session_ctx_get_token(session_ctx *ctx) {
     return ctx->tok;
 }
 
+void session_ctx_state_set(session_ctx *ctx, session_ctx_state state) {
+    ctx->state = state;
+}
+
 session_ctx_state session_ctx_state_get(session_ctx *ctx) {
     return ctx->state;
 }

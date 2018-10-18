@@ -26,6 +26,7 @@
  * C_Login may be called repeatedly, without intervening C_Logout calls, if (and only if) a key with the CKA_ALWAYS_AUTHENTICATE attribute
  * set to CK_TRUE exists, and the user needs to do cryptographic operation on this key.
  */
+
 //Normal SO Login and Logout
 void test_so_login_logout_good(CK_SESSION_HANDLE hSession) {
 
@@ -161,6 +162,84 @@ void test_so_login_already_logged_in(CK_SESSION_HANDLE hSession) {
     LOGV("test_so_login_logout_good Test Passed!");
 }
 
+// SO global login and logout
+// Tests whether user is automatically logged in to other sessions for the same slot/token
+void test_so_global_login_logout_good(CK_SESSION_HANDLE slot0_session0, CK_SESSION_HANDLE slot0_session1, CK_SESSION_HANDLE slot1_session0) {
+
+    unsigned char sopin[] = "mysopin";
+
+    CK_RV rv = C_Login(slot0_session0, CKU_SO, sopin, sizeof(sopin) - 1);
+    if (rv != CKR_OK){
+        LOGE("C_Login failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    rv = C_Login(slot0_session1, CKU_SO, sopin, sizeof(sopin) - 1);
+    if (rv != CKR_USER_ALREADY_LOGGED_IN) {
+        LOGE("C_Login when already logged in failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    rv = C_Logout(slot1_session0);
+    if(rv != CKR_USER_NOT_LOGGED_IN){
+        LOGE("C_Logout when not logged in failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    rv = C_Logout(slot0_session0);
+    if(rv != CKR_OK){
+        LOGE("C_Logout failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    rv = C_Logout(slot0_session1);
+    if(rv != CKR_USER_NOT_LOGGED_IN){
+        LOGE("C_Logout when not logged in failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    LOGV("test_user_global_login_logout_good Test Passed!");
+}
+
+// Normal user global login and logout
+// Tests whether user is automatically logged in to other sessions for the same slot/token
+void test_user_global_login_logout_good(CK_SESSION_HANDLE slot0_session0, CK_SESSION_HANDLE slot0_session1, CK_SESSION_HANDLE slot1_session0) {
+
+    unsigned char upin[] = "myuserpin";
+
+    CK_RV rv = C_Login(slot0_session0, CKU_USER, upin, sizeof(upin) - 1);
+    if (rv != CKR_OK){
+        LOGE("C_Login failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    rv = C_Login(slot0_session1, CKU_USER, upin, sizeof(upin) - 1);
+    if (rv != CKR_USER_ALREADY_LOGGED_IN) {
+        LOGE("C_Login when already logged in failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    rv = C_Logout(slot1_session0);
+    if(rv != CKR_USER_NOT_LOGGED_IN){
+        LOGE("C_Logout when not logged in failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    rv = C_Logout(slot0_session0);
+    if(rv != CKR_OK){
+        LOGE("C_Logout failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    rv = C_Logout(slot0_session1);
+    if(rv != CKR_USER_NOT_LOGGED_IN){
+        LOGE("C_Logout when not logged in failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    LOGV("test_user_global_login_logout_good Test Passed!");
+}
+
 int test_invoke() {
 
     CK_RV rv = C_Initialize(NULL);
@@ -177,25 +256,33 @@ int test_invoke() {
     else
 	LOGE("C_GetSlotList was unsuccessful");
 
-    CK_SESSION_HANDLE handle;
+    CK_SESSION_HANDLE slot0_session0;
+    CK_SESSION_HANDLE slot0_session1;
+    CK_SESSION_HANDLE slot1_session0;
 
-    rv = C_OpenSession(slots[0], CKF_SERIAL_SESSION, NULL , NULL, &handle);
 //    rv = C_OpenSession(slots[0], CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL , NULL, &handle);
+    rv += C_OpenSession(slots[0], CKF_SERIAL_SESSION, NULL , NULL, &slot0_session0);
+    rv += C_OpenSession(slots[0], CKF_SERIAL_SESSION, NULL , NULL, &slot0_session1);
+    rv += C_OpenSession(slots[1], CKF_SERIAL_SESSION, NULL , NULL, &slot1_session0);
 
     if (rv == CKR_OK)
 	LOGV("C_OpenSession was successful");
     else
 	LOGE("C_OpenSession was unsuccessful");
 
-    test_so_login_logout_good(handle);
-    test_user_login_logout_good(handle);
-    test_user_login_incorrect_pin(handle);
-    test_so_login_incorrect_pin(handle);
-    test_login_bad(handle);
-    test_logout_bad(handle);
-    test_so_login_already_logged_in(handle);
+    test_so_login_logout_good(slot0_session0);
+    test_user_login_logout_good(slot0_session0);
+    test_user_login_incorrect_pin(slot0_session0);
+    test_so_login_incorrect_pin(slot0_session0);
+    test_login_bad(slot0_session0);
+    test_logout_bad(slot0_session0);
+    test_so_login_already_logged_in(slot0_session0);
+    test_so_global_login_logout_good(slot0_session0, slot0_session1, slot1_session0);
+    test_user_global_login_logout_good(slot0_session0, slot0_session1, slot1_session0);
 
-    rv = C_CloseSession(handle);
+    rv += C_CloseSession(slot0_session0);
+    rv += C_CloseSession(slot0_session1);
+    rv += C_CloseSession(slot1_session0);
     if (rv == CKR_OK)
 	LOGV("C_CloseSession was successful");
     else

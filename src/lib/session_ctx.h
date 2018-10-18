@@ -55,6 +55,7 @@ tpm_ctx *session_ctx_get_tpm_ctx(session_ctx *ctx);
 
 token *session_ctx_get_token(session_ctx *ctx);
 
+void session_ctx_state_set(session_ctx *ctx, session_ctx_state state);
 session_ctx_state session_ctx_state_get(session_ctx *ctx);
 
 static inline bool session_is_rw(session_ctx *ctx) {

@@ -138,6 +138,13 @@ CK_RV session_login (CK_SESSION_HANDLE session, CK_USER_TYPE user_type,
     twist_free(tpin);
     session_ctx_unlock(ctx);
 
+    if (rv == CKR_OK) {
+        token *tok = session_ctx_get_token(ctx);
+        session_ctx_state state = session_ctx_state_get(ctx);
+
+        session_table_update_ctx_state(global.s_table, tok, state);
+    }
+
     return rv;
 }
 
@@ -153,6 +160,13 @@ CK_RV session_logout (CK_SESSION_HANDLE session) {
     CK_RV rv = session_ctx_logout(ctx);
 
     session_ctx_unlock(ctx);
+
+    if (rv == CKR_OK) {
+        token *tok = session_ctx_get_token(ctx);
+        session_ctx_state state = session_ctx_state_get(ctx);
+
+        session_table_update_ctx_state(global.s_table, tok, state);
+    }
 
     return rv;
 }
