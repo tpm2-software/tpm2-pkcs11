@@ -38,6 +38,7 @@ struct token {
 
     struct {
         bool sym_support; /* use TPM for unwrapping if true else use software */
+        bool is_initialized; /* token initialization state */
     } config;
 
 };

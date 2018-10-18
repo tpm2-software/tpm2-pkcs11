@@ -336,12 +336,11 @@ class Db(object):
         x = c.fetchall()
         return x
 
-    def addtoken(self, pid, label, sopobjkey, sopobjauth, userpobjkey, userpobjauth, config):
+    def addtoken(self, pid, sopobjkey, sopobjauth, userpobjkey, userpobjauth, config, label=None):
 
         token = {
             # General Metadata
             'pid'        : pid,
-            'label'      : label,
 
             'sopobjauthkeysalt'  : sopobjkey['salt'],
             'sopobjauthkeyiters' : sopobjkey['iters'],
@@ -352,6 +351,12 @@ class Db(object):
             'userpobjauth'         : userpobjauth,
             'config'               : list_dict_to_kvp(config)
         }
+
+        if 'token-init=True' in token['config'] and label is None:
+            raise RuntimeError('Expected label if token is to be initialized')
+
+        if label:
+             token['label'] = label
 
         columns = ', '.join(token.keys())
         placeholders = ', '.join('?' * len(token))
@@ -494,13 +499,13 @@ class Db(object):
             CREATE TABLE IF NOT EXISTS tokens(
                 id INTEGER PRIMARY KEY,
                 pid INTEGER NOT NULL,
-                label TEST NOT NULL UNIQUE,
-                userpobjauthkeysalt TEXT NOT NULL,
-                userpobjauthkeyiters NUMBER NOT NULL,
-                userpobjauth TEXT NOT NULL,
-                sopobjauthkeysalt TEXT NOT NULL,
-                sopobjauthkeyiters NUMBER NOT NULL,
-                sopobjauth TEXT NOT NULL,
+                label TEXT UNIQUE,
+                userpobjauthkeysalt TEXT,
+                userpobjauthkeyiters NUMBER,
+                userpobjauth TEXT,
+                sopobjauthkeysalt TEXT,
+                sopobjauthkeyiters NUMBER,
+                sopobjauth TEXT,
                 config TEXT NOT NULL,
                 FOREIGN KEY (pid) REFERENCES pobjects(id) ON DELETE CASCADE
             );
@@ -790,7 +795,7 @@ class DestroyCommand(Command):
 @commandlet("addtoken")
 class AddTokenCommand(Command):
     '''
-    Adds a token to a tpm2-pkcs11 store
+    Adds an initialized token to a tpm2-pkcs11 store
     '''
 
     # adhere to an interface
@@ -825,138 +830,205 @@ class AddTokenCommand(Command):
             + 'This is not recommended for production environments,as the tool will'
             + 'auto-configure this option based on TPM support.')
 
-    def __call__(self, args):
+    @staticmethod
+    def verify_pobjpin(pobject, pobjpin):
 
-        path = args['path']
+        iters = pobject['pobjauthiters']
+        salt = binascii.unhexlify(pobject['pobjauthsalt'])
+        pobjkey = hash_pass(pobjpin.encode(), salt=salt, iters=iters)
+
+        c = AESCipher(pobjkey['rhash'])
+        try:
+            return c.decrypt(pobject['pobjauth'])
+        except InvalidTag:
+            sys.exit('Invalid --pobj-pin, please enter the correct pin')
+
+    @staticmethod
+    def protect_pobj_auth(pobjauthhash, sopin, userpin):
+
+        # Now we need to protect the primaryobject auth in a way where SO and USER can access the value.
+        # When a "pkcs11" admin generates a token, they give the auth value to SO and USER.
+        sopobjkey = hash_pass(sopin.encode())
+        userpobjkey = hash_pass(userpin.encode())
+
+        sopobjauth = AESCipher(sopobjkey['rhash']).encrypt(pobjauthhash)
+
+        userpobjauth = AESCipher(userpobjkey['rhash']).encrypt(pobjauthhash)
+
+        return (sopobjkey, sopobjauth, userpobjkey, userpobjauth)
+
+    @staticmethod
+    def do_token_init(db, path, args):
+
         pobjpin = args['pobj_pin']
         userpin = args['userpin']
         sopin = args['sopin']
         label = args['label']
         pid = args['pid']
 
+        tpm2 = None
+
+        # Verify pid is in db
+        pobject = db.getprimary(pid)
+
+        pobjauthhash = AddTokenCommand.verify_pobjpin(pobject, pobjpin)
+
+        with TemporaryDirectory() as d:
+            tpm2 = Tpm2(d, path)
+
+            #
+            # Figure out if TPM supports encryptdecrypt
+            # interface. If it does use a symmetric TPM
+            # key to wrap object authorizations. If it
+            # doesn't default to Software based crypto.
+            #
+            # Auto-configure only if the user didn't specify
+            # explicitly what to do or specified auto.
+            #
+            print("auto-detecting TPM encryptdecrypt interface for wrapping key usage")
+            commands = tpm2.getcap('commands')
+            sym_support = 'encryptdecrypt' in commands
+
+            if args['wrap'] != 'auto':
+                if args['wrap'] == 'software' and sym_support:
+                    print("Warning: confifuring software wrapping key when TPM has support.\n"
+                      "THIS IS NOT RECOMENDED")
+                    sym_support = False
+                elif args['wrap'] == 'tpm' and not sym_support:
+                    sys.exit("TPM does not have symmetric wrapping key support and it was "
+                         + "explicitly requested.")
+                else:
+                    sym_support = True if args['wrap'] == 'tpm' else False
+
+            print('Using "%s" based object authorization protections'
+                  % ('TPM' if sym_support else "Software"))
+
+            # generate an auth for the wrapping object, which will be sealed
+            # to that object.
+            wrappingobjauth = hash_pass(os.urandom(32))
+
+            # We generate one auth for the sosealobj and the usersealobj
+            sosealauth = hash_pass(sopin.encode())
+            usersealauth = hash_pass(userpin.encode())
+
+            # Now we generate the two seal objects, using the sealauths as their
+            # auth values and sealing the wrappingobjauth value to it.
+            # soobject will be an AES key used for decrypting tertiary object
+            # auth values.
+            usersealpriv, usersealpub, usersealpubdata = tpm2.create(pobject['handle'], pobjauthhash,
+                                                    usersealauth['hash'], seal=wrappingobjauth['hash'])
+            sosealpriv, sosealpub, sosealpubdata = tpm2.create(pobject['handle'], pobjauthhash,
+                                                sosealauth['hash'], seal=wrappingobjauth['hash'])
+
+            #
+            # If the TPM supports encryptdecrypt we create the wrapping object in the TPM,
+            # else we use the sealed auth value as the key.
+            #
+            # We also need to adjust the key sizes for the wrapping key and secondary object to be the maximum
+            # value reported by the TPM.
+            #
+            fixed_properties = tpm2.getcap('properties-fixed')
+            y = yaml.load(fixed_properties)
+            sym_size = y['TPM2_PT_CONTEXT_SYM_SIZE']['value']
+
+            if sym_support:
+                # Now we create the wrappingbject, with algorithm aes256
+                wrappingobjpriv, wrappingobjpub, wrappingobjpubdata = tpm2.create(pobject['handle'], pobjauthhash, wrappingobjauth['hash'], alg='aes{}cfb'.format(sym_size))
+                wrappingctx = tpm2.load(pobject['handle'], pobjauthhash, wrappingobjpriv, wrappingobjpub)
+
+            sopobjkey, sopobjauth, userpobjkey, userpobjauth = AddTokenCommand.protect_pobj_auth(pobjauthhash, sopin, userpin)
+
+            # Now we create the secondary object, which is just a parent dummy, wrapping it's
+            # auth with the wrapping key
+            sobjauth = hash_pass(os.urandom(32))['hash']
+
+            if sym_support:
+                encsobjauth = tpm2.encrypt(wrappingctx, wrappingobjauth['hash'], sobjauth)
+                encsobjauth = binascii.hexlify(encsobjauth)
+            else:
+                encsobjauth = AESCipher(wrappingobjauth['rhash']).encrypt(sobjauth)
+
+            objattrs="restricted|decrypt|fixedtpm|fixedparent|sensitivedataorigin|userwithauth"
+            sobjpriv, sobjpub, sobjpubdata = tpm2.create(pobject['handle'], pobjauthhash, sobjauth, objattrs=objattrs, alg='aes{}'.format(sym_size))
+
+            # If this succeeds, we update the token table
+            config = [ { 'sym-support' : sym_support}, {'token-init' : True } ]
+            tokid = db.addtoken(pobject['id'], sopobjkey, sopobjauth, userpobjkey, userpobjauth, config, label=label)
+
+            # now we update the sealobject table with the tokid to seal objects mapping
+            db.addsealobjects(tokid, usersealauth, usersealpriv, usersealpub, sosealauth, sosealpriv, sosealpub)
+
+            # Update the wrapping object table
+            if sym_support:
+                tokid = db.addwrapping(tokid, wrappingobjpriv, wrappingobjpub)
+
+            # Update the secondary object table
+            tokid = db.addsecondary(tokid, encsobjauth, sobjpriv, sobjpub)
+
+            print("Created token label: %s" % label)
+
+    @staticmethod
+    def do_token_noninit(db, args):
+
+        pid = args['pid']
+        pobjpin = args['pobj_pin']
+
+        pobject = db.getprimary(pid)
+
+        if len(pobjpin) > 0:
+            question = 'The primary object auth value will not be protected until the token is initialized, continue?'
+            choice = query_yes_no(question)
+            if not choice:
+                sys.exit(0)
+
+        pobjauthhash = AddTokenCommand.verify_pobjpin(pobject, pobjpin)
+
+        sopobjkey, sopobjauth, userpobjkey, userpobjauth = AddTokenCommand.protect_pobj_auth(pobjauthhash, '', '')
+
+        config = [ {'token-init' : False } ]
+
+        tokid = db.addtoken(pobject['id'], sopobjkey, sopobjauth, userpobjkey, userpobjauth, config)
+
+        print('Created token id: {tokid}'.format(tokid=tokid))
+
+    def __call__(self, args):
+
         path = args['path']
+        do_token_init = not args.get('no_init', False)
 
         with Db(path) as db:
 
-            tpm2 = None
-
-            # Verify pid is in db
-            pobject = db.getprimary(pid)
-
-            iters = pobject['pobjauthiters']
-            salt = binascii.unhexlify(pobject['pobjauthsalt'])
-            pobjkey = hash_pass(pobjpin.encode(), salt=salt, iters=iters)
-
-            c = AESCipher(pobjkey['rhash'])
-            try:
-                pobjauthhash = c.decrypt(pobject['pobjauth'])
-            except InvalidTag:
-                sys.exit('Invalid --pobj-pin, please enter the correct pin')
-
-            with TemporaryDirectory() as d:
-                tpm2 = Tpm2(d, path)
-
-                #
-                # Figure out if TPM supports encryptdecrypt
-                # interface. If it does use a symmetric TPM
-                # key to wrap object authorizations. If it
-                # doesn't default to Software based crypto.
-                #
-                # Auto-configure only if the user didn't specify
-                # explicitly what to do or specified auto.
-                #
-                print("auto-detecting TPM encryptdecrypt interface for wrapping key usage")
-                commands = tpm2.getcap('commands')
-                sym_support = 'encryptdecrypt' in commands
-
-                if args['wrap'] != 'auto':
-                    if args['wrap'] == 'software' and sym_support:
-                        print("Warning: confifuring software wrapping key when TPM has support.\n"
-                          "THIS IS NOT RECOMENDED")
-                        sym_support = False
-                    elif args['wrap'] == 'tpm' and not sym_support:
-                        sys.exit("TPM does not have symmetric wrapping key support and it was "
-                             + "explicitly requested.")
-                    else:
-                        sym_support = True if args['wrap'] == 'tpm' else False
-
-                print('Using "%s" based object authorization protections'
-                      % ('TPM' if sym_support else "Software"))
-
-                # generate an auth for the wrapping object, which will be sealed
-                # to that object.
-                wrappingobjauth = hash_pass(os.urandom(32))
-
-                # We generate one auth for the sosealobj and the usersealobj
-                sosealauth = hash_pass(sopin.encode())
-                usersealauth = hash_pass(userpin.encode())
-
-                # Now we generate the two seal objects, using the sealauths as their
-                # auth values and sealing the wrappingobjauth value to it.
-                # soobject will be an AES key used for decrypting tertiary object
-                # auth values.
-                usersealpriv, usersealpub, usersealpubdata = tpm2.create(pobject['handle'], pobjauthhash,
-                                                        usersealauth['hash'], seal=wrappingobjauth['hash'])
-                sosealpriv, sosealpub, sosealpubdata = tpm2.create(pobject['handle'], pobjauthhash,
-                                                    sosealauth['hash'], seal=wrappingobjauth['hash'])
-
-                #
-                # If the TPM supports encryptdecrypt we create the wrapping object in the TPM,
-                # else we use the sealed auth value as the key.
-                #
-                # We also need to adjust the key sizes for the wrapping key and secondary object to be the maximum
-                # value reported by the TPM.
-                #
-                fixed_properties = tpm2.getcap('properties-fixed')
-                y = yaml.load(fixed_properties)
-                sym_size = y['TPM2_PT_CONTEXT_SYM_SIZE']['value']
-
-                if sym_support:
-                    # Now we create the wrappingbject, with algorithm aes256
-                    wrappingobjpriv, wrappingobjpub, wrappingobjpubdata = tpm2.create(pobject['handle'], pobjauthhash, wrappingobjauth['hash'], alg='aes{}cfb'.format(sym_size))
-                    wrappingctx = tpm2.load(pobject['handle'], pobjauthhash, wrappingobjpriv, wrappingobjpub)
-
-                # Now we need to protect the primaryobject auth in a way where SO and USER can access the value.
-                # When a "pkcs11" admin generates a token, they give the auth value to SO and USER.
-                sopobjkey = hash_pass(sopin.encode())
-                userpobjkey = hash_pass(userpin.encode())
-
-                sopobjauth = AESCipher(sopobjkey['rhash']).encrypt(pobjauthhash)
-
-                userpobjauth = AESCipher(userpobjkey['rhash']).encrypt(pobjauthhash)
-
-                # Now we create the secondary object, which is just a parent dummy, wrapping it's
-                # auth with the wrapping key
-
-
-                sobjauth = hash_pass(os.urandom(32))['hash']
-
-                if sym_support:
-                    encsobjauth = tpm2.encrypt(wrappingctx, wrappingobjauth['hash'], sobjauth)
-                    encsobjauth = binascii.hexlify(encsobjauth)
+                if do_token_init:
+                    AddTokenCommand.do_token_init(db, path, args)
                 else:
-                    encsobjauth = AESCipher(wrappingobjauth['rhash']).encrypt(sobjauth)
+                    AddTokenCommand.do_token_noninit(db, args)
 
-                objattrs="restricted|decrypt|fixedtpm|fixedparent|sensitivedataorigin|userwithauth"
-                sobjpriv, sobjpub, sobjpubdata = tpm2.create(pobject['handle'], pobjauthhash, sobjauth, objattrs=objattrs, alg='aes{}'.format(sym_size))
+@commandlet("addemptytoken")
+class AddEmptyTokenCommand(AddTokenCommand):
+    '''
+    Adds an un-initialized token to a tpm2-pkcs11 store.
+    '''
+    def generate_options(self, group_parser):
+        group_parser.add_argument(
+            '--pid',
+            type=int,
+            help='The primary object id to associate with this token.\n',
+            required=True),
+        group_parser.add_argument(
+            '--pobj-pin',
+            help='The primary object password. This password is use for authentication to the primary object.\n',
+            default="")
+        group_parser.add_argument(
+            "--wrap",
+            choices=[ 'auto', 'software', 'tpm' ],
+            default='auto',
+            help='Configure usage of SW based crypto for internal object protection.\n'
+            + 'This is not recommended for production environments,as the tool will'
+            + 'auto-configure this option based on TPM support.')
 
-                # If this succeeds, we update the token table
-                config = [ { 'sym-support' : sym_support} ]
-                tokid = db.addtoken(pobject['id'], label, sopobjkey, sopobjauth, userpobjkey, userpobjauth, config)
-
-                # now we update the sealobject table with the tokid to seal objects mapping
-                db.addsealobjects(tokid, usersealauth, usersealpriv, usersealpub, sosealauth, sosealpriv, sosealpub)
-
-                # Update the wrapping object table
-                if sym_support:
-                    tokid = db.addwrapping(tokid, wrappingobjpriv, wrappingobjpub)
-
-                # Update the secondary object table
-                tokid = db.addsecondary(tokid, encsobjauth, sobjpriv, sobjpub)
-
-                db.commit()
-
-        print("Created token: %s" % label)
+    def __call__(self, args):
+        args['no_init'] = True
+        super(self.__class__, self).__call__(args)
 
 @commandlet("addkey")
 class AddKeyCommand(Command):

@@ -318,6 +318,8 @@ static bool parse_token_config(const char *key, const char *value, size_t index,
 
     if(!strcmp(key, "sym-support")) {
         return !str_to_bool(value, &t->config.sym_support);
+    } else if (!strcmp(key, "token-init")) {
+        return !str_to_bool(value, &t->config.is_initialized);
     } else {
         LOGE("Unknown token config key: \"%s\"", key);
     }
@@ -490,7 +492,6 @@ int init_tobjects(unsigned sid, tobject **head) {
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 
         tobject *t = tobject_new(stmt);
-
         if (!t) {
             goto error;
         }
@@ -508,6 +509,7 @@ int init_tobjects(unsigned sid, tobject **head) {
          *   ~~~       ^
          */
         if (!cur) {
+            free(t);
             LOGE("Linked list not initialized properly");
             goto error;
         }
@@ -844,6 +846,11 @@ CK_RV db_get_tokens(token **t, size_t *len) {
         int rc = init_pobject(t->pid, &t->pobject);
         if (rc != SQLITE_OK) {
             goto error;
+        }
+
+        if (!t->config.is_initialized) {
+            LOGV("skipping further initialization of token tid: %u", t->id);
+            continue;
         }
 
         /*
