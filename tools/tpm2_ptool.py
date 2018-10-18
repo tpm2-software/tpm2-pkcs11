@@ -40,7 +40,7 @@ def list_dict_to_kvp(l):
     return x
 
 def dict_from_kvp(kvp):
-    return dict(x.split('=') for x in kvp.split(','))
+    return dict(x.split('=') for x in kvp.split('\n'))
 
 def rand_str(num):
     return binascii.hexlify(os.urandom(32))
