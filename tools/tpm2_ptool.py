@@ -152,7 +152,7 @@ class Tpm2(object):
         cmd = ['tpm2_evictcontrol', '-c', str(ctx) ]
 
         if ownerauth and len(ownerauth) > 0:
-            cmd.extend('-P', ownerauth)
+            cmd.extend(['-P', ownerauth])
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         stdout, stderr = p.communicate()
