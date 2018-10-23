@@ -27,7 +27,7 @@
         return x;
     }
 #else
-    static void int alloc_fails(void) {
+    static int alloc_fails(void) {
         return 0;
     }
 #endif
