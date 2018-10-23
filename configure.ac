@@ -58,12 +58,12 @@ AC_ARG_ENABLE([unit],
                             [build cmocka unit tests (default is no)])],
             [enable_unit=$enableval],
             [enable_unit=no])
-AS_IF([test "x$enable_unit" != xno],
+AS_IF([test "x$enable_unit" = "xyes"],
       [PKG_CHECK_MODULES([CMOCKA],
                          [cmocka],
                          [AC_DEFINE([HAVE_CMOCKA],
                                     [1])])])
-AM_CONDITIONAL([UNIT], [test "x$enable_unit" != xno])
+AM_CONDITIONAL([UNIT], [test "x$enable_unit" = "xyes"])
 
 #
 # enable integration tests and check for simulator binary
@@ -105,9 +105,8 @@ AC_DEFUN([unit_test_checks],[
     AC_DEFINE([UNIT_TESTING], [1])
 ])
 
-AS_IF([test "$unit" != "no"],
-       [unit_test_checks],
-       [])
+AS_IF([test "x$enable_unit" = "xyes"],
+       [unit_test_checks])
 
 # If P11 kit is installed we want to detect it and install
 # the module config file and change the library install location.
