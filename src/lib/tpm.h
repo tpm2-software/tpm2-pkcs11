@@ -76,14 +76,16 @@ CK_RV tpm_hash_final(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, C
 
 #define CKM_AES_NULL (CKM_VENDOR_DEFINED | 0x1)
 
-bool tpm_encrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mode, twist iv, twist plaintext, twist *ciphertext, twist *iv_out);
+CK_RV tpm_encrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mode, twist iv, twist plaintext, twist *ciphertext, twist *iv_out);
 
-bool tpm_decrypt_handle(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_MECHANISM_TYPE mode, twist iv, twist ciphertext, twist *plaintext, twist *iv_out);
+CK_RV tpm_decrypt_handle(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_MECHANISM_TYPE mode, twist iv, twist ciphertext, twist *plaintext, twist *iv_out);
 
-bool tpm_decrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mode, twist iv, twist ciphertext, twist *plaintext, twist *iv_out);
+CK_RV tpm_decrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mode, twist iv, twist ciphertext, twist *plaintext, twist *iv_out);
 
 CK_RV tpm_rsa_decrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech,
         CK_BYTE_PTR ctext, CK_ULONG ctextlen,
         CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen);
+
+bool tpm_register_handle(tpm_ctx *ctx, uint32_t *handle);
 
 #endif /* SRC_PKCS11_TPM_H_ */

@@ -16,7 +16,7 @@ struct encrypt_op_data {
     CK_MECHANISM_TYPE mode;
 };
 
-typedef bool (*tpm_op)(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mode, twist iv, twist data_in, twist *data_out, twist *iv_out);
+typedef CK_RV (*tpm_op)(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mode, twist iv, twist data_in, twist *data_out, twist *iv_out);
 
 static CK_RV common_init (operation op, CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
@@ -141,8 +141,8 @@ static CK_RV common_update (operation op, CK_SESSION_HANDLE session, unsigned ch
 
     tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
 
-    bool result = fop(tpm, opdata->object, opdata->mode, opdata->iv, input, &output, &iv_out);
-    if (!result) {
+    rv = fop(tpm, opdata->object, opdata->mode, opdata->iv, input, &output, &iv_out);
+    if (rv != CKR_OK) {
         goto out;
     }
 
