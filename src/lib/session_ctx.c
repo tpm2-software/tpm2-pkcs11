@@ -208,6 +208,14 @@ CK_RV session_ctx_login(session_ctx *ctx, twist pin, int usertype) {
 
     tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
 
+    if (!t->pobject.is_handle_registered) {
+        bool res = tpm_register_handle(tpm, &t->pobject.handle);
+        if (!res) {
+            goto error;
+        }
+        t->pobject.is_handle_registered = true;
+    }
+
     /* load seal object */
     sealobject *sealobj = &t->sealobject;
     twist sealpub = usertype == CKU_USER ? sealobj->userpub : sealobj->sopub;

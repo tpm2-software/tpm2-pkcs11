@@ -16,6 +16,7 @@
 
 typedef struct pobject pobject;
 struct pobject {
+    bool is_handle_registered;
     uint32_t handle;
     twist objauth;
 };
