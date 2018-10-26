@@ -22,6 +22,18 @@ Usage:
 END
 }
 
+function on_exit {
+    if [ -e private.pem ]
+    then
+        rm -rf private.pem
+    fi    
+
+    if [ -e primary.ctx ]
+    then
+        rm -rf primary.ctx
+    fi    
+}
+
 TPM2_PKCS11_STORE=""
 while test $# -gt 0; do
     echo $1
@@ -87,11 +99,11 @@ tpm2_ptool.py addkey --algorithm=aes128 --label="import-primary" --userpin=anoth
 echo "importing rsa2048 key under token 'import-primary'"
 openssl genrsa -out private.pem 2048
 tpm2_ptool.py importrsa --privkey='private.pem' --algorithm=rsa --key-label="imported_key" --label="import-primary" --userpin=anotheruserpin --path=$TPM2_PKCS11_STORE
-rm -f private.pem
 
-rm -f primary.ctx
 
 echo "RUN COMMAND BELOW BEFORE make check"
 echo "export TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
+
+trap on_exit EXIT
 
 exit 0

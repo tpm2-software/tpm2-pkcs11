@@ -261,7 +261,7 @@ class Tpm2(object):
             raise RuntimeError("Could not execute tpm2_getcap: %s", stderr)
         return stdout
 
-    def importrsa(self, phandle, pauth, objauth, privkey, objattrs=None, seal=None, alg=None):
+    def import(self, phandle, pauth, objauth, privkey, objattrs=None, seal=None, alg=None):
 
         fd, priv = tempfile.mkstemp(prefix='', suffix='.priv', dir=self._tmp)
         fd, pub = tempfile.mkstemp(prefix='', suffix='.pub', dir=self._tmp)
@@ -278,23 +278,18 @@ class Tpm2(object):
           
         if pauth and len(pauth) > 0:
             cmd.extend(['-P', 'hex:%s' % pauth.decode()])
-            print('-P', 'hex:%s' % pauth.decode())
 
         if objauth and len(objauth) > 0:
             cmd.extend(['-p', 'hex:%s' % objauth.decode()])
-            print('-p', 'hex:%s' % objauth.decode())
 
         if objattrs != None:
             cmd.extend(['-A', objattrs])
-            print('-A', objattrs)
 
         if seal != None:
             cmd.extend(['-I', '-'])
-            print('-I', '-')
 
         if alg != None:
             cmd.extend(['-G', alg])
-            print('-G', alg)
 
         p = Popen(cmd,
                    stdout=PIPE, stderr=PIPE, stdin=PIPE, env=os.environ)
@@ -1283,8 +1278,8 @@ class AddKeyCommand(Command):
 
                 print('Added key as label: "{keylabel}"'.format(keylabel=keylabel))
 
-@commandlet("importrsa")
-class ImportRsaCommand(Command):
+@commandlet("import")
+class ImportCommand(Command):
     '''
     Imports a rsa key to a token within a tpm2-pkcs11 store.
     '''
@@ -1306,7 +1301,7 @@ class ImportRsaCommand(Command):
         group_parser.add_argument(
             '--algorithm',
             help='The type of the key.\n',
-            choices=[ 'rsa', 'rsa1024', 'rsa2048', 'aes128', 'aes256' ],
+            choices=[ 'rsa'],
             required=True)
         group_parser.add_argument(
             '--id',
@@ -1321,8 +1316,6 @@ class ImportRsaCommand(Command):
             help='The User pin.\n'),
 
     def __call__(self, args):
-
-
         path = args['path']
         privkey = args['privkey']
         label = args['label']
