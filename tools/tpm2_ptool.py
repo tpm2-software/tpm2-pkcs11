@@ -688,7 +688,7 @@ class InitCommand(Command):
                     else:
                         # get the primary object auth value and convert it to hex
                         pobjauth = args['primary_auth'] if args['primary_auth'] != None else ""
-                        pobjauth = binascii.hexlify(pobjauth)
+                        pobjauth = binascii.hexlify(pobjauth.encode())
 
                         handle = args['primary_handle']
                         if handle == None:
@@ -887,7 +887,7 @@ class AddTokenCommand(Command):
             #
             print("auto-detecting TPM encryptdecrypt interface for wrapping key usage")
             commands = tpm2.getcap('commands')
-            sym_support = 'encryptdecrypt' in commands
+            sym_support = 'encryptdecrypt'.encode() in commands
 
             if args['wrap'] != 'auto':
                 if args['wrap'] == 'software' and sym_support:
