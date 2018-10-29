@@ -38,6 +38,49 @@ static int test_setup(void **state) {
     return 0;
 }
 
+static int test_setup_by_label(void **state) {
+
+    test_info *info = calloc(1, sizeof(*info));
+    assert_non_null(info);
+
+    /* get the slots */
+    CK_SLOT_ID slots[6];
+    unsigned long count = ARRAY_LEN(slots);
+    CK_RV rv = C_GetSlotList(true, slots, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 3);
+
+    unsigned i;
+    CK_SLOT_ID slot = ~0;
+    for (i=0; i < count; i++) {
+        CK_TOKEN_INFO info;
+        rv = C_GetTokenInfo(slots[i], &info);
+        assert_int_equal(rv, CKR_OK);
+
+        int eq = !memcmp((char *)info.label, "import-keys                     ", sizeof(info.label));
+        if (eq) {
+            slot = slots[i];
+            break;
+        }
+    }
+
+    assert_in_range(i, 0, count - 1);
+
+    /* open a session on foudn slot */
+    CK_SESSION_HANDLE session;
+    rv = C_OpenSession(slot, CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL,
+            NULL, &session);
+    assert_int_equal(rv, CKR_OK);
+
+    /* assign to state */
+    info->session = session;
+
+    *state = info;
+
+    /* success */
+    return 0;
+}
+
 static int test_teardown(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -89,14 +132,13 @@ static void test_find_objects_aes_good(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
-static void test_find_objects_by_label(void **state) {
+static void do_test_find_objects_by_label(void **state, const char *key_label, unsigned expected) {
 
     test_info *ti = test_info_from_state(state);
     CK_SESSION_HANDLE session = ti->session;
 
-    char key_label[] = "mykeylabel";
     CK_ATTRIBUTE tmpl[] = {
-      {CKA_LABEL, key_label, sizeof(key_label) - 1},
+      {CKA_LABEL, (void *)key_label, strlen(key_label)},
     };
 
     CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
@@ -106,13 +148,23 @@ static void test_find_objects_by_label(void **state) {
      * There is only one key in the test db with the label "mykeylabel"
      */
     unsigned long count;
-    CK_OBJECT_HANDLE objhandles[1];
+    CK_OBJECT_HANDLE objhandles[1024];
     rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
     assert_int_equal(rv, CKR_OK);
-    assert_int_equal(count, 1);
+    assert_int_equal(count, expected);
 
     rv = C_FindObjectsFinal(session);
     assert_int_equal(rv, CKR_OK);
+}
+
+static void test_find_objects_by_label(void **state) {
+
+    do_test_find_objects_by_label(state, "mykeylabel", 1);
+}
+
+static void test_find_imprted_objects_by_label(void **state) {
+
+    do_test_find_objects_by_label(state, "imported_key", 1);
 }
 
 static void test_find_objects_via_empty_template(void **state) {
@@ -145,6 +197,8 @@ int main() {
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_find_objects_via_empty_template,
                 test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_find_imprted_objects_by_label,
+                test_setup_by_label, test_teardown),
     };
 
     return cmocka_run_group_tests(tests, group_setup, group_teardown);
