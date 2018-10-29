@@ -135,7 +135,9 @@ class Tpm2(object):
         ctx = os.path.join(self._tmp, "context.out")
         cmd = ['tpm2_createprimary',
                     '-p', 'hex:%s' % objauth.decode(),
-                    '-o', ctx]
+                    '-o', ctx,
+                    '-g', 'sha256',
+                    '-G', 'rsa']
 
         if ownerauth and len(ownerauth) > 0:
             cmd.extend(['-P', ownerauth])
@@ -258,6 +260,49 @@ class Tpm2(object):
         if rc:
             raise RuntimeError("Could not execute tpm2_getcap: %s", stderr)
         return stdout
+
+    def importkey(self, phandle, pauth, objauth, privkey, objattrs=None, seal=None, alg=None):
+
+        fd, priv = tempfile.mkstemp(prefix='', suffix='.priv', dir=self._tmp)
+        fd, pub = tempfile.mkstemp(prefix='', suffix='.pub', dir=self._tmp)
+
+        if privkey and len(privkey) > 0:
+            exists = os.path.isfile(privkey)
+            if not exists:   
+                raise RuntimeError("File '%s' path is invalid or is missing", privkey)
+        else:
+            sys.exit("Invalid file path")
+
+        parent_path = "file:"+ str(phandle)
+        cmd = ['tpm2_import', '-V', '-C', parent_path, '-k', privkey, '-u', pub, '-r', priv]
+          
+        if pauth and len(pauth) > 0:
+            cmd.extend(['-P', 'hex:%s' % pauth.decode()])
+
+        if objauth and len(objauth) > 0:
+            cmd.extend(['-p', 'hex:%s' % objauth.decode()])
+
+        if objattrs != None:
+            cmd.extend(['-A', objattrs])
+
+        if seal != None:
+            cmd.extend(['-I', '-'])
+
+        if alg != None:
+            cmd.extend(['-G', alg])
+
+        p = Popen(cmd,
+                   stdout=PIPE, stderr=PIPE, stdin=PIPE, env=os.environ)
+        stdout, stderr = p.communicate(input=seal)
+        rc = p.wait()
+        if (rc != 0):
+            os.remove(pub)
+            os.remove(priv)
+            raise RuntimeError("Could not execute tpm2_import: %s" % str(stderr))
+
+        pub = self._move(pub)
+        priv = self._move(priv)
+        return priv, pub, stdout
 
 class TemporaryDirectory(object):
     """Context manager for tempfile.mkdtemp() so it's usable with "with" statement."""
@@ -949,7 +994,7 @@ class AddTokenCommand(Command):
                 encsobjauth = AESCipher(wrappingobjauth['rhash']).encrypt(sobjauth)
 
             objattrs="restricted|decrypt|fixedtpm|fixedparent|sensitivedataorigin|userwithauth"
-            sobjpriv, sobjpub, sobjpubdata = tpm2.create(pobject['handle'], pobjauthhash, sobjauth, objattrs=objattrs, alg='aes{}'.format(sym_size))
+            sobjpriv, sobjpub, sobjpubdata = tpm2.create(pobject['handle'], pobjauthhash, sobjauth, objattrs=objattrs, alg='rsa2048')
 
             # If this succeeds, we update the token table
             config = [ { 'sym-support' : sym_support}, {'token-init' : True } ]
@@ -1030,8 +1075,254 @@ class AddEmptyTokenCommand(AddTokenCommand):
         args['no_init'] = True
         super(self.__class__, self).__call__(args)
 
+class NewKeyCommandBase(Command):
+    '''
+    creates a key to a token within a tpm2-pkcs11 store.
+    '''
+    def generate_options(self, group_parser):
+        group_parser.add_argument(
+            '--id',
+            help='The key id. Defaults to a random 8 bytes of hex.\n',
+            default=binascii.hexlify(os.urandom(8)))
+        pinopts = group_parser.add_mutually_exclusive_group(required=True)
+        pinopts.add_argument(
+            '--sopin',
+            help='The Administrator pin.\n'),
+        pinopts.add_argument(
+            '--userpin',
+            help='The User pin.\n'),
+
+    # Implemented by derived class
+    def new_key_create(self, sobjctx, sobjauth, objauth, tpm2, path, alg, privkey):
+        raise NotImplementedError('Implement: new_key')
+
+    @staticmethod
+    def new_key_init(label, sopin, userpin, db, tpm2):
+        token = db.gettoken(label)
+        token_config =  dict_from_kvp(token['config'])
+        pobj = db.getprimary(token['pid'])
+
+        # Get the primary object encrypted auth value and sokey information
+        # to decode it. Based on the incoming pin
+        is_so = sopin != None
+        if is_so:
+            pin = sopin
+            pinpobjauthkeysalt = token['sopobjauthkeysalt']
+            pinpobjauthkeyiters = token['sopobjauthkeyiters']
+            pinpobjauth = token['sopobjauth']
+        else:
+            pin = userpin
+            pinpobjauthkeysalt = token['userpobjauthkeysalt']
+            pinpobjauthkeyiters = token['userpobjauthkeyiters']
+            pinpobjauth = token['userpobjauth']
+
+        pinpobjauthkeysalt = binascii.unhexlify(pinpobjauthkeysalt)
+        pinpobjauthkey = hash_pass(pin.encode(), iters=pinpobjauthkeyiters, salt=pinpobjauthkeysalt)
+
+        pinpobjauth = AESCipher(pinpobjauthkey['rhash']).decrypt(pinpobjauth)
+
+        # At this point we have recovered the ACTUAL auth value for the primary object, so now we
+        # can load up the seal objects
+        sealobject = db.getsealobject(token['id'])
+
+        if is_so:
+            sealpub = sealobject['sopub']
+            sealpriv = sealobject['sopriv']
+            salt = sealobject['soauthsalt']
+            iters = sealobject['soauthiters']
+        else:
+            sealpub = sealobject['userpub']
+            sealpriv = sealobject['userpriv']
+            salt = sealobject['userauthsalt']
+            iters = sealobject['userauthiters']
+
+        salt = binascii.unhexlify(salt)
+        sealauth = hash_pass(pin.encode(), iters, salt)['hash']
+
+        # Load the so sealobject using the PARENTS AUTH (primaryobject)
+        sealctx = tpm2.load(pobj['handle'], pinpobjauth, sealpriv, sealpub)
+
+        # Now that the sealobject is loaded, we need to unseal the wrapping key
+        # object auth or the key when the TPM doesn't support encryptdecrypt
+
+        wrappingauth = tpm2.unseal(sealctx, sealauth)
+
+        sym_support = str2bool(token_config['sym-support'])
+        if sym_support:
+            # Now that we have the unsealed wrappingauth value
+            # Load the wrapping object
+            wrappingobj = db.getwrapping(token['id'])
+            wrappingctx = tpm2.load(pobj['handle'], pinpobjauth, wrappingobj['priv'], wrappingobj['pub'])
+
+        # Now get the secondary object from db
+        sobj = db.getsecondary(token['id'])
+
+        # decrypt sobj auth with wrapping
+        sobjauth = sobj['objauth'];
+        if sym_support:
+            sobjauth = binascii.unhexlify(sobjauth)
+            sobjauth = tpm2.decrypt(wrappingctx, wrappingauth, sobjauth)
+        else:
+            c = AESCipher(binascii.unhexlify(wrappingauth))
+            sobjauth = c.decrypt(sobjauth)
+
+
+        # load the secondary object
+        sobjctx = tpm2.load(pobj['handle'], pinpobjauth, sobj['priv'], sobj['pub'])
+
+        #create an auth value for the tertiary object.
+        objauth = hash_pass(rand_str(32))['hash']
+
+        if sym_support:
+            # Encrypt tertiary object auth with secondary object via TPM
+            encobjauth = tpm2.encrypt(wrappingctx, wrappingauth, objauth)
+            encobjauth = binascii.hexlify(encobjauth)
+        else:
+            c = AESCipher(binascii.unhexlify(wrappingauth))
+            encobjauth = c.encrypt(objauth)
+
+        return (sobjctx, sobjauth, encobjauth, objauth)
+
+    @staticmethod
+    def new_key_save(alg, keylabel, id, label, tertiarypriv, tertiarypub, tertiarypubdata, encobjauth, objauth, db, tpm2):
+        token = db.gettoken(label)
+
+        #
+        # Cache the objects attributes from the public structure and other sources
+        # and populate the db with the data. This allows use of the public data
+        # without needed to load any objects which requires a pin to do.
+        #
+        y = yaml.load(tertiarypubdata)
+
+        if alg.startswith('rsa'):
+            attrs = [
+                {  CKA_KEY_TYPE        : CKK_RSA         },
+                {  CKA_CLASS           : CKO_PRIVATE_KEY },
+                {  CKA_CLASS           : CKO_PUBLIC_KEY  },
+                {  CKA_ID              : id              },
+                {  CKA_MODULUS         : y['rsa']        },
+                {  CKA_PUBLIC_EXPONENT : 65537           },
+            ]
+
+            mech = [
+                { CKM_RSA_PKCS_OAEP : "" },
+            ]
+
+        elif alg.startswith('aes'):
+            attrs = [
+                { CKA_CLASS    : CKO_SECRET_KEY },
+                { CKA_KEY_TYPE : CKK_AES        }
+            ]
+
+            mech = [
+                { CKM_AES_CBC : "" },
+            ]
+
+        # Add keylabel for ALL objects if set
+        if keylabel is not None:
+            attrs.append({CKA_LABEL : keylabel})
+
+        # Now get the secondary object from db
+        sobj = db.getsecondary(token['id'])
+
+        # Store to database
+        rowid = db.addtertiary(sobj['id'], tertiarypriv, tertiarypub, encobjauth, attrs, mech)
+
+        # if the keylabel is not set, use the tertiary object id as the keylabel
+        # Normally we would use a transaction to make this atomic, but Pythons
+        # sqlite3 transaction handling is quite odd. So when the keylabel is None, just insert
+        # into the db without that attribute, retrieve the primary key, and then issue an
+        # update. A possible race exists if someone is looking for the key by label between
+        # these operations.
+        # See:
+        #   - https://stackoverflow.com/questions/107005/predict-next-auto-inserted-row-id-sqlite
+        if keylabel is None:
+            keylabel = str(rowid)
+            attrs.append({CKA_LABEL : keylabel})
+            db.updatetertiaryattrs(rowid, attrs)
+
+        db.commit()
+
+        return keylabel
+
+    def __call__(self, args):
+        path = args['path']
+
+        with Db(path) as db:
+
+            with TemporaryDirectory() as d:
+                tpm2 = Tpm2(d, path)
+
+                label = args['label']
+                sopin = args['sopin']
+                userpin = args['userpin']
+                alg = args['algorithm']
+                key_label= args['key_label']
+                id = args['id']
+
+                privkey = None
+                try:
+                    privkey = args['privkey']
+                except:
+                    privkey = None
+                else:
+                    path = args['path']
+
+                path = args['path']
+
+                sobjctx, sobjauth, encobjauth, objauth = NewKeyCommandBase.new_key_init(label, sopin, userpin, db, tpm2)
+
+                tertiarypriv, tertiarypub, tertiarypubdata = self.new_key_create(sobjctx, sobjauth, objauth, tpm2, path, alg, privkey)
+
+                final_key_label = NewKeyCommandBase.new_key_save(alg, key_label, id, label, tertiarypriv, tertiarypub, tertiarypubdata, encobjauth, objauth, db, tpm2)
+
+                return final_key_label
+
+@commandlet("import")
+class ImportCommand(NewKeyCommandBase):
+    '''
+    Imports a rsa key to a token within a tpm2-pkcs11 store.
+    '''
+
+    # adhere to an interface
+    # pylint: disable=no-self-use
+    def generate_options(self, group_parser):
+        super(ImportCommand, self).generate_options(group_parser)
+        group_parser.add_argument(
+            '--privkey',
+            help='Full path of the private key to be imported.\n',
+            required=True)
+        group_parser.add_argument(
+            '--label',
+            help='The tokens label to import the key too.\n',
+            required=True)
+        group_parser.add_argument(
+            '--key-label',
+            help='The label of the key imported. Defaults to an integer value.\n')
+        group_parser.add_argument(
+            '--algorithm',
+            help='The type of the key.\n',
+            choices=[ 'rsa'],
+            required=True)
+
+    # Imports a new key
+    def new_key_create(self, sobjctx, sobjauth, objauth, tpm2, path, alg, privkey):
+        if alg !='rsa':
+            sys.exit('Unknown algorithm or algorithm not supported, got "%s"' % alg)
+
+        if privkey == None:
+            sys.exit("Invalid private key path")
+
+        tertiarypriv, tertiarypub, tertiarypubdata = tpm2.importkey(sobjctx, sobjauth, objauth, privkey=privkey, alg=alg)
+
+        return (tertiarypriv, tertiarypub, tertiarypubdata)
+
+    def __call__(self, args):
+        keylabel = super(self.__class__, self).__call__(args)
+        print('Imported key as label: "{keylabel}"'.format(keylabel=keylabel))
+
 @commandlet("addkey")
-class AddKeyCommand(Command):
+class AddKeyCommand(NewKeyCommandBase):
     '''
     Adds a key to a token within a tpm2-pkcs11 store.
     '''
@@ -1039,6 +1330,7 @@ class AddKeyCommand(Command):
     # adhere to an interface
     # pylint: disable=no-self-use
     def generate_options(self, group_parser):
+        super(self.__class__, self).generate_options(group_parser)
         group_parser.add_argument(
             '--label',
             help='The tokens label to add a key too.\n',
@@ -1050,188 +1342,28 @@ class AddKeyCommand(Command):
             required=True)
         group_parser.add_argument(
             '--key-label',
-            help='The key label to identify the key. Defaults to an integer value')
-        group_parser.add_argument(
-            '--id',
-            help='The key id. Defaults to a random 8 bytes of hex.\n',
-            default=binascii.hexlify(os.urandom(8)))
-        pinopts = group_parser.add_mutually_exclusive_group(required=True)
-        pinopts.add_argument(
-            '--sopin',
-            help='The Administrator pin,'),
-        pinopts.add_argument(
-            '--userpin',
-            help='The User pin.\n'),
+            help='The key label to identify the key. Defaults to an integer value.\n')
+
+    # Creates a new key
+    def new_key_create(self, sobjctx, sobjauth, objauth, tpm2, path, alg, privkey):
+        if alg.startswith('rsa'):
+            size = int(alg[3:],0)
+        elif alg.startswith('aes'):
+            size = int(alg[3:],0)
+            # XXX: We set the mode for the tpm to NULL so we can support arbitrary mechanisms on use, but we store it
+            # as CBC for now. We may wish to make this an asterik or NULL indicating we don't filter it out...
+            # Unfortunatley AES mechs are not bitwise flags, so we can't just or them in, and 0 is a valid
+            # CKM_ value, so we can't use 0. Maybe CKM_VENDOR_DEFINED | XXX.
+        else:
+            sys.exit('Unknown algorithm, got: "%s"' % alg)
+
+        tertiarypriv, tertiarypub, tertiarypubdata = tpm2.create(sobjctx, sobjauth, objauth, alg=alg)
+
+        return (tertiarypriv, tertiarypub, tertiarypubdata)
 
     def __call__(self, args):
-
-        path = args['path']
-
-        label = args['label']
-        keylabel= args['key_label']
-
-        id = args['id']
-
-        with Db(path) as db:
-
-            token = db.gettoken(label)
-
-            token_config =  dict_from_kvp(token['config'])
-
-            pobj = db.getprimary(token['pid'])
-
-            with TemporaryDirectory() as d:
-                tpm2 = Tpm2(d, path)
-
-                # Get the primary object encrypted auth value and sokey information
-                # to decode it. Based on the incoming pin
-                is_so = args['sopin'] != None
-                if is_so:
-                    pin = args['sopin']
-                    pinpobjauthkeysalt = token['sopobjauthkeysalt']
-                    pinpobjauthkeyiters = token['sopobjauthkeyiters']
-                    pinpobjauth = token['sopobjauth']
-                else:
-                    pin = args['userpin']
-                    pinpobjauthkeysalt = token['userpobjauthkeysalt']
-                    pinpobjauthkeyiters = token['userpobjauthkeyiters']
-                    pinpobjauth = token['userpobjauth']
-
-                pinpobjauthkeysalt = binascii.unhexlify(pinpobjauthkeysalt)
-                pinpobjauthkey = hash_pass(pin.encode(), iters=pinpobjauthkeyiters, salt=pinpobjauthkeysalt)
-
-                pinpobjauth = AESCipher(pinpobjauthkey['rhash']).decrypt(pinpobjauth)
-
-                # At this point we have recovered the ACTUAL auth value for the primary object, so now we
-                # can load up the seal objects
-                sealobject = db.getsealobject(token['id'])
-
-                if is_so:
-                    sealpub = sealobject['sopub']
-                    sealpriv = sealobject['sopriv']
-                    salt = sealobject['soauthsalt']
-                    iters = sealobject['soauthiters']
-                else:
-                    sealpub = sealobject['userpub']
-                    sealpriv = sealobject['userpriv']
-                    salt = sealobject['userauthsalt']
-                    iters = sealobject['userauthiters']
-
-                salt = binascii.unhexlify(salt)
-                sealauth = hash_pass(pin.encode(), iters, salt)['hash']
-
-                # Load the so sealobject using the PARENTS AUTH (primaryobject)
-                sealctx = tpm2.load(pobj['handle'], pinpobjauth, sealpriv, sealpub)
-
-                # Now that the sealobject is loaded, we need to unseal the wrapping key
-                # object auth or the key when the TPM doesn't support encryptdecrypt
-
-                wrappingauth = tpm2.unseal(sealctx, sealauth)
-
-                sym_support = str2bool(token_config['sym-support'])
-                if sym_support:
-                    # Now that we have the unsealed wrappingauth value
-                    # Load the wrapping object
-                    wrappingobj = db.getwrapping(token['id'])
-                    wrappingctx = tpm2.load(pobj['handle'], pinpobjauth, wrappingobj['priv'], wrappingobj['pub'])
-
-                # Now get the secondary object from db
-                sobj = db.getsecondary(token['id'])
-
-                # decrypt sobj auth with wrapping
-                sobjauth = sobj['objauth'];
-                if sym_support:
-                    sobjauth = binascii.unhexlify(sobjauth)
-                    sobjauth = tpm2.decrypt(wrappingctx, wrappingauth, sobjauth)
-                else:
-                    c = AESCipher(binascii.unhexlify(wrappingauth))
-                    sobjauth = c.decrypt(sobjauth)
-
-                #create an auth value for the tertiary object.
-                objauth = hash_pass(rand_str(32))['hash']
-
-                # load the secondary object
-                sobjctx = tpm2.load(pobj['handle'], pinpobjauth, sobj['priv'], sobj['pub'])
-
-                # create a tertiary object under the loaded secondary object
-                # Map onto the defaults in tpm2_create and store the attributes into
-                # the db.
-                alg = args['algorithm']
-                if alg.startswith('rsa'):
-                    size = int(alg[3:],0)
-                elif alg.startswith('aes'):
-                    size = int(alg[3:],0)
-                    # XXX: We set the mode for the tpm to NULL so we can support arbitrary mechanisms on use, but we store it
-                    # as CBC for now. We may wish to make this an asterik or NULL indicating we don't filter it out...
-                    # Unfortunatley AES mechs are not bitwise flags, so we can't just or them in, and 0 is a valid
-                    # CKM_ value, so we can't use 0. Maybe CKM_VENDOR_DEFINED | XXX.
-                else:
-                    sys.exit('Unknown algorithm, got: "%s"' % alg)
-
-                tertiarypriv, tertiarypub, tertiarypubdata = tpm2.create(sobjctx, sobjauth, objauth, alg=alg)
-
-                if sym_support:
-                    # Encrypt tertiary object auth with secondary object via TPM
-                    encobjauth = tpm2.encrypt(wrappingctx, wrappingauth, objauth)
-                    encobjauth = binascii.hexlify(encobjauth)
-                else:
-                    c = AESCipher(binascii.unhexlify(wrappingauth))
-                    encobjauth = c.encrypt(objauth)
-
-                #
-                # Cache the objects attributes from the public structure and other sources
-                # and populate the db with the data. This allows use of the public data
-                # without needed to load any objects which requires a pin to do.
-                #
-                y = yaml.load(tertiarypubdata)
-
-                if alg.startswith('rsa'):
-                    attrs = [
-                        {  CKA_KEY_TYPE        : CKK_RSA         },
-                        {  CKA_CLASS           : CKO_PRIVATE_KEY },
-                        {  CKA_CLASS           : CKO_PUBLIC_KEY  },
-                        {  CKA_ID              : id              },
-                        {  CKA_MODULUS         : y['rsa']        },
-                        {  CKA_PUBLIC_EXPONENT : 65537           },
-                    ]
-
-                    mech = [
-                        { CKM_RSA_PKCS_OAEP : "" },
-                    ]
-
-                elif alg.startswith('aes'):
-                    attrs = [
-                        { CKA_CLASS    : CKO_SECRET_KEY },
-                        { CKA_KEY_TYPE : CKK_AES        }
-                    ]
-
-                    mech = [
-                        { CKM_AES_CBC : "" },
-                    ]
-
-                # Add keylabel for ALL objects if set
-                if keylabel is not None:
-                    attrs.append({CKA_LABEL : keylabel})
-
-                # Store to database
-                id = db.addtertiary(sobj['id'], tertiarypriv, tertiarypub, encobjauth, attrs, mech)
-
-                # if the keylabel is not set, use the tertiary object id as the keylabel
-                # Normally we would use a transaction to make this atomic, but Pythons
-                # sqlite3 transaction handling is quite odd. So when the keylabel is None, just insert
-                # into the db without that attribute, retrieve the primary key, and then issue an
-                # update. A possible race exists if someone is looking for the key by label between
-                # these operations.
-                # See:
-                #   - https://stackoverflow.com/questions/107005/predict-next-auto-inserted-row-id-sqlite
-                if keylabel is None:
-                    keylabel = str(id)
-                    attrs.append({CKA_LABEL : keylabel})
-                    db.updatetertiaryattrs(id, attrs)
-
-                db.commit()
-
-                print('Added key as label: "{keylabel}"'.format(keylabel=keylabel))
+        keylabel = super(self.__class__, self).__call__(args)
+        print('Added key as label: "{keylabel}"'.format(keylabel=keylabel))
 
 @commandlet("rmtoken")
 class RmTokenCommand(Command):

@@ -201,6 +201,12 @@ CK_RV sign_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigned 
         // TODO dynamically get hash buffer size based on alg;
         hash_len = utils_get_halg_size(opdata->mtype);
 
+        if (!signature) {
+        	*signature_len = hash_len;
+        	LOGV("returning signature_len of %lu", *signature_len);
+        	return CKR_OK;
+        }
+
         hash = malloc(hash_len);
         if (!hash) {
             LOGE("oom");
@@ -230,6 +236,12 @@ CK_RV sign_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigned 
         }
 
         hash_len = a->ulValueLen;
+
+        if (!signature) {
+        	*signature_len = hash_len;
+        	LOGV("signature length will be %lu", *signature_len);
+        	return CKR_OK;
+        }
 
         hash = malloc(hash_len);
         if (!hash_len) {
@@ -278,7 +290,10 @@ out:
 
 CK_RV sign(CK_SESSION_HANDLE session, unsigned char *data, unsigned long data_len, unsigned char *signature, unsigned long *signature_len) {
 
-    CK_RV rv = sign_update(session, data, data_len);
+    CK_RV rv = CKR_OK;
+    if (signature){
+        rv = sign_update(session, data, data_len);
+    }
     if (rv != CKR_OK) {
         return rv;
     }
