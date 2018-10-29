@@ -56,7 +56,7 @@ set -e
 tpm2_ptool.py init --pobj-pin=mypobjpin --path=$TPM2_PKCS11_STORE
 
 # Test the existing primary object init functionality
-tpm2_createprimary -p foopass -o primary.ctx
+tpm2_createprimary -p foopass -o primary.ctx -g sha256 -G rsa
 handle=`tpm2_evictcontrol -a o -c primary.ctx | cut -d\: -f2-2 | sed 's/^ *//g'`
 
 tpm2_ptool.py init --pobj-pin=anotherpobjpin --primary-handle=$handle --primary-auth=foopass --path=$TPM2_PKCS11_STORE
@@ -64,7 +64,10 @@ tpm2_ptool.py init --pobj-pin=anotherpobjpin --primary-handle=$handle --primary-
 # add 3 tokens
 tpm2_ptool.py addtoken --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=myuserpin --label=label --path $TPM2_PKCS11_STORE
 tpm2_ptool.py addtoken --wrap=software --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=myuserpin --label=wrap-sw --path $TPM2_PKCS11_STORE
-tpm2_ptool.py addtoken --pid=2 --pobj-pin=anotherpobjpin --sopin=anothersopin --userpin=anotheruserpin --label=import-primary --path $TPM2_PKCS11_STORE
+
+echo "bill 1"
+tpm2_ptool.py addtoken --pid=2 --pobj-pin=anotherpobjpin --sopin=anothersopin --userpin=anotheruserpin --label=import-keys --path $TPM2_PKCS11_STORE
+echo "bill 2"
 
 # add 2 aes and 2 rsa keys under tokens 1 and 2
 for t in "label" "wrap-sw"; do
@@ -80,8 +83,13 @@ for t in "label" "wrap-sw"; do
 	echo "Added RSA Keys"
 done;
 
-# add 1 aes key under label "import-primary"
-tpm2_ptool.py addkey --algorithm=aes128 --label="import-primary" --userpin=anotheruserpin --path=$TPM2_PKCS11_STORE
+# add 1 aes key under label "import-keys"
+tpm2_ptool.py addkey --algorithm=aes128 --label="import-keys" --userpin=anotheruserpin --path=$TPM2_PKCS11_STORE
+
+# import 1 rsa2048 key under label "import-keys"
+echo "importing rsa2048 key under token 'import-keys'"
+openssl genrsa -out private.pem 2048
+tpm2_ptool.py import --privkey='private.pem' --algorithm=rsa --key-label="imported_key" --label="import-keys" --userpin=anotheruserpin --path=$TPM2_PKCS11_STORE
 
 echo "RUN COMMAND BELOW BEFORE make check"
 echo "export TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
