@@ -16,7 +16,10 @@ The project depends on:
 6. [tpm2-tools](https://github.com/tpm2-software/tpm2-tools): **MUST USE MASTER BRANCH**
 7. [Python](https://www.python.org/): **NOT TESTED WITH PYTHON >= 2.7**
 8. [openssl](https://www.openssl.org/): **MUST USE VERSION >= 1.0.2g**
-
+9. [autoconf-archive](https://github.com/autoconf-archive/autoconf-archive): **Tested with release v2018.03.13**
+     Others may not work, some distros package versions too old. Copy the contents of the m4 directory to
+     the m4 subdirectory of the project. If the m4 folder is not present, simply create it with mkdir.
+10. [gnulib](https://www.gnu.org/software/gnulib/): For ld-version-script.m4 (copy to m4 directory created in step 9).
 ### Notes:
 The tpm2-tss and tpm2-tools projects must be obtained via source. Packaged versions existing
 in known package managers are likely too old.
