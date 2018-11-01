@@ -21,6 +21,18 @@ Usage:
 
 END
 }
+on_exit ()
+{
+    if [ -e private.pem ]
+    then
+        rm -rf private.pem
+    fi
+
+    if [ -e primary.ctx ]
+    then
+        rm -rf primary.ctx
+    fi
+}
 
 TPM2_PKCS11_STORE=""
 while test $# -gt 0; do
@@ -56,7 +68,7 @@ set -e
 tpm2_ptool.py init --pobj-pin=mypobjpin --path=$TPM2_PKCS11_STORE
 
 # Test the existing primary object init functionality
-tpm2_createprimary -p foopass -o primary.ctx
+tpm2_createprimary -p foopass -o primary.ctx -g sha256 -G rsa
 handle=`tpm2_evictcontrol -a o -c primary.ctx | cut -d\: -f2-2 | sed 's/^ *//g'`
 
 tpm2_ptool.py init --pobj-pin=anotherpobjpin --primary-handle=$handle --primary-auth=foopass --path=$TPM2_PKCS11_STORE
@@ -83,7 +95,14 @@ done;
 # add 1 aes key under label "import-primary"
 tpm2_ptool.py addkey --algorithm=aes128 --label="import-primary" --userpin=anotheruserpin --path=$TPM2_PKCS11_STORE
 
+# import 1 rsa2048 key under label "import-primary"
+echo "importing rsa2048 key under token 'import-primary'"
+openssl genrsa -out private.pem 2048
+tpm2_ptool.py import --privkey='private.pem' --algorithm=rsa --key-label="imported_key" --label="import-primary" --userpin=anotheruserpin --path=$TPM2_PKCS11_STORE
+
 echo "RUN COMMAND BELOW BEFORE make check"
 echo "export TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
+
+trap on_exit EXIT
 
 exit 0
