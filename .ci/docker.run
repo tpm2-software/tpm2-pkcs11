@@ -70,8 +70,8 @@ else #GCC
   config_flags="--disable-hardening --enable-code-coverage"
 fi
 
-# Bootstrap in the tpm2.0-tss tools directory
-./bootstrap
+# Bootstrap the project
+./bootstrap -I /usr/share/gnulib/m4
 
 # clang has asan enabled with options exported that fail
 # make distcheck, so only do this with gcc.

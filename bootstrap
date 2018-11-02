@@ -26,4 +26,5 @@ echo "Generating file lists: ${VARS_FILE}"
   printf "LIB_PKCS11_INTERNAL_LIB_SRC = \$(LIB_PKCS11_INTERNAL_LIB_C) \$(LIB_PKCS11_INTERNAL_LIB_H)\n"
 ) > ${VARS_FILE}
 
-${AUTORECONF} --install --sym
+mkdir -p m4
+${AUTORECONF} --install --sym $@
