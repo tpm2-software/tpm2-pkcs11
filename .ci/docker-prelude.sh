@@ -22,6 +22,3 @@ export PATH=/root/.local/bin/:/ibmtpm974/src:$PATH
 echo "echo changing to $TRAVIS_BUILD_DIR"
 # Change to the the travis build dir
 cd $TRAVIS_BUILD_DIR
-
-echo "Installing M4 deps"
-install_m4_deps
