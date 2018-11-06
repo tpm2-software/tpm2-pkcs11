@@ -128,7 +128,7 @@ class AESCipher:
 
 class Tpm2(object):
     def __init__(self, tmp, final):
-        self._tmp = tmp;
+        self._tmp = tmp
         self._final = final
 
     def createprimary(self, ownerauth, objauth):
@@ -1139,7 +1139,7 @@ class AddKeyCommand(Command):
                 sobj = db.getsecondary(token['id'])
 
                 # decrypt sobj auth with wrapping
-                sobjauth = sobj['objauth'];
+                sobjauth = sobj['objauth']
                 if sym_support:
                     sobjauth = binascii.unhexlify(sobjauth)
                     sobjauth = tpm2.decrypt(wrappingctx, wrappingauth, sobjauth)
