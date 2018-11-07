@@ -8,6 +8,9 @@
 
 #include "session.h"
 #include "session_ctx.h"
+#include "session_table.h"
+
+typedef struct token token;
 
 typedef struct session_table session_table;
 
@@ -17,16 +20,39 @@ void session_table_free(session_table *t);
 void session_table_unlock(session_table *t);
 void session_table_lock(session_table *t);
 
-unsigned long session_table_get_cnt(session_table *t, bool is_rw);
-unsigned long session_table_get_cnt_unlocked(session_table *t, bool is_rw);
+void session_table_get_cnt(session_table *t, unsigned long *all, unsigned long *rw, unsigned long *ro);
+void session_table_get_cnt_unlocked(session_table *t, unsigned long *all, unsigned long *rw, unsigned long *ro);
 
 CK_RV session_table_new_ctx_unlocked(session_table *t,
-        CK_SESSION_HANDLE *handle, token *tok, bool is_rw);
+        CK_SESSION_HANDLE *handle, token *tok, CK_FLAGS flags);
 
 session_ctx *session_table_lookup(session_table *t, CK_SESSION_HANDLE handle);
 
 CK_RV session_table_free_ctx_unlocked(session_table *t, CK_SESSION_HANDLE handle);
 CK_RV session_table_free_ctx(session_table *t, CK_SESSION_HANDLE handle);
 void session_table_free_ctx_all(session_table *t);
+
+/**
+ * performs a session_ctx_login_event() call for each item in the table
+ * with the session table lock held.
+ * @param s_table
+ *  The session table
+ * @param user
+ *  The user triggering the login event.
+ * @param called_session
+ *  The session context that the login event occured on.
+ */
+void session_table_login_event(session_table *s_table, CK_USER_TYPE user, session_ctx *called_session);
+
+/**
+ * performs a session_ctx_logout_event() call for each item in the table
+ * with the session table lock held.
+ * @param s_table
+ *  The session table
+ * @param called_session
+ *  The session context that the logout event occured on.
+ */
+void session_table_logout_event(session_table *s_table, session_ctx *called_session);
+
 
 #endif /* SRC_PKCS11_SESSION_TABLE_H_ */

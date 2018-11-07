@@ -29,9 +29,10 @@ CK_RV digest_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     if (!session_ctx_is_user_logged_in(ctx)) {
@@ -83,11 +84,11 @@ CK_RV digest_update (CK_SESSION_HANDLE session, unsigned char *part, unsigned lo
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
-
     if (!session_ctx_is_user_logged_in(ctx)) {
         rv = CKR_USER_NOT_LOGGED_IN;
         goto out;
@@ -121,9 +122,10 @@ CK_RV digest_final (CK_SESSION_HANDLE session, unsigned char *digest, unsigned l
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     if (!session_ctx_is_user_logged_in(ctx)) {

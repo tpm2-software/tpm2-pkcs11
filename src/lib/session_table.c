@@ -58,15 +58,28 @@ void session_table_unlock(session_table *t) {
     mutex_unlock_fatal(t->lock);
 }
 
-unsigned long session_table_get_cnt_unlocked(session_table *t, bool is_rw) {
-    return is_rw ? t->rw_cnt : t->cnt;
+void session_table_get_cnt_unlocked(session_table *t, unsigned long *all, unsigned long *rw, unsigned long *ro) {
+
+    /* All counts should always be greater than or equal to rw count */
+    assert(t->cnt >= t->rw_cnt);
+
+    if (all) {
+        *all = t->cnt;
+    }
+
+    if (rw) {
+        *rw = t->rw_cnt;
+    }
+
+    if (ro) {
+        *ro = t->cnt - t->rw_cnt;
+    }
 }
 
-unsigned long session_table_get_cnt(session_table *t, bool is_rw) {
+void session_table_get_cnt(session_table *t, unsigned long *all, unsigned long *rw, unsigned long *ro) {
     session_table_lock(t);
-    unsigned long tmp = session_table_get_cnt_unlocked(t, is_rw);
+    session_table_get_cnt_unlocked(t, all, rw, ro);
     session_table_unlock(t);
-    return tmp;
 }
 
 session_ctx **session_table_lookup_unlocked(session_table *t, CK_SESSION_HANDLE handle) {
@@ -74,12 +87,12 @@ session_ctx **session_table_lookup_unlocked(session_table *t, CK_SESSION_HANDLE 
 }
 
 CK_RV session_table_new_ctx_unlocked(session_table *t, CK_SESSION_HANDLE *handle,
-        token *tok, bool is_rw) {
+        token *tok, CK_FLAGS flags) {
 
     session_ctx **c = session_table_lookup_unlocked(t, t->free_handle);
     assert(!*c);
 
-    CK_RV rv = session_ctx_new(c, tok, is_rw);
+    CK_RV rv = session_ctx_new(c, tok, flags);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -88,7 +101,7 @@ CK_RV session_table_new_ctx_unlocked(session_table *t, CK_SESSION_HANDLE *handle
     t->free_handle++;
     t->cnt++;
 
-    if(is_rw) {
+    if(flags & CKF_RW_SESSION) {
         t->rw_cnt++;
     }
 
@@ -102,8 +115,11 @@ CK_RV session_table_free_ctx_unlocked(session_table *t, CK_SESSION_HANDLE handle
         return CKR_SESSION_HANDLE_INVALID;
     }
 
-    session_ctx_state state = session_ctx_state_get(*ctx);
-    if(state == session_ctx_state_user_rw) {
+    CK_STATE state = session_ctx_state_get(*ctx);
+    if(state == CKS_RW_PUBLIC_SESSION
+        || state == CKS_RW_USER_FUNCTIONS
+        || state == CKS_RW_SO_FUNCTIONS) {
+        assert(t->rw_cnt);
         t->rw_cnt--;
     }
 
@@ -160,4 +176,36 @@ unlock:
     session_table_unlock(t);
 
     return ctx;
+}
+
+void session_table_login_event(session_table *s_table, CK_USER_TYPE user, session_ctx *called_session) {
+
+    size_t i;
+    for (i=0; i < ARRAY_LEN(s_table->table); i++) {
+
+        session_ctx *ctx = s_table->table[i];
+        if (!ctx) {
+            continue;
+        }
+
+        bool take_lock = ctx != called_session;
+
+        session_ctx_login_event(ctx, user, take_lock);
+    }
+}
+
+void session_table_logout_event(session_table *s_table, session_ctx *called_session) {
+
+    size_t i;
+    for (i=0; i < ARRAY_LEN(s_table->table); i++) {
+
+        session_ctx *ctx = s_table->table[i];
+        if (!ctx) {
+            continue;
+        }
+
+        bool take_lock = ctx != called_session;
+
+        session_ctx_logout_event(ctx, take_lock);
+    }
 }

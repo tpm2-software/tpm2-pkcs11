@@ -135,6 +135,19 @@ void test_login_bad(CK_SESSION_HANDLE hSession){
     LOGV("test_login_bad Test Passed!");
 }
 
+void test_so_on_ro_session(CK_SESSION_HANDLE hSession) {
+
+    unsigned char sopin[] = "mysopin";
+
+    CK_RV rv = C_Login(hSession, CKU_SO, sopin, sizeof(sopin) - 1);
+    if(rv != CKR_SESSION_READ_ONLY_EXISTS){
+        LOGE("C_Login failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    LOGV("test_so_on_ro_session Test Passed!");
+}
+
 // Login when user is already logged in
 void test_so_login_already_logged_in(CK_SESSION_HANDLE hSession) {
 
@@ -179,27 +192,54 @@ int test_invoke() {
 
     CK_SESSION_HANDLE handle;
 
+    /*
+     * Test user R/O sessions
+     */
     rv = C_OpenSession(slots[0], CKF_SERIAL_SESSION, NULL , NULL, &handle);
-//    rv = C_OpenSession(slots[0], CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL , NULL, &handle);
+    if (rv == CKR_OK) {
+	    LOGV("C_OpenSession was successful");
+    } else {
+	    LOGE("C_OpenSession was unsuccessful");
+    }
 
-    if (rv == CKR_OK)
-	LOGV("C_OpenSession was successful");
-    else
-	LOGE("C_OpenSession was unsuccessful");
-
-    test_so_login_logout_good(handle);
     test_user_login_logout_good(handle);
     test_user_login_incorrect_pin(handle);
-    test_so_login_incorrect_pin(handle);
+
     test_login_bad(handle);
     test_logout_bad(handle);
-    test_so_login_already_logged_in(handle);
+
+    /*
+     * This so test requires an R/O session
+     */
+    test_so_on_ro_session(handle);
 
     rv = C_CloseSession(handle);
-    if (rv == CKR_OK)
-	LOGV("C_CloseSession was successful");
-    else
-	LOGE("C_CloseSession was unsuccessful");
+    if (rv == CKR_OK) {
+        LOGV("C_CloseSession was successful");
+    } else {
+        LOGE("C_CloseSession was unsuccessful");
+    }
+
+    /*
+     * test SO which requires an R/W session
+     */
+    rv = C_OpenSession(slots[0], CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL , NULL, &handle);
+    if (rv == CKR_OK) {
+        LOGV("C_OpenSession was successful");
+    } else {
+        LOGE("C_OpenSession was unsuccessful");
+    }
+
+    test_so_login_already_logged_in(handle);
+    test_so_login_logout_good(handle);
+    test_so_login_incorrect_pin(handle);
+
+    rv = C_CloseSession(handle);
+    if (rv == CKR_OK) {
+        LOGV("C_CloseSession was successful");
+    } else {
+        LOGE("C_CloseSession was unsuccessful");
+    }
 
     rv = C_Finalize(NULL);
     if (rv == CKR_OK)

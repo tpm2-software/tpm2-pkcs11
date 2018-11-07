@@ -8,9 +8,13 @@
 
 #include "object.h"
 #include "pkcs11.h"
+#include "session_table.h"
 #include "tpm.h"
 #include "twist.h"
 #include "utils.h"
+
+typedef struct session_table session_table;
+typedef struct session_ctx session_ctx;
 
 typedef struct token token;
 struct token {
@@ -41,6 +45,9 @@ struct token {
         bool is_initialized; /* token initialization state */
     } config;
 
+    session_table *s_table;
+
+    session_ctx *login_session_ctx;
 };
 
 void token_free(token *t);

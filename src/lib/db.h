@@ -11,6 +11,12 @@
 #include "pkcs11.h"
 #include "token.h"
 
+/*
+ * This HAS to be smaller than 1 byte, as this is embedded
+ * in the top byte of the session handle.
+ */
+#define MAX_TOKEN_CNT 255
+
 CK_RV db_init(void);
 CK_RV db_destroy(void);
 

@@ -30,6 +30,8 @@ void token_free_list(token *t, size_t len) {
 
 void token_free(token *t) {
 
+    session_table_free(t->s_table);
+
     twist_free(t->sopobjauth);
     twist_free(t->sopobjauthkeysalt);
 
@@ -53,7 +55,9 @@ void token_free(token *t) {
 CK_RV token_get_info (CK_SLOT_ID slot_id, CK_TOKEN_INFO *info) {
 
     check_pointer(info);
-    check_slot_id(slot_id);
+
+    token *t;
+    check_slot_id(slot_id, t,CKR_SLOT_ID_INVALID);
 
     const unsigned char token_sn[]   = TPM2_TOKEN_SERIAL_NUMBER;
     const unsigned char token_manuf[]  = TPM2_TOKEN_MANUFACTURER;
@@ -62,11 +66,6 @@ CK_RV token_get_info (CK_SLOT_ID slot_id, CK_TOKEN_INFO *info) {
     const unsigned char token_fwver[2] = TPM2_SLOT_FW_VERSION;
     time_t rawtime;
     struct tm * tminfo;
-
-    token *t = slot_get_token(slot_id);
-    if (!t) {
-        return CKR_TOKEN_NOT_PRESENT;
-    }
 
     memset(info, 0, sizeof(*info));
 
@@ -110,8 +109,7 @@ CK_RV token_get_info (CK_SLOT_ID slot_id, CK_TOKEN_INFO *info) {
     info->ulMaxRwSessionCount = MAX_NUM_OF_SESSIONS;
 
     // Session
-    info->ulRwSessionCount = session_cnt_get(true);
-    info->ulSessionCount = session_cnt_get(false);
+    session_table_get_cnt(t->s_table, &info->ulSessionCount, &info->ulRwSessionCount, NULL);
 
     // Time
     time (&rawtime);

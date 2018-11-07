@@ -767,6 +767,12 @@ CK_RV db_get_tokens(token **t, size_t *len) {
         return CKR_OK;
     }
 
+    if (cnt > MAX_TOKEN_CNT) {
+        LOGE("Too many tokens, got: %lu, expected less than %u", cnt,
+                MAX_TOKEN_CNT);
+        return CKR_GENERAL_ERROR;
+    }
+
     token *tmp = calloc(cnt, sizeof(token));
     if (!tmp) {
         LOGE("oom");
@@ -841,6 +847,15 @@ CK_RV db_get_tokens(token **t, size_t *len) {
                 LOGE("Unknown key: %s", name);
                 goto error;
             }
+        } /* done with sql key value search */
+
+        /*
+         * Initialize the per-token session table
+         */
+        CK_RV rv = session_table_new(&t->s_table);
+        if (rv != CKR_OK) {
+            LOGE("Could not initialize session table");
+            goto error;
         }
 
         int rc = init_pobject(t->pid, &t->pobject);
