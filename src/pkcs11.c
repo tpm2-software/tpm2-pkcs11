@@ -45,12 +45,12 @@ CK_RV C_Finalize (void *pReserved) {
     TRACE_RET(general_finalize(pReserved));
 }
 
-CK_RV C_GetInfo (struct _CK_INFO *info) {
+CK_RV C_GetInfo (CK_INFO *info) {
     TRACE_CALL;
     TRACE_RET(general_get_info(info));
 }
 
-CK_RV C_GetFunctionList (struct _CK_FUNCTION_LIST **function_list) {
+CK_RV C_GetFunctionList (CK_FUNCTION_LIST **function_list) {
     TRACE_CALL;
     TRACE_RET(general_get_func_list(function_list));
 }
@@ -60,12 +60,12 @@ CK_RV C_GetSlotList (unsigned char token_present, CK_SLOT_ID *slot_list, unsigne
     TRACE_RET(slot_get_list(token_present, slot_list, count));
 }
 
-CK_RV C_GetSlotInfo (CK_SLOT_ID slotID, struct _CK_SLOT_INFO *info) {
+CK_RV C_GetSlotInfo (CK_SLOT_ID slotID, CK_SLOT_INFO *info) {
     TRACE_CALL;
     TRACE_RET(slot_get_info(slotID, info));
 }
 
-CK_RV C_GetTokenInfo (CK_SLOT_ID slotID, struct _CK_TOKEN_INFO *info) {
+CK_RV C_GetTokenInfo (CK_SLOT_ID slotID, CK_TOKEN_INFO *info) {
     TRACE_CALL;
     TRACE_RET(token_get_info (slotID, info));
 }
@@ -80,7 +80,7 @@ CK_RV C_GetMechanismList (CK_SLOT_ID slotID, CK_MECHANISM_TYPE *mechanism_list, 
     TRACE_RET(slot_mechanism_list_get(slotID, mechanism_list, count));
 }
 
-CK_RV C_GetMechanismInfo (CK_SLOT_ID slotID, CK_MECHANISM_TYPE type, struct _CK_MECHANISM_INFO *info) {
+CK_RV C_GetMechanismInfo (CK_SLOT_ID slotID, CK_MECHANISM_TYPE type, CK_MECHANISM_INFO *info) {
     TRACE_CALL;
     TRACE_RET(slot_mechanism_info_get(slotID, type, info));
 }
@@ -115,7 +115,7 @@ CK_RV C_CloseAllSessions (CK_SLOT_ID slotID) {
     TRACE_RET(session_closeall(slotID));
 }
 
-CK_RV C_GetSessionInfo (CK_SESSION_HANDLE session, struct _CK_SESSION_INFO *info) {
+CK_RV C_GetSessionInfo (CK_SESSION_HANDLE session, CK_SESSION_INFO *info) {
     TRACE_CALL;
     TRACE_RET(session_get_info(session, info));
 }
@@ -140,12 +140,12 @@ CK_RV C_Logout (CK_SESSION_HANDLE session) {
     TRACE_RET(session_logout(session));
 }
 
-CK_RV C_CreateObject (CK_SESSION_HANDLE session, struct _CK_ATTRIBUTE *templ, unsigned long count, CK_OBJECT_HANDLE *object) {
+CK_RV C_CreateObject (CK_SESSION_HANDLE session, CK_ATTRIBUTE *templ, unsigned long count, CK_OBJECT_HANDLE *object) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_CopyObject (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, struct _CK_ATTRIBUTE *templ, unsigned long count, CK_OBJECT_HANDLE *new_object) {
+CK_RV C_CopyObject (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count, CK_OBJECT_HANDLE *new_object) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
@@ -160,17 +160,17 @@ CK_RV C_GetObjectSize (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, unsig
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_GetAttributeValue (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, struct _CK_ATTRIBUTE *templ, unsigned long count) {
+CK_RV C_GetAttributeValue (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count) {
     TRACE_CALL;
     TRACE_RET(object_get_attributes(session, object, templ, count));
 }
 
-CK_RV C_SetAttributeValue (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, struct _CK_ATTRIBUTE *templ, unsigned long count) {
+CK_RV C_SetAttributeValue (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_FindObjectsInit (CK_SESSION_HANDLE session, struct _CK_ATTRIBUTE *templ, unsigned long count) {
+CK_RV C_FindObjectsInit (CK_SESSION_HANDLE session, CK_ATTRIBUTE *templ, unsigned long count) {
     TRACE_CALL;
     TRACE_RET(object_find_init(session, templ, count));
 }
@@ -185,7 +185,7 @@ CK_RV C_FindObjectsFinal (CK_SESSION_HANDLE session) {
     TRACE_RET(object_find_final(session));
 }
 
-CK_RV C_EncryptInit (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV C_EncryptInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
     TRACE_CALL;
     TRACE_RET(encrypt_init(session, mechanism, key));
 }
@@ -205,7 +205,7 @@ CK_RV C_EncryptFinal (CK_SESSION_HANDLE session, unsigned char *last_encrypted_p
     TRACE_RET(encrypt_final(session, last_encrypted_part, last_encrypted_part_len));
 }
 
-CK_RV C_DecryptInit (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV C_DecryptInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
     TRACE_CALL;
     TRACE_RET(decrypt_init(session, mechanism, key));
 }
@@ -225,7 +225,7 @@ CK_RV C_DecryptFinal (CK_SESSION_HANDLE session, unsigned char *last_part, unsig
     TRACE_RET(decrypt_final(session, last_part, last_part_len));
 }
 
-CK_RV C_DigestInit (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism) {
+CK_RV C_DigestInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism) {
     TRACE_CALL;
     TRACE_RET(digest_init(session, mechanism));
 }
@@ -250,7 +250,7 @@ CK_RV C_DigestFinal (CK_SESSION_HANDLE session, unsigned char *digest, unsigned 
     TRACE_RET(digest_final(session, digest, digest_len));
 }
 
-CK_RV C_SignInit (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV C_SignInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
     TRACE_CALL;
     TRACE_RET(sign_init(session, mechanism, key));
 }
@@ -270,7 +270,7 @@ CK_RV C_SignFinal (CK_SESSION_HANDLE session, unsigned char *signature, unsigned
     TRACE_RET(sign_final(session, signature, signature_len));
 }
 
-CK_RV C_SignRecoverInit (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV C_SignRecoverInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
@@ -280,7 +280,7 @@ CK_RV C_SignRecover (CK_SESSION_HANDLE session, unsigned char *data, unsigned lo
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_VerifyInit (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV C_VerifyInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
     TRACE_CALL;
     TRACE_RET(verify_init(session, mechanism, key));
 }
@@ -300,7 +300,7 @@ CK_RV C_VerifyFinal (CK_SESSION_HANDLE session, unsigned char *signature, unsign
     TRACE_RET(verify_final(session, signature, signature_len));
 }
 
-CK_RV C_VerifyRecoverInit (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV C_VerifyRecoverInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
@@ -330,27 +330,27 @@ CK_RV C_DecryptVerifyUpdate (CK_SESSION_HANDLE session, unsigned char *encrypted
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_GenerateKey (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, struct _CK_ATTRIBUTE *templ, unsigned long count, CK_OBJECT_HANDLE *key) {
+CK_RV C_GenerateKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_ATTRIBUTE *templ, unsigned long count, CK_OBJECT_HANDLE *key) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_GenerateKeyPair (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, struct _CK_ATTRIBUTE *public_key_template, unsigned long public_key_attribute_count, struct _CK_ATTRIBUTE *private_key_template, unsigned long private_key_attribute_count, CK_OBJECT_HANDLE *public_key, CK_OBJECT_HANDLE *private_key) {
+CK_RV C_GenerateKeyPair (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_ATTRIBUTE *public_key_template, unsigned long public_key_attribute_count, CK_ATTRIBUTE *private_key_template, unsigned long private_key_attribute_count, CK_OBJECT_HANDLE *public_key, CK_OBJECT_HANDLE *private_key) {
     TRACE_CALL;
     TRACE_RET(key_gen(session, mechanism, public_key_template, public_key_attribute_count, private_key_template, private_key_attribute_count, public_key, private_key));
 }
 
-CK_RV C_WrapKey (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE wrapping_key, CK_OBJECT_HANDLE key, unsigned char *wrapped_key, unsigned long *wrapped_key_len) {
+CK_RV C_WrapKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE wrapping_key, CK_OBJECT_HANDLE key, unsigned char *wrapped_key, unsigned long *wrapped_key_len) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_UnwrapKey (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE unwrapping_key, unsigned char *wrapped_key, unsigned long wrapped_key_len, struct _CK_ATTRIBUTE *templ, unsigned long attribute_count, CK_OBJECT_HANDLE *key) {
+CK_RV C_UnwrapKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE unwrapping_key, unsigned char *wrapped_key, unsigned long wrapped_key_len, CK_ATTRIBUTE *templ, unsigned long attribute_count, CK_OBJECT_HANDLE *key) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_DeriveKey (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE base_key, struct _CK_ATTRIBUTE *templ, unsigned long attribute_count, CK_OBJECT_HANDLE *key) {
+CK_RV C_DeriveKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE base_key, CK_ATTRIBUTE *templ, unsigned long attribute_count, CK_OBJECT_HANDLE *key) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }

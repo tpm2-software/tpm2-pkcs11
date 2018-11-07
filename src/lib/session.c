@@ -157,7 +157,7 @@ CK_RV session_logout (CK_SESSION_HANDLE session) {
     return rv;
 }
 
-CK_RV session_get_info (CK_SESSION_HANDLE session, struct _CK_SESSION_INFO *info) {
+CK_RV session_get_info (CK_SESSION_HANDLE session, CK_SESSION_INFO *info) {
 
     check_is_init();
     check_pointer(info);

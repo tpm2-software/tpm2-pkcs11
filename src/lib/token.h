@@ -47,6 +47,6 @@ void token_free(token *t);
 
 void token_free_list(token *t, size_t len);
 
-CK_RV token_get_info (CK_SLOT_ID slot_id, struct _CK_TOKEN_INFO *info);
+CK_RV token_get_info (CK_SLOT_ID slot_id, CK_TOKEN_INFO *info);
 
 #endif /* SRC_TOKEN_H_ */
