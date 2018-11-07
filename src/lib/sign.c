@@ -155,7 +155,7 @@ out:
 
 }
 
-CK_RV sign_init (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV sign_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
     return common_init(operation_sign, session, mechanism, key);
 }
@@ -286,7 +286,7 @@ CK_RV sign(CK_SESSION_HANDLE session, unsigned char *data, unsigned long data_le
     return sign_final(session, signature, signature_len);
 }
 
-CK_RV verify_init (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV verify_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
     return common_init(operation_verify, session, mechanism, key);
 }

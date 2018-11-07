@@ -97,7 +97,7 @@ CK_RV object_find(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE *object, unsigned 
 
 CK_RV object_find_final(CK_SESSION_HANDLE session);
 
-CK_RV object_get_attributes(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, struct _CK_ATTRIBUTE *templ, unsigned long count);
+CK_RV object_get_attributes(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count);
 
 /**
  * Given an attribute type, retrieves the attribute data if present.

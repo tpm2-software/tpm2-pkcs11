@@ -1168,6 +1168,9 @@ typedef CK_ULONG          CK_RV;
 #define CKR_VENDOR_DEFINED                    0x80000000UL
 
 
+typedef CK_RV (*CK_NOTIFY) (CK_SESSION_HANDLE session,
+                               CK_NOTIFICATION event, void *application);
+
 /* CK_NOTIFY is an application callback that processes events */
 typedef CK_CALLBACK_FUNCTION(CK_RV, CK_NOTIFY)(
   CK_SESSION_HANDLE hSession,     /* the session's handle */

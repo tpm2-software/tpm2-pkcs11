@@ -18,7 +18,7 @@ struct encrypt_op_data {
 
 typedef CK_RV (*tpm_op)(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mode, twist iv, twist data_in, twist *data_out, twist *iv_out);
 
-static CK_RV common_init (operation op, CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+static CK_RV common_init (operation op, CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
     check_is_init();
     check_pointer(mechanism);
@@ -206,12 +206,12 @@ out:
     return rv;
 }
 
-CK_RV encrypt_init (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV encrypt_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
     return common_init(operation_encrypt, session, mechanism, key);
 }
 
-CK_RV decrypt_init (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV decrypt_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
     return common_init(operation_decrypt, session, mechanism, key);
 }

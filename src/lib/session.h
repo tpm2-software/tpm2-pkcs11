@@ -35,6 +35,6 @@ CK_RV session_logout (CK_SESSION_HANDLE session);
 
 unsigned long session_cnt_get(bool is_rw);
 
-CK_RV session_get_info (CK_SESSION_HANDLE session, struct _CK_SESSION_INFO *info);
+CK_RV session_get_info (CK_SESSION_HANDLE session, CK_SESSION_INFO *info);
 
 #endif /* SRC_PKCS11_SESSION_H_ */

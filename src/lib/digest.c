@@ -22,7 +22,7 @@ struct digest_op_data {
     uint32_t sequence_handle;
 };
 
-CK_RV digest_init (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism) {
+CK_RV digest_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism) {
 
     check_is_init();
     check_pointer(mechanism);

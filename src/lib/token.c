@@ -50,7 +50,7 @@ void token_free(token *t) {
     }
 }
 
-CK_RV token_get_info (CK_SLOT_ID slot_id, struct _CK_TOKEN_INFO *info) {
+CK_RV token_get_info (CK_SLOT_ID slot_id, CK_TOKEN_INFO *info) {
 
     check_pointer(info);
     check_slot_id(slot_id);
