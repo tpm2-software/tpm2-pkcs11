@@ -13,9 +13,10 @@
 
 CK_RV random_get(CK_SESSION_HANDLE session, unsigned char *random_data, unsigned long random_len) {
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    CK_RV rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     tpm_ctx *sys = session_ctx_get_tpm_ctx(ctx);
@@ -28,14 +29,15 @@ CK_RV random_get(CK_SESSION_HANDLE session, unsigned char *random_data, unsigned
 
 CK_RV seed_random (CK_SESSION_HANDLE session, unsigned char *seed, unsigned long seed_len) {
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    CK_RV rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
 
-    CK_RV rv = tpm_stirrandom(tpm, seed, seed_len);
+    rv = tpm_stirrandom(tpm, seed, seed_len);
     session_ctx_unlock(ctx);
 
     return rv;

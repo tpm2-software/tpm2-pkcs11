@@ -150,9 +150,10 @@ CK_RV object_find_init(CK_SESSION_HANDLE session, CK_ATTRIBUTE_PTR templ, unsign
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     object_find_data *fd = calloc(1, sizeof(*fd));
@@ -161,7 +162,7 @@ CK_RV object_find_init(CK_SESSION_HANDLE session, CK_ATTRIBUTE_PTR templ, unsign
         goto out;
     }
 
-    token *tok = session_ctx_get_token(ctx);
+    token *tok = session_ctx_get_tok(ctx);
     if (!tok->tobjects) {
         session_ctx_opdata_set(ctx, operation_find, fd);
         goto empty;
@@ -232,9 +233,10 @@ CK_RV object_find(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE *object, unsigned 
 
     CK_RV rv = CKR_OK;
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     object_find_data *fd = (object_find_data *)session_ctx_opdata_get(ctx, operation_find);
@@ -275,9 +277,10 @@ CK_RV object_find_final(CK_SESSION_HANDLE session) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     object_find_data *fd = (object_find_data *)session_ctx_opdata_get(ctx, operation_find);
@@ -334,12 +337,13 @@ CK_RV object_get_attributes(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, 
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
-    token *tok = session_ctx_get_token(ctx);
+    token *tok = session_ctx_get_tok(ctx);
     tobject *tobj = find_object_by_id(object, tok);
     /* no match */
     if (!tobj) {

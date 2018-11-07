@@ -21,9 +21,10 @@ CK_RV key_gen (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism,
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_OPERATION_NOT_INITIALIZED;
+    session_ctx *ctx = NULL;
+    rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     // TODO use me
