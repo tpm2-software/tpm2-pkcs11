@@ -4,12 +4,6 @@
  * All rights reserved.
  */
 /* SPDX-License-Identifier: BSD-2 */
-/***********************************************************************
- * Copyright (c) 2017-2018, Intel Corporation
- *
- * All rights reserved.
- ***********************************************************************/
-//#include "tss2_sys.h"
 
 #define YES 1
 #define NO  0
