@@ -17,6 +17,19 @@
 #include "utils.h"
 
 struct session_ctx {
+
+    /*
+     * Switching the backend to esapi means we need to
+     * register the primary objects persistent handle
+     * on every ESAPI context created, so we need to
+     * track per-session if we registered it, and what
+     * the value it.
+     */
+    struct {
+        bool is_registered;
+        uint32_t registered_handle;
+    } pobj_handle;
+
     tpm_ctx *ctx;
     token *tok;
     session_ctx_state state;
@@ -208,12 +221,13 @@ CK_RV session_ctx_login(session_ctx *ctx, twist pin, int usertype) {
 
     tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
 
-    if (!t->pobject.is_handle_registered) {
-        bool res = tpm_register_handle(tpm, &t->pobject.handle);
+    if (!ctx->pobj_handle.is_registered) {
+        ctx->pobj_handle.registered_handle = t->pobject.handle;
+        bool res = tpm_register_handle(tpm, &ctx->pobj_handle.registered_handle);
         if (!res) {
             goto error;
         }
-        t->pobject.is_handle_registered = true;
+        ctx->pobj_handle.is_registered = true;
     }
 
     /* load seal object */
@@ -221,9 +235,11 @@ CK_RV session_ctx_login(session_ctx *ctx, twist pin, int usertype) {
     twist sealpub = usertype == CKU_USER ? sealobj->userpub : sealobj->sopub;
     twist sealpriv = usertype == CKU_USER ? sealobj->userpriv : sealobj->sopriv;
 
+    uint32_t pobj_handle = ctx->pobj_handle.registered_handle;
+
     // TODO evict sealobjhandle
     uint32_t sealobjhandle;
-    bool res = tpm_loadobj(tpm, t->pobject.handle, dpobjauth, sealpub, sealpriv, &sealobjhandle);
+    bool res = tpm_loadobj(tpm, pobj_handle, dpobjauth, sealpub, sealpriv, &sealobjhandle);
     if (!res) {
         goto error;
     }
@@ -261,7 +277,7 @@ CK_RV session_ctx_login(session_ctx *ctx, twist pin, int usertype) {
         }
 
         /* load the wrapping key */
-        res = tpm_loadobj(tpm, t->pobject.handle, dpobjauth, wobj->pub, wobj->priv, &wobj->handle);
+        res = tpm_loadobj(tpm, pobj_handle, dpobjauth, wobj->pub, wobj->priv, &wobj->handle);
         if (!res) {
             goto error;
         }
@@ -271,7 +287,7 @@ CK_RV session_ctx_login(session_ctx *ctx, twist pin, int usertype) {
 
     /* load the secondary object */
     sobject *sobj = &t->sobject;
-    res = tpm_loadobj(tpm, t->pobject.handle, dpobjauth, sobj->pub, sobj->priv, &sobj->handle);
+    res = tpm_loadobj(tpm, pobj_handle, dpobjauth, sobj->pub, sobj->priv, &sobj->handle);
     if (!res) {
         goto error;
     }
