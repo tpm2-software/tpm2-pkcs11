@@ -143,6 +143,9 @@ void session_table_free_ctx_all(session_table *t) {
         *ctx = NULL;
     }
 
+    t->cnt = 0;
+    t->rw_cnt = 0;
+
     session_table_unlock(t);
 }
 

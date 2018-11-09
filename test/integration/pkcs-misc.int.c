@@ -201,6 +201,132 @@ void test_digest_good(CK_SESSION_HANDLE session) {
     LOGV("test_digest_good test Passed!");
 }
 
+static void test_session_cnt(CK_SLOT_ID slot) {
+
+    size_t i;
+    CK_RV rv;
+    CK_TOKEN_INFO info;
+
+    CK_ULONG cnt = 0;
+    CK_ULONG rw_cnt = 0;
+
+    CK_SESSION_HANDLE handles[6];
+
+    /*
+     * Test incrementing
+     */
+    for (i=0; i < ARRAY_LEN(handles); i++) {
+        CK_SESSION_HANDLE *handle = &handles[i];
+        /*
+         * Every odd open up a RW session, every even open up a RO session
+         */
+        CK_FLAGS flags = CKF_SERIAL_SESSION;
+        flags |= (i & 1) ? CKF_RW_SESSION : 0;
+
+        rv = C_OpenSession(slot, flags, NULL , NULL, handle);
+        if (rv != CKR_OK) {
+            LOGE("C_OpenSession was unsuccessful: 0x%x", rv);
+            exit(1);
+        }
+
+        /*
+         * For clarity, just track the sessions here rather than
+         * doing computing it off of i.
+         */
+        if (i & 1) {
+            rw_cnt++;
+        }
+
+        cnt++;
+
+        rv = C_GetTokenInfo(slot, &info);
+        if (rv != CKR_OK) {
+            LOGE("C_GetTokenInfo was unsuccessful: 0x%x", rv);
+            exit(1);
+        }
+
+        if (info.ulSessionCount != cnt) {
+            LOGE("ulSessionCount %lu != expected %lu",
+                    info.ulSessionCount, cnt);
+            exit (1);
+        }
+
+        if (info.ulRwSessionCount != rw_cnt) {
+            LOGE("ulRwSessionCount %lu != expected %lu",
+                    info.ulRwSessionCount, rw_cnt);
+            exit (1);
+        }
+    }
+
+    /*
+     * Test decrementing, but only decrement all but 2, so we can test
+     * closeall.
+     *
+     * rw_cnt and cnt are properly in the state of current open handles, so
+     * just use them from above.
+     */
+    for (i=0; i < (ARRAY_LEN(handles) - 2); i++) {
+        CK_SESSION_HANDLE handle = handles[i];
+
+        rv = C_CloseSession(handle);
+        if (rv != CKR_OK) {
+            LOGE("C_OpenSession was unsuccessful: 0x%x", rv);
+            exit(1);
+        }
+
+        /*
+         * For clarity, just track the sessions here rather than
+         * doing computing it off of i. Remember that odd indexed
+         * handles are R/W.
+         */
+        if (i & 1) {
+            rw_cnt--;
+        }
+
+        cnt--;
+
+        rv = C_GetTokenInfo(slot, &info);
+        if (rv != CKR_OK) {
+            LOGE("C_GetTokenInfo was unsuccessful: 0x%x", rv);
+            exit(1);
+        }
+
+        if (info.ulSessionCount != cnt) {
+            LOGE("ulSessionCount %lu != expected %lu");
+            exit (1);
+        }
+
+        if (info.ulRwSessionCount != rw_cnt) {
+            LOGE("ulRwSessionCount %lu != expected %lu");
+            exit (1);
+        }
+    }
+
+    /*
+     * test closeall brings it 0
+     */
+    rv = C_CloseAllSessions(slot);
+    if (rv != CKR_OK) {
+        LOGE("C_CloseAllSessions was unsuccessful: 0x%x", rv);
+        exit(1);
+    }
+
+    rv = C_GetTokenInfo(slot, &info);
+    if (rv != CKR_OK) {
+        LOGE("C_GetTokenInfo was unsuccessful: 0x%x", rv);
+        exit(1);
+    }
+
+    if (info.ulSessionCount != 0) {
+        LOGE("ulSessionCount %lu != expected %lu");
+        exit (1);
+    }
+
+    if (info.ulRwSessionCount != 0) {
+        LOGE("ulRwSessionCount %lu != expected %lu");
+        exit (1);
+    }
+}
 
 int test_invoke() {
 
@@ -238,6 +364,11 @@ int test_invoke() {
         LOGV("C_CloseSession was successful");
     else
         LOGV("C_CloseSession was unsuccessful");
+
+    /*
+     * Test session handle count
+     */
+    test_session_cnt(slots[0]);
 
     rv = C_Finalize(NULL);
     if (rv == CKR_OK)
