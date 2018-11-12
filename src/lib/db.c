@@ -944,7 +944,7 @@ CK_RV db_get_path(char path[PATH_MAX]) {
     struct stat sb;
     rc = stat(path, &sb);
     if (rc) {
-        LOGV("Could not stat db \""DB_NAME"\" under store \"%s\", error: %s", base_path,
+        LOGV("Could not stat db \""DB_NAME"\" under store \"%s\", error: %s", path,
                 strerror(errno));
         LOGV("Consider exporting "PKCS11_STORE_ENV_VAR" to point to a valid store directory");
         return CKR_TOKEN_NOT_PRESENT;
