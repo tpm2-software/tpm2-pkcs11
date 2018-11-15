@@ -252,6 +252,138 @@ void test_user_global_login_logout_good(CK_SESSION_HANDLE slot0_session0, CK_SES
     LOGV("test_user_global_login_logout_good Test Passed!");
 }
 
+/*
+ * Replicate issue https://github.com/tpm2-software/tpm2-pkcs11/issues/81
+ *
+ * Where a C_OpenSession, C_Login, C_OpenSession, C_Login fails
+ */
+void test_user_login_logout_time_two(CK_SLOT_ID slotid) {
+
+    /*
+     * Open a session
+     */
+    CK_SESSION_HANDLE handle[3];
+    CK_RV rv = C_OpenSession(slotid, CKF_SERIAL_SESSION, NULL , NULL, &handle[0]);
+    if (rv != CKR_OK) {
+        LOGE("C_OpenSession was unsuccessful");
+        exit(1);
+    }
+
+    /*
+     * State should be CKS_RO_PUBLIC_SESSION
+     */
+    CK_SESSION_INFO info;
+    rv = C_GetSessionInfo(handle[0], &info);
+    if(rv != CKR_OK){
+        LOGE("C_GetSessionInfo failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    if (info.state != CKS_RO_PUBLIC_SESSION) {
+        LOGE("Expected session state to be %lu, got: %lu!", CKS_RO_PUBLIC_SESSION, info.state);
+        exit(1);
+    }
+
+    /*
+     * Login should cause state to change from:
+     * CKS_RO_PUBLIC_SESSION
+     * to
+     * CKS_RO_USER_FUNCTIONS
+     */
+
+    unsigned char upin[] = "myuserpin";
+
+    rv = C_Login(handle[0], CKU_USER, upin, sizeof(upin) - 1);
+    if(rv != CKR_OK){
+        LOGE("C_Login failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    rv = C_GetSessionInfo(handle[0], &info);
+    if(rv != CKR_OK){
+        LOGE("C_GetSessionInfo failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    if (info.state != CKS_RO_USER_FUNCTIONS) {
+        LOGE("Expected session state to be %lu, got: %lu!", CKS_RO_USER_FUNCTIONS, info.state);
+        exit(1);
+    }
+
+    /*
+     * Start another session, state should be CKS_RO_USER_FUNCTIONS
+     */
+    rv = C_OpenSession(slotid, CKF_SERIAL_SESSION, NULL , NULL, &handle[1]);
+    if (rv != CKR_OK) {
+        LOGE("C_OpenSession was unsuccessful");
+        exit(1);
+    }
+
+    rv = C_GetSessionInfo(handle[1], &info);
+    if(rv != CKR_OK){
+        LOGE("C_GetSessionInfo failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    if (info.state != CKS_RO_USER_FUNCTIONS) {
+        LOGE("Expected session state to be %lu, got: %lu!", CKS_RO_USER_FUNCTIONS, info.state);
+        exit(1);
+    }
+
+    /*
+     * Start another session but R/W, and state should be CKS_RW_USER_FUNCTIONS
+     */
+    rv = C_OpenSession(slotid, CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL , NULL, &handle[2]);
+    if (rv != CKR_OK) {
+        LOGE("C_OpenSession was unsuccessful");
+        exit(1);
+    }
+
+    rv = C_GetSessionInfo(handle[2], &info);
+    if(rv != CKR_OK){
+        LOGE("C_GetSessionInfo failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    if (info.state != CKS_RW_USER_FUNCTIONS) {
+        LOGE("Expected session state to be %lu, got: %lu!", CKS_RW_USER_FUNCTIONS, info.state);
+        exit(1);
+    }
+
+    /*
+     * C_Logout, states should return to CKS_RO_PUBLIC_SESSION
+     */
+    rv = C_Logout(handle[0]);
+    if(rv != CKR_OK){
+        LOGE("C_Logout failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    unsigned i;
+    for (i=0; i < ARRAY_LEN(handle); i++) {
+
+        rv = C_GetSessionInfo(handle[i], &info);
+        if(rv != CKR_OK){
+            LOGE("C_GetSessionInfo failed! Response Code %x", rv);
+            exit(1);
+        }
+
+        CK_STATE expected = i < 2 ? CKS_RO_PUBLIC_SESSION : CKS_RW_PUBLIC_SESSION;
+        if (info.state != expected) {
+            LOGE("Expected session state to be %lu, got: %lu!", expected, info.state);
+            exit(1);
+        }
+    }
+
+    rv = C_CloseAllSessions(slotid);
+    if (rv != CKR_OK) {
+        LOGE("C_CloseAllSessions was unsuccessful");
+        exit(1);
+    }
+
+    LOGV("test_user_login_logout_time_two Test Passed!");
+}
+
 int test_invoke() {
 
     CK_RV rv = C_Initialize(NULL);
@@ -345,6 +477,11 @@ int test_invoke() {
     } else {
         LOGE("C_CloseSession was unsuccessful");
     }
+
+    /*
+     * Session Slot tests
+     */
+    test_user_login_logout_time_two(slots[0]);
 
     rv = C_Finalize(NULL);
     if (rv == CKR_OK)

@@ -16,6 +16,13 @@
 typedef struct session_table session_table;
 typedef struct session_ctx session_ctx;
 
+typedef enum token_login_state token_login_state;
+enum token_login_state {
+    token_no_one_logged_in = 0,
+    token_user_logged_in   = 1 << 0,
+    token_so_logged_in     = 1 << 1,
+};
+
 typedef struct token token;
 struct token {
 
@@ -46,6 +53,8 @@ struct token {
     } config;
 
     session_table *s_table;
+
+    token_login_state login_state;
 
     session_ctx *login_session_ctx;
 };

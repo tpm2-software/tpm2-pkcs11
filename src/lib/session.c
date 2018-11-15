@@ -85,6 +85,13 @@ CK_RV session_open(CK_SLOT_ID slot_id, CK_FLAGS flags, void *application,
 	    goto unlock;
 	}
 
+	/*
+	 * Cannot open an R/O session when the SO is logged in
+	 */
+	if ((!(flags & CKF_RW_SESSION)) && (t->login_state == token_so_logged_in)) {
+	    return CKR_SESSION_READ_WRITE_SO_EXISTS;
+	}
+
 	rv = session_table_new_ctx_unlocked(t->s_table, session, t, flags);
     if (rv != CKR_OK) {
         goto unlock;
@@ -161,7 +168,7 @@ CK_RV session_login (CK_SESSION_HANDLE session, CK_USER_TYPE user_type,
         case CKU_SO:
             /* falls-through */
         case CKU_USER:
-            rv = session_ctx_login(ctx, tpin, user_type);
+            rv = session_ctx_token_login(ctx, tpin, user_type);
         break;
         case CKU_CONTEXT_SPECIFIC:
             rv = CKR_USER_TYPE_INVALID;
@@ -186,7 +193,7 @@ CK_RV session_logout (CK_SESSION_HANDLE session) {
         return rv;
     }
 
-    rv = session_ctx_logout(ctx);
+    rv = session_ctx_token_logout(ctx);
 
     return rv;
 }
