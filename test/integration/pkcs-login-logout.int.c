@@ -386,7 +386,18 @@ void test_user_login_logout_time_two(CK_SLOT_ID slotid) {
 
 int test_invoke() {
 
-    CK_RV rv = C_Initialize(NULL);
+    /*
+     * Run these tests with locking enabled
+     */
+    CK_C_INITIALIZE_ARGS args = {
+        .CreateMutex = NULL,
+        .DestroyMutex = NULL,
+        .LockMutex = NULL,
+        .UnlockMutex = NULL,
+        .flags = CKF_OS_LOCKING_OK
+    };
+
+    CK_RV rv = C_Initialize(&args);
     if (rv == CKR_OK)
 	LOGV("Initialize was successful");
     else
