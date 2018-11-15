@@ -97,6 +97,14 @@ AC_ARG_ENABLE([dlclose],
   [AC_DEFINE([DISABLE_DLCLOSE], [1])]
  )
 
+AC_ARG_ENABLE([pack],
+            [AS_HELP_STRING([--enable-pack=]@<:@yes/no@:>@,
+                            [Pack the structures. (default is no, except on Windows, where it defaults to packing)])],
+            [enable_pack=$enableval],
+            [enable_pack=no])
+AS_IF([test "x$enable_pack" = "xyes"],
+      [AC_DEFINE([PKCS11_PACK], [1])])
+
 AC_DEFUN([unit_test_checks],[
 
     PKG_CHECK_MODULES([CMOCKA],[cmocka],

@@ -181,7 +181,19 @@ extern "C" {
  * #endif
  */
 
+/*
+ * If the user specified packing, use their request
+ * or detect if windows is present
+ */
+#if defined PKCS11_PACK
+#define DO_PACK PKCS11_PACK
+# elif defined(_WIN32)
+#define DO_PACK 1
+#endif
+
+#if DO_PACK > 0
 #pragma pack(push, 1)
+#endif
 
 #define CK_PTR *
 
@@ -277,7 +289,9 @@ struct CK_FUNCTION_LIST {
 }
 #endif
 
+#if DO_PACK > 0
 #pragma pack(pop)
+#endif
 
 #endif /* _PKCS11_H_ */
 
