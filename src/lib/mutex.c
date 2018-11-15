@@ -101,6 +101,8 @@ static CK_RV default_mutex_destroy(void *mutex) {
         return CKR_MUTEX_BAD;
     }
 
+    free(p);
+
     return CKR_OK;
 }
 
