@@ -159,7 +159,8 @@ CK_RV session_login (CK_SESSION_HANDLE session, CK_USER_TYPE user_type,
 
     tpin = twistbin_new(pin, pin_len);
     if (!tpin) {
-        return CKR_HOST_MEMORY;
+        rv = CKR_HOST_MEMORY;
+        goto out;
     }
 
     // TODO Handle CKU_CONTEXT_SPECIFIC
@@ -178,6 +179,8 @@ CK_RV session_login (CK_SESSION_HANDLE session, CK_USER_TYPE user_type,
     }
 
     twist_free(tpin);
+
+out:
     session_ctx_unlock(ctx);
 
     return rv;

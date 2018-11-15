@@ -114,12 +114,8 @@ CK_RV session_ctx_new(session_ctx **ctx, token *tok, CK_FLAGS flags) {
     return CKR_OK;
 }
 
-void session_ctx_lock(session_ctx *ctx) {
-    mutex_lock_fatal(ctx->mutex);
-}
-
-void session_ctx_unlock(session_ctx *ctx) {
-    mutex_unlock_fatal(ctx->mutex);
+void *_session_ctx_get_lock(session_ctx *ctx) {
+    return ctx->mutex;
 }
 
 void session_ctx_opdata_set(session_ctx *ctx, operation op, void *opdata) {
@@ -157,12 +153,14 @@ static bool is_any_user_logged_in(session_ctx *ctx) {
     return ctx->tok->login_state != token_no_one_logged_in;
 }
 
-
 CK_RV session_ctx_token_logout(session_ctx *ctx) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
 
     bool is_anyone_logged_in = is_any_user_logged_in(ctx);
     if (!is_anyone_logged_in) {
-        return CKR_USER_NOT_LOGGED_IN;
+        rv = CKR_USER_NOT_LOGGED_IN;
+        goto out;
     }
 
     /*
@@ -170,16 +168,19 @@ CK_RV session_ctx_token_logout(session_ctx *ctx) {
      * C_Login() as it needs to unregister TPM
      * objects, as C_Login/C_Logout can be called
      * across sessions.
+     *
+     * Note that when swapping out you need to lock the
+     * new session ctx, and unlock the old one.
      */
     token *tok = session_ctx_get_tok(ctx);
 
     assert(tok->login_session_ctx);
 
-    session_ctx_lock(tok->login_session_ctx);
-
-    session_ctx_unlock(ctx);
-
-    ctx = tok->login_session_ctx;
+    if (tok->login_session_ctx != ctx) {
+        session_ctx_lock(tok->login_session_ctx);
+        session_ctx_unlock(ctx);
+        ctx = tok->login_session_ctx;
+    }
 
     /*
      * Ok now start evicting TPM objects from the right
@@ -259,13 +260,12 @@ CK_RV session_ctx_token_logout(session_ctx *ctx) {
      */
     ctx->tok->login_state = token_no_one_logged_in;
 
+    rv = CKR_OK;
 
-    /*
-     * release the original session_ctx lock;
-     */
+out:
     session_ctx_unlock(ctx);
 
-    return CKR_OK;
+    return rv;
 }
 
 void session_ctx_login_event(session_ctx *ctx, CK_USER_TYPE usertype, bool take_lock) {
