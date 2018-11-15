@@ -54,6 +54,35 @@ void session_ctx_free(session_ctx *ctx) {
     free(ctx);
 }
 
+/**
+ * Sets the initial state of the a session context based on the tokens login state
+ * and the flags present. Does no error checking.
+ * @param ctx
+ *  The session ctx to set
+ * @param tok
+ *  The token state to check
+ * @param flags
+ *  The session flags.
+ */
+static void session_set_initial_state(session_ctx *ctx, token *tok, CK_FLAGS flags) {
+
+    switch(tok->login_state) {
+    case token_no_one_logged_in:
+        ctx->state = flags & CKF_RW_SESSION ?
+                CKS_RW_PUBLIC_SESSION : CKS_RO_PUBLIC_SESSION;
+        break;
+    case token_user_logged_in:
+        ctx->state = flags & CKF_RW_SESSION ?
+                CKS_RW_USER_FUNCTIONS : CKS_RO_USER_FUNCTIONS;
+        break;
+    case token_so_logged_in:
+        assert(flags & CKF_RW_SESSION);
+        ctx->state = CKS_RW_SO_FUNCTIONS;
+        break;
+        /* no default */
+    }
+}
+
 CK_RV session_ctx_new(session_ctx **ctx, token *tok, CK_FLAGS flags) {
 
     session_ctx *s = calloc(1, sizeof(session_ctx));
@@ -74,10 +103,9 @@ CK_RV session_ctx_new(session_ctx **ctx, token *tok, CK_FLAGS flags) {
         return CKR_GENERAL_ERROR;
     }
 
+    session_set_initial_state(s, tok, flags);
+
     s->tok = tok;
-    s->state = flags &
-        CKF_RW_SESSION & flags ?
-        CKS_RW_PUBLIC_SESSION : CKS_RO_PUBLIC_SESSION;
 
     s->flags = flags;
 
@@ -121,20 +149,18 @@ CK_FLAGS session_ctx_flags_get(session_ctx *ctx) {
 
 bool session_ctx_is_user_logged_in(session_ctx *ctx) {
 
-    return ctx->state == CKS_RO_USER_FUNCTIONS
-            || ctx->state == CKS_RW_USER_FUNCTIONS;
+    return ctx->tok->login_state == token_user_logged_in;
 }
 
-static bool is_any_user_logged_in(CK_STATE state) {
+static bool is_any_user_logged_in(session_ctx *ctx) {
 
-    return state == CKS_RO_USER_FUNCTIONS
-               || state == CKS_RW_USER_FUNCTIONS
-               || state == CKS_RW_SO_FUNCTIONS;
+    return ctx->tok->login_state != token_no_one_logged_in;
 }
 
-CK_RV session_ctx_logout(session_ctx *ctx) {
 
-    bool is_anyone_logged_in = is_any_user_logged_in(ctx->state);
+CK_RV session_ctx_token_logout(session_ctx *ctx) {
+
+    bool is_anyone_logged_in = is_any_user_logged_in(ctx);
     if (!is_anyone_logged_in) {
         return CKR_USER_NOT_LOGGED_IN;
     }
@@ -229,6 +255,12 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
     session_table_logout_event(tok->s_table, ctx);
 
     /*
+     * mark no one logged in
+     */
+    ctx->tok->login_state = token_no_one_logged_in;
+
+
+    /*
      * release the original session_ctx lock;
      */
     session_ctx_unlock(ctx);
@@ -293,14 +325,14 @@ void session_ctx_logout_event(session_ctx *ctx, bool take_lock) {
     }
 }
 
-CK_RV session_ctx_login(session_ctx *ctx, twist pin, CK_USER_TYPE user) {
+CK_RV session_ctx_token_login(session_ctx *ctx, twist pin, CK_USER_TYPE user) {
 
     twist sealobjauth = NULL;
     twist dpobjauth = NULL;
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    bool is_anyone_logged_in = is_any_user_logged_in(ctx->state);
+    bool is_anyone_logged_in = is_any_user_logged_in(ctx);
     if (is_anyone_logged_in) {
         return CKR_USER_ALREADY_LOGGED_IN;
     }
@@ -410,12 +442,17 @@ CK_RV session_ctx_login(session_ctx *ctx, twist pin, CK_USER_TYPE user) {
     }
 
     /*
+     * Indicate that the token has been logged in
+     */
+    t->login_state = user == CKU_USER ? token_user_logged_in : token_so_logged_in;
+
+    /*
      * Cache the login session
      */
     t->login_session_ctx = ctx;
 
     /*
-     * State transition all sessions in the table
+     * State transition all *EXISTING* sessions in the table
      */
     session_table_login_event(t->s_table, user, ctx);
 

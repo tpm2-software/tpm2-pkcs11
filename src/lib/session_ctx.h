@@ -45,9 +45,9 @@ CK_FLAGS session_ctx_flags_get(session_ctx *ctx);
 
 bool session_ctx_is_user_logged_in(session_ctx *ctx);
 
-CK_RV session_ctx_login(session_ctx *ctx, twist pin, CK_USER_TYPE user);
+CK_RV session_ctx_token_login(session_ctx *ctx, twist pin, CK_USER_TYPE user);
 
-CK_RV session_ctx_logout(session_ctx *ctx);
+CK_RV session_ctx_token_logout(session_ctx *ctx);
 
 CK_RV session_ctx_load_object(session_ctx *ctx, CK_OBJECT_HANDLE key, tobject **loaded_tobj);
 
