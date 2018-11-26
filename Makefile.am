@@ -94,7 +94,9 @@ AM_TESTS_ENVIRONMENT = \
     PATH=./src:$(PATH)
 INT_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
 
-TESTS_LDADD = $(noinst_LTLIBRARIES) $(lib_LTLIBRARIES) $(AM_LDFLAGS)
+TESTS_LDADD = $(noinst_LTLIBRARIES) $(lib_LTLIBRARIES) $(AM_LDFLAGS) $(CMOCKA_LIBS)
+
+TETS_CFLAGS = $(CMOCKA_CFLAGS)
 
 # Intentionally empty so INTEGRATION and UNIT tests can append to it.
 check_PROGRAMS =
@@ -110,7 +112,8 @@ check_PROGRAMS += \
     test/integration/pkcs-login-logout.int \
     test/integration/pkcs-sign-verify.int \
     test/integration/pkcs-initialize-finalize.int \
-    test/integration/pkcs-misc.int
+    test/integration/pkcs-misc.int \
+    test/integration/pkcs-crypt.int
 
 XFAIL_TESTS=test/unit/test_pkcs11
 
@@ -148,6 +151,11 @@ test_integration_pkcs_initialize_finalize_int_SOURCES = test/integration/pkcs-in
 test_integration_pkcs_misc_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_misc_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
 test_integration_pkcs_misc_int_SOURCES = test/integration/pkcs-misc.int.c \
+    test/integration/main-test.c test/integration/test.h
+
+test_integration_pkcs_crypt_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_crypt_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_crypt_int_SOURCES = test/integration/pkcs-crypt.int.c \
     test/integration/main-test.c test/integration/test.h
 
 endif
