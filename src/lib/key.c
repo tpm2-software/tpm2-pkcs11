@@ -59,7 +59,7 @@ CK_RV key_gen (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism,
     *public_key = 42;
     *private_key= 43;
 
-    rv = CKR_OK;
+    rv = CKR_FUNCTION_NOT_SUPPORTED;
 
 //unlock:
     session_ctx_unlock(ctx);
