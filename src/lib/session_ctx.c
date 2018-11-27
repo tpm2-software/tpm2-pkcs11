@@ -464,19 +464,19 @@ error:
 
 CK_RV unwrap_objauth(token *tok, tpm_ctx *tpm, wrappingobject *wobj, twist objauth, twist *unwrapped_auth) {
 
-    twist tmp;
+    twist unwrapped_raw;
     if (tok->config.sym_support) {
-        twist sobjauthraw = twistbin_unhexlify(objauth);
-        if (!sobjauthraw) {
+        twist objauthraw = twistbin_unhexlify(objauth);
+        if (!objauthraw) {
             LOGE("unhexlify objauth failed: %u-%s", twist_len(objauth), objauth);
             return CKR_HOST_MEMORY;
         }
 
         bool result = tpm_decrypt_handle(tpm, wobj->handle, wobj->objauth, CKM_AES_NULL,
-                NULL, sobjauthraw, &tmp, NULL);
+                NULL, objauthraw, &unwrapped_raw, NULL);
         if (!result) {
             LOGE("tpm_decrypt_handle failed");
-            twist_free(sobjauthraw);
+            twist_free(objauthraw);
             return CKR_GENERAL_ERROR;
         }
     } else {
@@ -484,21 +484,21 @@ CK_RV unwrap_objauth(token *tok, tpm_ctx *tpm, wrappingobject *wobj, twist objau
         if (!swkey) {
             return CKR_GENERAL_ERROR;
         }
-        tmp = aes256_gcm_decrypt(swkey, objauth);
+        unwrapped_raw = aes256_gcm_decrypt(swkey, objauth);
         twist_free(swkey);
-        if (!tmp) {
+        if (!unwrapped_raw) {
             return CKR_GENERAL_ERROR;
         }
     }
 
-    twist sobjauthraw = twistbin_unhexlify(tmp);
-    twist_free(tmp);
-    if (!sobjauthraw) {
+    twist objauth_unwrapped = twistbin_unhexlify(unwrapped_raw);
+    twist_free(unwrapped_raw);
+    if (!objauth_unwrapped) {
         LOGE("unhexlify failed");
         return CKR_HOST_MEMORY;
     }
 
-    *unwrapped_auth = sobjauthraw;
+    *unwrapped_auth = objauth_unwrapped;
 
     return CKR_OK;
 }
