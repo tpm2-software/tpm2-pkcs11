@@ -201,11 +201,11 @@ CK_RV session_ctx_token_logout(session_ctx *ctx) {
                 bool result = tpm_flushcontext(tpm, tobj->handle);
                 assert(result);
                 UNUSED(result);
-
-                twist_free(tobj->objauth);
-                tobj->objauth = NULL;
-
                 tobj->handle = 0;
+
+                /* Clear the unwrapped auth value for tertiary objects */
+                twist_free(tobj->unsealed_auth);
+                tobj->unsealed_auth = NULL;
             }
         }
     }
@@ -225,9 +225,6 @@ CK_RV session_ctx_token_logout(session_ctx *ctx) {
     bool result = tpm_flushcontext(tpm, sobj->handle);
     assert(result);
     UNUSED(result);
-
-    twist_free(sobj->objauth);
-    sobj->objauth = NULL;
     sobj->handle = 0;
 
     // Kill primary object auth data
