@@ -20,4 +20,8 @@ CK_RV decrypt_update (CK_SESSION_HANDLE session, unsigned char *part, unsigned l
 
 CK_RV decrypt_final (CK_SESSION_HANDLE session, unsigned char *last_part, unsigned long *last_part_len);
 
+CK_RV decrypt_oneshot (CK_SESSION_HANDLE session, unsigned char *encrypted_data, unsigned long encrypted_data_len, unsigned char *data, unsigned long *data_len);
+
+CK_RV encrypt_oneshot (CK_SESSION_HANDLE session, unsigned char *data, unsigned long data_len, unsigned char *encrypted_data, unsigned long *encrypted_data_len);
+
 #endif /* SRC_LIB_ENCRYPT_H_ */

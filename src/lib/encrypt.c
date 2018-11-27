@@ -238,3 +238,24 @@ CK_RV decrypt_final (CK_SESSION_HANDLE session, unsigned char *last_part, unsign
 
     return common_final(operation_decrypt, session, last_part, last_part_len);
 }
+
+CK_RV decrypt_oneshot (CK_SESSION_HANDLE session, unsigned char *encrypted_data, unsigned long encrypted_data_len, unsigned char *data, unsigned long *data_len) {
+
+    CK_RV rv = decrypt_update(session, encrypted_data, encrypted_data_len,
+            data, data_len);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    return decrypt_final(session, NULL, NULL);
+}
+
+CK_RV encrypt_oneshot (CK_SESSION_HANDLE session, unsigned char *data, unsigned long data_len, unsigned char *encrypted_data, unsigned long *encrypted_data_len) {
+
+    CK_RV rv = encrypt_update(session, data, data_len, encrypted_data, encrypted_data_len);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    return encrypt_final(session, NULL, NULL);
+}

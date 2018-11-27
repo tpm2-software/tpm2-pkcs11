@@ -192,7 +192,7 @@ CK_RV C_EncryptInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJE
 
 CK_RV C_Encrypt (CK_SESSION_HANDLE session, unsigned char *data, unsigned long data_len, unsigned char *encrypted_data, unsigned long *encrypted_data_len) {
     TRACE_CALL;
-    TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
+    TRACE_RET(encrypt_oneshot(session, data, data_len, encrypted_data, encrypted_data_len));
 }
 
 CK_RV C_EncryptUpdate (CK_SESSION_HANDLE session, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
@@ -212,7 +212,7 @@ CK_RV C_DecryptInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJE
 
 CK_RV C_Decrypt (CK_SESSION_HANDLE session, unsigned char *encrypted_data, unsigned long encrypted_data_len, unsigned char *data, unsigned long *data_len) {
     TRACE_CALL;
-    TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
+    TRACE_RET(decrypt_oneshot(session, encrypted_data, encrypted_data_len, data, data_len));
 }
 
 CK_RV C_DecryptUpdate (CK_SESSION_HANDLE session, unsigned char *encrypted_part, unsigned long encrypted_part_len, unsigned char *part, unsigned long *part_len) {
