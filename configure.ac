@@ -27,9 +27,9 @@
 
 AC_INIT([tpm2-pkcs11],
         [m4_esyscmd_s([git describe --tags --always --dirty])],
-        [https://github.com/tpm2-software/<todo>/issues],
+        [https://github.com/tpm2-software/tpm2-pkcs11/issues],
         [],
-        [https://github.com/tpm2-software/<todo>])
+        [https://github.com/tpm2-software/tpm2-pkcs11])
 
 AC_CONFIG_MACRO_DIR([m4])
 
