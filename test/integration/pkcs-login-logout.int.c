@@ -16,7 +16,6 @@
 #include "log.h"
 #include "pkcs11.h"
 #include "db.h"
-#include "test.h"
 
 /**
  * C_Login logs a user into a token.
@@ -384,7 +383,7 @@ void test_user_login_logout_time_two(CK_SLOT_ID slotid) {
     LOGV("test_user_login_logout_time_two Test Passed!");
 }
 
-int test_invoke() {
+int main() {
 
     /*
      * Run these tests with locking enabled

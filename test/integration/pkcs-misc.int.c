@@ -21,7 +21,6 @@
 #include "log.h"
 #include "pkcs11.h"
 #include "db.h"
-#include "test.h"
 
 void test_c_getfunctionlist() {
 
@@ -328,7 +327,7 @@ static void test_session_cnt(CK_SLOT_ID slot) {
     }
 }
 
-int test_invoke() {
+int main() {
 
     CK_RV rv = C_Initialize(NULL);
     if (rv == CKR_OK)

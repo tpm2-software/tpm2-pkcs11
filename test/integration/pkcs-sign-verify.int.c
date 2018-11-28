@@ -16,7 +16,6 @@
 #include "log.h"
 #include "pkcs11.h"
 #include "db.h"
-#include "test.h"
 
 /*
  * Test that we can do a CKM_RSA_PKCS mechanism signature.
@@ -178,7 +177,7 @@ void test_sign_verify_CKM_RSA_PKCS(CK_SESSION_HANDLE session) {
     LOGV("test_sign_verify_CKM_RSA_PKCS Test Passed!");
 }
 
-int test_invoke() {
+int main() {
 
     CK_RV rv = C_Initialize(NULL);
     if (rv == CKR_OK)

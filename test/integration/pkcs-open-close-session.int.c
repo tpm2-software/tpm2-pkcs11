@@ -15,7 +15,6 @@
 #include "log.h"
 #include "pkcs11.h"
 #include "db.h"
-#include "test.h"
 
 /*
  * Test that a C_OpenSession and C_CloseSession work as expected (ie return code CKR_OK).
@@ -122,7 +121,7 @@ static void test_session_open_close_all(CK_SLOT_ID *slots, unsigned long count) 
 }
 
 
-int test_invoke() {
+int main() {
 
     CK_RV rv = C_Initialize(NULL);
     if(rv != CKR_OK){
