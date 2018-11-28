@@ -97,6 +97,17 @@ AC_ARG_ENABLE([dlclose],
   [AC_DEFINE([DISABLE_DLCLOSE], [1])]
  )
 
+AC_DEFUN([handle_store_dir],[
+    AX_NORMALIZE_PATH([with_storedir])
+    AC_DEFINE_UNQUOTED([TPM2_PKCS11_STORE_DIR], ["$with_storedir"])
+])
+
+AC_ARG_WITH([storedir],
+            [AS_HELP_STRING([--with-storedir=DIR],[Store directory for searching, defaults to /etc/tpm2_pkcs11])],
+            [handle_store_dir],
+            []
+)
+
 AC_ARG_ENABLE([pack],
             [AS_HELP_STRING([--enable-pack=]@<:@yes/no@:>@,
                             [Pack the structures. (default is no, except on Windows, where it defaults to packing)])],
