@@ -12,6 +12,7 @@
 #include "mutex.h"
 #include "pkcs11.h"
 #include "session_ctx.h"
+#include "session_table.h"
 #include "token.h"
 #include "tpm.h"
 #include "twist.h"

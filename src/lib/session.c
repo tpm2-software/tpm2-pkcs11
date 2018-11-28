@@ -114,7 +114,7 @@ CK_RV session_close(CK_SESSION_HANDLE session) {
     unsigned tokid = get_tokid_from_session_handle_and_cleanse(&session);
     check_slot_id(tokid, t, CKR_SESSION_HANDLE_INVALID);
 
-    return session_table_free_ctx(t->s_table, session);
+    return session_table_free_ctx(t, session);
 }
 
 CK_RV session_closeall(CK_SLOT_ID slot_id) {
@@ -124,7 +124,7 @@ CK_RV session_closeall(CK_SLOT_ID slot_id) {
     token *t;
     check_slot_id(slot_id, t, CKR_SLOT_ID_INVALID);
 
-    session_table_free_ctx_all(t->s_table);
+    session_table_free_ctx_all(t);
 
     return CKR_OK;
 }

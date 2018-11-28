@@ -8,7 +8,6 @@
 
 #include "object.h"
 #include "pkcs11.h"
-#include "session_table.h"
 #include "tpm.h"
 #include "twist.h"
 #include "utils.h"

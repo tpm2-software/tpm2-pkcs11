@@ -28,9 +28,9 @@ CK_RV session_table_new_ctx_unlocked(session_table *t,
 
 session_ctx *session_table_lookup(session_table *t, CK_SESSION_HANDLE handle);
 
-CK_RV session_table_free_ctx_unlocked(session_table *t, CK_SESSION_HANDLE handle);
-CK_RV session_table_free_ctx(session_table *t, CK_SESSION_HANDLE handle);
-void session_table_free_ctx_all(session_table *t);
+CK_RV session_table_free_ctx_unlocked_by_handle(token *t, CK_SESSION_HANDLE handle);
+CK_RV session_table_free_ctx(token *t, CK_SESSION_HANDLE handle);
+void session_table_free_ctx_all(token *t);
 
 /**
  * performs a session_ctx_login_event() call for each item in the table
