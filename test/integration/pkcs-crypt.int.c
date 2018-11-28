@@ -5,24 +5,8 @@
  * All rights reserved.
  ***********************************************************************/
 
-#include <errno.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <setjmp.h>
+#include "test.h"
 
-#include <cmocka.h>
-#include <tss2/tss2_sys.h>
-
-#define LOGMODULE test
-#include "log.h"
-#include "pkcs11.h"
-#include "db.h"
-
-typedef struct test_info test_info;
 struct test_info {
     CK_SESSION_HANDLE handle;
     CK_SLOT_ID slot;
@@ -31,30 +15,6 @@ struct test_info {
         CK_OBJECT_HANDLE aes;
     } objects;
 };
-
-static inline test_info *test_info_from_state(void **state) {
-    return (test_info *)*state;
-}
-
-static int group_setup(void **state) {
-    UNUSED(state);
-
-    /* Initialize the library */
-    CK_RV rv = C_Initialize(NULL);
-    assert_int_equal(rv, CKR_OK);
-
-    return 0;
-}
-
-static int group_teardown(void **state) {
-    UNUSED(state);
-
-    /* Finalize the library */
-    CK_RV rv = C_Finalize(NULL);
-    assert_int_equal(rv, CKR_OK);
-
-    return 0;
-}
 
 static int test_setup(void **state) {
 
@@ -122,11 +82,8 @@ static int test_teardown(void **state) {
 }
 
 static void do_login(test_info *ti) {
-    /* now that we have an object, login */
-    unsigned char upin[] = "myuserpin";
-    CK_RV rv = C_Login(ti->handle, CKU_USER, upin, sizeof(upin) - 1);
-    assert_int_equal(rv, CKR_OK);
 
+    user_login(ti->handle);
     ti->is_logged_in = true;
 }
 

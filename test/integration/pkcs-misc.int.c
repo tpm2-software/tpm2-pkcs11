@@ -1,151 +1,159 @@
 /* SPDX-License-Identifier: BSD-2 */
-/*
- * Copyright (c) 2018, Intel Corporation
- * All rights reserved.
- */
-/* SPDX-License-Identifier: BSD-2 */
 /***********************************************************************
- * Copyright (c) 2017-2018, Intel Corporation
+ * Copyright (c) 2018, Intel Corporation
  *
  * All rights reserved.
  ***********************************************************************/
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sqlite3.h>
-#include <assert.h>
 
-#include <tss2/tss2_sys.h>
+#include "test.h"
 
-#define LOGMODULE test
-#include "log.h"
-#include "pkcs11.h"
-#include "db.h"
+struct test_info {
+    CK_SESSION_HANDLE handles[6];
+    CK_SLOT_ID slot_id;
+};
 
-void test_c_getfunctionlist() {
+static test_info *test_info_new(void) {
+
+    test_info *ti = calloc(1, sizeof(*ti));
+    assert_non_null(ti);
+
+    /* get the slots */
+    CK_SLOT_ID slots[6];
+    unsigned long count = ARRAY_LEN(slots);
+    CK_RV rv = C_GetSlotList(true, slots, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 3);
+
+    ti->slot_id = slots[0];
+
+    return ti;
+}
+
+static int test_setup(void **state) {
+
+    test_info *ti = test_info_new();
+
+    CK_RV rv = C_OpenSession(ti->slot_id, CKF_SERIAL_SESSION, NULL,
+            NULL, &ti->handles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    *state = ti;
+
+    return 0;
+}
+
+static int test_teardown(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+
+    CK_RV rv = C_CloseAllSessions(ti->slot_id);
+    assert_int_equal(rv, CKR_OK);
+
+    free(ti);
+
+    return 0;
+}
+
+static void test_c_getfunctionlist_good(void **state) {
+
+    UNUSED(state);
 
     //Case 1: Successfully obtain function list
     CK_FUNCTION_LIST_PTR pFunctionList;
     CK_RV rv = C_GetFunctionList(&pFunctionList);
-    if (rv != CKR_OK) {
-        LOGE("C_GetFunctionList failed for Case 1! Response Code %x", rv);
-        exit(1);
-    }
-
-    //Case 2: Null to obtain gunction list
-    rv = C_GetFunctionList(NULL);
-    if (rv != CKR_ARGUMENTS_BAD) {
-        LOGE("C_GetFunctionList failed for Case 2! Response Code %x", rv);
-        exit(1);
-    }
-    LOGV("test_c_getfunctionlist Test Passed!");
+    assert_int_equal(rv, CKR_OK);
 }
 
-void test_get_slot_list() {
+static void test_c_getfunctionlist_bad(void **state) {
+
+    UNUSED(state);
+
+    //Case 2: Null PTR fails
+    CK_RV rv = C_GetFunctionList(NULL);
+    assert_int_equal(rv, CKR_ARGUMENTS_BAD);
+}
+
+static void test_get_slot_list(void **state) {
+
+    UNUSED(state);
 
     CK_SLOT_ID slots[6];
     unsigned long count;
     // Case 1: Good test to get the count of slots
     CK_RV rv = C_GetSlotList(true, NULL, &count);
-    if (rv != CKR_OK) {
-        LOGE("C_GetSlotList failed for Case 1! Response Code %x", rv);
-        exit(1);
-    }
+    assert_int_equal(rv, CKR_OK);
 
     // Case 2: Good test to get the slots in buffer
     rv = C_GetSlotList(true, slots, &count);
-    if (rv != CKR_OK) {
-        LOGE("C_GetSlotList failed for Case 2! Response Code %x", rv);
-        exit(1);
-    }
+    assert_int_equal(rv, CKR_OK);
+
     CK_SLOT_INFO sinfo;
     rv = C_GetSlotInfo(slots[0], &sinfo);
-    if (rv != CKR_OK) {
-        LOGE("C_GetSlotInfo failed for Case 2! Response Code %x", rv);
-        exit(1);
-    }
-    if (!(sinfo.flags & CKF_TOKEN_PRESENT)){
-        LOGE("C_GetSlotInfo failed for Case 2! CKF_TOKEN_PRESENT flag is missing");
-        exit(1);
-    }
-    if (!(sinfo.flags & CKF_HW_SLOT)){
-        LOGE("C_GetSlotInfo failed for Case 2! CKF_HW_SLOT flag is missing");
-        exit(1);
-    }
+    assert_int_equal(rv, CKR_OK);
+
+    assert_true(sinfo.flags & CKF_TOKEN_PRESENT);
+    assert_true(sinfo.flags & CKF_HW_SLOT);
 
     CK_TOKEN_INFO tinfo;
     rv = C_GetTokenInfo(slots[0], &tinfo);
-    if (rv != CKR_OK) {
-        LOGE("C_GetTokenInfo failed for Case 2! Response Code %x", rv);
-        exit(1);
-    }
-    if (!(tinfo.flags & CKF_RNG)){
-        LOGE("C_GetTokenInfo failed for Case 2! CKF_RING flag is missing");
-        exit(1);
-    }
-    if (!(tinfo.flags & CKF_TOKEN_INITIALIZED)){
-        LOGE("C_GetTokenInfo failed for Case 2! CKF_TOKEN_INITIALIZED flag is missing");
-        exit(1);
-    }
+    assert_int_equal(rv, CKR_OK);
 
-    LOGV("test_get_slot_list test Passed!");
+    assert_true(tinfo.flags & CKF_RNG);
+    assert_true(tinfo.flags & CKF_TOKEN_INITIALIZED);
 }
 
-void test_random(CK_SESSION_HANDLE hSession) {
+static void test_random_good(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE handle = ti->handles[0];
 
     unsigned char buf[4];
 
     // Case 1: Good test
-    CK_RV rv = C_GenerateRandom(hSession++, buf, 4);
-    if(rv != CKR_OK){
-        LOGE("C_GenerateRandom failed for Case 1! Response Code %x", rv);
-        exit(1);
-    }
+    CK_RV rv = C_GenerateRandom(handle++, buf, sizeof(buf));
+    assert_int_equal(rv, CKR_OK);
+}
+
+static void test_random_bad_session_handle(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    /* make the handle bad */
+    CK_SESSION_HANDLE handle = ~ti->handles[0];
+
+    unsigned char buf[4];
 
     // Case 2: Test bad session
-    rv = C_GenerateRandom(hSession, buf, 4);
-    if(rv != CKR_SESSION_HANDLE_INVALID){
-        LOGE("C_GenerateRandom failed for Case 2! Response Code %x", rv);
-        exit(1);
-    }
-
-    LOGV("test_random test Passed!");
+    CK_RV rv = C_GenerateRandom(handle, buf, sizeof(buf));
+    assert_int_equal(rv, CKR_SESSION_HANDLE_INVALID);
 }
 
-void test_seed(CK_SESSION_HANDLE hSession) {
+static void test_seed(void **state) {
 
-    unsigned char buf[]="ksadjfhjkhfsiudgfkjewsdjbkfcoidugshbvfewug";
+    static unsigned char buf[]="ksadjfhjkhfsiudgfkjewsdjbkfcoidugshbvfewug";
 
-    CK_RV rv = C_SeedRandom(hSession, buf, sizeof(buf));
-    if(rv != CKR_OK){
-        LOGE("C_GenerateRandom failed for Case 1! Response Code %x", rv);
-        exit(1);
-    }
-    LOGV("test_seed test Passed!");
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE handle = ti->handles[0];
+
+    CK_RV rv = C_SeedRandom(handle, buf, sizeof(buf));
+    assert_int_equal(rv, CKR_OK);
 }
 
-void test_get_session_info (CK_SESSION_HANDLE session) {
+static void test_get_session_info (void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE handle = ti->handles[0];
 
     CK_SESSION_INFO info;
-    CK_RV rv = C_GetSessionInfo(session, &info);
-
-    if (rv != CKR_OK){
-        LOGE("C_GetSessionInfo failed! Response Code %x", rv);
-        exit(1);
-    }
-
-    LOGV("test_get_session_info test Passed!");
+    CK_RV rv = C_GetSessionInfo(handle, &info);
+    assert_int_equal(rv, CKR_OK);
 }
 
-void test_digest_good(CK_SESSION_HANDLE session) {
+static void test_digest_good(void **state) {
 
-    /* now that we have an object, login */
-    unsigned char upin[] = "myuserpin";
-    CK_RV rv = C_Login(session, CKU_USER, upin, sizeof(upin) - 1);
-    if (rv != CKR_OK){
-        LOGE("C_Login failed! Response Code %x", rv);
-        exit(1);
-    }
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE handle = ti->handles[0];
+
+    user_login(handle);
 
     CK_MECHANISM smech = {
         .mechanism = CKM_SHA256,
@@ -153,11 +161,8 @@ void test_digest_good(CK_SESSION_HANDLE session) {
         .ulParameterLen = 0
     };
 
-    rv = C_DigestInit(session, &smech);
-    if (rv != CKR_OK){
-        LOGE("C_DigestInit failed! Response Code %x", rv);
-        exit(1);
-    }
+    CK_RV rv = C_DigestInit(handle, &smech);
+    assert_int_equal(rv, CKR_OK);
 
     // sizeof a sha256 hash
     unsigned char data[] = "Hello World This is My First Digest Message";
@@ -165,42 +170,49 @@ void test_digest_good(CK_SESSION_HANDLE session) {
     unsigned char hash[32];
     unsigned long hashlen = sizeof(hash);
 
-    rv = C_DigestUpdate(session, data, sizeof(data) - 1);
-    if (rv != CKR_OK){
-        LOGE("C_DigestUpdate failed! Response Code %x", rv);
-        exit(1);
-    }
+    rv = C_DigestUpdate(handle, data, sizeof(data) - 1);
+    assert_int_equal(rv, CKR_OK);
 
-    rv = C_DigestFinal(session, hash, &hashlen);
-    if (rv != CKR_OK){
-        LOGE("C_DigestFinal failed! Response Code %x", rv);
-        exit(1);
-    }
+    rv = C_DigestFinal(handle, hash, &hashlen);
+    assert_int_equal(rv, CKR_OK);
 
     unsigned char hash2[32];
     unsigned long hash2len = sizeof(hash);
 
-    rv = C_DigestInit(session, &smech);
-    if (rv != CKR_OK){
-        LOGE("C_DigestInit failed! Response Code %x", rv);
-        exit(1);
-    }
+    rv = C_DigestInit(handle, &smech);
+    assert_int_equal(rv, CKR_OK);
 
-    rv = C_Digest(session, data, sizeof(data) - 1, hash2, &hash2len);
-    if (rv != CKR_OK){
-        LOGE("C_Digest failed! Response Code %x", rv);
-        exit(1);
-    }
+    rv = C_Digest(handle, data, sizeof(data) - 1, hash2, &hash2len);
+    assert_int_equal(rv, CKR_OK);
 
-    rv = C_Logout(session);
-    if (rv != CKR_OK){
-        LOGE("C_Logout failed! Response Code %x", rv);
-        exit(1);
-    }
-    LOGV("test_digest_good test Passed!");
+    rv = C_Logout(handle);
+    assert_int_equal(rv, CKR_OK);
+
+    assert_int_equal(hash2len, hashlen);
+    assert_memory_equal(hash, hash2, hash2len);
+
+    /*
+     * expected hash of data
+     */
+    unsigned char expected_digest[] = {
+      0xce, 0x89, 0xe6, 0x32, 0xe2, 0x56, 0x4c, 0x7b, 0xdb, 0x3c, 0x01, 0xca,
+      0x28, 0x20, 0x9b, 0x02, 0x9b, 0x80, 0x05, 0x99, 0x65, 0xb2, 0x8e, 0x58,
+      0xe0, 0xb3, 0xec, 0x88, 0x16, 0xe0, 0x77, 0x77
+    };
+
+    assert_int_equal(hashlen, sizeof(expected_digest));
+    assert_memory_equal(hash, expected_digest, sizeof(expected_digest));
 }
 
-static void test_session_cnt(CK_SLOT_ID slot) {
+static void test_session_cnt(void **state) {
+
+    /* we populate state in this test */
+    assert_null(*state);
+
+    test_info *ti = test_info_new();
+    *state = ti;
+
+    CK_SESSION_HANDLE slot = ti->slot_id;
 
     size_t i;
     CK_RV rv;
@@ -209,13 +221,11 @@ static void test_session_cnt(CK_SLOT_ID slot) {
     CK_ULONG cnt = 0;
     CK_ULONG rw_cnt = 0;
 
-    CK_SESSION_HANDLE handles[6];
-
     /*
      * Test incrementing
      */
-    for (i=0; i < ARRAY_LEN(handles); i++) {
-        CK_SESSION_HANDLE *handle = &handles[i];
+    for (i=0; i < ARRAY_LEN(ti->handles); i++) {
+        CK_SESSION_HANDLE_PTR handle = &ti->handles[i];
         /*
          * Every odd open up a RW session, every even open up a RO session
          */
@@ -223,10 +233,7 @@ static void test_session_cnt(CK_SLOT_ID slot) {
         flags |= (i & 1) ? CKF_RW_SESSION : 0;
 
         rv = C_OpenSession(slot, flags, NULL , NULL, handle);
-        if (rv != CKR_OK) {
-            LOGE("C_OpenSession was unsuccessful: 0x%x", rv);
-            exit(1);
-        }
+        assert_int_equal(rv, CKR_OK);
 
         /*
          * For clarity, just track the sessions here rather than
@@ -239,22 +246,10 @@ static void test_session_cnt(CK_SLOT_ID slot) {
         cnt++;
 
         rv = C_GetTokenInfo(slot, &info);
-        if (rv != CKR_OK) {
-            LOGE("C_GetTokenInfo was unsuccessful: 0x%x", rv);
-            exit(1);
-        }
+        assert_int_equal(rv, CKR_OK);
 
-        if (info.ulSessionCount != cnt) {
-            LOGE("ulSessionCount %lu != expected %lu",
-                    info.ulSessionCount, cnt);
-            exit (1);
-        }
-
-        if (info.ulRwSessionCount != rw_cnt) {
-            LOGE("ulRwSessionCount %lu != expected %lu",
-                    info.ulRwSessionCount, rw_cnt);
-            exit (1);
-        }
+        assert_int_equal(info.ulSessionCount, cnt);
+        assert_int_equal(info.ulRwSessionCount, rw_cnt);
     }
 
     /*
@@ -264,14 +259,12 @@ static void test_session_cnt(CK_SLOT_ID slot) {
      * rw_cnt and cnt are properly in the state of current open handles, so
      * just use them from above.
      */
-    for (i=0; i < (ARRAY_LEN(handles) - 2); i++) {
-        CK_SESSION_HANDLE handle = handles[i];
+    for (i=0; i < (ARRAY_LEN(ti->handles) - 2); i++) {
+        CK_SESSION_HANDLE handle = ti->handles[i];
 
         rv = C_CloseSession(handle);
-        if (rv != CKR_OK) {
-            LOGE("C_OpenSession was unsuccessful: 0x%x", rv);
-            exit(1);
-        }
+        assert_int_equal(rv, CKR_OK);
+
 
         /*
          * For clarity, just track the sessions here rather than
@@ -285,95 +278,58 @@ static void test_session_cnt(CK_SLOT_ID slot) {
         cnt--;
 
         rv = C_GetTokenInfo(slot, &info);
-        if (rv != CKR_OK) {
-            LOGE("C_GetTokenInfo was unsuccessful: 0x%x", rv);
-            exit(1);
-        }
+        assert_int_equal(rv, CKR_OK);
 
-        if (info.ulSessionCount != cnt) {
-            LOGE("ulSessionCount %lu != expected %lu");
-            exit (1);
-        }
-
-        if (info.ulRwSessionCount != rw_cnt) {
-            LOGE("ulRwSessionCount %lu != expected %lu");
-            exit (1);
-        }
+        assert_int_equal(info.ulSessionCount, cnt);
+        assert_int_equal(info.ulRwSessionCount, rw_cnt);
     }
 
     /*
      * test closeall brings it 0
      */
     rv = C_CloseAllSessions(slot);
-    if (rv != CKR_OK) {
-        LOGE("C_CloseAllSessions was unsuccessful: 0x%x", rv);
-        exit(1);
-    }
+    assert_int_equal(rv, CKR_OK);
+
 
     rv = C_GetTokenInfo(slot, &info);
-    if (rv != CKR_OK) {
-        LOGE("C_GetTokenInfo was unsuccessful: 0x%x", rv);
-        exit(1);
-    }
+    assert_int_equal(rv, CKR_OK);
 
-    if (info.ulSessionCount != 0) {
-        LOGE("ulSessionCount %lu != expected %lu");
-        exit (1);
-    }
-
-    if (info.ulRwSessionCount != 0) {
-        LOGE("ulRwSessionCount %lu != expected %lu");
-        exit (1);
-    }
+    assert_int_equal(info.ulSessionCount, 0);
+    assert_int_equal(info.ulRwSessionCount, 0);
 }
 
 int main() {
 
-    CK_RV rv = C_Initialize(NULL);
-    if (rv == CKR_OK)
-        LOGV("Initialize was successful");
-    else
-        LOGV("Initialize was unsuccessful");
+    const struct CMUnitTest tests[] = {
+        /*
+         * No Session tests
+         */
+        cmocka_unit_test_setup_teardown(test_c_getfunctionlist_good,
+                NULL, NULL),
+        cmocka_unit_test_setup_teardown(test_c_getfunctionlist_bad,
+                NULL, NULL),
+        cmocka_unit_test_setup_teardown(test_get_slot_list,
+                NULL, NULL),
 
-    CK_SLOT_ID slots[6];
-    unsigned long count = ARRAY_LEN(slots);
-    rv = C_GetSlotList(true, slots, &count);
-    if (rv == CKR_OK)
-        LOGV("C_GetSlotList was successful");
-    else
-        LOGV("C_GetSlotList was unsuccessful");
+        /*
+         * R/O Session Tests
+         */
+        cmocka_unit_test_setup_teardown(test_seed,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_random_good,
+                test_setup, test_teardown),
+                cmocka_unit_test_setup_teardown(test_random_bad_session_handle,
+                        test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_get_session_info,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_digest_good,
+                test_setup, test_teardown),
+        /*
+         * manages it's own sessions
+         */
+        cmocka_unit_test_setup_teardown(test_session_cnt,
+                NULL, test_teardown),
+    };
 
-    CK_SESSION_HANDLE handle;
-
-    rv = C_OpenSession(slots[0], CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL , NULL, &handle);
-    if (rv == CKR_OK)
-        LOGV("C_OpenSession was successful");
-    else
-        LOGV("C_OpenSession was unsuccessful");
-
-    test_c_getfunctionlist();
-    test_get_slot_list();
-    test_seed(handle);
-    test_random(handle);
-    test_get_session_info(handle);
-    test_digest_good(handle);
-
-    rv = C_CloseSession(handle);
-    if (rv == CKR_OK)
-        LOGV("C_CloseSession was successful");
-    else
-        LOGV("C_CloseSession was unsuccessful");
-
-    /*
-     * Test session handle count
-     */
-    test_session_cnt(slots[0]);
-
-    rv = C_Finalize(NULL);
-    if (rv == CKR_OK)
-        LOGV("C_Finalize was successful");
-    else
-        LOGV("C_Finalize was unsuccessful");
-
-    return 0;
+    return cmocka_run_group_tests(tests, group_setup_locking, group_teardown);
 }
