@@ -16,7 +16,6 @@
 #include "log.h"
 #include "pkcs11.h"
 #include "db.h"
-#include "test.h"
 
 /**
  * C_FindObjects continues a search for token and session objects that match a template, obtaining additional object handles.
@@ -220,7 +219,7 @@ static void test_find_objects_via_empty_template(CK_SESSION_HANDLE hSession) {
     LOGV("\"%s\" Test Passed!", __func__);
 }
 
-int test_invoke() {
+int main() {
 
     CK_RV rv = C_Initialize(NULL);
     if (rv == CKR_OK)

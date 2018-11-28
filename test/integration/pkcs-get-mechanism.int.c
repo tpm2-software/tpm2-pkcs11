@@ -16,7 +16,6 @@
 #include "log.h"
 #include "pkcs11.h"
 #include "db.h"
-#include "test.h"
 
 /**
  * C_GetMechanismList is used to obtain a list of mechanism types supported by a token.
@@ -174,7 +173,7 @@ void test_get_mechanism_info_bad(CK_SLOT_ID slot_id) {
     LOGV("test_get_mechanism_info_bad Test Passed!");
 }
 
-int test_invoke() {
+int main() {
 
     CK_RV rv = C_Initialize(NULL);
     if (rv == CKR_OK)

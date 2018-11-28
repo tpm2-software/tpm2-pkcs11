@@ -21,7 +21,6 @@
 #include "log.h"
 #include "pkcs11.h"
 #include "db.h"
-#include "test.h"
 
 typedef struct test_info test_info;
 struct test_info {
@@ -262,7 +261,7 @@ static void test_aes_encrypt_decrypt_oneshot_good(void **state) {
     assert_memory_equal(plaintext, plaintext2, sizeof(plaintext2));
 }
 
-int test_invoke(void) {
+int main() {
 
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_aes_encrypt_decrypt_good,
