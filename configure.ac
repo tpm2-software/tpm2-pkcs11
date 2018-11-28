@@ -103,6 +103,8 @@ AC_ARG_ENABLE(
 
 AC_DEFUN([integration_test_checks], [
 
+  PKG_CHECK_MODULES([CMOCKA],[cmocka])
+
   AC_CHECK_PROG([tpm_server], [tpm_server], [yes], [no])
   AS_IF([test "x$tpm_server" != "xyes"],
     [AC_MSG_ERROR([Integration tests enabled but tpm_server not found, try setting PATH])])
