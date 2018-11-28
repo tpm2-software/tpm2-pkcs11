@@ -21,6 +21,7 @@
 #include "db.h"
 #include "log.h"
 #include "object.h"
+#include "session_table.h"
 #include "token.h"
 #include "twist.h"
 #include "utils.h"

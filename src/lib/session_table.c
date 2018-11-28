@@ -10,6 +10,7 @@
 #include "pkcs11.h"
 #include "session_ctx.h"
 #include "session_table.h"
+#include "token.h"
 #include "utils.h"
 
 struct session_table {
@@ -108,52 +109,98 @@ CK_RV session_table_new_ctx_unlocked(session_table *t, CK_SESSION_HANDLE *handle
     return CKR_OK;
 }
 
-CK_RV session_table_free_ctx_unlocked(session_table *t, CK_SESSION_HANDLE handle) {
+static void do_logout_if_needed(token *t) {
 
-    session_ctx **ctx = &t->table[handle];
-    if (!*ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    /*
+     * Are we logged in, if so logout
+     * XXX Locking token, note the called routine manipulates
+     * token so we *MAY* need a locked/unlocked version
+     */
+    if (t->login_state != token_no_one_logged_in) {
+        /*
+         * This should never fail, if it does the state is so borked
+         * recovery is impossible.
+         */
+        session_ctx_lock(t->login_session_ctx);
+        CK_RV rv = session_ctx_token_logout(t->login_session_ctx);
+        assert(rv == CKR_OK);
+
+        session_ctx_free(t->login_session_ctx);
     }
+}
+
+static CK_RV session_table_free_ctx_unlocked_by_ctx(token *t, session_ctx **ctx) {
+
+    session_table *stable = t->s_table;
 
     CK_STATE state = session_ctx_state_get(*ctx);
     if(state == CKS_RW_PUBLIC_SESSION
         || state == CKS_RW_USER_FUNCTIONS
         || state == CKS_RW_SO_FUNCTIONS) {
-        assert(t->rw_cnt);
-        t->rw_cnt--;
+        assert(stable->rw_cnt);
+        stable->rw_cnt--;
     }
 
-    t->cnt--;
+    stable->cnt--;
 
-    session_ctx_free(*ctx);
+    /* Per the spec, when session count hits 0, logout */
+    if (!stable->cnt) {
+        do_logout_if_needed(t);
+    }
+
+    /*
+     * Do not free the cached token login context
+     * this is used in do_logout_needed, so skip it, but let the count
+     * go to 0.
+     */
+    if (t->login_session_ctx != *ctx) {
+        session_ctx_free(*ctx);
+    }
+
     *ctx = NULL;
 
     return CKR_OK;
 }
 
-void session_table_free_ctx_all(session_table *t) {
+CK_RV session_table_free_ctx_unlocked_by_handle(token *t, CK_SESSION_HANDLE handle) {
 
-    session_table_lock(t);
+    session_table *stable = t->s_table;
 
-    unsigned i;
-    for (i=0; i < ARRAY_LEN(t->table); i++) {
-        CK_SESSION_HANDLE handle = i;
-        session_ctx **ctx = session_table_lookup_unlocked(t, handle);
-        session_ctx_free(*ctx);
-        *ctx = NULL;
+    session_ctx **ctx = &stable->table[handle];
+    if (!*ctx) {
+        return CKR_SESSION_HANDLE_INVALID;
     }
 
-    t->cnt = 0;
-    t->rw_cnt = 0;
-
-    session_table_unlock(t);
+    return session_table_free_ctx_unlocked_by_ctx(t, ctx);
 }
 
-CK_RV session_table_free_ctx(session_table *t, CK_SESSION_HANDLE handle) {
+void session_table_free_ctx_all(token *t) {
 
-    session_table_lock(t);
-    CK_RV rv = session_table_free_ctx_unlocked(t, handle);
-    session_table_unlock(t);
+    session_table_lock(t->s_table);
+
+    unsigned i;
+    for (i=0; i < ARRAY_LEN(t->s_table->table); i++) {
+        CK_SESSION_HANDLE handle = i;
+
+        /*
+         * skip dead handles
+         */
+        session_ctx **ctx = &t->s_table->table[handle];
+        if (!*ctx) {
+            continue;
+        }
+
+        session_table_free_ctx_unlocked_by_ctx(t, ctx);
+    }
+
+    session_table_unlock(t->s_table);
+}
+
+CK_RV session_table_free_ctx(token *t, CK_SESSION_HANDLE handle) {
+
+    session_table_lock(t->s_table);
+    CK_RV rv = session_table_free_ctx_unlocked_by_handle(t, handle);
+    session_table_unlock(t->s_table);
 
     return rv;
 }
