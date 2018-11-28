@@ -1,23 +1,13 @@
 /* SPDX-License-Identifier: BSD-2 */
-/*
+/***********************************************************************
  * Copyright (c) 2018, Intel Corporation
+ *
  * All rights reserved.
- */
-/* SPDX-License-Identifier: BSD-2 */
+ ***********************************************************************/
 
-#include <stdlib.h>
-#include <string.h>
-#include <sqlite3.h>
-#include <assert.h>
+#include "test.h"
 
-#include <tss2/tss2_sys.h>
-
-#define LOGMODULE test
-#include "log.h"
-#include "pkcs11.h"
-#include "db.h"
-
-/**
+/*
  * C_GetMechanismList is used to obtain a list of mechanism types supported by a token.
  * SlotID is the ID of the token’s slot; pulCount points to the location that receives the number of mechanisms.
  * There are two ways for an application to call C_GetMechanismList:
@@ -31,85 +21,85 @@
  * Because C_GetMechanismList does not allocate any space of its own, an application will often call C_GetMechanismList twice.
  * However, this behavior is by no means required.
  */
-void test_get_mechanism_list_good(CK_SLOT_ID slot_id) {
+
+struct test_info {
+    CK_SLOT_ID slot;
+};
+
+static int test_setup(void **state) {
+
+    test_info *info = calloc(1, sizeof(*info));
+    assert_non_null(info);
+
+    /* get the slots */
+    CK_SLOT_ID slots[32];
+    unsigned long count = ARRAY_LEN(slots);
+    CK_RV rv = C_GetSlotList(true, slots, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_not_equal(count, 0);
+
+    /* assign to state */
+    info->slot = slots[0];
+
+    *state = info;
+
+    /* success */
+    return 0;
+}
+
+static int test_teardown(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+
+    free(ti);
+
+    return 0;
+}
+
+void test_get_mechanism_list_good(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SLOT_ID slot_id = ti->slot;
 
     unsigned long mech_cnt;
-
+    CK_MECHANISM_TYPE mechs[256];
     // Only return the number of mechanisms
     CK_RV rv = C_GetMechanismList(slot_id, NULL, &mech_cnt);
-    if ( rv != CKR_OK)
-    {
-        LOGE("C_GetMechanismList failed! Response Code %x", rv);
-        exit(1);
-    }
-
-    CK_MECHANISM_TYPE_PTR mechs = malloc(mech_cnt * sizeof(CK_MECHANISM_TYPE));
+    assert_int_equal(rv, CKR_OK);
+    assert_in_range(mech_cnt, 1, ARRAY_LEN(mechs));
 
     // Return List of mechanisms
     rv = C_GetMechanismList(slot_id, mechs, &mech_cnt);
-    if ( rv != CKR_OK)
-    {
-        LOGE("C_GetMechanismList failed! Response Code %x", rv);
-        free(mechs);
-        exit(1);
-    }
-
-    free(mechs);
-    LOGV("test_get_mechanism_list_good Test Passed!");
+    assert_int_equal(rv, CKR_OK);
 }
 
-void test_get_mechanism_list_bad(CK_SLOT_ID slot_id) {
+void test_get_mechanism_list_bad(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SLOT_ID slot_id = ti->slot;
 
     unsigned long mech_cnt;
 
     // Invalid Slot
     CK_RV rv = C_GetMechanismList((CK_ULONG)-10, NULL, &mech_cnt);
-    if ( rv != CKR_SLOT_ID_INVALID)
-    {
-        LOGE("C_GetMechanismList failed for Invalid Slot id! Response Code %x", rv);
-        exit(1);
-    }
-    LOGV("Invalid slot passed");
-    // NULL Arguments
+    assert_int_equal(rv, CKR_SLOT_ID_INVALID);
+
     rv = C_GetMechanismList(slot_id, NULL, NULL);
-    if ( rv != CKR_ARGUMENTS_BAD)
-    {
-        LOGE("C_GetMechanismList failed for Invalid Arguments! Response Code %x", rv);
-        exit(1);
-    }
+    assert_int_equal(rv, CKR_ARGUMENTS_BAD);
 
-    // No buffer
+    CK_MECHANISM_TYPE mechs[1];
     rv = C_GetMechanismList(slot_id, NULL, &mech_cnt);
-    if ( rv != CKR_OK)
-    {
-        LOGE("C_GetMechanismList failed for No buffer! Response Code %x", rv);
-        exit(1);
-    }
+    assert_int_equal(rv, CKR_OK);
+    assert_int_not_equal(mech_cnt, ARRAY_LEN(mechs));
 
-    CK_MECHANISM_TYPE_PTR mechs = malloc(mech_cnt * sizeof(CK_MECHANISM_TYPE));
-
-    // Zero count but buffer present
     unsigned long value = 0;
     rv = C_GetMechanismList(slot_id, mechs, &value);
-    if ( rv != CKR_BUFFER_TOO_SMALL)
-    {
-        LOGE("C_GetMechanismList failed for Zero count! Response Code %x", rv);
-        free(mechs);
-        exit(1);
-    }
+    assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
 
     // Low count but buffer present
-    value = 1;
+    value = ARRAY_LEN(mechs);
     rv = C_GetMechanismList(slot_id, mechs, &value);
-    if ( rv != CKR_BUFFER_TOO_SMALL)
-    {
-        LOGE("C_GetMechanismList failed for Low count! Response Code %x", rv);
-        free(mechs);
-        exit(1);
-    }
-
-    free(mechs);
-    LOGV("test_get_mechanism_list_bad Test Passed!");
+    assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
 }
 
 /**
@@ -117,100 +107,53 @@ void test_get_mechanism_list_bad(CK_SLOT_ID slot_id) {
  * slotID is the ID of the token’s slot; type is the type of mechanism; pInfo points to the location that receives the mechanism
  * information.
  */
-void test_get_mechanism_info_good(CK_SLOT_ID slot_id) {
+void test_get_mechanism_info_good(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SLOT_ID slot_id = ti->slot;
 
     CK_MECHANISM_INFO mech_info;
 
     CK_RV rv = C_GetMechanismInfo(slot_id, CKM_AES_KEY_GEN, &mech_info);
-    if ( rv != CKR_OK){
-        LOGE("C_GetMechanismInfo failed! Response Code %x", rv);
-        exit(1);
-    }
+    assert_int_equal(rv, CKR_OK);
 
-    if ( mech_info.ulMaxKeySize != 512){
-        LOGE("C_GetMechanismInfo failed, Mechanism max key size is wrong! Response Code %x", rv);
-        exit(1);
-    }
-
-    if ( mech_info.ulMinKeySize != 128){
-        LOGE("C_GetMechanismInfo failed, Mechanism min key size is wrong! Response Code %x", rv);
-        exit(1);
-    }
-
-    if ( mech_info.flags != 0){
-        LOGE("C_GetMechanismInfo failed, Mechanism flags are wrong! Response Code %x", rv);
-        exit(1);
-    }
-
-    LOGV("test_get_mechanism_info_good Test Passed!");
+    assert_int_equal(mech_info.ulMaxKeySize, 512);
+    assert_int_equal(mech_info.ulMinKeySize, 128);
+    assert_int_equal(mech_info.flags, 0);
 }
 
-void test_get_mechanism_info_bad(CK_SLOT_ID slot_id) {
+void test_get_mechanism_info_bad(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SLOT_ID slot_id = ti->slot;
 
     CK_MECHANISM_INFO mech_info;
 
     // Invalid mechanism
     CK_RV rv = C_GetMechanismInfo(slot_id, (CK_ULONG)-10, &mech_info);
-    if ( rv != CKR_MECHANISM_INVALID ){
-        LOGE("C_GetMechanismInfo failed for Invalid Mechanism! Response Code %x", rv);
-        exit(1);
-    }
+    assert_int_equal(rv, CKR_MECHANISM_INVALID);
 
     // NULL Arguments
     rv = C_GetMechanismInfo(slot_id, CKM_AES_KEY_GEN, NULL);
-    if ( rv != CKR_ARGUMENTS_BAD ){
-        LOGE("C_GetMechanismInfo failed for NULL Arguments! Response Code %x", rv);
-        exit(1);
-    }
+    assert_int_equal(rv, CKR_ARGUMENTS_BAD);
 
     // Invalid slot ID
     rv = C_GetMechanismInfo((CK_ULONG)-10, CKM_AES_KEY_GEN, &mech_info);
-    if ( rv != CKR_SLOT_ID_INVALID ){
-        LOGE("C_GetMechanismInfo failed for Invalid Slot ID! Response Code %x", rv);
-        exit(1);
-    }
-
-    LOGV("test_get_mechanism_info_bad Test Passed!");
+    assert_int_equal(rv, CKR_SLOT_ID_INVALID);
 }
 
 int main() {
 
-    CK_RV rv = C_Initialize(NULL);
-    if (rv == CKR_OK)
-	LOGV("Initialize was successful");
-    else
-	LOGE("Initialize was unsuccessful");
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_get_mechanism_list_good,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_get_mechanism_list_bad,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_get_mechanism_info_good,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_get_mechanism_info_bad,
+                test_setup, test_teardown),
+    };
 
-    CK_SLOT_ID slots[6];
-    unsigned long count = ARRAY_LEN(slots);
-    rv = C_GetSlotList(true, slots, &count);
-    if (rv == CKR_OK)
-	LOGV("C_GetSlotList was successful");
-    else
-	LOGE("C_GetSlotList was unsuccessful");
-
-    CK_SESSION_HANDLE handle;
-
-    rv = C_OpenSession(slots[0], CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL , NULL, &handle);
-    if (rv == CKR_OK)
-	LOGV("C_OpenSession was successful");
-    else
-	LOGE("C_OpenSession was unsuccessful");
-
-    test_get_mechanism_list_good(slots[0]);
-    test_get_mechanism_list_bad(slots[0]);
-
-    rv = C_CloseSession(handle);
-    if (rv == CKR_OK)
-	LOGV("C_CloseSession was successful");
-    else
-	LOGE("C_CloseSession was unsuccessful");
-
-    rv = C_Finalize(NULL);
-    if (rv == CKR_OK)
-	LOGV("C_Finalize was successful");
-    else
-	LOGE("C_Finalize was unsuccessful");
-
-    return 0;
+    return cmocka_run_group_tests(tests, group_setup, group_teardown);
 }
