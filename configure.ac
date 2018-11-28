@@ -24,6 +24,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
 # THE POSSIBILITY OF SUCH DAMAGE.
 #;**********************************************************************;
+
 AC_INIT([tpm2-pkcs11],
         [m4_esyscmd_s([git describe --tags --always --dirty])],
         [https://github.com/tpm2-software/<todo>/issues],
@@ -43,6 +44,7 @@ AM_INIT_AUTOMAKE([foreign
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AX_CODE_COVERAGE
 AC_CONFIG_FILES([Makefile])
+AC_CONFIG_HEADERS([src/lib/config.h])
 
 PKG_CHECK_MODULES([TSS2_ESYS],[tss2-esys])
 PKG_CHECK_MODULES([TCTI_DEVICE], [tss2-tcti-device])
@@ -61,8 +63,7 @@ AC_ARG_ENABLE([unit],
 AS_IF([test "x$enable_unit" = "xyes"],
       [PKG_CHECK_MODULES([CMOCKA],
                          [cmocka],
-                         [AC_DEFINE([HAVE_CMOCKA],
-                                    [1])])])
+                         )])
 AM_CONDITIONAL([UNIT], [test "x$enable_unit" = "xyes"])
 
 #
@@ -92,14 +93,18 @@ AM_CONDITIONAL([ENABLE_INTEGRATION],[test "x$enable_integration" = "xyes"])
 
 AC_ARG_ENABLE([dlclose],
   [AS_HELP_STRING([--disable-dlclose],
-                            [Some versions of libc cause a sigsegv on exit, this disables the dlclose and works around that bug])],
+                            [Some versions of libc cause a sigsegv on exit with dlclose(),
+                            this disables the dlclose() and works around that bug])],
   []
-  [AC_DEFINE([DISABLE_DLCLOSE], [1])]
+  [AC_DEFINE([DISABLE_DLCLOSE], [1],
+  [Some versions of libc cause a sigsegv on exit with dlcolse(), this disables the dlclose()
+  and works around that bug])]
  )
 
 AC_DEFUN([handle_store_dir],[
     AX_NORMALIZE_PATH([with_storedir])
-    AC_DEFINE_UNQUOTED([TPM2_PKCS11_STORE_DIR], ["$with_storedir"])
+    AC_DEFINE_UNQUOTED([TPM2_PKCS11_STORE_DIR], ["$with_storedir"],
+    [Changes the store directory to search. Defaults to /etc/tpm2_pkcs11])
 ])
 
 AC_ARG_WITH([storedir],
@@ -114,14 +119,16 @@ AC_ARG_ENABLE([pack],
             [enable_pack=$enableval],
             [enable_pack=no])
 AS_IF([test "x$enable_pack" = "xyes"],
-      [AC_DEFINE([PKCS11_PACK], [1])])
+  [AC_DEFINE([PKCS11_PACK], [1],
+    [Define to enable 1 byte structure packing. Default for Windows builds.])
+  ])
 
 AC_DEFUN([unit_test_checks],[
 
-    PKG_CHECK_MODULES([CMOCKA],[cmocka],
-        [AC_DEFINE([HAVE_CMOCKA],[1])])
+  PKG_CHECK_MODULES([CMOCKA],[cmocka])
 
-    AC_DEFINE([UNIT_TESTING], [1])
+  AC_DEFINE([UNIT_TESTING], [1],
+    [Define when unit testing. libtwist uses this to define a debug interface for alloc failures])
 ])
 
 AS_IF([test "x$enable_unit" = "xyes"],
