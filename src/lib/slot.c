@@ -211,6 +211,7 @@ CK_RV slot_mechanism_list_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE *mechanism_
 CK_RV slot_mechanism_info_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE type, CK_MECHANISM_INFO *info) {
 
     check_is_init();
+    check_pointer(info);
 
     if (!slot_get_token(slot_id)) {
         return CKR_SLOT_ID_INVALID;
