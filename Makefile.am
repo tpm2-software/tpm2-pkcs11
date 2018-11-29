@@ -107,7 +107,6 @@ if ENABLE_INTEGRATION
 TESTS = $(check_PROGRAMS)
 check_PROGRAMS += \
     test/integration/pkcs-find-objects.int \
-    test/integration/pkcs-open-close-session.int \
     test/integration/pkcs-get-mechanism.int \
     test/integration/pkcs-login-logout.int \
     test/integration/pkcs-sign-verify.int \
@@ -116,11 +115,6 @@ check_PROGRAMS += \
     test/integration/pkcs-crypt.int
 
 XFAIL_TESTS=test/unit/test_pkcs11
-
-INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
-test_integration_pkcs_open_close_session_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
-test_integration_pkcs_open_close_session_int_LDADD   = $(TESTS_LDADD)
-test_integration_pkcs_open_close_session_int_SOURCES = test/integration/pkcs-open-close-session.int.c
 
 test_integration_pkcs_find_objects_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_find_objects_int_LDADD   = $(TESTS_LDADD)
