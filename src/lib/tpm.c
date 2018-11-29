@@ -456,8 +456,6 @@ bool tpm_loadobj(
         twist pub_path, twist priv_path,
         uint32_t *handle) {
 
-    bool rc = false;
-
     TPM2B_PRIVATE priv = { .size = 0 };
     bool res = files_load_private(priv_path, &priv);
     if (!res) {
@@ -700,8 +698,6 @@ bool tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_BYTE_PTR data, CK_ULONG datalen,
 
 CK_RV tpm_hash_init(tpm_ctx *ctx, CK_MECHANISM_TYPE mode, uint32_t *sequence_handle) {
 
-    CK_RV rv = CKR_GENERAL_ERROR;
-
     TPM2B_AUTH null_auth = TPM2B_EMPTY_INIT;
 
     TPMI_ALG_HASH halg = mech_to_hash_alg(mode);
@@ -867,8 +863,6 @@ CK_RV tpm_rsa_decrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech,
 
 static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_MECHANISM_TYPE mode, TPMI_YES_NO is_decrypt,
         twist iv_in, twist data_in, twist *data_out, twist *iv_out) {
-
-    CK_RV rc = CKR_GENERAL_ERROR;
 
     TPMI_ALG_SYM_MODE tpm_mode;
     switch(mode) {

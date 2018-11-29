@@ -163,13 +163,15 @@ CK_RV session_login (CK_SESSION_HANDLE session, CK_USER_TYPE user_type,
         goto out;
     }
 
+    token *tok = session_ctx_get_tok(ctx);
+
     // TODO Handle CKU_CONTEXT_SPECIFIC
     // TODO Support CKA_ALWAYS_AUTHENTICATE
     switch(user_type) {
         case CKU_SO:
             /* falls-through */
         case CKU_USER:
-            rv = session_ctx_token_login(ctx, tpin, user_type);
+            rv = token_login(tok, tpin, user_type);
         break;
         case CKU_CONTEXT_SPECIFIC:
             rv = CKR_USER_TYPE_INVALID;

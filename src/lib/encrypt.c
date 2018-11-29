@@ -7,7 +7,6 @@
 #include "encrypt.h"
 #include "session.h"
 #include "session_ctx.h"
-#include "token.h"
 #include "tpm.h"
 
 typedef struct encrypt_op_data encrypt_op_data;
@@ -49,13 +48,16 @@ static CK_RV common_init (operation op, CK_SESSION_HANDLE session, CK_MECHANISM 
         return rv;
     }
 
-    if (!session_ctx_is_user_logged_in(ctx)) {
+    bool session_state_ok = session_ctx_user_state_ok(ctx);
+    if (!session_state_ok) {
         rv = CKR_USER_NOT_LOGGED_IN;
         goto out;
     }
 
-    encrypt_op_data *opdata = (encrypt_op_data *)session_ctx_opdata_get(ctx, op);
-    if (opdata) {
+    token *tok = session_ctx_get_tok(ctx);
+
+    bool is_active = token_opdata_is_active(tok);
+    if (is_active) {
         rv = CKR_OPERATION_ACTIVE;
         goto out;
     }
@@ -66,7 +68,7 @@ static CK_RV common_init (operation op, CK_SESSION_HANDLE session, CK_MECHANISM 
         goto out;
     }
 
-    opdata = (encrypt_op_data *)calloc(1, sizeof(*opdata));
+    encrypt_op_data *opdata = (encrypt_op_data *)calloc(1, sizeof(*opdata));
     if (!opdata) {
         rv = CKR_HOST_MEMORY;
         goto out;
@@ -76,7 +78,7 @@ static CK_RV common_init (operation op, CK_SESSION_HANDLE session, CK_MECHANISM 
     opdata->mode = mode;
     opdata->iv = iv;
 
-    session_ctx_opdata_set(ctx, op, opdata);
+    token_opdata_set(tok, op, opdata);
 
     rv = CKR_OK;
 
@@ -131,18 +133,20 @@ static CK_RV common_update (operation op, CK_SESSION_HANDLE session, unsigned ch
         return rv;
     }
 
-    if (!session_ctx_is_user_logged_in(ctx)) {
+    token *tok = session_ctx_get_tok(ctx);
+
+    bool session_state_ok = session_ctx_user_state_ok(ctx);
+    if (!session_state_ok) {
         rv = CKR_USER_NOT_LOGGED_IN;
         goto out;
     }
 
-    encrypt_op_data *opdata = session_ctx_opdata_get(ctx, op);
-    if (!opdata) {
-        rv = CKR_OPERATION_NOT_INITIALIZED;
+    encrypt_op_data *opdata = NULL;
+    rv = token_opdata_get(tok, op, &opdata);
+    if (rv != CKR_OK) {
         goto out;
     }
 
-    token *tok = session_ctx_get_tok(ctx);
     tpm_ctx *tpm = tok->tctx;
 
     rv = fop(tpm, opdata->object, opdata->mode, opdata->iv, input, &output, &iv_out);
@@ -187,21 +191,24 @@ static CK_RV common_final (operation op, CK_SESSION_HANDLE session, unsigned cha
         return rv;
     }
 
-    if (!session_ctx_is_user_logged_in(ctx)) {
+    bool session_state_ok = session_ctx_user_state_ok(ctx);
+    if (!session_state_ok) {
         rv = CKR_USER_NOT_LOGGED_IN;
         goto out;
     }
 
-    encrypt_op_data *opdata = session_ctx_opdata_get(ctx, op);
-    if (!opdata) {
-        rv = CKR_OPERATION_NOT_INITIALIZED;
+    token *tok = session_ctx_get_tok(ctx);
+
+    encrypt_op_data *opdata = NULL;
+    rv = token_opdata_get(tok, op, &opdata);
+    if (rv != CKR_OK) {
         goto out;
     }
 
     twist_free(opdata->iv);
     free(opdata);
 
-    session_ctx_opdata_set(ctx, op, NULL);
+    token_opdata_clear(tok);
 
     rv = CKR_OK;
 

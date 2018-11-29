@@ -109,23 +109,20 @@ CK_RV session_table_new_ctx_unlocked(session_table *t, CK_SESSION_HANDLE *handle
     return CKR_OK;
 }
 
-static void do_logout_if_needed(token *t) {
+static void do_logout_if_needed(token *tok) {
 
     /*
      * Are we logged in, if so logout
      * XXX Locking token, note the called routine manipulates
      * token so we *MAY* need a locked/unlocked version
      */
-    if (t->login_state != token_no_one_logged_in) {
+    if (tok->login_state != token_no_one_logged_in) {
         /*
          * This should never fail, if it does the state is so borked
          * recovery is impossible.
          */
-        session_ctx_lock(t->login_session_ctx);
-        CK_RV rv = session_ctx_token_logout(t->login_session_ctx);
+        CK_RV rv = token_logout(tok);
         assert(rv == CKR_OK);
-
-        session_ctx_free(t->login_session_ctx);
     }
 }
 
@@ -148,14 +145,7 @@ static CK_RV session_table_free_ctx_unlocked_by_ctx(token *t, session_ctx **ctx)
         do_logout_if_needed(t);
     }
 
-    /*
-     * Do not free the cached token login context
-     * this is used in do_logout_needed, so skip it, but let the count
-     * go to 0.
-     */
-    if (t->login_session_ctx != *ctx) {
-        session_ctx_free(*ctx);
-    }
+    session_ctx_free(*ctx);
 
     *ctx = NULL;
 
@@ -228,7 +218,7 @@ unlock:
     return ctx;
 }
 
-void session_table_login_event(session_table *s_table, CK_USER_TYPE user, session_ctx *called_session) {
+void session_table_login_event(session_table *s_table, CK_USER_TYPE user) {
 
     size_t i;
     for (i=0; i < ARRAY_LEN(s_table->table); i++) {
@@ -238,24 +228,20 @@ void session_table_login_event(session_table *s_table, CK_USER_TYPE user, sessio
             continue;
         }
 
-        bool take_lock = ctx != called_session;
-
-        session_ctx_login_event(ctx, user, take_lock);
+        session_ctx_login_event(ctx, user);
     }
 }
 
-void session_table_logout_event(session_table *s_table, session_ctx *called_session) {
+void token_logout_all_sessions(token *tok) {
 
     size_t i;
-    for (i=0; i < ARRAY_LEN(s_table->table); i++) {
+    for (i=0; i < ARRAY_LEN(tok->s_table->table); i++) {
 
-        session_ctx *ctx = s_table->table[i];
+        session_ctx *ctx = tok->s_table->table[i];
         if (!ctx) {
             continue;
         }
 
-        bool take_lock = ctx != called_session;
-
-        session_ctx_logout_event(ctx, take_lock);
+        session_ctx_logout_event(ctx);
     }
 }

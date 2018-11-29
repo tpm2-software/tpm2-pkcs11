@@ -150,21 +150,29 @@ CK_RV object_find_init(CK_SESSION_HANDLE session, CK_ATTRIBUTE_PTR templ, unsign
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
+    object_find_data *fd = NULL;
+
     session_ctx *ctx = NULL;
     rv = session_lookup(session, &ctx);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    object_find_data *fd = calloc(1, sizeof(*fd));
+    token *tok = session_ctx_get_tok(ctx);
+
+    bool is_active = token_opdata_is_active(tok);
+    if (is_active) {
+        rv = CKR_OPERATION_ACTIVE;
+        goto out;
+    }
+
+    fd = calloc(1, sizeof(*fd));
     if (!fd) {
         rv = CKR_HOST_MEMORY;
         goto out;
     }
 
-    token *tok = session_ctx_get_tok(ctx);
     if (!tok->tobjects) {
-        session_ctx_opdata_set(ctx, operation_find, fd);
         goto empty;
     }
 
@@ -208,12 +216,12 @@ CK_RV object_find_init(CK_SESSION_HANDLE session, CK_ATTRIBUTE_PTR templ, unsign
     fd->cur = fd->head;
 
 empty:
-    session_ctx_opdata_set(ctx, operation_find, fd);
+
+    token_opdata_set(tok, operation_find, fd);
 
     rv = CKR_OK;
 
 out:
-
     if (rv != CKR_OK) {
         free_object_find_data(fd);
     }
@@ -239,21 +247,23 @@ CK_RV object_find(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE *object, unsigned 
         return rv;
     }
 
-    object_find_data *fd = (object_find_data *)session_ctx_opdata_get(ctx, operation_find);
-    if (!fd) {
-        rv = CKR_OPERATION_NOT_INITIALIZED;
+    token *tok = session_ctx_get_tok(ctx);
+
+    object_find_data *opdata = NULL;
+    rv = token_opdata_get(tok, operation_find, &opdata);
+    if (rv != CKR_OK) {
         goto out;
     }
 
     unsigned long count = 0;
-    while(fd->cur && count < max_object_count) {
+    while(opdata->cur && count < max_object_count) {
 
         // Get the current object, and grab it's id for the object handle
-        tobject *tobj = fd->cur->obj;
+        tobject *tobj = opdata->cur->obj;
         object[count] = tobj->id;
 
         // Update our iterator
-        fd->cur = fd->cur->next;
+        opdata->cur = opdata->cur->next;
 
         count++;
     }
@@ -283,14 +293,17 @@ CK_RV object_find_final(CK_SESSION_HANDLE session) {
         return rv;
     }
 
-    object_find_data *fd = (object_find_data *)session_ctx_opdata_get(ctx, operation_find);
-    if (!fd) {
-        rv = CKR_OPERATION_NOT_INITIALIZED;
+    token *tok = session_ctx_get_tok(ctx);
+
+    object_find_data *opdata = NULL;
+    rv = token_opdata_get(tok, operation_find, &opdata);
+    if (rv != CKR_OK) {
         goto out;
     }
 
-    free_object_find_data(fd);
-    session_ctx_opdata_set(ctx, operation_find, NULL);
+    free_object_find_data(opdata);
+
+    token_opdata_clear(tok);
 
     rv = CKR_OK;
 

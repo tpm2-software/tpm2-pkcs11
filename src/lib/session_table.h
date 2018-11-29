@@ -39,10 +39,8 @@ void session_table_free_ctx_all(token *t);
  *  The session table
  * @param user
  *  The user triggering the login event.
- * @param called_session
- *  The session context that the login event occured on.
  */
-void session_table_login_event(session_table *s_table, CK_USER_TYPE user, session_ctx *called_session);
+void session_table_login_event(session_table *s_table, CK_USER_TYPE user);
 
 /**
  * performs a session_ctx_logout_event() call for each item in the table
@@ -52,7 +50,7 @@ void session_table_login_event(session_table *s_table, CK_USER_TYPE user, sessio
  * @param called_session
  *  The session context that the logout event occured on.
  */
-void session_table_logout_event(session_table *s_table, session_ctx *called_session);
+void token_logout_all_sessions(token *tok);
 
 
 #endif /* SRC_PKCS11_SESSION_TABLE_H_ */
