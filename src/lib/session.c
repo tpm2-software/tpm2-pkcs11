@@ -196,7 +196,11 @@ CK_RV session_logout (CK_SESSION_HANDLE session) {
         return rv;
     }
 
-    rv = session_ctx_token_logout(ctx);
+    token *tok = session_ctx_get_tok(ctx);
+
+    rv = token_logout(tok);
+
+    session_ctx_unlock(ctx);
 
     return rv;
 }

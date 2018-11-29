@@ -32,7 +32,6 @@ struct session_ctx {
         uint32_t registered_handle;
     } pobj_handle;
 
-    tpm_ctx *ctx;
     token *tok;
     CK_FLAGS flags;
     CK_STATE state;
@@ -49,8 +48,6 @@ void session_ctx_free(session_ctx *ctx) {
     if (ctx->mutex) {
         mutex_destroy(ctx->mutex);
     }
-
-    tpm_ctx_free(ctx->ctx);
 
     free(ctx);
 }
@@ -97,13 +94,6 @@ CK_RV session_ctx_new(session_ctx **ctx, token *tok, CK_FLAGS flags) {
         return rv;
     }
 
-    s->ctx = tpm_ctx_new();
-    if (!s->ctx) {
-        LOGE("Error initializing TPM");
-        session_ctx_free(s);
-        return CKR_GENERAL_ERROR;
-    }
-
     session_set_initial_state(s, tok, flags);
 
     s->tok = tok;
@@ -125,10 +115,6 @@ void session_ctx_opdata_set(session_ctx *ctx, operation op, void *opdata) {
 
 void *session_ctx_opdata_get(session_ctx *ctx, operation op) {
     return ctx->opdata[op];
-}
-
-tpm_ctx *session_ctx_get_tpm_ctx(session_ctx *ctx) {
-    return ctx->ctx;
 }
 
 token *session_ctx_get_tok(session_ctx *ctx) {
@@ -187,7 +173,7 @@ CK_RV session_ctx_token_logout(session_ctx *ctx) {
      * Ok now start evicting TPM objects from the right
      * context
      */
-    tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
+    tpm_ctx *tpm = tok->tctx;
 
     // Evict the keys
     sobject *sobj = &tok->sobject;
@@ -366,7 +352,8 @@ CK_RV session_ctx_token_login(session_ctx *ctx, twist pin, CK_USER_TYPE user) {
 
     t->pobject.objauth = dpobjauth;
 
-    tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
+    token *tok = session_ctx_get_tok(ctx);
+    tpm_ctx *tpm = tok->tctx;
 
     if (!ctx->pobj_handle.is_registered) {
         ctx->pobj_handle.registered_handle = t->pobject.handle;
@@ -507,7 +494,7 @@ CK_RV unwrap_objauth(token *tok, tpm_ctx *tpm, wrappingobject *wobj, twist objau
 CK_RV session_ctx_load_object(session_ctx *ctx, CK_OBJECT_HANDLE key, tobject **loaded_tobj) {
 
     token *tok = session_ctx_get_tok(ctx);
-    tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
+    tpm_ctx *tpm = tok->tctx;
 
     bool is_user_logged_in = session_ctx_is_user_logged_in(ctx);
     if (!is_user_logged_in) {

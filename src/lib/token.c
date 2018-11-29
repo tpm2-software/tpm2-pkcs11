@@ -16,6 +16,7 @@
 #include "session.h"
 #include "session_table.h"
 #include "slot.h"
+#include "tpm.h"
 #include "token.h"
 #include "utils.h"
 
@@ -50,6 +51,8 @@ void token_free(token *t) {
             tobject_free(tobj);
         }
     }
+
+    tpm_ctx_free(t->tctx);
 }
 
 CK_RV token_get_info (CK_SLOT_ID slot_id, CK_TOKEN_INFO *info) {

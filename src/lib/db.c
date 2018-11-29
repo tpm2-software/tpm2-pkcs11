@@ -23,6 +23,7 @@
 #include "object.h"
 #include "session_table.h"
 #include "token.h"
+#include "tpm.h"
 #include "twist.h"
 #include "utils.h"
 
@@ -866,6 +867,15 @@ CK_RV db_get_tokens(token **t, size_t *len) {
 
         int rc = init_pobject(t->pid, &t->pobject);
         if (rc != SQLITE_OK) {
+            goto error;
+        }
+
+        /*
+         * Intiialize the per-token tpm context
+         */
+        rv = tpm_ctx_new(&t->tctx);
+        if (rv != CKR_OK) {
+            LOGE("Could not initialize tpm ctx: 0x%x", rv);
             goto error;
         }
 

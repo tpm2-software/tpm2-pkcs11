@@ -16,17 +16,6 @@
 typedef struct tpm_ctx tpm_ctx;
 
 /**
- * Initializes the tpm subsytem
- * @return
- */
-CK_RV tpm_init(void);
-
-/**
- * Frees the tpm subsystem
- */
-void tpm_destroy(void);
-
-/**
  * Destroys the system API context, and when the refcnt
  * hits 0 for the tcti context, destroys it as well.
  * @param ctx
@@ -36,13 +25,14 @@ void tpm_destroy(void);
 void tpm_ctx_free(tpm_ctx *ctx);
 
 /**
- * Initializes the system API context, and increments the refcnt
- * for the tcti context, destroys it as well.
- * @param sys
- *  The system API context
- * @note: NOT THREAD SAFE: Assumes session table lock held
+ * Creates a new tpm_ctx with it's own ESAPI
+ * and TCTI contexts internally.
+ * @param tctx
+ *  The tpm_ctx to create.
+ * @return
+ *  CJR_OK on success, anything else is a failure.
  */
-tpm_ctx *tpm_ctx_new(void);
+CK_RV tpm_ctx_new(tpm_ctx **tctx);
 
 /**
  * Generates random bytes from the TPM
