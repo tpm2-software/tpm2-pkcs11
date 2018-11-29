@@ -71,12 +71,15 @@ CK_RV slot_get_list (unsigned char token_present, CK_SLOT_ID *slot_list, unsigne
 }
 
 CK_RV slot_get_info (CK_SLOT_ID slot_id, CK_SLOT_INFO *info) {
+
     const unsigned char manufacturerID[] = "foo";
     const unsigned char slotDescription[] = "bar";
 
-
     check_pointer(info);
-    check_slot_id(slot_id);
+
+    if (!slot_get_token(slot_id)) {
+        return CKR_SLOT_ID_INVALID;
+    }
 
     memset(info, 0, sizeof(*info));
 
@@ -98,7 +101,10 @@ CK_RV slot_get_info (CK_SLOT_ID slot_id, CK_SLOT_INFO *info) {
 CK_RV slot_mechanism_list_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE *mechanism_list, unsigned long *count) {
 
     check_is_init();
-    check_slot_id(slot_id);
+
+    if (!slot_get_token(slot_id)) {
+        return CKR_SLOT_ID_INVALID;
+    }
 
     if (!count){
         return CKR_ARGUMENTS_BAD;
@@ -176,10 +182,6 @@ CK_RV slot_mechanism_list_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE *mechanism_
         CKM_EC_KEY_PAIR_GEN,
         CKM_ECDSA,
         CKM_ECDSA_SHA1,
-        CKM_ECDSA_SHA224,
-        CKM_ECDSA_SHA256,
-        CKM_ECDSA_SHA384,
-        CKM_ECDSA_SHA512,
         CKM_ECDH1_DERIVE,
         CKM_ECDH1_COFACTOR_DERIVE,
         CKM_AES_KEY_GEN,
@@ -206,10 +208,14 @@ CK_RV slot_mechanism_list_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE *mechanism_
     return CKR_OK;
 }
 
-CK_RV slot_mechanism_info_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE type, struct _CK_MECHANISM_INFO *info) {
+CK_RV slot_mechanism_info_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE type, CK_MECHANISM_INFO *info) {
 
     check_is_init();
-    check_slot_id(slot_id);
+    check_pointer(info);
+
+    if (!slot_get_token(slot_id)) {
+        return CKR_SLOT_ID_INVALID;
+    }
 
     switch(type) {
     case CKM_AES_KEY_GEN:

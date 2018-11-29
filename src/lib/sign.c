@@ -50,9 +50,10 @@ static CK_RV common_init(operation op, CK_SESSION_HANDLE session, CK_MECHANISM_P
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     if (!session_ctx_is_user_logged_in(ctx)) {
@@ -115,9 +116,10 @@ static CK_RV common_update(operation op, CK_SESSION_HANDLE session, unsigned cha
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     if (!session_ctx_is_user_logged_in(ctx)) {
@@ -155,7 +157,7 @@ out:
 
 }
 
-CK_RV sign_init (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV sign_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
     return common_init(operation_sign, session, mechanism, key);
 }
@@ -173,9 +175,10 @@ CK_RV sign_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigned 
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     if (!session_ctx_is_user_logged_in(ctx)) {
@@ -301,7 +304,7 @@ CK_RV sign(CK_SESSION_HANDLE session, unsigned char *data, unsigned long data_le
     return sign_final(session, signature, signature_len);
 }
 
-CK_RV verify_init (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV verify_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
     return common_init(operation_verify, session, mechanism, key);
 }
@@ -319,9 +322,10 @@ CK_RV verify_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigne
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     if (!session_ctx_is_user_logged_in(ctx)) {

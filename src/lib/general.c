@@ -3,6 +3,8 @@
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
  */
+#include <config.h>
+
 #include <stdbool.h>
 #include <stdlib.h>
 
@@ -214,17 +216,11 @@ CK_RV general_init(void *init_args) {
         goto err;
     }
 
-    rv = session_init();
-    if (rv != CKR_OK) {
-        goto err;
-    }
-
     _g_is_init = true;
 
     return CKR_OK;
 err:
     tpm_destroy();
-    session_destroy();
     return rv;
 }
 
@@ -237,7 +233,6 @@ CK_RV general_finalize(void *reserved) {
 
     _g_is_init = false;
 
-    session_destroy();
     tpm_destroy();
     db_destroy();
     slot_destroy();

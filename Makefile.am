@@ -94,7 +94,9 @@ AM_TESTS_ENVIRONMENT = \
     PATH=./src:$(PATH)
 INT_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
 
-TESTS_LDADD = $(noinst_LTLIBRARIES) $(lib_LTLIBRARIES) $(AM_LDFLAGS)
+TESTS_LDADD = $(noinst_LTLIBRARIES) $(lib_LTLIBRARIES) $(AM_LDFLAGS) $(CMOCKA_LIBS)
+
+TETS_CFLAGS = $(CMOCKA_CFLAGS)
 
 # Intentionally empty so INTEGRATION and UNIT tests can append to it.
 check_PROGRAMS =
@@ -105,50 +107,42 @@ if ENABLE_INTEGRATION
 TESTS = $(check_PROGRAMS)
 check_PROGRAMS += \
     test/integration/pkcs-find-objects.int \
-    test/integration/pkcs-open-close-session.int \
     test/integration/pkcs-get-mechanism.int \
     test/integration/pkcs-login-logout.int \
     test/integration/pkcs-sign-verify.int \
     test/integration/pkcs-initialize-finalize.int \
-    test/integration/pkcs-misc.int
+    test/integration/pkcs-misc.int \
+    test/integration/pkcs-crypt.int
 
 XFAIL_TESTS=test/unit/test_pkcs11
 
-INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
-test_integration_pkcs_open_close_session_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
-test_integration_pkcs_open_close_session_int_LDADD   = $(TESTS_LDADD)
-test_integration_pkcs_open_close_session_int_SOURCES = test/integration/pkcs-open-close-session.int.c \
-    test/integration/main-test.c test/integration/test.h
-
 test_integration_pkcs_find_objects_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_find_objects_int_LDADD   = $(TESTS_LDADD)
-test_integration_pkcs_find_objects_int_SOURCES = test/integration/pkcs-find-objects.int.c \
-    test/integration/main-test.c test/integration/test.h
+test_integration_pkcs_find_objects_int_SOURCES = test/integration/pkcs-find-objects.int.c
 
 test_integration_pkcs_get_mechanism_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_get_mechanism_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_get_mechanism_int_SOURCES = test/integration/pkcs-get-mechanism.int.c \
-    test/integration/main-test.c test/integration/test.h
+test_integration_pkcs_get_mechanism_int_SOURCES = test/integration/pkcs-get-mechanism.int.c
 
 test_integration_pkcs_login_logout_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_login_logout_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_login_logout_int_SOURCES = test/integration/pkcs-login-logout.int.c \
-    test/integration/main-test.c test/integration/test.h
+test_integration_pkcs_login_logout_int_SOURCES = test/integration/pkcs-login-logout.int.c
 
 test_integration_pkcs_sign_verify_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_sign_verify_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_sign_verify_int_SOURCES = test/integration/pkcs-sign-verify.int.c \
-    test/integration/main-test.c test/integration/test.h
+test_integration_pkcs_sign_verify_int_SOURCES = test/integration/pkcs-sign-verify.int.c
 
 test_integration_pkcs_initialize_finalize_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_initialize_finalize_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_initialize_finalize_int_SOURCES = test/integration/pkcs-initialize-finalize.int.c \
-    test/integration/main-test.c test/integration/test.h
+test_integration_pkcs_initialize_finalize_int_SOURCES = test/integration/pkcs-initialize-finalize.int.c
 
 test_integration_pkcs_misc_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_misc_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_misc_int_SOURCES = test/integration/pkcs-misc.int.c \
-    test/integration/main-test.c test/integration/test.h
+test_integration_pkcs_misc_int_SOURCES = test/integration/pkcs-misc.int.c
+
+test_integration_pkcs_crypt_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_crypt_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_crypt_int_SOURCES = test/integration/pkcs-crypt.int.c
 
 endif
 # END INTEGRATION

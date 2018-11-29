@@ -1,10 +1,9 @@
 With the exception of some files:
-- src/pkcs11.h 
+- src/pkcs11.h
+- src/lib/pkcs11f.h
 - src/lib/pkcs11t.h
-- m4/ld-version-script.m4
 
-Those files respect the license as documented in the respective file.
-
+Those files respect the license as documented in the respective file,
 All other files are licensed under BSD-2 clause as follows:
 
 Redistribution and use in source and binary forms, with or without
@@ -29,7 +28,7 @@ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
 THE POSSIBILITY OF SUCH DAMAGE.
 
-Note that
+Note that:
 - lib/twist.c
 - lib/twist.h
 - test/unit/test_twist

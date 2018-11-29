@@ -12,19 +12,39 @@
 #include "mutex.h"
 #include "pkcs11.h"
 #include "session_ctx.h"
+#include "session_table.h"
+#include "token.h"
 #include "tpm.h"
 #include "twist.h"
 #include "utils.h"
 
 struct session_ctx {
+
+    /*
+     * Switching the backend to esapi means we need to
+     * register the primary objects persistent handle
+     * on every ESAPI context created, so we need to
+     * track per-session if we registered it, and what
+     * the value it.
+     */
+    struct {
+        bool is_registered;
+        uint32_t registered_handle;
+    } pobj_handle;
+
     tpm_ctx *ctx;
     token *tok;
-    session_ctx_state state;
+    CK_FLAGS flags;
+    CK_STATE state;
     void *mutex;
     void *opdata[operation_count];
 };
 
 void session_ctx_free(session_ctx *ctx) {
+
+    if (!ctx) {
+        return;
+    }
 
     if (ctx->mutex) {
         mutex_destroy(ctx->mutex);
@@ -35,7 +55,36 @@ void session_ctx_free(session_ctx *ctx) {
     free(ctx);
 }
 
-CK_RV session_ctx_new(session_ctx **ctx, token *tok, bool is_rw) {
+/**
+ * Sets the initial state of the a session context based on the tokens login state
+ * and the flags present. Does no error checking.
+ * @param ctx
+ *  The session ctx to set
+ * @param tok
+ *  The token state to check
+ * @param flags
+ *  The session flags.
+ */
+static void session_set_initial_state(session_ctx *ctx, token *tok, CK_FLAGS flags) {
+
+    switch(tok->login_state) {
+    case token_no_one_logged_in:
+        ctx->state = flags & CKF_RW_SESSION ?
+                CKS_RW_PUBLIC_SESSION : CKS_RO_PUBLIC_SESSION;
+        break;
+    case token_user_logged_in:
+        ctx->state = flags & CKF_RW_SESSION ?
+                CKS_RW_USER_FUNCTIONS : CKS_RO_USER_FUNCTIONS;
+        break;
+    case token_so_logged_in:
+        assert(flags & CKF_RW_SESSION);
+        ctx->state = CKS_RW_SO_FUNCTIONS;
+        break;
+        /* no default */
+    }
+}
+
+CK_RV session_ctx_new(session_ctx **ctx, token *tok, CK_FLAGS flags) {
 
     session_ctx *s = calloc(1, sizeof(session_ctx));
     if (!s) {
@@ -55,20 +104,19 @@ CK_RV session_ctx_new(session_ctx **ctx, token *tok, bool is_rw) {
         return CKR_GENERAL_ERROR;
     }
 
+    session_set_initial_state(s, tok, flags);
+
     s->tok = tok;
-    s->state = is_rw ?
-            session_ctx_state_user_rw : session_ctx_state_user_ro;
+
+    s->flags = flags;
+
     *ctx = s;
 
     return CKR_OK;
 }
 
-void session_ctx_lock(session_ctx *ctx) {
-    mutex_lock_fatal(ctx->mutex);
-}
-
-void session_ctx_unlock(session_ctx *ctx) {
-    mutex_unlock_fatal(ctx->mutex);
+void *_session_ctx_get_lock(session_ctx *ctx) {
+    return ctx->mutex;
 }
 
 void session_ctx_opdata_set(session_ctx *ctx, operation op, void *opdata) {
@@ -83,30 +131,65 @@ tpm_ctx *session_ctx_get_tpm_ctx(session_ctx *ctx) {
     return ctx->ctx;
 }
 
-token *session_ctx_get_token(session_ctx *ctx) {
+token *session_ctx_get_tok(session_ctx *ctx) {
     return ctx->tok;
 }
 
-session_ctx_state session_ctx_state_get(session_ctx *ctx) {
+CK_STATE session_ctx_state_get(session_ctx *ctx) {
     return ctx->state;
 }
 
-bool session_ctx_is_user_logged_in(session_ctx *ctx) {
-
-    return ctx->state & session_ctx_state_user_loggedin;
+CK_FLAGS session_ctx_flags_get(session_ctx *ctx) {
+    return ctx->flags;
 }
 
-CK_RV session_ctx_logout(session_ctx *ctx) {
 
-    if (!((ctx->state & session_ctx_state_user_loggedin)
-            || (ctx->state &session_ctx_state_so_loggedin))) {
-        return CKR_USER_NOT_LOGGED_IN;
+bool session_ctx_is_user_logged_in(session_ctx *ctx) {
+
+    return ctx->tok->login_state == token_user_logged_in;
+}
+
+static bool is_any_user_logged_in(session_ctx *ctx) {
+
+    return ctx->tok->login_state != token_no_one_logged_in;
+}
+
+CK_RV session_ctx_token_logout(session_ctx *ctx) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    bool is_anyone_logged_in = is_any_user_logged_in(ctx);
+    if (!is_anyone_logged_in) {
+        rv = CKR_USER_NOT_LOGGED_IN;
+        goto out;
     }
 
+    /*
+     * Use the cached session_ctx that called
+     * C_Login() as it needs to unregister TPM
+     * objects, as C_Login/C_Logout can be called
+     * across sessions.
+     *
+     * Note that when swapping out you need to lock the
+     * new session ctx, and unlock the old one.
+     */
+    token *tok = session_ctx_get_tok(ctx);
+
+    assert(tok->login_session_ctx);
+
+    if (tok->login_session_ctx != ctx) {
+        session_ctx_lock(tok->login_session_ctx);
+        session_ctx_unlock(ctx);
+        ctx = tok->login_session_ctx;
+    }
+
+    /*
+     * Ok now start evicting TPM objects from the right
+     * context
+     */
     tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
 
     // Evict the keys
-    token *tok = session_ctx_get_token(ctx);
     sobject *sobj = &tok->sobject;
 
     if (tok->tobjects) {
@@ -119,11 +202,11 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
                 bool result = tpm_flushcontext(tpm, tobj->handle);
                 assert(result);
                 UNUSED(result);
-
-                twist_free(tobj->objauth);
-                tobj->objauth = NULL;
-
                 tobj->handle = 0;
+
+                /* Clear the unwrapped auth value for tertiary objects */
+                twist_free(tobj->unsealed_auth);
+                tobj->unsealed_auth = NULL;
             }
         }
     }
@@ -140,16 +223,13 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
     wobj->handle = 0;
 
     // Evict the secondary object
-    pobject *pobj = &tok->pobject;
     bool result = tpm_flushcontext(tpm, sobj->handle);
     assert(result);
     UNUSED(result);
-
-    twist_free(sobj->objauth);
-    sobj->objauth = NULL;
     sobj->handle = 0;
 
     // Kill primary object auth data
+    pobject *pobj = &tok->pobject;
     twist_free(pobj->objauth);
     pobj->objauth = NULL;
 
@@ -163,22 +243,109 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
         free(opdata);
     }
 
-    // Turn down logged in flags.
-    ctx->state &= ~(session_ctx_state_user_loggedin
-            | session_ctx_state_so_loggedin);
+    /*
+     * Clear the cached login session ctx
+     */
+    tok->login_session_ctx = NULL;
 
-    return CKR_OK;
+    /*
+     * State transition all sessions in the table
+     */
+    session_table_logout_event(tok->s_table, ctx);
+
+    /*
+     * mark no one logged in
+     */
+    ctx->tok->login_state = token_no_one_logged_in;
+
+    rv = CKR_OK;
+
+out:
+    session_ctx_unlock(ctx);
+
+    return rv;
 }
 
+void session_ctx_login_event(session_ctx *ctx, CK_USER_TYPE usertype, bool take_lock) {
 
-CK_RV session_ctx_login(session_ctx *ctx, twist pin, int usertype) {
+    /*
+     * S/O REQUIRES a R/W start state and transitions
+     * to CKS_RW_SO_FUNCTIONS
+     *
+     * Users can start in a RO or RW PUBLIC Session and transition
+     * on that to either RO or RW USER FUNCTION state
+     *
+     * See Section 5 of:
+     *  - https://www.cryptsoft.com/pkcs11doc/STANDARD/pkcs-11.pdf
+     */
+    if (take_lock) {
+        session_ctx_lock(ctx);
+    }
+
+    if (usertype == CKU_SO) {
+        assert(ctx->state == CKS_RW_PUBLIC_SESSION);
+        ctx->state = CKS_RW_SO_FUNCTIONS;
+    } else {
+        assert(ctx->state == CKS_RO_PUBLIC_SESSION
+                || ctx->state == CKS_RW_PUBLIC_SESSION);
+
+        if (ctx->state == CKS_RO_PUBLIC_SESSION) {
+            ctx->state = CKS_RO_USER_FUNCTIONS;
+        } else {
+            ctx->state = CKS_RW_USER_FUNCTIONS;
+        }
+    }
+
+    if (take_lock) {
+        session_ctx_unlock(ctx);
+    }
+}
+
+void session_ctx_logout_event(session_ctx *ctx, bool take_lock) {
+
+    /*
+     * Returns a session back to it's initial state.
+     * See the comment block insession_ctx_login() for details
+     */
+    if (take_lock) {
+        session_ctx_lock(ctx);
+    }
+
+    if (ctx->state == CKS_RW_SO_FUNCTIONS
+            || ctx->state == CKS_RW_USER_FUNCTIONS) {
+        ctx->state = CKS_RW_PUBLIC_SESSION;
+    } else {
+        ctx->state = CKS_RO_PUBLIC_SESSION;
+    }
+
+    if (take_lock) {
+        session_ctx_unlock(ctx);
+    }
+}
+
+CK_RV session_ctx_token_login(session_ctx *ctx, twist pin, CK_USER_TYPE user) {
 
     twist sealobjauth = NULL;
     twist dpobjauth = NULL;
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    token *t = session_ctx_get_token(ctx);
+    bool is_anyone_logged_in = is_any_user_logged_in(ctx);
+    if (is_anyone_logged_in) {
+        return CKR_USER_ALREADY_LOGGED_IN;
+    }
+
+    token *t = session_ctx_get_tok(ctx);
+
+    assert(t->login_session_ctx == NULL);
+
+    unsigned long ro;
+    session_table_get_cnt(t->s_table, NULL, NULL, &ro);
+
+    if (user == CKU_SO && ro) {
+        return CKR_SESSION_READ_ONLY_EXISTS;
+    }
+
 
     /*
      * To login, we need to use PIN against the correct seal object.
@@ -187,17 +354,10 @@ CK_RV session_ctx_login(session_ctx *ctx, twist pin, int usertype) {
      * Then on actual key operation, we can load the tertiary object.
      */
 
-    session_ctx_state state = session_ctx_state_get(ctx);
-    session_ctx_state loginstate = usertype == CKU_USER ?
-            session_ctx_state_user_loggedin : session_ctx_state_so_loggedin;
-    if (state & loginstate) {
-        return CKR_USER_ALREADY_LOGGED_IN;
-    }
-
     /* derive the primary object auth for loading the sealed and wrapping key up */
-    unsigned pobjiters = usertype == CKU_USER ? t->userpobjauthkeyiters : t->sopobjauthkeyiters;
-    twist pobjsalt = usertype == CKU_USER ? t->userpobjauthkeysalt : t->sopobjauthkeysalt;
-    twist pobjauth = usertype == CKU_USER ? t->userpobjauth : t->sopobjauth;
+    unsigned pobjiters = user == CKU_USER ? t->userpobjauthkeyiters : t->sopobjauthkeyiters;
+    twist pobjsalt = user == CKU_USER ? t->userpobjauthkeysalt : t->sopobjauthkeysalt;
+    twist pobjauth = user == CKU_USER ? t->userpobjauth : t->sopobjauth;
 
     dpobjauth = decrypt(pin, pobjsalt, pobjiters, pobjauth);
     if (!dpobjauth) {
@@ -208,29 +368,32 @@ CK_RV session_ctx_login(session_ctx *ctx, twist pin, int usertype) {
 
     tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
 
-    if (!t->pobject.is_handle_registered) {
-        bool res = tpm_register_handle(tpm, &t->pobject.handle);
+    if (!ctx->pobj_handle.is_registered) {
+        ctx->pobj_handle.registered_handle = t->pobject.handle;
+        bool res = tpm_register_handle(tpm, &ctx->pobj_handle.registered_handle);
         if (!res) {
             goto error;
         }
-        t->pobject.is_handle_registered = true;
+        ctx->pobj_handle.is_registered = true;
     }
 
     /* load seal object */
     sealobject *sealobj = &t->sealobject;
-    twist sealpub = usertype == CKU_USER ? sealobj->userpub : sealobj->sopub;
-    twist sealpriv = usertype == CKU_USER ? sealobj->userpriv : sealobj->sopriv;
+    twist sealpub = user == CKU_USER ? sealobj->userpub : sealobj->sopub;
+    twist sealpriv = user == CKU_USER ? sealobj->userpriv : sealobj->sopriv;
+
+    uint32_t pobj_handle = ctx->pobj_handle.registered_handle;
 
     // TODO evict sealobjhandle
     uint32_t sealobjhandle;
-    bool res = tpm_loadobj(tpm, t->pobject.handle, dpobjauth, sealpub, sealpriv, &sealobjhandle);
+    bool res = tpm_loadobj(tpm, pobj_handle, dpobjauth, sealpub, sealpriv, &sealobjhandle);
     if (!res) {
         goto error;
     }
 
     /* derive the sealed obj auth for use in tpm_unseal to get the wrapping key auth*/
-    unsigned sealiters = usertype == CKU_USER ? sealobj->userauthiters : sealobj->soauthiters;
-    twist sealsalt = usertype == CKU_USER ? sealobj->userauthsalt : sealobj->soauthsalt;
+    unsigned sealiters = user == CKU_USER ? sealobj->userauthiters : sealobj->soauthiters;
+    twist sealsalt = user == CKU_USER ? sealobj->userauthsalt : sealobj->soauthsalt;
     sealobjauth = utils_pdkdf2_hmac_sha256_raw(pin, sealsalt, sealiters);
     if (!sealobjauth) {
         rv = CKR_HOST_MEMORY;
@@ -261,7 +424,7 @@ CK_RV session_ctx_login(session_ctx *ctx, twist pin, int usertype) {
         }
 
         /* load the wrapping key */
-        res = tpm_loadobj(tpm, t->pobject.handle, dpobjauth, wobj->pub, wobj->priv, &wobj->handle);
+        res = tpm_loadobj(tpm, pobj_handle, dpobjauth, wobj->pub, wobj->priv, &wobj->handle);
         if (!res) {
             goto error;
         }
@@ -271,12 +434,26 @@ CK_RV session_ctx_login(session_ctx *ctx, twist pin, int usertype) {
 
     /* load the secondary object */
     sobject *sobj = &t->sobject;
-    res = tpm_loadobj(tpm, t->pobject.handle, dpobjauth, sobj->pub, sobj->priv, &sobj->handle);
+    res = tpm_loadobj(tpm, pobj_handle, dpobjauth, sobj->pub, sobj->priv, &sobj->handle);
     if (!res) {
         goto error;
     }
 
-    ctx->state |= loginstate;
+    /*
+     * Indicate that the token has been logged in
+     */
+    t->login_state = user == CKU_USER ? token_user_logged_in : token_so_logged_in;
+
+    /*
+     * Cache the login session
+     */
+    t->login_session_ctx = ctx;
+
+    /*
+     * State transition all *EXISTING* sessions in the table
+     */
+    session_table_login_event(t->s_table, user, ctx);
+
     rv = CKR_OK;
 
 error:
@@ -288,19 +465,19 @@ error:
 
 CK_RV unwrap_objauth(token *tok, tpm_ctx *tpm, wrappingobject *wobj, twist objauth, twist *unwrapped_auth) {
 
-    twist tmp;
+    twist unwrapped_raw;
     if (tok->config.sym_support) {
-        twist sobjauthraw = twistbin_unhexlify(objauth);
-        if (!sobjauthraw) {
+        twist objauthraw = twistbin_unhexlify(objauth);
+        if (!objauthraw) {
             LOGE("unhexlify objauth failed: %u-%s", twist_len(objauth), objauth);
             return CKR_HOST_MEMORY;
         }
 
         bool result = tpm_decrypt_handle(tpm, wobj->handle, wobj->objauth, CKM_AES_NULL,
-                NULL, sobjauthraw, &tmp, NULL);
+                NULL, objauthraw, &unwrapped_raw, NULL);
         if (!result) {
             LOGE("tpm_decrypt_handle failed");
-            twist_free(sobjauthraw);
+            twist_free(objauthraw);
             return CKR_GENERAL_ERROR;
         }
     } else {
@@ -308,31 +485,32 @@ CK_RV unwrap_objauth(token *tok, tpm_ctx *tpm, wrappingobject *wobj, twist objau
         if (!swkey) {
             return CKR_GENERAL_ERROR;
         }
-        tmp = aes256_gcm_decrypt(swkey, objauth);
+        unwrapped_raw = aes256_gcm_decrypt(swkey, objauth);
         twist_free(swkey);
-        if (!tmp) {
+        if (!unwrapped_raw) {
             return CKR_GENERAL_ERROR;
         }
     }
 
-    twist sobjauthraw = twistbin_unhexlify(tmp);
-    twist_free(tmp);
-    if (!sobjauthraw) {
+    twist objauth_unwrapped = twistbin_unhexlify(unwrapped_raw);
+    twist_free(unwrapped_raw);
+    if (!objauth_unwrapped) {
         LOGE("unhexlify failed");
         return CKR_HOST_MEMORY;
     }
 
-    *unwrapped_auth = sobjauthraw;
+    *unwrapped_auth = objauth_unwrapped;
 
     return CKR_OK;
 }
 
 CK_RV session_ctx_load_object(session_ctx *ctx, CK_OBJECT_HANDLE key, tobject **loaded_tobj) {
 
-    token *tok = session_ctx_get_token(ctx);
+    token *tok = session_ctx_get_tok(ctx);
     tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
 
-    if (!(ctx->state & session_ctx_state_user_loggedin)) {
+    bool is_user_logged_in = session_ctx_is_user_logged_in(ctx);
+    if (!is_user_logged_in) {
         return CKR_USER_NOT_LOGGED_IN;
     }
 

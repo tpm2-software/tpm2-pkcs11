@@ -20,7 +20,6 @@
 #include "log.h"
 #include "pkcs11.h"
 #include "db.h"
-#include "test.h"
 
 /**
  * This program contains integration test for C_Initialize and C_Finalize.
@@ -240,7 +239,7 @@ static void test_c_finalize_bad() {
     LOGV("test_c_finalize_bad Test Passed!");
 }
 
-int test_invoke() {
+int main() {
 
     test_c_init_args();
     test_c_double_init();

@@ -16,6 +16,15 @@ The project depends on:
 6. [tpm2-tools](https://github.com/tpm2-software/tpm2-tools): **MUST USE MASTER BRANCH**
 7. [Python](https://www.python.org/): **NOT TESTED WITH PYTHON >= 2.7**
 8. [openssl](https://www.openssl.org/): **MUST USE VERSION >= 1.0.2g**
+9. [autoconf-archive](https://github.com/autoconf-archive/autoconf-archive): **Tested with release v2018.03.13**
+     Others may not work, some distros package versions too old. Either install or just copy the contents of the
+     autoconf-archive's m4 directory to the m4 subdirectory of the tpm2-pkcs11 project. If the m4 folder is not
+     present, simply create it with mkdir.
+10. [gnulib](https://www.gnu.org/software/gnulib/): For ld-version-script.m4.
+    On Ubuntu, the ld-version-script.m4 file does not resolve in it's default location under /usr/share/gnulib/m4.
+    During bootstrap one can pass arguments to autoreconf and specify additional search paths via `-I`.
+    For example:
+      ```./bootstrap -I /usr/share/gnulib/m4```
 
 ### Notes:
 The tpm2-tss and tpm2-tools projects must be obtained via source. Packaged versions existing
@@ -48,6 +57,11 @@ that *are outside of normal autoconf/automake options*, which are documented [he
 
 ### Configure Options
 1. `--enable-unit` - Enables the unit tests when running `make check`
+
+   **Note:** When enabling unit tests, it will be necessary to rebuild `src/lib/twist.c` if it was already built, e.g. by using
+   ```
+   make --assume-new src/lib/twist.c check
+   ```
 2. `--enable-integration` - Enables the integration tests when running `make check`
   * Requires the following items to be found on PATH:
     * [tpm2-ptool](../tools/tpm2_ptool.py)

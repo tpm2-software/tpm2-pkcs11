@@ -18,7 +18,7 @@ struct encrypt_op_data {
 
 typedef CK_RV (*tpm_op)(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mode, twist iv, twist data_in, twist *data_out, twist *iv_out);
 
-static CK_RV common_init (operation op, CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+static CK_RV common_init (operation op, CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
     check_is_init();
     check_pointer(mechanism);
@@ -42,9 +42,10 @@ static CK_RV common_init (operation op, CK_SESSION_HANDLE session, struct _CK_ME
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     if (!session_ctx_is_user_logged_in(ctx)) {
@@ -123,9 +124,10 @@ static CK_RV common_update (operation op, CK_SESSION_HANDLE session, unsigned ch
     twist output = NULL;
     twist iv_out = NULL;
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     if (!session_ctx_is_user_logged_in(ctx)) {
@@ -177,9 +179,10 @@ static CK_RV common_final (operation op, CK_SESSION_HANDLE session, unsigned cha
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = session_lookup(session);
-    if (!ctx) {
-        return CKR_SESSION_HANDLE_INVALID;
+    session_ctx *ctx = NULL;
+    rv = session_lookup(session, &ctx);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     if (!session_ctx_is_user_logged_in(ctx)) {
@@ -206,12 +209,12 @@ out:
     return rv;
 }
 
-CK_RV encrypt_init (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV encrypt_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
     return common_init(operation_encrypt, session, mechanism, key);
 }
 
-CK_RV decrypt_init (CK_SESSION_HANDLE session, struct _CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV decrypt_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
     return common_init(operation_decrypt, session, mechanism, key);
 }
@@ -234,4 +237,25 @@ CK_RV encrypt_final (CK_SESSION_HANDLE session, unsigned char *last_encrypted_pa
 CK_RV decrypt_final (CK_SESSION_HANDLE session, unsigned char *last_part, unsigned long *last_part_len) {
 
     return common_final(operation_decrypt, session, last_part, last_part_len);
+}
+
+CK_RV decrypt_oneshot (CK_SESSION_HANDLE session, unsigned char *encrypted_data, unsigned long encrypted_data_len, unsigned char *data, unsigned long *data_len) {
+
+    CK_RV rv = decrypt_update(session, encrypted_data, encrypted_data_len,
+            data, data_len);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    return decrypt_final(session, NULL, NULL);
+}
+
+CK_RV encrypt_oneshot (CK_SESSION_HANDLE session, unsigned char *data, unsigned long data_len, unsigned char *encrypted_data, unsigned long *encrypted_data_len) {
+
+    CK_RV rv = encrypt_update(session, data, data_len, encrypted_data, encrypted_data_len);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    return encrypt_final(session, NULL, NULL);
 }

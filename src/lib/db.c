@@ -14,17 +14,23 @@
 
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <sqlite3.h>
 
 #include "db.h"
 #include "log.h"
 #include "object.h"
+#include "session_table.h"
 #include "token.h"
 #include "twist.h"
 #include "utils.h"
 
 #include <openssl/evp.h>
+
+#ifndef TPM2_PKCS11_STORE_DIR
+#define TPM2_PKCS11_STORE_DIR "/etc/tpm2_pkcs11"
+#endif
 
 #define goto_oom(x, l) if (!x) { LOGE("oom"); goto l; }
 
@@ -767,6 +773,12 @@ CK_RV db_get_tokens(token **t, size_t *len) {
         return CKR_OK;
     }
 
+    if (cnt > MAX_TOKEN_CNT) {
+        LOGE("Too many tokens, got: %lu, expected less than %u", cnt,
+                MAX_TOKEN_CNT);
+        return CKR_GENERAL_ERROR;
+    }
+
     token *tmp = calloc(cnt, sizeof(token));
     if (!tmp) {
         LOGE("oom");
@@ -841,6 +853,15 @@ CK_RV db_get_tokens(token **t, size_t *len) {
                 LOGE("Unknown key: %s", name);
                 goto error;
             }
+        } /* done with sql key value search */
+
+        /*
+         * Initialize the per-token session table
+         */
+        CK_RV rv = session_table_new(&t->s_table);
+        if (rv != CKR_OK) {
+            LOGE("Could not initialize session table");
+            goto error;
         }
 
         int rc = init_pobject(t->pid, &t->pobject);
@@ -908,29 +929,147 @@ CK_RV db_destroy(void) {
 
 #define DB_NAME "tpm2_pkcs11.sqlite3"
 #define PKCS11_STORE_ENV_VAR "TPM2_PKCS11_STORE"
-CK_RV db_get_path(char path[PATH_MAX]) {
 
-    int rc;
+static CK_RV handle_env_var(char *path, size_t len, bool *skip, bool *stat_is_no_token) {
 
-    const char *fmt = "%s/%s";
-    char *base_path = getenv(PKCS11_STORE_ENV_VAR);
-    if (!base_path) {
-        fmt = "%s/.tpm2_pkcs11/%s";
-        base_path = getenv("HOME");
+    *skip = false;
+    *stat_is_no_token = true;
+
+    char *env_path = getenv(PKCS11_STORE_ENV_VAR);
+    if (!env_path) {
+        *skip = true;
+        return CKR_OK;
     }
 
-    rc = snprintf(path, PATH_MAX, fmt, base_path, DB_NAME);
-    if (rc >= PATH_MAX) {
+    unsigned l = snprintf(path, len, "%s/%s", env_path, DB_NAME);
+    if (l >= len) {
         LOGE("Completed DB path was over-length, got %d expected less than %lu",
-                rc, PATH_MAX);
+                l, len);
         return CKR_GENERAL_ERROR;
     }
 
-    struct stat sb;
-    rc = stat(path, &sb);
-    if (rc) {
-        LOGV("Could not stat db \""DB_NAME"\" under store \"%s\", error: %s", base_path,
-                strerror(errno));
+    return CKR_OK;
+}
+
+static CK_RV handle_home(char *path, size_t len, bool *skip) {
+
+    *skip = false;
+
+    char *env_home = getenv("HOME");
+    if (!env_home) {
+        *skip = true;
+        return CKR_OK;
+    }
+
+    unsigned l = snprintf(path, len, "%s/.tpm2_pkcs11/%s", env_home, DB_NAME);
+    if (l >= len) {
+        LOGE("Completed DB path was over-length, got %d expected less than %lu",
+                l, len);
+        return CKR_GENERAL_ERROR;
+    }
+
+    return CKR_OK;
+}
+
+static CK_RV handle_cwd(char *path, size_t len, bool *skip) {
+
+    *skip = false;
+
+    char *cwd_path = getcwd(NULL, 0);
+    if (!cwd_path) {
+        return errno == ENOMEM ? CKR_HOST_MEMORY : CKR_GENERAL_ERROR;
+    }
+
+    unsigned l = snprintf(path, len, "%s/%s", cwd_path, DB_NAME);
+    free(cwd_path);
+    if (l >= len) {
+        LOGE("Completed DB path was over-length, got %d expected less than %lu",
+                l, len);
+        return CKR_GENERAL_ERROR;
+    }
+
+    return CKR_OK;
+}
+
+static CK_RV handle_path(char *path, size_t len, bool *skip) {
+
+    *skip = false;
+
+    unsigned l = snprintf(path, len, "%s/%s", TPM2_PKCS11_STORE_DIR, DB_NAME);
+    if (l >= len) {
+        LOGE("Completed DB path was over-length, got %d expected less than %lu",
+                l, len);
+        return CKR_GENERAL_ERROR;
+    }
+
+    return CKR_OK;
+}
+
+CK_RV db_get_path(char *path, size_t len) {
+
+    int rc;
+
+    /*
+     * Search in the following order:
+     * 1. ENV variable
+     * 2. $HOME/.tpm2_pkcs11
+     * 3. cwd
+     * 4. TPM2_PKCS11_STORE_DIR
+     */
+
+    unsigned i;
+    for (i=0; i < 4; i++) {
+
+        CK_RV rv = CKR_GENERAL_ERROR;
+        bool skip = false;
+        bool stat_is_no_token = false;
+
+        switch (i) {
+        case 0:
+            rv = handle_env_var(path, len, &skip, &stat_is_no_token);
+            break;
+        case 1:
+            rv = handle_home(path, len, &skip);
+            break;
+        case 2:
+            rv = handle_cwd(path, len, &skip);
+            break;
+        case 3:
+            rv = handle_path(path, len, &skip);
+            break;
+            /* no default */
+        }
+
+        /* handler had fatal error, exit with return code */
+        if (rv != CKR_OK) {
+            return rv;
+        }
+
+        /* handler says skip, something must not be set */
+        if (skip) {
+            continue;
+        }
+
+        struct stat sb;
+        rc = stat(path, &sb);
+        if (rc) {
+            LOGV("Could not stat db at path \"%s\", error: %s", path, strerror(errno));
+            if (stat_is_no_token) {
+                return CKR_TOKEN_NOT_PRESENT;
+            }
+
+            /* no db, keep looking */
+            continue;
+        }
+
+        /*
+         * made it all the way through, break out
+         */
+        break;
+    }
+
+    if (i >= 4) {
+        LOGV("Could not find pkcs11 store");
         LOGV("Consider exporting "PKCS11_STORE_ENV_VAR" to point to a valid store directory");
         return CKR_TOKEN_NOT_PRESENT;
     }
@@ -941,10 +1080,12 @@ CK_RV db_get_path(char path[PATH_MAX]) {
 CK_RV db_new(sqlite3 **db) {
 
     char path[PATH_MAX];
-    CK_RV rv = db_get_path(path);
+    CK_RV rv = db_get_path(path, sizeof(path));
     if (rv != CKR_OK) {
         return rv;
     }
+
+    LOGV("Using sqlite3 DB: \"%s\"", path);
 
     int rc = sqlite3_open(path, db);
     if (rc != SQLITE_OK) {
