@@ -56,7 +56,8 @@ static CK_RV common_init(operation op, CK_SESSION_HANDLE session, CK_MECHANISM_P
         return rv;
     }
 
-    if (!session_ctx_is_user_logged_in(ctx)) {
+    bool session_state_ok = session_ctx_user_state_ok(ctx);
+    if (!session_state_ok) {
         rv = CKR_USER_NOT_LOGGED_IN;
         goto out;
     }
@@ -65,10 +66,10 @@ static CK_RV common_init(operation op, CK_SESSION_HANDLE session, CK_MECHANISM_P
      * Start a hashing sequence with the TPM, but only if requested.
      * Some callers perform hashing and padding "off-card".
      */
+    token *tok = session_ctx_get_tok(ctx);
     uint32_t sequence_handle = 0;
     bool do_hash = is_hashing_needed(mechanism->mechanism);
     if (do_hash) {
-        token *tok = session_ctx_get_tok(ctx);
         tpm_ctx *tpm = tok->tctx;
         rv = tpm_hash_init(tpm, mechanism->mechanism, &sequence_handle);
         if (rv != CKR_OK) {
@@ -76,13 +77,13 @@ static CK_RV common_init(operation op, CK_SESSION_HANDLE session, CK_MECHANISM_P
         }
     }
 
-    sign_opdata *opdata = (sign_opdata *)session_ctx_opdata_get(ctx, op);
-    if (opdata) {
+    bool is_active = token_opdata_is_active(tok);
+    if (is_active) {
         rv = CKR_OPERATION_ACTIVE;
         goto out;
     }
 
-    opdata = calloc(1, sizeof(*opdata));
+    sign_opdata *opdata = calloc(1, sizeof(*opdata));
     if (!opdata) {
         rv = CKR_HOST_MEMORY;
         goto out;
@@ -100,7 +101,7 @@ static CK_RV common_init(operation op, CK_SESSION_HANDLE session, CK_MECHANISM_P
     /*
      * Store everything for later
      */
-    session_ctx_opdata_set(ctx, op, opdata);
+    token_opdata_set(tok, op, opdata);
 
     rv = CKR_OK;
 
@@ -123,14 +124,17 @@ static CK_RV common_update(operation op, CK_SESSION_HANDLE session, unsigned cha
         return rv;
     }
 
-    if (!session_ctx_is_user_logged_in(ctx)) {
+    bool session_state_ok = session_ctx_user_state_ok(ctx);
+    if (!session_state_ok) {
         rv = CKR_USER_NOT_LOGGED_IN;
         goto out;
     }
 
-    sign_opdata *opdata = (sign_opdata *)session_ctx_opdata_get(ctx, op);
-    if (!opdata) {
-        rv = CKR_OPERATION_NOT_INITIALIZED;
+    token *tok = session_ctx_get_tok(ctx);
+
+    sign_opdata *opdata = NULL;
+    rv = token_opdata_get(tok, op, &opdata);
+    if (rv != CKR_OK) {
         goto out;
     }
 
@@ -183,7 +187,10 @@ CK_RV sign_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigned 
         return rv;
     }
 
-    if (!session_ctx_is_user_logged_in(ctx)) {
+    token *tok = session_ctx_get_tok(ctx);
+
+    bool session_state_ok = session_ctx_user_state_ok(ctx);
+    if (!session_state_ok) {
         rv = CKR_USER_NOT_LOGGED_IN;
         goto out;
     }
@@ -191,21 +198,21 @@ CK_RV sign_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigned 
     CK_BYTE_PTR hash = NULL;
     CK_ULONG hash_len = 0;
 
-    sign_opdata *opdata = (sign_opdata *)session_ctx_opdata_get(ctx, operation_sign);
-    if (!opdata) {
-        rv = CKR_OPERATION_NOT_INITIALIZED;
-        goto session_out;
+    sign_opdata *opdata = NULL;
+    rv = token_opdata_get(tok, operation_sign, &opdata);
+    if (rv != CKR_OK) {
+        goto out;
     }
 
-    token *tok = session_ctx_get_tok(ctx);
+    assert(opdata);
+
     tpm_ctx *tpm = tok->tctx;
 
     /*
      * Double checking of opdata to silence scan-build
      */
-    if (opdata && opdata->do_hash) {
+    if (opdata->do_hash) {
 
-        // TODO dynamically get hash buffer size based on alg;
         hash_len = utils_get_halg_size(opdata->mtype);
 
         hash = malloc(hash_len);
@@ -274,7 +281,8 @@ session_out:
     if (opdata && !opdata->do_hash) {
         twist_free(opdata->buffer);
     }
-    session_ctx_opdata_set(ctx, operation_sign, NULL);
+
+    token_opdata_clear(tok);
     free(opdata);
 
 out:
@@ -317,18 +325,20 @@ CK_RV verify_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigne
         return rv;
     }
 
-    if (!session_ctx_is_user_logged_in(ctx)) {
+    token *tok = session_ctx_get_tok(ctx);
+
+    bool session_state_ok = session_ctx_user_state_ok(ctx);
+    if (!session_state_ok) {
         rv = CKR_USER_NOT_LOGGED_IN;
         goto out;
     }
 
-    sign_opdata *opdata = (sign_opdata *)session_ctx_opdata_get(ctx, operation_verify);
-    if (!opdata) {
-        rv = CKR_OPERATION_NOT_INITIALIZED;
+    sign_opdata *opdata = NULL;
+    rv = token_opdata_get(tok, operation_verify, &opdata);
+    if (rv != CKR_OK) {
         goto out;
     }
 
-    token *tok = session_ctx_get_tok(ctx);
     tpm_ctx *tpm = tok->tctx;
 
     // TODO mode to buffer size
@@ -346,7 +356,7 @@ CK_RV verify_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigne
         goto out;
     }
 
-    session_ctx_opdata_set(ctx, operation_verify, NULL);
+    token_opdata_clear(tok);
     free(opdata);
 
 out:

@@ -36,13 +36,15 @@ CK_RV digest_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism) {
         return rv;
     }
 
-    if (!session_ctx_is_user_logged_in(ctx)) {
+    bool session_state_ok = session_ctx_user_state_ok(ctx);
+    if (!session_state_ok) {
         rv = CKR_USER_NOT_LOGGED_IN;
         goto out;
     }
 
-    digest_op_data *opdata = (digest_op_data *)session_ctx_opdata_get(ctx, operation_digest);
-    if (opdata) {
+    token *tok = session_ctx_get_tok(ctx);
+    bool is_active = token_opdata_is_active(tok);
+    if (is_active) {
         rv = CKR_OPERATION_ACTIVE;
         goto out;
     }
@@ -50,7 +52,6 @@ CK_RV digest_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism) {
     /*
      * Start a hashing sequence with the TPM
      */
-    token *tok = session_ctx_get_tok(ctx);
     tpm_ctx *tpm = tok->tctx;
 
     uint32_t sequence_handle;
@@ -59,7 +60,7 @@ CK_RV digest_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism) {
         goto out;
     }
 
-    opdata = calloc(1, sizeof(*opdata));
+    digest_op_data *opdata = calloc(1, sizeof(*opdata));
     if (!opdata) {
         rv = CKR_HOST_MEMORY;
         goto out;
@@ -68,12 +69,11 @@ CK_RV digest_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism) {
     opdata->mode = mechanism->mechanism;
     opdata->sequence_handle = sequence_handle;
 
-    /*
-     * Store everything for later
-     */
-    session_ctx_opdata_set(ctx, operation_digest, opdata);
+    /* Store everything for later */
+    token_opdata_set(tok, operation_digest, opdata);
 
     rv = CKR_OK;
+
 out:
     session_ctx_unlock(ctx);
 
@@ -92,18 +92,20 @@ CK_RV digest_update (CK_SESSION_HANDLE session, unsigned char *part, unsigned lo
     if (rv != CKR_OK) {
         return rv;
     }
-    if (!session_ctx_is_user_logged_in(ctx)) {
+
+    bool session_state_ok = session_ctx_user_state_ok(ctx);
+    if (!session_state_ok) {
         rv = CKR_USER_NOT_LOGGED_IN;
         goto out;
     }
 
-    digest_op_data *opdata = (digest_op_data *)session_ctx_opdata_get(ctx, operation_digest);
-    if (!opdata) {
-        rv = CKR_OPERATION_NOT_INITIALIZED;
+    digest_op_data *opdata = NULL;
+    token *tok = session_ctx_get_tok(ctx);
+    rv = token_opdata_get(tok, operation_digest, &opdata);
+    if (rv != CKR_OK) {
         goto out;
     }
 
-    token *tok = session_ctx_get_tok(ctx);
     tpm_ctx *tpm = tok->tctx;
 
     rv = tpm_hash_update(tpm, opdata->sequence_handle, part, part_len);
@@ -133,18 +135,19 @@ CK_RV digest_final (CK_SESSION_HANDLE session, unsigned char *digest, unsigned l
         return rv;
     }
 
-    if (!session_ctx_is_user_logged_in(ctx)) {
+    bool session_state_ok = session_ctx_user_state_ok(ctx);
+    if (!session_state_ok) {
         rv = CKR_USER_NOT_LOGGED_IN;
         goto out;
     }
 
-    digest_op_data *opdata = (digest_op_data *)session_ctx_opdata_get(ctx, operation_digest);
-    if (!opdata) {
-        rv = CKR_OPERATION_NOT_INITIALIZED;
+    digest_op_data *opdata = NULL;
+    token *tok = session_ctx_get_tok(ctx);
+    rv = token_opdata_get(tok, operation_digest, &opdata);
+    if (rv != CKR_OK) {
         goto out;
     }
 
-    token *tok = session_ctx_get_tok(ctx);
     tpm_ctx *tpm = tok->tctx;
 
     rv = tpm_hash_final(tpm, opdata->sequence_handle, digest, digest_len);
@@ -152,7 +155,8 @@ CK_RV digest_final (CK_SESSION_HANDLE session, unsigned char *digest, unsigned l
         goto out;
     }
 
-    session_ctx_opdata_set(ctx, operation_digest, NULL);
+    token_opdata_clear(tok);
+
     free(opdata);
 
 out:

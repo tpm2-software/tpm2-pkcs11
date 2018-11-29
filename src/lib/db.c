@@ -879,6 +879,12 @@ CK_RV db_get_tokens(token **t, size_t *len) {
             goto error;
         }
 
+        /* register the primary object handle with the TPM */
+        bool res = tpm_register_handle(t->tctx, &t->pobject.handle);
+        if (!res) {
+            goto error;
+        }
+
         if (!t->config.is_initialized) {
             LOGV("skipping further initialization of token tid: %u", t->id);
             continue;
