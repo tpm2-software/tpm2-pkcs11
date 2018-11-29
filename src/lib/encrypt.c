@@ -7,6 +7,7 @@
 #include "encrypt.h"
 #include "session.h"
 #include "session_ctx.h"
+#include "token.h"
 #include "tpm.h"
 
 typedef struct encrypt_op_data encrypt_op_data;
@@ -141,7 +142,8 @@ static CK_RV common_update (operation op, CK_SESSION_HANDLE session, unsigned ch
         goto out;
     }
 
-    tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
+    token *tok = session_ctx_get_tok(ctx);
+    tpm_ctx *tpm = tok->tctx;
 
     rv = fop(tpm, opdata->object, opdata->mode, opdata->iv, input, &output, &iv_out);
     if (rv != CKR_OK) {

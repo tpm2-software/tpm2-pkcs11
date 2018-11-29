@@ -41,8 +41,6 @@ void *_session_ctx_get_lock(session_ctx *ctx);
 void session_ctx_opdata_set(session_ctx *ctx, operation op, void *opdata);
 void *session_ctx_opdata_get(session_ctx *ctx, operation op);
 
-tpm_ctx *session_ctx_get_tpm_ctx(session_ctx *ctx);
-
 token *session_ctx_get_tok(session_ctx *ctx);
 
 CK_STATE session_ctx_state_get(session_ctx *ctx);

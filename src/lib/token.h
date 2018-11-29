@@ -56,6 +56,8 @@ struct token {
     token_login_state login_state;
 
     session_ctx *login_session_ctx;
+
+    tpm_ctx *tctx;
 };
 
 void token_free(token *t);

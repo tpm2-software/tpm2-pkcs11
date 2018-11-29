@@ -9,6 +9,7 @@
 #include "digest.h"
 #include "session.h"
 #include "session_ctx.h"
+#include "token.h"
 #include "tpm.h"
 
 /*
@@ -49,7 +50,9 @@ CK_RV digest_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism) {
     /*
      * Start a hashing sequence with the TPM
      */
-    tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
+    token *tok = session_ctx_get_tok(ctx);
+    tpm_ctx *tpm = tok->tctx;
+
     uint32_t sequence_handle;
     rv = tpm_hash_init(tpm, mechanism->mechanism, &sequence_handle);
     if (rv != CKR_OK) {
@@ -100,7 +103,9 @@ CK_RV digest_update (CK_SESSION_HANDLE session, unsigned char *part, unsigned lo
         goto out;
     }
 
-    tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
+    token *tok = session_ctx_get_tok(ctx);
+    tpm_ctx *tpm = tok->tctx;
+
     rv = tpm_hash_update(tpm, opdata->sequence_handle, part, part_len);
     if (rv != CKR_OK) {
         goto out;
@@ -139,7 +144,9 @@ CK_RV digest_final (CK_SESSION_HANDLE session, unsigned char *digest, unsigned l
         goto out;
     }
 
-    tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
+    token *tok = session_ctx_get_tok(ctx);
+    tpm_ctx *tpm = tok->tctx;
+
     rv = tpm_hash_final(tpm, opdata->sequence_handle, digest, digest_len);
     if (rv != CKR_OK) {
         goto out;

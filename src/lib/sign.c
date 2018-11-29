@@ -68,7 +68,8 @@ static CK_RV common_init(operation op, CK_SESSION_HANDLE session, CK_MECHANISM_P
     uint32_t sequence_handle = 0;
     bool do_hash = is_hashing_needed(mechanism->mechanism);
     if (do_hash) {
-        tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
+        token *tok = session_ctx_get_tok(ctx);
+        tpm_ctx *tpm = tok->tctx;
         rv = tpm_hash_init(tpm, mechanism->mechanism, &sequence_handle);
         if (rv != CKR_OK) {
             goto out;
@@ -134,7 +135,8 @@ static CK_RV common_update(operation op, CK_SESSION_HANDLE session, unsigned cha
     }
 
     if (opdata->do_hash) {
-        tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
+        token *tok = session_ctx_get_tok(ctx);
+        tpm_ctx *tpm = tok->tctx;
         rv = tpm_hash_update(tpm, opdata->sequence_handle, part, part_len);
         if (rv != CKR_OK) {
             goto out;
@@ -195,7 +197,9 @@ CK_RV sign_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigned 
         goto session_out;
     }
 
-    tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
+    token *tok = session_ctx_get_tok(ctx);
+    tpm_ctx *tpm = tok->tctx;
+
     /*
      * Double checking of opdata to silence scan-build
      */
@@ -324,7 +328,8 @@ CK_RV verify_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigne
         goto out;
     }
 
-    tpm_ctx *tpm = session_ctx_get_tpm_ctx(ctx);
+    token *tok = session_ctx_get_tok(ctx);
+    tpm_ctx *tpm = tok->tctx;
 
     // TODO mode to buffer size
     CK_BYTE hash[1024];
