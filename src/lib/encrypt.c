@@ -7,6 +7,7 @@
 #include "encrypt.h"
 #include "session.h"
 #include "session_ctx.h"
+#include "token.h"
 #include "tpm.h"
 
 typedef struct encrypt_op_data encrypt_op_data;
@@ -18,9 +19,8 @@ struct encrypt_op_data {
 
 typedef CK_RV (*tpm_op)(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mode, twist iv, twist data_in, twist *data_out, twist *iv_out);
 
-static CK_RV common_init (operation op, CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+static CK_RV common_init (token *tok, operation op, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
-    check_is_init();
     check_pointer(mechanism);
 
     /*
@@ -42,36 +42,21 @@ static CK_RV common_init (operation op, CK_SESSION_HANDLE session, CK_MECHANISM 
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = NULL;
-    rv = session_lookup(session, &ctx);
+    bool is_active = token_opdata_is_active(tok);
+    if (is_active) {
+        rv = CKR_OPERATION_ACTIVE;
+        return rv;
+    }
+
+    tobject *tobj;
+    rv = token_load_object(tok, key, &tobj);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    bool session_state_ok = session_ctx_user_state_ok(ctx);
-    if (!session_state_ok) {
-        rv = CKR_USER_NOT_LOGGED_IN;
-        goto out;
-    }
-
-    token *tok = session_ctx_get_tok(ctx);
-
-    bool is_active = token_opdata_is_active(tok);
-    if (is_active) {
-        rv = CKR_OPERATION_ACTIVE;
-        goto out;
-    }
-
-    tobject *tobj;
-    rv = session_ctx_load_object(ctx, key, &tobj);
-    if (rv != CKR_OK) {
-        goto out;
-    }
-
     encrypt_op_data *opdata = (encrypt_op_data *)calloc(1, sizeof(*opdata));
     if (!opdata) {
-        rv = CKR_HOST_MEMORY;
-        goto out;
+        return CKR_HOST_MEMORY;
     }
 
     opdata->object = tobj;
@@ -80,17 +65,13 @@ static CK_RV common_init (operation op, CK_SESSION_HANDLE session, CK_MECHANISM 
 
     token_opdata_set(tok, op, opdata);
 
-    rv = CKR_OK;
-
-out:
-    session_ctx_unlock(ctx);
-
-    return rv;
+    return CKR_OK;
 }
 
-static CK_RV common_update (operation op, CK_SESSION_HANDLE session, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
+static CK_RV common_update (token *tok, operation op,
+        unsigned char *part, unsigned long part_len,
+        unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
 
-    check_is_init();
     check_pointer(part);
     check_pointer(encrypted_part);
     check_pointer(encrypted_part_len);
@@ -127,20 +108,6 @@ static CK_RV common_update (operation op, CK_SESSION_HANDLE session, unsigned ch
     twist output = NULL;
     twist iv_out = NULL;
 
-    session_ctx *ctx = NULL;
-    rv = session_lookup(session, &ctx);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    token *tok = session_ctx_get_tok(ctx);
-
-    bool session_state_ok = session_ctx_user_state_ok(ctx);
-    if (!session_state_ok) {
-        rv = CKR_USER_NOT_LOGGED_IN;
-        goto out;
-    }
-
     encrypt_op_data *opdata = NULL;
     rv = token_opdata_get(tok, op, &opdata);
     if (rv != CKR_OK) {
@@ -165,17 +132,14 @@ static CK_RV common_update (operation op, CK_SESSION_HANDLE session, unsigned ch
     rv = CKR_OK;
 
 out:
-    session_ctx_unlock(ctx);
-
     twist_free(input);
     twist_free(output);
 
     return rv;
 }
 
-static CK_RV common_final (operation op, CK_SESSION_HANDLE session, unsigned char *last_part, unsigned long *last_part_len) {
-
-    check_is_init();
+static CK_RV common_final(token *tok, operation op,
+        unsigned char *last_part, unsigned long *last_part_len) {
 
     /*
      * We have no use for these.
@@ -185,24 +149,10 @@ static CK_RV common_final (operation op, CK_SESSION_HANDLE session, unsigned cha
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = NULL;
-    rv = session_lookup(session, &ctx);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    bool session_state_ok = session_ctx_user_state_ok(ctx);
-    if (!session_state_ok) {
-        rv = CKR_USER_NOT_LOGGED_IN;
-        goto out;
-    }
-
-    token *tok = session_ctx_get_tok(ctx);
-
     encrypt_op_data *opdata = NULL;
     rv = token_opdata_get(tok, op, &opdata);
     if (rv != CKR_OK) {
-        goto out;
+        return rv;
     }
 
     twist_free(opdata->iv);
@@ -210,61 +160,56 @@ static CK_RV common_final (operation op, CK_SESSION_HANDLE session, unsigned cha
 
     token_opdata_clear(tok);
 
-    rv = CKR_OK;
-
-out:
-    session_ctx_unlock(ctx);
-
-    return rv;
+    return CKR_OK;
 }
 
-CK_RV encrypt_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV encrypt_init (token *tok, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
-    return common_init(operation_encrypt, session, mechanism, key);
+    return common_init(tok, operation_encrypt, mechanism, key);
 }
 
-CK_RV decrypt_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV decrypt_init (token *tok, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
-    return common_init(operation_decrypt, session, mechanism, key);
+    return common_init(tok, operation_decrypt, mechanism, key);
 }
 
-CK_RV encrypt_update (CK_SESSION_HANDLE session, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
+CK_RV encrypt_update (token *tok, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
 
-    return common_update(operation_encrypt, session, part, part_len, encrypted_part, encrypted_part_len);
+    return common_update(tok, operation_encrypt, part, part_len, encrypted_part, encrypted_part_len);
 }
 
-CK_RV decrypt_update (CK_SESSION_HANDLE session, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
+CK_RV decrypt_update (token *tok, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
 
-    return common_update(operation_decrypt, session, part, part_len, encrypted_part, encrypted_part_len);
+    return common_update(tok, operation_decrypt, part, part_len, encrypted_part, encrypted_part_len);
 }
 
-CK_RV encrypt_final (CK_SESSION_HANDLE session, unsigned char *last_encrypted_part, unsigned long *last_encrypted_part_len) {
+CK_RV encrypt_final (token *tok, unsigned char *last_encrypted_part, unsigned long *last_encrypted_part_len) {
 
-    return common_final(operation_encrypt, session, last_encrypted_part, last_encrypted_part_len);
+    return common_final(tok, operation_encrypt, last_encrypted_part, last_encrypted_part_len);
 }
 
-CK_RV decrypt_final (CK_SESSION_HANDLE session, unsigned char *last_part, unsigned long *last_part_len) {
+CK_RV decrypt_final (token *tok, unsigned char *last_part, unsigned long *last_part_len) {
 
-    return common_final(operation_decrypt, session, last_part, last_part_len);
+    return common_final(tok, operation_decrypt, last_part, last_part_len);
 }
 
-CK_RV decrypt_oneshot (CK_SESSION_HANDLE session, unsigned char *encrypted_data, unsigned long encrypted_data_len, unsigned char *data, unsigned long *data_len) {
+CK_RV decrypt_oneshot (token *tok, unsigned char *encrypted_data, unsigned long encrypted_data_len, unsigned char *data, unsigned long *data_len) {
 
-    CK_RV rv = decrypt_update(session, encrypted_data, encrypted_data_len,
+    CK_RV rv = decrypt_update(tok, encrypted_data, encrypted_data_len,
             data, data_len);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    return decrypt_final(session, NULL, NULL);
+    return decrypt_final(tok, NULL, NULL);
 }
 
-CK_RV encrypt_oneshot (CK_SESSION_HANDLE session, unsigned char *data, unsigned long data_len, unsigned char *encrypted_data, unsigned long *encrypted_data_len) {
+CK_RV encrypt_oneshot (token *tok, unsigned char *data, unsigned long data_len, unsigned char *encrypted_data, unsigned long *encrypted_data_len) {
 
-    CK_RV rv = encrypt_update(session, data, data_len, encrypted_data, encrypted_data_len);
+    CK_RV rv = encrypt_update(tok, data, data_len, encrypted_data, encrypted_data_len);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    return encrypt_final(session, NULL, NULL);
+    return encrypt_final(tok, NULL, NULL);
 }

@@ -107,6 +107,8 @@ static void test_random_good(void **state) {
     test_info *ti = test_info_from_state(state);
     CK_SESSION_HANDLE handle = ti->handles[0];
 
+    user_login(ti->handles[0]);
+
     unsigned char buf[4];
 
     // Case 1: Good test
@@ -133,6 +135,8 @@ static void test_seed(void **state) {
 
     test_info *ti = test_info_from_state(state);
     CK_SESSION_HANDLE handle = ti->handles[0];
+
+    user_login(ti->handles[0]);
 
     CK_RV rv = C_SeedRandom(handle, buf, sizeof(buf));
     assert_int_equal(rv, CKR_OK);

@@ -17,18 +17,14 @@ typedef struct session_table session_table;
 CK_RV session_table_new(session_table **t);
 void session_table_free(session_table *t);
 
-void session_table_unlock(session_table *t);
-void session_table_lock(session_table *t);
-
 void session_table_get_cnt(session_table *t, unsigned long *all, unsigned long *rw, unsigned long *ro);
-void session_table_get_cnt_unlocked(session_table *t, unsigned long *all, unsigned long *rw, unsigned long *ro);
 
-CK_RV session_table_new_ctx_unlocked(session_table *t,
+CK_RV session_table_new_entry(session_table *t,
         CK_SESSION_HANDLE *handle, token *tok, CK_FLAGS flags);
 
 session_ctx *session_table_lookup(session_table *t, CK_SESSION_HANDLE handle);
 
-CK_RV session_table_free_ctx_unlocked_by_handle(token *t, CK_SESSION_HANDLE handle);
+CK_RV session_table_free_ctx_by_handle(token *t, CK_SESSION_HANDLE handle);
 CK_RV session_table_free_ctx(token *t, CK_SESSION_HANDLE handle);
 void session_table_free_ctx_all(token *t);
 

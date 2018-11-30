@@ -20,20 +20,14 @@
 
 struct session_ctx {
 
-    token *tok;
     CK_FLAGS flags;
     CK_STATE state;
-    void *mutex;
 };
 
 void session_ctx_free(session_ctx *ctx) {
 
     if (!ctx) {
         return;
-    }
-
-    if (ctx->mutex) {
-        mutex_destroy(ctx->mutex);
     }
 
     free(ctx);
@@ -49,9 +43,9 @@ void session_ctx_free(session_ctx *ctx) {
  * @param flags
  *  The session flags.
  */
-static void session_set_initial_state(session_ctx *ctx, token *tok, CK_FLAGS flags) {
+static void session_set_initial_state(session_ctx *ctx, token_login_state state, CK_FLAGS flags) {
 
-    switch(tok->login_state) {
+    switch(state) {
     case token_no_one_logged_in:
         ctx->state = flags & CKF_RW_SESSION ?
                 CKS_RW_PUBLIC_SESSION : CKS_RO_PUBLIC_SESSION;
@@ -68,36 +62,20 @@ static void session_set_initial_state(session_ctx *ctx, token *tok, CK_FLAGS fla
     }
 }
 
-CK_RV session_ctx_new(session_ctx **ctx, token *tok, CK_FLAGS flags) {
+CK_RV session_ctx_new(session_ctx **ctx, token_login_state state, CK_FLAGS flags) {
 
     session_ctx *s = calloc(1, sizeof(session_ctx));
     if (!s) {
         return CKR_HOST_MEMORY;
     }
 
-    CK_RV rv = mutex_create(&s->mutex);
-    if (rv != CKR_OK) {
-        session_ctx_free(s);
-        return rv;
-    }
-
-    session_set_initial_state(s, tok, flags);
-
-    s->tok = tok;
+    session_set_initial_state(s, state, flags);
 
     s->flags = flags;
 
     *ctx = s;
 
     return CKR_OK;
-}
-
-void *_session_ctx_get_lock(session_ctx *ctx) {
-    return ctx->mutex;
-}
-
-token *session_ctx_get_tok(session_ctx *ctx) {
-    return ctx->tok;
 }
 
 CK_STATE session_ctx_state_get(session_ctx *ctx) {
@@ -191,15 +169,9 @@ CK_RV unwrap_objauth(token *tok, tpm_ctx *tpm, wrappingobject *wobj, twist objau
     return CKR_OK;
 }
 
-CK_RV session_ctx_load_object(session_ctx *ctx, CK_OBJECT_HANDLE key, tobject **loaded_tobj) {
+CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj) {
 
-    token *tok = session_ctx_get_tok(ctx);
     tpm_ctx *tpm = tok->tctx;
-
-    bool session_state_ok = session_ctx_user_state_ok(ctx);
-    if (!session_state_ok) {
-        return CKR_USER_NOT_LOGGED_IN;
-    }
 
     if (!tok->tobjects) {
         return CKR_KEY_HANDLE_INVALID;
