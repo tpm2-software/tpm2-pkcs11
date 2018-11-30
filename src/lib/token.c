@@ -53,14 +53,13 @@ void token_free(token *t) {
     }
 
     tpm_ctx_free(t->tctx);
+
+    mutex_destroy(t->mutex);
 }
 
-CK_RV token_get_info (CK_SLOT_ID slot_id, CK_TOKEN_INFO *info) {
+CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
 
     check_pointer(info);
-
-    token *t;
-    check_slot_id(slot_id, t,CKR_SLOT_ID_INVALID);
 
     const unsigned char token_sn[]   = TPM2_TOKEN_SERIAL_NUMBER;
     const unsigned char token_manuf[]  = TPM2_TOKEN_MANUFACTURER;
@@ -122,7 +121,7 @@ CK_RV token_get_info (CK_SLOT_ID slot_id, CK_TOKEN_INFO *info) {
     return CKR_OK;
 }
 
-bool token_is_any_user_logged_in(token *tok) {
+static bool token_is_any_user_logged_in(token *tok) {
 
     return tok->login_state != token_no_one_logged_in;
 }
@@ -345,3 +344,12 @@ CK_RV _token_opdata_get(token *tok, operation op, void **data) {
 
     return CKR_OK;
 }
+
+void token_lock(token *t) {
+    mutex_lock_fatal(t->mutex);
+}
+
+void token_unlock(token *t) {
+    mutex_unlock_fatal(t->mutex);
+}
+

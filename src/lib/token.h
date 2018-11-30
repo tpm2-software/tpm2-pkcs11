@@ -6,8 +6,10 @@
 #ifndef SRC_TOKEN_H_
 #define SRC_TOKEN_H_
 
+#include "checks.h"
 #include "object.h"
 #include "pkcs11.h"
+#include "session_ctx.h"
 #include "tpm.h"
 #include "twist.h"
 #include "utils.h"
@@ -76,6 +78,8 @@ struct token {
     tpm_ctx *tctx;
 
     generic_opdata opdata;
+
+    void *mutex;
 };
 
 /**
@@ -94,7 +98,7 @@ void token_free(token *t);
  */
 void token_free_list(token *t, size_t len);
 
-CK_RV token_get_info (CK_SLOT_ID slot_id, CK_TOKEN_INFO *info);
+CK_RV token_get_info(token *t, CK_TOKEN_INFO *info);
 
 /**
  * Causes a login event to be propagated through the token
@@ -125,15 +129,6 @@ CK_RV token_login(token *tok, twist pin, CK_USER_TYPE user);
  *  CKR_OK on success, anything else is a failure.
  */
 CK_RV token_logout(token *tok);
-
-/**
- * True if ANY user is logged into the card, including SO.
- * @param tok
- *  The token to check.
- * @return
- *  true if anyone is logged in.
- */
-bool token_is_any_user_logged_in(token *tok);
 
 /**
  * Determines if the opdata is in use
@@ -179,5 +174,8 @@ void token_opdata_clear(token *tok);
  */
 #define token_opdata_get(ctx, op, data) _token_opdata_get(ctx, op, (void **)data)
 CK_RV _token_opdata_get(token *tok, operation op, void **data);
+
+void token_lock(token *t);
+void token_unlock(token *t);
 
 #endif /* SRC_TOKEN_H_ */

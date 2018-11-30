@@ -13,6 +13,7 @@
 #include "session.h"
 #include "session_ctx.h"
 #include "sign.h"
+#include "token.h"
 #include "tpm.h"
 
 typedef struct sign_opdata sign_opdata;
@@ -43,55 +44,40 @@ static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
     return false;
 }
 
-static CK_RV common_init(operation op, CK_SESSION_HANDLE session, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
+static CK_RV common_init(operation op, token *tok, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
 
-    check_is_init();
     check_pointer(mechanism);
 
     CK_RV rv = CKR_GENERAL_ERROR;
-
-    session_ctx *ctx = NULL;
-    rv = session_lookup(session, &ctx);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    bool session_state_ok = session_ctx_user_state_ok(ctx);
-    if (!session_state_ok) {
-        rv = CKR_USER_NOT_LOGGED_IN;
-        goto out;
-    }
 
     /*
      * Start a hashing sequence with the TPM, but only if requested.
      * Some callers perform hashing and padding "off-card".
      */
-    token *tok = session_ctx_get_tok(ctx);
     uint32_t sequence_handle = 0;
     bool do_hash = is_hashing_needed(mechanism->mechanism);
     if (do_hash) {
         tpm_ctx *tpm = tok->tctx;
         rv = tpm_hash_init(tpm, mechanism->mechanism, &sequence_handle);
         if (rv != CKR_OK) {
-            goto out;
+            return rv;
         }
     }
 
     bool is_active = token_opdata_is_active(tok);
     if (is_active) {
-        rv = CKR_OPERATION_ACTIVE;
-        goto out;
+        return CKR_OPERATION_ACTIVE;
     }
 
     sign_opdata *opdata = calloc(1, sizeof(*opdata));
     if (!opdata) {
-        rv = CKR_HOST_MEMORY;
-        goto out;
+        return CKR_HOST_MEMORY;
     }
 
-    rv = session_ctx_load_object(ctx, key, &opdata->tobj);
+
+    rv = token_load_object(tok, key, &opdata->tobj);
     if (rv != CKR_OK) {
-        goto out;
+        return rv;
     }
 
     opdata->do_hash = do_hash;
@@ -103,97 +89,54 @@ static CK_RV common_init(operation op, CK_SESSION_HANDLE session, CK_MECHANISM_P
      */
     token_opdata_set(tok, op, opdata);
 
-    rv = CKR_OK;
-
-out:
-    session_ctx_unlock(ctx);
-
-    return rv;
+    return CKR_OK;
 }
 
-static CK_RV common_update(operation op, CK_SESSION_HANDLE session, unsigned char *part, unsigned long part_len) {
+static CK_RV common_update(operation op, token *tok, unsigned char *part, unsigned long part_len) {
 
-    check_is_init();
     check_pointer(part);
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = NULL;
-    rv = session_lookup(session, &ctx);
+    sign_opdata *opdata = NULL;
+    rv = token_opdata_get(tok, op, &opdata);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    bool session_state_ok = session_ctx_user_state_ok(ctx);
-    if (!session_state_ok) {
-        rv = CKR_USER_NOT_LOGGED_IN;
-        goto out;
-    }
-
-    token *tok = session_ctx_get_tok(ctx);
-
-    sign_opdata *opdata = NULL;
-    rv = token_opdata_get(tok, op, &opdata);
-    if (rv != CKR_OK) {
-        goto out;
-    }
-
     if (opdata->do_hash) {
-        token *tok = session_ctx_get_tok(ctx);
         tpm_ctx *tpm = tok->tctx;
         rv = tpm_hash_update(tpm, opdata->sequence_handle, part, part_len);
         if (rv != CKR_OK) {
-            goto out;
+            return rv;
         }
     } else {
         twist tmp = twistbin_append(opdata->buffer, part, part_len);
         if (!tmp) {
-            rv = CKR_HOST_MEMORY;
-            goto out;
+            return CKR_HOST_MEMORY;
         }
         opdata->buffer = tmp;
     }
 
-    rv = CKR_OK;
-
-out:
-    session_ctx_unlock(ctx);
-
-    return rv;
-
+    return CKR_OK;
 }
 
-CK_RV sign_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV sign_init(token *tok, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
-    return common_init(operation_sign, session, mechanism, key);
+    return common_init(operation_sign, tok, mechanism, key);
 }
 
-CK_RV sign_update (CK_SESSION_HANDLE session, unsigned char *part, unsigned long part_len) {
+CK_RV sign_update(token *tok, unsigned char *part, unsigned long part_len) {
 
-    return common_update(operation_sign, session, part, part_len);
+    return common_update(operation_sign, tok, part, part_len);
 }
 
-CK_RV sign_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigned long *signature_len) {
+CK_RV sign_final(token *tok, unsigned char *signature, unsigned long *signature_len) {
 
-    check_is_init();
     check_pointer(signature);
     check_pointer(signature_len);
 
     CK_RV rv = CKR_GENERAL_ERROR;
-
-    session_ctx *ctx = NULL;
-    rv = session_lookup(session, &ctx);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    token *tok = session_ctx_get_tok(ctx);
-
-    bool session_state_ok = session_ctx_user_state_ok(ctx);
-    if (!session_state_ok) {
-        rv = CKR_USER_NOT_LOGGED_IN;
-        goto out;
-    }
 
     CK_BYTE_PTR hash = NULL;
     CK_ULONG hash_len = 0;
@@ -201,7 +144,7 @@ CK_RV sign_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigned 
     sign_opdata *opdata = NULL;
     rv = token_opdata_get(tok, operation_sign, &opdata);
     if (rv != CKR_OK) {
-        goto out;
+        return rv;
     }
 
     assert(opdata);
@@ -285,58 +228,40 @@ session_out:
     token_opdata_clear(tok);
     free(opdata);
 
-out:
-    session_ctx_unlock(ctx);
-
     return rv;
 }
 
-CK_RV sign(CK_SESSION_HANDLE session, unsigned char *data, unsigned long data_len, unsigned char *signature, unsigned long *signature_len) {
+CK_RV sign(token *tok, unsigned char *data, unsigned long data_len, unsigned char *signature, unsigned long *signature_len) {
 
-    CK_RV rv = sign_update(session, data, data_len);
+    CK_RV rv = sign_update(tok, data, data_len);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    return sign_final(session, signature, signature_len);
+    return sign_final(tok, signature, signature_len);
 }
 
-CK_RV verify_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV verify_init (token *tok, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
-    return common_init(operation_verify, session, mechanism, key);
+    return common_init(operation_verify, tok, mechanism, key);
 }
 
-CK_RV verify_update (CK_SESSION_HANDLE session, unsigned char *part, unsigned long part_len) {
+CK_RV verify_update (token *tok, unsigned char *part, unsigned long part_len) {
 
-    return common_update(operation_verify, session, part, part_len);
+    return common_update(operation_verify, tok, part, part_len);
 }
 
-CK_RV verify_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigned long signature_len) {
+CK_RV verify_final (token *tok, unsigned char *signature, unsigned long signature_len) {
 
-    check_is_init();
     check_pointer(signature);
     check_pointer(signature_len);
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = NULL;
-    rv = session_lookup(session, &ctx);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    token *tok = session_ctx_get_tok(ctx);
-
-    bool session_state_ok = session_ctx_user_state_ok(ctx);
-    if (!session_state_ok) {
-        rv = CKR_USER_NOT_LOGGED_IN;
-        goto out;
-    }
-
     sign_opdata *opdata = NULL;
     rv = token_opdata_get(tok, operation_verify, &opdata);
     if (rv != CKR_OK) {
-        goto out;
+        return rv;
     }
 
     tpm_ctx *tpm = tok->tctx;
@@ -347,29 +272,27 @@ CK_RV verify_final (CK_SESSION_HANDLE session, unsigned char *signature, unsigne
 
     rv = tpm_hash_final(tpm, opdata->sequence_handle, hash, &hash_len);
     if (rv != CKR_OK) {
-        goto out;
+        return rv;
     }
 
     bool res = tpm_verify(tpm, opdata->tobj, hash, hash_len, signature, signature_len);
     rv = res ? CKR_OK : CKR_GENERAL_ERROR;
     if (rv != CKR_OK) {
-        goto out;
+        return rv;
     }
 
     token_opdata_clear(tok);
     free(opdata);
 
-out:
-    session_ctx_unlock(ctx);
     return rv;
 }
 
-CK_RV verify (CK_SESSION_HANDLE session, unsigned char *data, unsigned long data_len, unsigned char *signature, unsigned long signature_len) {
+CK_RV verify(token *tok, unsigned char *data, unsigned long data_len, unsigned char *signature, unsigned long signature_len) {
 
-    CK_RV rv = verify_update(session, data, data_len);
+    CK_RV rv = verify_update(tok, data, data_len);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    return verify_final(session, signature, signature_len);
+    return verify_final(tok, signature, signature_len);
 }

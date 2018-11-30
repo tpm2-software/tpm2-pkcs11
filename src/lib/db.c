@@ -20,6 +20,7 @@
 
 #include "db.h"
 #include "log.h"
+#include "mutex.h"
 #include "object.h"
 #include "session_table.h"
 #include "token.h"
@@ -882,6 +883,12 @@ CK_RV db_get_tokens(token **t, size_t *len) {
         /* register the primary object handle with the TPM */
         bool res = tpm_register_handle(t->tctx, &t->pobject.handle);
         if (!res) {
+            goto error;
+        }
+
+        rv = mutex_create(&t->mutex);
+        if (rv != CKR_OK) {
+            LOGE("Could not initialize mutex: 0x%x", rv);
             goto error;
         }
 

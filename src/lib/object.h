@@ -14,6 +14,8 @@
 #include "twist.h"
 #include "utils.h"
 
+typedef struct token token;
+
 typedef struct pobject pobject;
 struct pobject {
     uint32_t handle;
@@ -90,13 +92,13 @@ void sobject_free(sobject *sobj);
 void wrappingobject_free(wrappingobject *wobj);
 void sealobject_free(sealobject *sealobj);
 
-CK_RV object_find_init(CK_SESSION_HANDLE session, CK_ATTRIBUTE_PTR templ, unsigned long count);
+CK_RV object_find_init(token *tok, CK_ATTRIBUTE_PTR templ, unsigned long count);
 
-CK_RV object_find(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE *object, unsigned long max_object_count, unsigned long *object_count);
+CK_RV object_find(token *tok, CK_OBJECT_HANDLE *object, unsigned long max_object_count, unsigned long *object_count);
 
-CK_RV object_find_final(CK_SESSION_HANDLE session);
+CK_RV object_find_final(token *tok);
 
-CK_RV object_get_attributes(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count);
+CK_RV object_get_attributes(token *tok, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count);
 
 /**
  * Given an attribute type, retrieves the attribute data if present.

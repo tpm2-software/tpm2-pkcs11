@@ -9,8 +9,10 @@
 #include <stdbool.h>
 
 #include "pkcs11.h"
-#include "session_ctx.h"
 #include "tpm.h"
+
+typedef struct session_ctx session_ctx;
+typedef struct token token;
 
 /*
  * This max value CANNOT extend into the upper byte of a CK_SESSION_HANDLE,
@@ -25,13 +27,13 @@ CK_RV session_close(CK_SESSION_HANDLE session);
 
 CK_RV session_closeall(CK_SLOT_ID slot_id);
 
-CK_RV session_lookup(CK_SESSION_HANDLE session, session_ctx **ctx);
+CK_RV session_lookup(CK_SESSION_HANDLE session, token **tok, session_ctx **ctx);
 
-CK_RV session_login (CK_SESSION_HANDLE session, CK_USER_TYPE user_type,
+CK_RV session_login(token *tok, CK_USER_TYPE user_type,
         unsigned char *pin, unsigned long pin_len);
 
-CK_RV session_logout (CK_SESSION_HANDLE session);
+CK_RV session_logout(token *tok );
 
-CK_RV session_get_info (CK_SESSION_HANDLE session, CK_SESSION_INFO *info);
+CK_RV session_get_info(token *tok, session_ctx *ctx, CK_SESSION_INFO *info);
 
 #endif /* SRC_PKCS11_SESSION_H_ */
