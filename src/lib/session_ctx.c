@@ -138,11 +138,11 @@ CK_RV unwrap_objauth(token *tok, tpm_ctx *tpm, wrappingobject *wobj, twist objau
             return CKR_HOST_MEMORY;
         }
 
-        bool result = tpm_decrypt_handle(tpm, wobj->handle, wobj->objauth, CKM_AES_NULL,
+        CK_RV rv = tpm_decrypt_handle(tpm, wobj->handle, wobj->objauth, CKM_AES_NULL,
                 NULL, objauthraw, &unwrapped_raw, NULL);
-        if (!result) {
+        twist_free(objauthraw);
+        if (rv != CKR_OK) {
             LOGE("tpm_decrypt_handle failed");
-            twist_free(objauthraw);
             return CKR_GENERAL_ERROR;
         }
     } else {
