@@ -203,3 +203,31 @@ size_t utils_get_halg_size(CK_MECHANISM_TYPE mttype) {
 
     return 0;
 }
+
+bool utils_mech_is_raw_sign(CK_MECHANISM_TYPE mech) {
+
+    switch(mech) {
+    case CKM_RSA_PKCS:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool utils_mech_is_rsa_pkcs(CK_MECHANISM_TYPE mech) {
+
+    switch(mech) {
+    case CKM_RSA_PKCS:
+        /* falls-thru*/
+    case CKM_SHA1_RSA_PKCS:
+        /* falls-thru*/
+    case CKM_SHA256_RSA_PKCS:
+        /* falls-thru*/
+    case CKM_SHA384_RSA_PKCS:
+        /* falls-thru*/
+    case CKM_SHA512_RSA_PKCS:
+        return true;
+    default:
+        return false;
+    }
+}

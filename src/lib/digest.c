@@ -5,6 +5,9 @@
  */
 #include <stdint.h>
 
+#include <openssl/evp.h>
+#include <openssl/err.h>
+
 #include "checks.h"
 #include "digest.h"
 #include "session.h"
@@ -12,26 +15,109 @@
 #include "token.h"
 #include "tpm.h"
 
-/*
- * TODO The digest code could be refactored to be shared between this and sign.
- */
+static inline const char *get_openssl_err(void) {
+    return ERR_error_string(ERR_get_error(), NULL);
+}
 
-typedef struct digest_op_data digest_op_data;
-struct digest_op_data {
-    tobject *tobj;
-    CK_MECHANISM_TYPE mode;
-    uint32_t sequence_handle;
-};
+digest_op_data *digest_op_data_new(void) {
+    return calloc(1, sizeof(digest_op_data));
+}
 
-CK_RV digest_init(token *tok, CK_MECHANISM *mechanism) {
+void digest_op_data_free(digest_op_data **opdata) {
+    free(*opdata);
+    *opdata = NULL;
+}
+
+const EVP_MD *ossl_halg_from_mech(CK_MECHANISM_TYPE mech) {
+
+    switch(mech) {
+        case CKM_SHA1_RSA_PKCS:
+            return EVP_sha1();
+        case CKM_SHA256_RSA_PKCS:
+            return EVP_sha256();
+        case CKM_SHA384_RSA_PKCS:
+            return EVP_sha384();
+        case CKM_SHA512_RSA_PKCS:
+            return EVP_sha512();
+        default:
+            return NULL;
+    }
+    /* no return, not possible */
+}
+
+static CK_RV digest_sw_init(digest_op_data *opdata) {
+
+    const EVP_MD *md = ossl_halg_from_mech(opdata->mode);
+    if (!md) {
+        return CKR_MECHANISM_INVALID;
+    }
+
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_create();
+    if (!mdctx) {
+        LOGE("%s", get_openssl_err());
+        return CKR_GENERAL_ERROR;
+    }
+
+    int rc = EVP_DigestInit_ex(mdctx, md, NULL);
+    if (!rc) {
+        EVP_MD_CTX_destroy(mdctx);
+        LOGE("%s", get_openssl_err());
+        return CKR_GENERAL_ERROR;
+    }
+
+    opdata->mdctx = mdctx;
+
+    return CKR_OK;
+}
+
+static CK_RV digest_sw_update(digest_op_data *opdata, const void *d, size_t cnt) {
+
+    int rc = EVP_DigestUpdate(opdata->mdctx, d, cnt);
+    if (!rc) {
+        LOGE("%s", get_openssl_err());
+        return CKR_GENERAL_ERROR;
+    }
+
+    return CKR_OK;
+}
+
+static CK_RV digest_sw_final(digest_op_data *opdata, unsigned char *md, unsigned long *s) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    /*
+     * Warn on truncation, this is likely not an issue unless digest message lengths overflow
+     * int.
+     */
+    if (*s > INT_MAX) {
+        LOGW("OSSL takes an int pointer, anything past %u is lost, got %lu", INT_MAX, *s);
+    }
+
+    int rc = EVP_DigestFinal_ex(opdata->mdctx, md, (unsigned int *)s);
+    if (!rc) {
+        LOGE("%s", get_openssl_err());
+        goto out;
+    }
+
+    rv = CKR_OK;
+
+out:
+    EVP_MD_CTX_destroy(opdata->mdctx);
+
+    return rv;
+}
+
+CK_RV digest_init_op(token *tok, digest_op_data *supplied_opdata, CK_MECHANISM *mechanism) {
 
     check_pointer(mechanism);
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    bool is_active = token_opdata_is_active(tok);
-    if (is_active) {
-        return CKR_OPERATION_ACTIVE;
+    if (!supplied_opdata) {
+        bool is_active = token_opdata_is_active(tok);
+        if (is_active) {
+            return CKR_OPERATION_ACTIVE;
+        }
     }
 
     /*
@@ -39,49 +125,78 @@ CK_RV digest_init(token *tok, CK_MECHANISM *mechanism) {
      */
     tpm_ctx *tpm = tok->tctx;
 
+    bool use_sw_hash = false;
+
     uint32_t sequence_handle;
     rv = tpm_hash_init(tpm, mechanism->mechanism, &sequence_handle);
     if (rv != CKR_OK) {
-        return rv;
+        if (rv == CKR_MECHANISM_INVALID) {
+            use_sw_hash = true;
+        } else {
+            return rv;
+        }
     }
 
-    digest_op_data *opdata = calloc(1, sizeof(*opdata));
-    if (!opdata) {
-        return CKR_HOST_MEMORY;
+    digest_op_data *opdata = NULL;
+    if (!supplied_opdata) {
+        opdata = digest_op_data_new();
+        if (!opdata) {
+            return CKR_HOST_MEMORY;
+        }
+    } else {
+        opdata = supplied_opdata;
     }
 
+    opdata->use_sw_hash = use_sw_hash;
     opdata->mode = mechanism->mechanism;
-    opdata->sequence_handle = sequence_handle;
 
-    /* Store everything for later */
-    token_opdata_set(tok, operation_digest, opdata);
+    if (use_sw_hash) {
+        rv = digest_sw_init(opdata);
+        if (rv != CKR_OK) {
+            if (!supplied_opdata) {
+                digest_op_data_free(&opdata);
+            }
+            return rv;
+        }
+    } else {
+        opdata->sequence_handle = sequence_handle;
+    }
+
+    if (!supplied_opdata) {
+        /* Store everything for later */
+        token_opdata_set(tok, operation_digest, opdata);
+    }
 
     return CKR_OK;
 }
 
-CK_RV digest_update(token *tok, unsigned char *part, unsigned long part_len) {
+CK_RV digest_update_op(token *tok, digest_op_data *supplied_opdata, unsigned char *part, unsigned long part_len) {
 
     check_pointer(part);
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
     digest_op_data *opdata = NULL;
-    rv = token_opdata_get(tok, operation_digest, &opdata);
-    if (rv != CKR_OK) {
-        return rv;
+    if (!supplied_opdata) {
+        rv = token_opdata_get(tok, operation_digest, &opdata);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+    } else {
+        opdata = supplied_opdata;
     }
 
-    tpm_ctx *tpm = tok->tctx;
-
-    rv = tpm_hash_update(tpm, opdata->sequence_handle, part, part_len);
-    if (rv != CKR_OK) {
-        return rv;
+    if (opdata->use_sw_hash) {
+        rv = digest_sw_update(opdata, part, part_len);
+    } else {
+        tpm_ctx *tpm = tok->tctx;
+        rv = tpm_hash_update(tpm, opdata->sequence_handle, part, part_len);
     }
 
-    return CKR_OK;
+    return rv;
 }
 
-CK_RV digest_final(token *tok, unsigned char *digest, unsigned long *digest_len) {
+CK_RV digest_final_op(token *tok, digest_op_data *supplied_opdata, unsigned char *digest, unsigned long *digest_len) {
 
     check_pointer(digest);
     check_pointer(digest_len);
@@ -89,18 +204,26 @@ CK_RV digest_final(token *tok, unsigned char *digest, unsigned long *digest_len)
     CK_RV rv = CKR_GENERAL_ERROR;
 
     digest_op_data *opdata = NULL;
-    rv = token_opdata_get(tok, operation_digest, &opdata);
-    if (rv != CKR_OK) {
-        return rv;
+    if (!supplied_opdata) {
+        rv = token_opdata_get(tok, operation_digest, &opdata);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+    } else {
+        opdata = supplied_opdata;
     }
 
-    tpm_ctx *tpm = tok->tctx;
+    if (opdata->use_sw_hash) {
+        rv = digest_sw_final(opdata, digest, digest_len);
+    } else {
+        tpm_ctx *tpm = tok->tctx;
+        rv = tpm_hash_final(tpm, opdata->sequence_handle, digest, digest_len);
+    }
 
-    rv = tpm_hash_final(tpm, opdata->sequence_handle, digest, digest_len);
-
-    token_opdata_clear(tok);
-
-    free(opdata);
+    if (!supplied_opdata) {
+        token_opdata_clear(tok);
+        digest_op_data_free(&opdata);
+    }
 
     return rv;
 }

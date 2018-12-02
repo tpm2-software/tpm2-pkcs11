@@ -9,6 +9,7 @@
 #include <openssl/rsa.h>
 
 #include "checks.h"
+#include "digest.h"
 #include "log.h"
 #include "session.h"
 #include "session_ctx.h"
@@ -21,10 +22,8 @@ struct sign_opdata {
     tobject *tobj;
     CK_MECHANISM_TYPE mtype;
     bool do_hash;
-    union {
-        twist buffer;
-        uint32_t sequence_handle;
-    };
+    twist buffer;
+    digest_op_data *digest_opdata;
 };
 
 static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
@@ -50,16 +49,18 @@ static CK_RV common_init(operation op, token *tok, CK_MECHANISM_PTR mechanism, C
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    /*
-     * Start a hashing sequence with the TPM, but only if requested.
-     * Some callers perform hashing and padding "off-card".
-     */
-    uint32_t sequence_handle = 0;
+    digest_op_data *digest_opdata = NULL;
     bool do_hash = is_hashing_needed(mechanism->mechanism);
     if (do_hash) {
-        tpm_ctx *tpm = tok->tctx;
-        rv = tpm_hash_init(tpm, mechanism->mechanism, &sequence_handle);
+
+        digest_opdata = digest_op_data_new();
+        if (!digest_opdata) {
+            return CKR_HOST_MEMORY;
+        }
+
+        rv = digest_init_op(tok, digest_opdata, mechanism);
         if (rv != CKR_OK) {
+            digest_op_data_free(&digest_opdata);
             return rv;
         }
     }
@@ -82,7 +83,7 @@ static CK_RV common_init(operation op, token *tok, CK_MECHANISM_PTR mechanism, C
 
     opdata->do_hash = do_hash;
     opdata->mtype = mechanism->mechanism;
-    opdata->sequence_handle = sequence_handle;
+    opdata->digest_opdata = digest_opdata;
 
     /*
      * Store everything for later
@@ -105,8 +106,7 @@ static CK_RV common_update(operation op, token *tok, unsigned char *part, unsign
     }
 
     if (opdata->do_hash) {
-        tpm_ctx *tpm = tok->tctx;
-        rv = tpm_hash_update(tpm, opdata->sequence_handle, part, part_len);
+        rv = digest_update_op(tok, opdata->digest_opdata, part, part_len);
         if (rv != CKR_OK) {
             return rv;
         }
@@ -129,6 +129,104 @@ CK_RV sign_init(token *tok, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 CK_RV sign_update(token *tok, unsigned char *part, unsigned long part_len) {
 
     return common_update(operation_sign, tok, part, part_len);
+}
+
+static CK_RV pkcs1_5_build_struct(CK_MECHANISM_TYPE mech,
+        CK_BYTE_PTR hash, CK_ULONG hash_len,
+        char **built, size_t *built_len) {
+
+    /* These headers are defined in the following RFC
+     *   - https://www.ietf.org/rfc/rfc3447.txt
+     *     - Page 42
+     */
+    static const unsigned char pkcs1_5_hdr_sha1[15] = {
+        0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a,
+        0x05, 0x00, 0x04, 0x14,
+    };
+
+    static const unsigned char pkcs1_5_hdr_sha256[19] = {
+        0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20,
+    };
+
+    static const unsigned char pkcs1_5_hdr_sha384[19] = {
+        0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x02, 0x05, 0x00, 0x04, 0x30,
+    };
+
+    static const unsigned char pkcs1_5_hdr_sha512[19] = {
+        0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x03, 0x05, 0x00, 0x04, 0x40,
+    };
+
+    const unsigned char *hdr;
+    size_t hdr_size;
+
+    switch(mech) {
+    case CKM_SHA1_RSA_PKCS:
+        hdr = pkcs1_5_hdr_sha1;
+        hdr_size = sizeof(pkcs1_5_hdr_sha1);
+        break;
+    case CKM_SHA256_RSA_PKCS:
+        hdr = pkcs1_5_hdr_sha256;
+        hdr_size = sizeof(pkcs1_5_hdr_sha256);
+        break;
+    case CKM_SHA384_RSA_PKCS:
+        hdr = pkcs1_5_hdr_sha384;
+        hdr_size = sizeof(pkcs1_5_hdr_sha384);
+        break;
+    case CKM_SHA512_RSA_PKCS:
+        hdr = pkcs1_5_hdr_sha512;
+        hdr_size = sizeof(pkcs1_5_hdr_sha512);
+        break;
+    default:
+        return CKR_MECHANISM_INVALID;
+    }
+
+    /*
+     * Build and populate a buffer with hdr + hash
+     */
+    char *b = calloc(1, hdr_size + hash_len);
+    if (!b) {
+        return CKR_HOST_MEMORY;
+    }
+
+    memcpy(b, hdr, hdr_size);
+    memcpy(&b[hdr_size], hash, hash_len);
+
+    *built_len = hdr_size + hash_len;
+    *built = b;
+
+    return CKR_OK;
+}
+
+static CK_RV apply_pkcs_1_5_pad(tobject *tobj, char *built, size_t built_len, char **padded, size_t *padded_len) {
+
+    CK_ATTRIBUTE_PTR a = object_get_attribute(tobj, CKA_MODULUS);
+    if (!a) {
+        LOGE("Signing key has no modulus");
+        return CKR_GENERAL_ERROR;
+    }
+
+    size_t out_len = a->ulValueLen;
+
+    char *out = malloc(out_len);
+    if (!out) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    /* Apply the PKCS1.5 padding */
+    int rc = RSA_padding_add_PKCS1_type_1((unsigned char *)out, out_len,
+            (const unsigned char *)built, built_len);
+    if (!rc) {
+        LOGE("Applying RSA padding failed");
+    }
+
+    *padded = out;
+    *padded_len = out_len;
+
+    return CKR_OK;
 }
 
 CK_RV sign_final(token *tok, unsigned char *signature, unsigned long *signature_len) {
@@ -165,46 +263,82 @@ CK_RV sign_final(token *tok, unsigned char *signature, unsigned long *signature_
             goto session_out;
         }
 
-        rv = tpm_hash_final(tpm, opdata->sequence_handle, hash, &hash_len);
+        rv = digest_final_op(tok, opdata->digest_opdata, hash, &hash_len);
         if (rv != CKR_OK) {
             goto session_out;
         }
     }
 
     /*
+     * Their are two cases when we need to use the raw RSA Decrypt to sign the signature:
+     *
+     * CASE 1
      * In the case of CKM_RSA_PKCS the raw DigestInfo structure has been done off-card, just perform
      * a an RSA PKCS1.5 padded private-key encryption formally known as RSA decrypt.
      *
+     * CASE 2
      * This method should also be used if the TPM doesn't support the hash algorithm, ie hash off card,
-     * build digest info ASN1 structure, apply padding and RSA_Decrypt().
+     * build digest info ASN1 structure, apply padding and RSA_Decrypt() AND the signing structure
+     * is PKCS1.5
      */
-    if (opdata->mtype == CKM_RSA_PKCS) {
+    bool is_raw_sign = utils_mech_is_raw_sign(opdata->mtype);
+    bool is_sw_hash = opdata->digest_opdata && opdata->digest_opdata->use_sw_hash;
+    if (is_raw_sign || is_sw_hash) {
 
-        CK_ATTRIBUTE_PTR a = object_get_attribute(opdata->tobj, CKA_MODULUS);
-        if (!a) {
-            LOGE("Signing key has no modulus");
+        bool is_rsa_pkcs1_5 = utils_mech_is_rsa_pkcs(opdata->mtype);
+        if (!is_rsa_pkcs1_5) {
+            LOGE("Do not support synthesizing non PKCS 1_5 signing/padding schemes");
+            return CKR_MECHANISM_INVALID;
+        }
+
+        bool free_built = false;
+        char *built = NULL;
+        size_t built_len = 0;
+
+        if(opdata->do_hash) {
+            /*
+             * Ok we did the hash, AND because of the entry condition, it's a SW hash, as is_raw_sign
+             * means we didn't do the hashing. In this case, hash and hash_len should be set with
+             * the digest.
+             */
+            assert(hash);
+            assert(hash_len);
+            assert(!opdata->buffer);
+
+            rv = pkcs1_5_build_struct(opdata->mtype, hash, hash_len, &built, &built_len);
+            if (rv != CKR_OK) {
+                return rv;
+            }
+
+            free_built = true;
+
+        } else {
+            /*
+             * We just mark the existing PKCS1.5 signing structure as
+             * hash so we can just apply padding to hash below.
+             */
+            assert(!hash);
+            assert(!hash_len);
+            assert(opdata->buffer);
+
+            built = (char *)opdata->buffer;
+            built_len = twist_len(opdata->buffer);
+        }
+
+        /* apply padding */
+        char *padded = NULL;
+        size_t padded_len = 0;
+        rv = apply_pkcs_1_5_pad(opdata->tobj, built, built_len, &padded, &padded_len);
+        if (free_built) {
+            free(built);
+        }
+        if (rv != CKR_OK) {
             goto session_out;
         }
 
-        hash_len = a->ulValueLen;
-
-        hash = malloc(hash_len);
-        if (!hash_len) {
-            LOGE("oom");
-            rv = CKR_HOST_MEMORY;
-            goto session_out;
-        }
-
-        /* Apply the PKCS1.5 padding */
-        unsigned int len = twist_len(opdata->buffer);
-        int rc = RSA_padding_add_PKCS1_type_1(hash, hash_len,
-                (unsigned char *)opdata->buffer, len);
-        if (!rc) {
-            LOGE("Applying RSA padding failed");
-            goto session_out;
-        }
-
-        rv = tpm_rsa_decrypt(tpm, opdata->tobj, opdata->mtype, hash, hash_len, signature, signature_len);
+        /* sign padded pkcs 1.5 structure */
+        rv = tpm_rsa_decrypt(tpm, opdata->tobj, opdata->mtype, (CK_BYTE_PTR)padded, padded_len, signature, signature_len);
+        free(padded);
         if (rv != CKR_OK) {
             goto session_out;
         }
@@ -226,6 +360,7 @@ session_out:
     }
 
     token_opdata_clear(tok);
+    digest_op_data_free(&opdata->digest_opdata);
     free(opdata);
 
     return rv;
@@ -270,7 +405,7 @@ CK_RV verify_final (token *tok, unsigned char *signature, unsigned long signatur
     CK_BYTE hash[1024];
     CK_ULONG hash_len = sizeof(hash);
 
-    rv = tpm_hash_final(tpm, opdata->sequence_handle, hash, &hash_len);
+    rv = digest_final_op(tok, opdata->digest_opdata, hash, &hash_len);
     if (rv != CKR_OK) {
         return rv;
     }

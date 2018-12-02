@@ -696,6 +696,8 @@ bool tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_BYTE_PTR data, CK_ULONG datalen,
     return true;
 }
 
+#define P2_RC_HASH (TPM2_RC_HASH + TPM2_RC_P + TPM2_RC_2)
+
 CK_RV tpm_hash_init(tpm_ctx *ctx, CK_MECHANISM_TYPE mode, uint32_t *sequence_handle) {
 
     TPM2B_AUTH null_auth = TPM2B_EMPTY_INIT;
@@ -717,7 +719,11 @@ CK_RV tpm_hash_init(tpm_ctx *ctx, CK_MECHANISM_TYPE mode, uint32_t *sequence_han
             &null_auth,
             halg,
             sequence_handle);
+    rval = tpm2_error_get(rval);
     if (rval != TPM2_RC_SUCCESS) {
+        if (rval == P2_RC_HASH) {
+            return CKR_MECHANISM_INVALID;
+        }
         LOGE("Esys_HashSequenceStart: 0x%x", rval);
         return CKR_GENERAL_ERROR;
     }
@@ -794,10 +800,14 @@ TPM2_ALG_ID mech_to_rsa_dec_alg(CK_MECHANISM_TYPE mech) {
 
     switch(mech) {
     case CKM_RSA_PKCS:
+    case CKM_SHA1_RSA_PKCS:
+    case CKM_SHA256_RSA_PKCS:
+    case CKM_SHA384_RSA_PKCS:
+    case CKM_SHA512_RSA_PKCS:
         /* RSA Decrypt expects padded data */
         return TPM2_ALG_NULL;
     default:
-        LOGE("Unsupported RSA cipher mechansim, got: %lu", mech);
+        LOGE("Unsupported RSA cipher mechanism, got: %lu", mech);
         return TPM2_ALG_ERROR;
     }
 }
