@@ -13,56 +13,22 @@
 #include "session_ctx.h"
 #include "utils.h"
 
-CK_RV key_gen (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism,
+CK_RV key_gen (token *tok, CK_MECHANISM *mechanism,
         CK_ATTRIBUTE *public_key_template, unsigned long public_key_attribute_count, CK_ATTRIBUTE *private_key_template,
         unsigned long private_key_attribute_count, CK_OBJECT_HANDLE *public_key, CK_OBJECT_HANDLE *private_key) {
 
-    check_is_init();
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    session_ctx *ctx = NULL;
-    rv = session_lookup(session, &ctx);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
     // TODO use me
-    (void) mechanism;
-    (void) public_key_template;
-    (void) public_key_attribute_count;
-    (void) private_key_template;
-    (void) private_key_attribute_count;
+    UNUSED(tok);
 
-    //tpm_ctx *sys = session_ctx_get_tpm_ctx(ctx);
+    UNUSED(mechanism);
 
-//    util_buf *so_pin = session_ctx_get_so_pin_unlocked(ctx);
-//    assert(so_pin);
-//
-//    db_get_primary_key_auth();
-//
-//    bool res = tpm_genkeypair(sys, salt, NULL,
-//            public_key_template, public_key_attribute_count,
-//            private_key_template, private_key_attribute_count);
-//    if (!res) {
-//        goto unlock;
-//    }
+    UNUSED(public_key);
+    UNUSED(public_key_template);
+    UNUSED(public_key_attribute_count);
 
-//    rv = db_insert_keypair(public_key_template, public_key_attribute_count,
-//            private_key_template, private_key_attribute_count,
-//            public_key, private_key);
-//    if (!res) {
-//        goto unlock;
-//    }
+    UNUSED(private_key);
+    UNUSED(private_key_template);
+    UNUSED(private_key_attribute_count);
 
-    // TODO Real keygen here and set up objects.
-    *public_key = 42;
-    *private_key= 43;
-
-    rv = CKR_FUNCTION_NOT_SUPPORTED;
-
-//unlock:
-    session_ctx_unlock(ctx);
-
-    return rv;
+    return CKR_FUNCTION_NOT_SUPPORTED;
 }

@@ -19,6 +19,11 @@
 #include "tcti_ldr.h"
 #include "tpm.h"
 
+struct tpm_ctx {
+    TSS2_TCTI_CONTEXT *tcti_ctx;
+    ESYS_CONTEXT *esys_ctx;
+};
+
 #define TPM2B_INIT(xsize) { .size = xsize, }
 #define TPM2B_EMPTY_INIT TPM2B_INIT(0)
 
@@ -119,15 +124,6 @@ struct tpm2_hierarchy_pdata {
     }, \
 }
 
-static inline ESYS_CONTEXT *from_ctx(tpm_ctx *ctx) {
-    return (ESYS_CONTEXT *)ctx;
-}
-
-static inline tpm_ctx *to_ctx(ESYS_CONTEXT *sys) {
-    return (tpm_ctx *)sys;
-}
-
-
 #define SUPPORTED_ABI_VERSION \
 { \
     .tssCreator = 1, \
@@ -150,90 +146,46 @@ static ESYS_CONTEXT* esys_ctx_init(TSS2_TCTI_CONTEXT *tcti_ctx) {
     return esys_ctx;
 }
 
-static void tcti_teardown (TSS2_TCTI_CONTEXT *tcti_context) {
-
-    Tss2_Tcti_Finalize(tcti_context);
-    free(tcti_context);
-}
-
-static void esys_teardown (ESYS_CONTEXT *esys_ctx) {
-
-    Esys_Finalize(&esys_ctx);
-}
-
-static struct {
-    unsigned long tcti_cnt;
-    void *tcti_mutex;
-    TSS2_TCTI_CONTEXT *tcti;
-    TPM2_HANDLE phandle;
-} global;
-
-static void lock_tcti(void) {
-    mutex_lock_fatal(global.tcti_mutex);
-}
-
-static void unlock_tcti(void) {
-    mutex_unlock_fatal(global.tcti_mutex);
-}
-
-CK_RV tpm_init(void) {
-
-    return mutex_create(&global.tcti_mutex);
-}
-
-void tpm_destroy(void) {
-
-    mutex_destroy(global.tcti_mutex);
-    global.tcti_mutex = NULL;
-}
-
-static void tpm_tcti_free_unlocked(void) {
-
-    assert(global.tcti_cnt);
-
-    global.tcti_cnt--;
-    if (!global.tcti_cnt) {
-        tcti_teardown (global.tcti);
-        global.tcti = NULL;
-    }
-}
-
-static bool tpm_ctx_new_unlocked(void) {
-
-    if (!global.tcti) {
-        global.tcti = tcti_ldr_load();
-    }
-
-    global.tcti_cnt++;
-
-    return global.tcti ? true : false;
-}
-
 void tpm_ctx_free(tpm_ctx *ctx) {
 
-    esys_teardown (from_ctx(ctx));
-    tpm_tcti_free_unlocked();
+    Esys_Finalize(&ctx->esys_ctx);
+    Tss2_Tcti_Finalize(ctx->tcti_ctx);
+    free(ctx->tcti_ctx);
+    free(ctx);
 }
 
-tpm_ctx *tpm_ctx_new(void) {
+CK_RV tpm_ctx_new(tpm_ctx **tctx) {
 
-    ESYS_CONTEXT *sys = NULL;
+    ESYS_CONTEXT *esys = NULL;
+    TSS2_TCTI_CONTEXT *tcti = NULL;
 
-    lock_tcti();
-    bool res = tpm_ctx_new_unlocked();
-    if (!res) {
-        goto unlock;
+    tpm_ctx *t = calloc(1, sizeof(*t));
+    if (!t) {
+        return CKR_HOST_MEMORY;
     }
 
-    sys = esys_ctx_init(global.tcti);
-    if (!sys) {
-        tpm_tcti_free_unlocked();
-        goto unlock;
+    tcti = tcti_ldr_load();
+    if (!tcti) {
+        goto error;
     }
 
-unlock:
-    unlock_tcti();
-    return to_ctx(sys);
+    esys = esys_ctx_init(tcti);
+    if (!esys) {
+        goto error;
+    }
+
+    /* populate */
+    t->esys_ctx = esys;
+    t->tcti_ctx = tcti;
+
+    /* assign back (return via pointer) */
+    *tctx = t;
+
+    return CKR_OK;
+
+error:
+    tpm_ctx_free(t);
+    return CKR_GENERAL_ERROR;
 }
 
 bool files_get_file_size(FILE *fp, unsigned long *file_size, const char *path) {
@@ -385,10 +337,6 @@ bool tpm_getrandom(tpm_ctx *ctx, BYTE *data, size_t size) {
 
     bool result = false;
 
-    lock_tcti();
-
-    ESYS_CONTEXT *esys_ctx = from_ctx(ctx);
-
     /*
      * This will get re-used once allocated by esys
      */
@@ -400,7 +348,7 @@ bool tpm_getrandom(tpm_ctx *ctx, BYTE *data, size_t size) {
                 sizeof(rand_bytes->buffer) : size;
 
         TSS2_RC rval = Esys_GetRandom(
-            esys_ctx,
+            ctx->esys_ctx,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
@@ -421,7 +369,6 @@ bool tpm_getrandom(tpm_ctx *ctx, BYTE *data, size_t size) {
 
 out:
     free(rand_bytes);
-    unlock_tcti();
 
     return result;
 }
@@ -429,10 +376,6 @@ out:
 CK_RV tpm_stirrandom(tpm_ctx *ctx, unsigned char *seed, unsigned long seed_len) {
 
     TSS2_RC rc = TSS2_TCTI_RC_GENERAL_FAILURE;;
-
-    lock_tcti();
-
-    ESYS_CONTEXT *esys_ctx = from_ctx(ctx);
 
     size_t offset = 0;
     while(offset < seed_len) {
@@ -445,33 +388,29 @@ CK_RV tpm_stirrandom(tpm_ctx *ctx, unsigned char *seed, unsigned long seed_len) 
         memcpy(stir.buffer, &seed[offset], chunk);
 
         rc = Esys_StirRandom(
-            esys_ctx,
+            ctx->esys_ctx,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             &stir);
         if (rc != TSS2_RC_SUCCESS) {
             LOGE("Esys_StirRandom: 0x%x:", rc);
-            goto out;
+            return CKR_GENERAL_ERROR;
         }
 
         offset += seed_len;
     }
 
-out:
-    unlock_tcti();
-    return rc == TSS2_RC_SUCCESS ? CKR_OK : CKR_GENERAL_ERROR;
+    return CKR_OK;
 }
 
 bool tpm_register_handle(tpm_ctx *ctx, uint32_t *handle) {
 
     ESYS_TR object;
 
-    ESYS_CONTEXT *esys_ctx = from_ctx(ctx);
-
     TSS2_RC rval =
         Esys_TR_FromTPMPublic(
-            esys_ctx,
+            ctx->esys_ctx,
             *handle,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
@@ -517,8 +456,6 @@ bool tpm_loadobj(
         twist pub_path, twist priv_path,
         uint32_t *handle) {
 
-    bool rc = false;
-
     TPM2B_PRIVATE priv = { .size = 0 };
     bool res = files_load_private(priv_path, &priv);
     if (!res) {
@@ -531,17 +468,13 @@ bool tpm_loadobj(
         return false;
     }
 
-    ESYS_CONTEXT *esys_ctx = from_ctx(ctx);
-
-    bool tmp_rc = set_esys_auth(esys_ctx, phandle, auth);
+    bool tmp_rc = set_esys_auth(ctx->esys_ctx, phandle, auth);
     if (!tmp_rc) {
         return false;
     }
 
-    lock_tcti();
-
     TSS2_RC rval = Esys_Load(
-               esys_ctx,
+               ctx->esys_ctx,
                phandle,
                ESYS_TR_PASSWORD,
                ESYS_TR_NONE,
@@ -551,26 +484,17 @@ bool tpm_loadobj(
                handle);
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Esys_Load: 0x%x:", rval);
-        goto out;
+        return false;
     }
 
-    rc = true;
-
-out:
-    unlock_tcti();
-    return rc;
+    return true;
 }
 
 bool tpm_flushcontext(tpm_ctx *ctx, uint32_t handle) {
 
-    ESYS_CONTEXT *esys_ctx = from_ctx(ctx);
-
-    lock_tcti();
-
     TSS2_RC rval = Esys_FlushContext(
-                esys_ctx,
+                ctx->esys_ctx,
                 handle);
-    unlock_tcti();
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Esys_FlushContext: 0x%x", rval);
         return false;
@@ -637,19 +561,15 @@ twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth) {
 
     twist t = NULL;
 
-    ESYS_CONTEXT *esys_ctx = from_ctx(ctx);
-
-    bool result = set_esys_auth(esys_ctx, handle, objauth);
+    bool result = set_esys_auth(ctx->esys_ctx, handle, objauth);
     if (!result) {
         return false;
     }
 
     TPM2B_SENSITIVE_DATA *unsealed_data = NULL;
 
-    lock_tcti();
-
     TSS2_RC rval = Esys_Unseal(
-            esys_ctx,
+            ctx->esys_ctx,
             handle,
             ESYS_TR_PASSWORD,
             ESYS_TR_NONE,
@@ -657,12 +577,11 @@ twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth) {
             &unsealed_data);
     if (rval != TPM2_RC_SUCCESS) {
         LOGE("Tss2_Sys_Unseal: 0x%X", rval);
-        goto out;
+        return NULL;
     }
 
     t = twistbin_new(unsealed_data->buffer, unsealed_data->size);
-out:
-    unlock_tcti();
+
     free(unsealed_data);
 
     return t;
@@ -670,14 +589,10 @@ out:
 
 bool tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
 
-    bool rv = false;
-
-    ESYS_CONTEXT *esys_ctx = from_ctx(ctx);
-
     twist auth = tobj->unsealed_auth;
     TPMI_DH_OBJECT handle = tobj->handle;
 
-    bool result = set_esys_auth(esys_ctx, handle, auth);
+    bool result = set_esys_auth(ctx->esys_ctx, handle, auth);
     if (!result) {
         return false;
     }
@@ -704,7 +619,7 @@ bool tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR d
 
     TPMT_SIGNATURE *signature = NULL;
     TSS2_RC rval = Esys_Sign(
-            esys_ctx,
+            ctx->esys_ctx,
             handle,
             ESYS_TR_PASSWORD,
             ESYS_TR_NONE,
@@ -719,7 +634,7 @@ bool tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR d
     }
 
     if (*siglen <  sizeof(signature->signature.rsassa.sig.size)) {
-        goto out;
+        return false;
     }
 
     assert(signature->sigAlg == TPM2_ALG_RSASSA);
@@ -727,25 +642,17 @@ bool tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR d
     *siglen = signature->signature.rsassa.sig.size;
     memcpy(sig, signature->signature.rsassa.sig.buffer, *siglen);
 
-    rv = true;
-
-out:
-    unlock_tcti();
     free(signature);
 
-    return rv;
+    return true;
 }
 
 bool tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen) {
 
-    bool rc = false;
-
-    ESYS_CONTEXT *esys_ctx = from_ctx(ctx);
-
     twist auth = tobj->unsealed_auth;
     TPMI_DH_OBJECT handle = tobj->handle;
 
-    bool tmp_rc = set_esys_auth(esys_ctx, handle, auth);
+    bool tmp_rc = set_esys_auth(ctx->esys_ctx, handle, auth);
     if (tmp_rc) {
         return false;
     }
@@ -771,10 +678,8 @@ bool tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_BYTE_PTR data, CK_ULONG datalen,
 
     TPMT_TK_VERIFIED *validation = NULL;
 
-    lock_tcti();
-
     TSS2_RC rval = Esys_VerifySignature(
-            esys_ctx,
+            ctx->esys_ctx,
             handle,
             ESYS_TR_PASSWORD,
             ESYS_TR_NONE,
@@ -784,22 +689,14 @@ bool tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_BYTE_PTR data, CK_ULONG datalen,
             &validation);
     if (rval != TPM2_RC_SUCCESS) {
         LOGE("Esys_VerifySignature: 0x%x", rval);
-        goto out;
+        return false;
     }
 
-    rc = true;
-
-out:
-    unlock_tcti();
     free(validation);
-    return rc;
+    return true;
 }
 
 CK_RV tpm_hash_init(tpm_ctx *ctx, CK_MECHANISM_TYPE mode, uint32_t *sequence_handle) {
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    ESYS_CONTEXT *esys_ctx = from_ctx(ctx);
 
     TPM2B_AUTH null_auth = TPM2B_EMPTY_INIT;
 
@@ -812,10 +709,8 @@ CK_RV tpm_hash_init(tpm_ctx *ctx, CK_MECHANISM_TYPE mode, uint32_t *sequence_han
         return CKR_OK;
     }
 
-    lock_tcti();
-
     TSS2_RC rval = Esys_HashSequenceStart(
-            esys_ctx,
+            ctx->esys_ctx,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
@@ -824,23 +719,13 @@ CK_RV tpm_hash_init(tpm_ctx *ctx, CK_MECHANISM_TYPE mode, uint32_t *sequence_han
             sequence_handle);
     if (rval != TPM2_RC_SUCCESS) {
         LOGE("Esys_HashSequenceStart: 0x%x", rval);
-        goto out;
+        return CKR_GENERAL_ERROR;
     }
 
-    rv = CKR_OK;
-
-out:
-    unlock_tcti();
-    return rv;
+    return CKR_OK;
 }
 
 CK_RV tpm_hash_update(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, CK_ULONG data_len) {
-
-    CK_RV rc = CKR_GENERAL_ERROR;
-
-    ESYS_CONTEXT *esys_ctx = from_ctx(ctx);
-
-    lock_tcti();
 
     size_t offset = 0;
     while(offset < data_len) {
@@ -853,7 +738,7 @@ CK_RV tpm_hash_update(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, 
         memcpy(buffer.buffer, &data[offset], send);
 
         TSS2_RC rval = Esys_SequenceUpdate(
-                    esys_ctx,
+                    ctx->esys_ctx,
                     sequence_handle,
                     ESYS_TR_PASSWORD,
                     ESYS_TR_NONE,
@@ -861,34 +746,24 @@ CK_RV tpm_hash_update(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, 
                     &buffer);
         if (rval != TPM2_RC_SUCCESS) {
             LOGE("Esys_SequenceUpdate: 0x%x", rval);
-            goto out;
+            return CKR_GENERAL_ERROR;
         }
 
         offset += send;
     }
 
-    rc = CKR_OK;
-
-out:
-    unlock_tcti();
-    return rc;
+    return CKR_OK;
 }
 
 CK_RV tpm_hash_final(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
-
-    CK_RV rc = CKR_GENERAL_ERROR;
-
-    ESYS_CONTEXT *esys_ctx = from_ctx(ctx);
 
     TPM2B_MAX_BUFFER no_data = { .size = 0 };
 
     TPMT_TK_HASHCHECK *validation = NULL;
     TPM2B_DIGEST *result = NULL;
 
-    lock_tcti();
-
     TSS2_RC rval = Esys_SequenceComplete(
-            esys_ctx,
+            ctx->esys_ctx,
             sequence_handle,
             ESYS_TR_PASSWORD,
             ESYS_TR_NONE,
@@ -899,25 +774,20 @@ CK_RV tpm_hash_final(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, C
             &validation);
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Esys_SequenceComplete: 0x%x", rval);
-        goto out;
+        return CKR_GENERAL_ERROR;
     }
 
     if (*data_len < result->size) {
-        rc = CKR_BUFFER_TOO_SMALL;
-        goto out;
+        return CKR_BUFFER_TOO_SMALL;
     }
 
     *data_len = result->size;
     memcpy(data, result->buffer, result->size);
 
-    rc = CKR_OK;
-
-out:
-    unlock_tcti();
     free(result);
     free(validation);
 
-    return rc;
+    return CKR_OK;
 }
 
 TPM2_ALG_ID mech_to_rsa_dec_alg(CK_MECHANISM_TYPE mech) {
@@ -936,8 +806,6 @@ CK_RV tpm_rsa_decrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech,
         CK_BYTE_PTR ctext, CK_ULONG ctextlen,
         CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen) {
 
-    CK_RV rc = CKR_GENERAL_ERROR;
-
     TPM2_ALG_ID alg = mech_to_rsa_dec_alg(mech);
     if (alg == TPM2_ALG_ERROR) {
         return CKR_ARGUMENTS_BAD;
@@ -954,25 +822,20 @@ CK_RV tpm_rsa_decrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech,
     }
     memcpy(tpm_ctext.buffer, ctext, ctextlen);
 
-    ESYS_CONTEXT *esys_ctx = from_ctx(ctx);
-
     twist auth = tobj->unsealed_auth;
     ESYS_TR handle = tobj->handle;
-    bool result = set_esys_auth(esys_ctx, handle, auth);
+    bool result = set_esys_auth(ctx->esys_ctx, handle, auth);
     if (!result) {
         return CKR_GENERAL_ERROR;
     }
 
     TPMT_RSA_DECRYPT scheme  = { .scheme = alg };
 
-
     TPM2B_DATA label = TPM2B_EMPTY_INIT;
     TPM2B_PUBLIC_KEY_RSA *tpm_ptext;
 
-    lock_tcti();
-
     TSS2_RC rval = Esys_RSA_Decrypt(
-            esys_ctx,
+            ctx->esys_ctx,
             handle,
             ESYS_TR_PASSWORD,
             ESYS_TR_NONE,
@@ -983,30 +846,23 @@ CK_RV tpm_rsa_decrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech,
             &tpm_ptext);
     if (rval != TPM2_RC_SUCCESS) {
         LOGE("Esys_RSA_Decrypt: 0x%x", rval);
-        goto out;
+        return CKR_GENERAL_ERROR;
     }
 
     if (*ptextlen < tpm_ctext.size) {
-        rc = CKR_BUFFER_TOO_SMALL;
-        goto out;
+        return CKR_BUFFER_TOO_SMALL;
     }
 
     *ptextlen = tpm_ptext->size;
     memcpy(ptext, tpm_ptext->buffer, tpm_ptext->size);
 
-    rc = CKR_OK;
-
-out:
-    unlock_tcti();
     free(tpm_ptext);
 
-    return rc;
+    return CKR_OK;
 }
 
 static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_MECHANISM_TYPE mode, TPMI_YES_NO is_decrypt,
         twist iv_in, twist data_in, twist *data_out, twist *iv_out) {
-
-    CK_RV rc = CKR_GENERAL_ERROR;
 
     TPMI_ALG_SYM_MODE tpm_mode;
     switch(mode) {
@@ -1024,8 +880,7 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_ME
         return CKR_ARGUMENTS_BAD;
     }
 
-    ESYS_CONTEXT *esys_ctx = from_ctx(ctx);
-    bool result = set_esys_auth(esys_ctx, handle, objauth);
+    bool result = set_esys_auth(ctx->esys_ctx, handle, objauth);
     if (!result) {
         return CKR_GENERAL_ERROR;
     }
@@ -1060,13 +915,11 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_ME
     TPM2B_MAX_BUFFER *tpm_data_out = NULL;
     TPM2B_IV *tpm_iv_out = NULL;
 
-    lock_tcti();
-
     unsigned version = 2;
 
     TSS2_RC rval =
         Esys_EncryptDecrypt2(
-            esys_ctx,
+            ctx->esys_ctx,
             handle,
             ESYS_TR_PASSWORD,
             ESYS_TR_NONE,
@@ -1081,7 +934,7 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_ME
     if (tpm2_error_get(rval) == TPM2_RC_COMMAND_CODE) {
         version = 1;
         rval = Esys_EncryptDecrypt(
-            esys_ctx,
+            ctx->esys_ctx,
             handle,
             ESYS_TR_PASSWORD,
             ESYS_TR_NONE,
@@ -1096,14 +949,14 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_ME
 
     if(rval != TSS2_RC_SUCCESS) {
         LOGE("Esys_EncryptDecrypt%u: 0x%x", version, rval);
-        goto out;
+        return CKR_GENERAL_ERROR;
     }
 
     /* copy output data from tpm into twist types */
     if (iv_out) {
         *iv_out = twistbin_new(tpm_iv_out->buffer, tpm_iv_out->size);
         if (!*iv_out) {
-            goto out;
+            return CKR_HOST_MEMORY;
         }
     }
 
@@ -1112,17 +965,13 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_ME
         if (iv_out) {
             twist_free(*iv_out);
         }
-        goto out;
+        return CKR_HOST_MEMORY;
     }
 
-    rc = CKR_OK;
-
-out:
-    unlock_tcti();
     free(tpm_data_out);
     free(tpm_iv_out);
 
-    return rc;
+    return CKR_OK;
 }
 
 /*

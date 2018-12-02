@@ -14,6 +14,7 @@
 #include "pkcs11.h"
 #include "session.h"
 #include "session_table.h"
+#include "token.h"
 #include "tpm.h"
 #include "utils.h"
 
@@ -21,7 +22,7 @@ static CK_RV check_max_sessions(session_table *s_table) {
 
     unsigned long all;
 
-    session_table_get_cnt_unlocked(s_table, &all, NULL, NULL);
+    session_table_get_cnt(s_table, &all, NULL, NULL);
 
     return (all > MAX_NUM_OF_SESSIONS) ?
         CKR_SESSION_COUNT : CKR_OK;
@@ -79,10 +80,9 @@ CK_RV session_open(CK_SLOT_ID slot_id, CK_FLAGS flags, void *application,
 	    return CKR_SLOT_ID_INVALID;
 	}
 
-	session_table_lock(t->s_table);
 	rv = check_max_sessions(t->s_table);
 	if (rv != CKR_OK) {
-	    goto unlock;
+	    return rv;
 	}
 
 	/*
@@ -92,18 +92,14 @@ CK_RV session_open(CK_SLOT_ID slot_id, CK_FLAGS flags, void *application,
 	    return CKR_SESSION_READ_WRITE_SO_EXISTS;
 	}
 
-	rv = session_table_new_ctx_unlocked(t->s_table, session, t, flags);
+	rv = session_table_new_entry(t->s_table, session, t, flags);
     if (rv != CKR_OK) {
-        goto unlock;
+        return rv;
     }
 
 	add_tokid_to_session_handle(t->id, session);
 
-	rv = CKR_OK;
-
-unlock:
-	session_table_unlock(t->s_table);
-	return rv;
+	return CKR_OK;
 }
 
 CK_RV session_close(CK_SESSION_HANDLE session) {
@@ -129,7 +125,7 @@ CK_RV session_closeall(CK_SLOT_ID slot_id) {
     return CKR_OK;
 }
 
-CK_RV session_lookup(CK_SESSION_HANDLE session, session_ctx **ctx) {
+CK_RV session_lookup(CK_SESSION_HANDLE session, token **tok, session_ctx **ctx) {
 
     token *tmp = NULL;
     unsigned tokid = get_tokid_from_session_handle_and_cleanse(&session);
@@ -140,27 +136,23 @@ CK_RV session_lookup(CK_SESSION_HANDLE session, session_ctx **ctx) {
         return CKR_SESSION_HANDLE_INVALID;
     }
 
+    token_lock(tmp);
+
+    *tok = tmp;
+
     return CKR_OK;
 }
 
-CK_RV session_login (CK_SESSION_HANDLE session, CK_USER_TYPE user_type,
-        unsigned char *pin, unsigned long pin_len) {
 
-    check_is_init();
+CK_RV session_login(token *tok, CK_USER_TYPE user_type,
+        unsigned char *pin, unsigned long pin_len) {
 
     twist tpin = NULL;
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    session_ctx *ctx = NULL;
-    rv = session_lookup(session, &ctx);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
     tpin = twistbin_new(pin, pin_len);
     if (!tpin) {
-        rv = CKR_HOST_MEMORY;
-        goto out;
+        return CKR_HOST_MEMORY;
     }
 
     // TODO Handle CKU_CONTEXT_SPECIFIC
@@ -169,7 +161,7 @@ CK_RV session_login (CK_SESSION_HANDLE session, CK_USER_TYPE user_type,
         case CKU_SO:
             /* falls-through */
         case CKU_USER:
-            rv = session_ctx_token_login(ctx, tpin, user_type);
+            rv = token_login(tok, tpin, user_type);
         break;
         case CKU_CONTEXT_SPECIFIC:
             rv = CKR_USER_TYPE_INVALID;
@@ -180,50 +172,26 @@ CK_RV session_login (CK_SESSION_HANDLE session, CK_USER_TYPE user_type,
 
     twist_free(tpin);
 
-out:
-    session_ctx_unlock(ctx);
-
     return rv;
 }
 
-CK_RV session_logout (CK_SESSION_HANDLE session) {
+CK_RV session_logout(token *tok) {
 
-    check_is_init();
-
-    session_ctx *ctx = NULL;
-    CK_RV rv = session_lookup(session, &ctx);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    rv = session_ctx_token_logout(ctx);
-
-    return rv;
+    return token_logout(tok);
 }
 
-CK_RV session_get_info (CK_SESSION_HANDLE session, CK_SESSION_INFO *info) {
+CK_RV session_get_info(token *tok, session_ctx *ctx, CK_SESSION_INFO *info) {
 
-    check_is_init();
     check_pointer(info);
-
-    session_ctx *ctx = NULL;
-    CK_RV rv = session_lookup(session, &ctx);
-    if (rv != CKR_OK) {
-        return rv;
-    }
 
     info->flags = session_ctx_flags_get(ctx);
 
-    token *t = session_ctx_get_tok(ctx);
-    info->slotID = t->id;
-
+    info->slotID = tok->id;
 
     info->state = session_ctx_state_get(ctx);
 
     // We'll need to set this state error at some point, perhaps TSS2_RC's
     info->ulDeviceError = 0;
-
-    session_ctx_unlock(ctx);
 
     return CKR_OK;
 }

@@ -9,7 +9,8 @@
 #include <stdbool.h>
 
 #include "pkcs11.h"
-#include "token.h"
+
+typedef struct token token;
 
 #define SLOT_ID 0x1234
 

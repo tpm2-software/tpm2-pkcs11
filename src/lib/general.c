@@ -201,11 +201,6 @@ CK_RV general_init(void *init_args) {
      *
      * THESE MUST GO AFTER MUTEX INIT above!!
      */
-    rv  = tpm_init();
-    if (rv != CKR_OK) {
-        goto err;
-    }
-
     rv = db_init();
     if (rv != CKR_OK) {
         goto err;
@@ -220,7 +215,6 @@ CK_RV general_init(void *init_args) {
 
     return CKR_OK;
 err:
-    tpm_destroy();
     return rv;
 }
 
@@ -233,7 +227,6 @@ CK_RV general_finalize(void *reserved) {
 
     _g_is_init = false;
 
-    tpm_destroy();
     db_destroy();
     slot_destroy();
 

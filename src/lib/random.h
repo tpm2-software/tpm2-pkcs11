@@ -8,8 +8,11 @@
 
 #include "pkcs11.h"
 
-CK_RV random_get(CK_SESSION_HANDLE session, unsigned char *random_data, unsigned long random_len);
+typedef struct token token;
+typedef struct session_ctx session_ctx;
 
-CK_RV seed_random (CK_SESSION_HANDLE session, unsigned char *seed, unsigned long seed_len);
+CK_RV random_get(token *tok, unsigned char *random_data, unsigned long random_len);
+
+CK_RV seed_random(token *tok, unsigned char *seed, unsigned long seed_len);
 
 #endif /* SRC_PKCS11_RANDOM_H_ */
