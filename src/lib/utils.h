@@ -51,4 +51,25 @@ twist aes256_gcm_decrypt(const twist key, const twist objauth);
  */
 size_t utils_get_halg_size(CK_MECHANISM_TYPE mttype);
 
+/**
+ * True if a mechanism is a "raw" sign. A raw signing operation
+ * is defined as a signing structure constructed by the application,
+ * for instance mechanism type CKM_RSA_PKCS.
+ * @param mech
+ *  The mechanism to check.
+ * @return
+ *  True if it is a raw signature, else it isn't.
+ */
+bool utils_mech_is_raw_sign(CK_MECHANISM_TYPE mech);
+
+/**
+ * True if the mechanism is an RSA PKCS v1.5 signing
+ * scheme.
+ * @param mech
+ *  The mechanism to check
+ * @return
+ *  True if it is, false otherwise.
+ */
+bool utils_mech_is_rsa_pkcs(CK_MECHANISM_TYPE mech);
+
 #endif /* SRC_PKCS11_UTILS_H_ */
