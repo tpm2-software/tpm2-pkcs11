@@ -7,3 +7,5 @@ compiler:
 - clang
 script:
   - ./.ci/travis.run
+after_failure:
+  - cat tpm2-pkcs11/test-suite.log
