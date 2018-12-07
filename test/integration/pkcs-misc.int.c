@@ -296,7 +296,7 @@ static void test_session_cnt(void **state) {
 
 
     rv = C_GetTokenInfo(slot, &info);
-    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(rv, 32);
 
     assert_int_equal(info.ulSessionCount, 0);
     assert_int_equal(info.ulRwSessionCount, 0);
