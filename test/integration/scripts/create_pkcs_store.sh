@@ -81,6 +81,12 @@ for t in "label" "wrap-sw"; do
 	  tpm2_ptool.py addkey --algorithm=rsa2048 --label="$t" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 	done;
 	echo "Added RSA Keys"
+
+	echo "Adding 2 EC p256 keys under token \"$t\""
+	for i in `seq 0 1`; do
+	  tpm2_ptool.py addkey --algorithm=ecc256 --label="$t" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+	done;
+	echo "Added EC Keys"
 done;
 
 # add 1 aes key under label "import-keys"
