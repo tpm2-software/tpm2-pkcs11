@@ -1353,16 +1353,6 @@ class AddKeyCommand(NewKeyCommandBase):
 
     # Creates a new key
     def new_key_create(self, sobjctx, sobjauth, objauth, tpm2, path, alg, privkey):
-        if alg.startswith('rsa'):
-            size = int(alg[3:],0)
-        elif alg.startswith('aes'):
-            size = int(alg[3:],0)
-            # XXX: We set the mode for the tpm to NULL so we can support arbitrary mechanisms on use, but we store it
-            # as CBC for now. We may wish to make this an asterik or NULL indicating we don't filter it out...
-            # Unfortunatley AES mechs are not bitwise flags, so we can't just or them in, and 0 is a valid
-            # CKM_ value, so we can't use 0. Maybe CKM_VENDOR_DEFINED | XXX.
-        else:
-            sys.exit('Unknown algorithm, got: "%s"' % alg)
 
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.create(sobjctx, sobjauth, objauth, alg=alg)
 
