@@ -75,10 +75,12 @@ CKO_PRIVATE_KEY = 3
 CKO_SECRET_KEY  = 4
 
 CKK_RSA = 0
+CKK_EC = 0x3
 CKK_AES = 0x1f
 
 CKM_RSA_PKCS_OAEP = 9
 CKM_AES_CBC = 0x1082
+CKM_ECDSA = 0x1041
 
 CKA_LABEL = 0x3
 CKA_ID = 0x102
@@ -1214,7 +1216,17 @@ class NewKeyCommandBase(Command):
             mech = [
                 { CKM_RSA_PKCS_OAEP : "" },
             ]
+        elif alg.startswith('ecc'):
+            attrs = [
+                {  CKA_KEY_TYPE        : CKK_EC         },
+                {  CKA_CLASS           : CKO_PRIVATE_KEY },
+                {  CKA_CLASS           : CKO_PUBLIC_KEY  },
+                {  CKA_ID              : id              },
+            ]
 
+            mech = [
+                { CKM_ECDSA : "" },
+            ]
         elif alg.startswith('aes'):
             attrs = [
                 { CKA_CLASS    : CKO_SECRET_KEY },
@@ -1224,6 +1236,8 @@ class NewKeyCommandBase(Command):
             mech = [
                 { CKM_AES_CBC : "" },
             ]
+        else:
+            sys.exit('Cannot handle algorithm: "{}"'.format(alg))
 
         # Add keylabel for ALL objects if set
         if keylabel is not None:
@@ -1345,7 +1359,11 @@ class AddKeyCommand(NewKeyCommandBase):
         group_parser.add_argument(
             '--algorithm',
             help='The type of the key.\n',
-            choices=[ 'rsa1024', 'rsa2048', 'aes128', 'aes256' ],
+            choices=[
+                'rsa1024', 'rsa2048',
+                'aes128', 'aes256',
+                'ecc224', 'ecc256', 'ecc384', 'ecc521'
+                ],
             required=True)
         group_parser.add_argument(
             '--key-label',

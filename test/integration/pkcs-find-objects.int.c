@@ -182,7 +182,7 @@ static void test_find_objects_via_empty_template(void **state) {
     CK_OBJECT_HANDLE objhandles[6];
     rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
     assert_int_equal(rv, CKR_OK);
-    assert_int_equal(count, 4);
+    assert_int_equal(count, ARRAY_LEN(objhandles));
 
     rv = C_FindObjectsFinal(session);
     assert_int_equal(rv, CKR_OK);
