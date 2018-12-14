@@ -41,7 +41,7 @@ in known package managers are likely too old.
 Run the `bootstrap` command.
 
 ```sh
-$ ./bootstrap
+$ ./bootstrap -I /usr/share/gnulib/m4
 ```
 
 ## Step 3 - Configuring
