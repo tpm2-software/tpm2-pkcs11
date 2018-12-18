@@ -43,11 +43,32 @@ static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
     return false;
 }
 
+/*
+ * XXX this is probably best to query the TPM layer
+ */
+static bool is_mech_supported(CK_MECHANISM_TYPE mech) {
+
+    switch (mech) {
+    case CKM_RSA_PKCS_OAEP:
+        /* falls-thru */
+    case CKM_AES_CBC:
+        return true;
+        /* no default */
+    }
+
+    return false;
+}
+
 static CK_RV common_init(operation op, token *tok, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
 
     check_pointer(mechanism);
 
     CK_RV rv = CKR_GENERAL_ERROR;
+
+    bool is_mech_sup = is_mech_supported(mechanism->mechanism);
+    if (!is_mech_sup) {
+        return CKR_MECHANISM_INVALID;
+    }
 
     digest_op_data *digest_opdata = NULL;
     bool do_hash = is_hashing_needed(mechanism->mechanism);
@@ -345,6 +366,7 @@ CK_RV sign_final(token *tok, unsigned char *signature, unsigned long *signature_
     } else {
         bool res = tpm_sign(tpm, opdata->tobj, opdata->mtype, hash, hash_len, signature, signature_len);
         if (!res) {
+            rv = CKR_GENERAL_ERROR;
             goto session_out;
         }
     }
