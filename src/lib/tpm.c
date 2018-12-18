@@ -148,6 +148,10 @@ static ESYS_CONTEXT* esys_ctx_init(TSS2_TCTI_CONTEXT *tcti_ctx) {
 
 void tpm_ctx_free(tpm_ctx *ctx) {
 
+    if (!ctx) {
+        return;
+    }
+
     Esys_Finalize(&ctx->esys_ctx);
     Tss2_Tcti_Finalize(ctx->tcti_ctx);
     free(ctx->tcti_ctx);
