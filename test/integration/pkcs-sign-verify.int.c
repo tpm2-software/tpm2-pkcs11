@@ -274,12 +274,55 @@ static void test_sign_verify_CKM_RSA_PKCS_sha512(void **state) {
             ckm_sha512_rsa_pkcs_siglen);
 }
 
+static void test_sign_verify_CKM_ECDSA_SHA1(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_OBJECT_CLASS key_class = CKO_PRIVATE_KEY;
+    CK_KEY_TYPE key_type = CKK_EC;
+    CK_ATTRIBUTE tmpl[] = {
+        { CKA_CLASS, &key_class, sizeof(key_class) },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+    };
+
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    /* Find an EC key */
+    unsigned long count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    user_login(session);
+
+    CK_MECHANISM mech = { .mechanism = CKM_ECDSA_SHA1 };
+
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    unsigned char ckm_ecdsa_sha1_sig[4096];
+    unsigned long ckm_ecdsa_sha1_siglen = sizeof(ckm_ecdsa_sha1_sig);
+
+    rv = C_Sign(session, (unsigned char *) _data, sizeof(_data),
+            ckm_ecdsa_sha1_sig, &ckm_ecdsa_sha1_siglen);
+    assert_int_equal(rv, CKR_OK);
+}
+
+
 int main() {
 
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_RSA_PKCS_sha256,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_RSA_PKCS_sha512,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_verify_CKM_ECDSA_SHA1,
                 test_setup, test_teardown),
     };
 

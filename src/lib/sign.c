@@ -33,6 +33,7 @@ static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
     case CKM_SHA256_RSA_PKCS:
     case CKM_SHA384_RSA_PKCS:
     case CKM_SHA512_RSA_PKCS:
+    case CKM_ECDSA_SHA1:
         return true;
     case CKM_RSA_PKCS:
         return false;
@@ -49,9 +50,19 @@ static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
 static bool is_mech_supported(CK_MECHANISM_TYPE mech) {
 
     switch (mech) {
-    case CKM_RSA_PKCS_OAEP:
+    case CKM_RSA_PKCS:
+        /* falls-thru */
+    case CKM_SHA1_RSA_PKCS:
+        /* falls-thru */
+    case CKM_SHA256_RSA_PKCS:
+        /* falls-thru */
+    case CKM_SHA384_RSA_PKCS:
+        /* falls-thru */
+    case CKM_SHA512_RSA_PKCS:
         /* falls-thru */
     case CKM_AES_CBC:
+        /* falls-thru */
+    case CKM_ECDSA_SHA1:
         return true;
         /* no default */
     }

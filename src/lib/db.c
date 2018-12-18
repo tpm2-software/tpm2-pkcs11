@@ -292,6 +292,8 @@ static bool parse_mech(const char *key, const char *value, size_t index, void *u
     /* unsigned longs */
     case CKM_RSA_PKCS_OAEP:
         /* falls through */
+    case CKM_ECDSA:
+        /* falls through */
     case CKM_AES_CBC: {
         size_t val;
         int rc = str_to_ul(key, &val);
