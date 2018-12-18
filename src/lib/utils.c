@@ -191,6 +191,8 @@ twist utils_pdkdf2_hmac_sha256(const twist pin, const twist salt, int iterations
 size_t utils_get_halg_size(CK_MECHANISM_TYPE mttype) {
 
     switch(mttype) {
+        case CKM_ECDSA_SHA1:
+            /* falls-thru */
         case CKM_SHA1_RSA_PKCS:
             return 20;
         case CKM_SHA256_RSA_PKCS:

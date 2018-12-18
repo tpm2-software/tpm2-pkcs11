@@ -525,6 +525,9 @@ TPMI_ALG_HASH mech_to_hash_alg(CK_MECHANISM_TYPE mode) {
     case CKM_SHA512:
         return TPM2_ALG_SHA512;
 
+    case CKM_ECDSA_SHA1:
+        return TPM2_ALG_SHA1;
+
     default:
         return TPM2_ALG_ERROR;
     }
@@ -538,6 +541,8 @@ TPM2_ALG_ID mech_to_sig_scheme(CK_MECHANISM_TYPE mode) {
     case CKM_SHA384_RSA_PKCS:
     case CKM_SHA512_RSA_PKCS:
         return TPM2_ALG_RSASSA;
+    case CKM_ECDSA_SHA1:
+        return TPM2_ALG_ECDSA;
     default:
         return TPM2_ALG_ERROR;
     }
@@ -552,7 +557,7 @@ bool get_signature_scheme(CK_MECHANISM_TYPE mech, TPMT_SIG_SCHEME *scheme) {
 
     TPMI_ALG_HASH halg = mech_to_hash_alg(mech);
     if (halg == TPM2_ALG_ERROR) {
-        return CKR_MECHANISM_INVALID;
+        return false;
     }
 
     scheme->scheme = sig_scheme;
@@ -640,8 +645,6 @@ bool tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR d
     if (*siglen <  sizeof(signature->signature.rsassa.sig.size)) {
         return false;
     }
-
-    assert(signature->sigAlg == TPM2_ALG_RSASSA);
 
     *siglen = signature->signature.rsassa.sig.size;
     memcpy(sig, signature->signature.rsassa.sig.buffer, *siglen);
