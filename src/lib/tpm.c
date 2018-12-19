@@ -9,6 +9,12 @@
 #include <string.h>
 #include <stddef.h>
 
+#include <openssl/asn1.h>
+#include <openssl/rsa.h>
+#include <openssl/pem.h>
+#include <openssl/bn.h>
+#include <openssl/err.h>
+
 #include <tss2/tss2_mu.h>
 #include <tss2/tss2_esys.h>
 #include <openssl/sha.h>
@@ -596,6 +602,129 @@ twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth) {
     return t;
 }
 
+bool flatten_rsassa(TPMS_SIGNATURE_RSASSA *rsassa, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+
+    if (*siglen <  sizeof(rsassa->sig.size)) {
+        return false;
+    }
+
+    *siglen = rsassa->sig.size;
+    memcpy(sig, rsassa->sig.buffer, *siglen);
+
+    return true;
+}
+
+bool flatten_ecdsa(TPMS_SIGNATURE_ECDSA *ecdsa, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+
+    /*
+     * This code is a bit of hack for converting from a TPM ECDSA
+     * signature, to an ASN1 encoded one for things like OSSL.
+     *
+     * The problem here, is that it is unclear the proper OSSL
+     * calls to make the SEQUENCE HEADER populate.
+     *
+     * AN ECDSA Signature is an ASN1 sequence of 2 ASNI Integers,
+     * the R and the S portions of the signature.
+     */
+    static const unsigned SEQ_HDR_SIZE = 2;
+
+    unsigned char *buf_r = NULL;
+    unsigned char *buf_s = NULL;
+
+    TPM2B_ECC_PARAMETER *R = &ecdsa->signatureR;
+    TPM2B_ECC_PARAMETER *S = &ecdsa->signatureS;
+
+    /*
+     * 1. Calculate the sizes of the ASN1 INTEGERS
+     *    DER encoded.
+     * 2. Allocate an array big enough for them and
+     *    the SEQUENCE header.
+     * 3. Set the header 0x30 and length
+     * 4. Copy in R then S
+     */
+    ASN1_INTEGER *asn1_r = ASN1_INTEGER_new();
+    ASN1_INTEGER *asn1_s = ASN1_INTEGER_new();
+    if (!asn1_r || !asn1_s) {
+        LOGE("oom");
+        goto out;
+    }
+
+    /*
+     * I wanted to calc the total size with i2d_ASN1_INTEGER
+     * using a NULL output buffer, per the man page this should
+     * work, however the code was dereferencing the pointer.
+     *
+     * I'll just let is alloc the buffers
+     */
+    ASN1_STRING_set(asn1_r, R->buffer, R->size);
+    int size_r = i2d_ASN1_INTEGER(asn1_r, &buf_r);
+    if (size_r < 0) {
+        LOGE("Error converting R to ASN1");
+        goto out;
+    }
+
+    ASN1_STRING_set(asn1_s, S->buffer, S->size);
+    int size_s = i2d_ASN1_INTEGER(asn1_s, &buf_s);
+    if (size_s < 0) {
+        LOGE("Error converting R to ASN1");
+        goto out;
+    }
+
+    /*
+     * If the size doesn't fit in a byte my
+     * encoding hack for ASN1 Sequence won't
+     * work, so fail...loudly.
+     */
+    if (size_s + size_r > 0xFF) {
+        LOGE("Cannot encode ASN1 Sequence, too big!");
+        goto out;
+    }
+
+    if (size_s + size_r + SEQ_HDR_SIZE > *siglen) {
+        return false;
+    }
+
+    unsigned char *p = sig;
+
+    /* populate header and skip */
+    p[0] = 0x30;
+    p[1] = size_r + size_s;
+    p += 2;
+
+    memcpy(p, buf_r, size_r);
+    p += size_r;
+    memcpy(p, buf_s, size_s);
+
+    *siglen = size_r + size_s + SEQ_HDR_SIZE;
+
+out:
+    if (asn1_r) {
+        ASN1_INTEGER_free(asn1_r);
+    }
+
+    if (asn1_s) {
+        ASN1_INTEGER_free(asn1_s);
+    }
+
+    free(buf_r);
+    free(buf_s);
+
+    return true;
+}
+
+bool sig_flatten(TPMT_SIGNATURE *signature, TPMT_SIG_SCHEME *scheme, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+
+    switch(scheme->scheme) {
+    case TPM2_ALG_RSASSA:
+        return flatten_rsassa(&signature->signature.rsassa, sig, siglen);
+    case TPM2_ALG_ECDSA:
+        return flatten_ecdsa(&signature->signature.ecdsa, sig, siglen);
+        /* no default */
+    }
+
+    return false;
+}
+
 bool tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
 
     twist auth = tobj->unsealed_auth;
@@ -642,65 +771,142 @@ bool tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR d
         return false;
     }
 
-    if (*siglen <  sizeof(signature->signature.rsassa.sig.size)) {
-        return false;
+    result = sig_flatten(signature, &in_scheme, sig, siglen);
+    if (!result) {
+        goto out;
     }
 
-    *siglen = signature->signature.rsassa.sig.size;
-    memcpy(sig, signature->signature.rsassa.sig.buffer, *siglen);
-
+out:
     free(signature);
 
-    return true;
+    return result;
 }
 
-bool tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen) {
+static CK_RV init_rsassa_sig(CK_BYTE_PTR sig, CK_ULONG siglen, TPMS_SIGNATURE_RSASSA *rsassa) {
 
-    twist auth = tobj->unsealed_auth;
-    TPMI_DH_OBJECT handle = tobj->handle;
-
-    bool tmp_rc = set_esys_auth(ctx->esys_ctx, handle, auth);
-    if (tmp_rc) {
-        return false;
+    if (siglen > sizeof(rsassa->sig.buffer)) {
+        return CKR_SIGNATURE_LEN_RANGE;
     }
+
+    rsassa->sig.size = siglen;
+    memcpy(rsassa->sig.buffer, sig, siglen);
+
+    return CKR_OK;
+}
+
+static CK_RV init_ecdsa_sig(CK_BYTE_PTR sig, CK_ULONG siglen, TPMS_SIGNATURE_ECDSA *ecdsa) {
+
+    int tag;
+    int class;
+    long len;
+    const unsigned char *p = sig;
+
+    int j = ASN1_get_object(&p, &len, &tag, &class, siglen);
+    if (!(j & V_ASN1_CONSTRUCTED)) {
+        LOGE("Expected ECDSA signature to start as ASN1 Constructed object");
+        return CKR_GENERAL_ERROR;
+    }
+
+    if (tag != V_ASN1_SEQUENCE) {
+        LOGE("Expected ECDSA signature to be an ASN1 sequence");
+        return CKR_GENERAL_ERROR;
+    }
+
+    /*
+     * Get R
+     */
+    TPM2B_ECC_PARAMETER *R = &ecdsa->signatureR;
+    ASN1_INTEGER *r = d2i_ASN1_INTEGER(NULL, &p, len);
+    if (!r) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+    memcpy(R->buffer, r->data, r->length);
+    R->size = r->length;
+    ASN1_INTEGER_free(r);
+
+    /*
+     * Get S
+     */
+    TPM2B_ECC_PARAMETER *S = &ecdsa->signatureS;
+    ASN1_INTEGER *s = d2i_ASN1_INTEGER(NULL, &p, len);
+    if (!s) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+    memcpy(S->buffer, s->data, s->length);
+    S->size = s->length;
+    ASN1_INTEGER_free(s);
+
+    return CKR_OK;
+}
+
+static CK_RV init_sig_from_mech(CK_MECHANISM_TYPE mech, CK_BYTE_PTR sig, CK_ULONG siglen, TPMT_SIGNATURE *tpmsig) {
+
+    /*
+     * VerifyInit should be verifying that the mech and sig is supported, so
+     * we can't return that error code here as PKCS11 doesn't support it,
+     * so just return general error.
+     */
+    tpmsig->sigAlg = mech_to_sig_scheme(mech);
+    if (tpmsig->sigAlg == TPM2_ALG_ERROR) {
+        return CKR_GENERAL_ERROR;
+    }
+
+    tpmsig->signature.any.hashAlg = mech_to_hash_alg(mech);
+    if (tpmsig->signature.any.hashAlg == TPM2_ALG_ERROR) {
+        return CKR_GENERAL_ERROR;
+    }
+
+    switch(tpmsig->sigAlg) {
+    case TPM2_ALG_RSASSA:
+        return init_rsassa_sig(sig, siglen, &tpmsig->signature.rsassa);
+    case TPM2_ALG_ECDSA:
+        return init_ecdsa_sig(sig, siglen, &tpmsig->signature.ecdsa);
+    default:
+        LOGE("Unsupported verification algorithm, got: 0x%x", mech);
+        return CKR_GENERAL_ERROR;
+    }
+}
+
+CK_RV tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen) {
+
+    TPMI_DH_OBJECT handle = tobj->handle;
 
     // Copy the data into the digest block
     TPM2B_DIGEST msgdigest;
     if (sizeof(msgdigest.buffer) < datalen) {
-        return false;
+        return CKR_DATA_LEN_RANGE;
     }
     memcpy(msgdigest.buffer, data, datalen);
     msgdigest.size = datalen;
 
-    // Copy the signature into the signature block
-    // For now we have sign hardcoded to RSASSA + SHA256, so just replicate that here.
-    TPMT_SIGNATURE signature;
-
-    assert(siglen < sizeof(signature.signature.rsassa.sig.buffer));
-
-    signature.sigAlg = TPM2_ALG_RSASSA;
-    signature.signature.rsassa.hash = TPM2_ALG_SHA256;
-    signature.signature.rsassa.sig.size = siglen;
-    memcpy(signature.signature.rsassa.sig.buffer, sig, siglen);
+    TPMT_SIGNATURE tpmsig;
+    CK_RV rv = init_sig_from_mech(mech, sig, siglen, &tpmsig);
+    if (rv != CKR_OK) {
+        return rv;
+    }
 
     TPMT_TK_VERIFIED *validation = NULL;
-
     TSS2_RC rval = Esys_VerifySignature(
             ctx->esys_ctx,
             handle,
-            ESYS_TR_PASSWORD,
+            ESYS_TR_NONE,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             &msgdigest,
-            &signature,
+            &tpmsig,
             &validation);
     if (rval != TPM2_RC_SUCCESS) {
-        LOGE("Esys_VerifySignature: 0x%x", rval);
-        return false;
+        if (rval != TPM2_RC_SIGNATURE) {
+            LOGE("Esys_VerifySignature: 0x%x", rval);
+            return CKR_GENERAL_ERROR;
+        }
+        return CKR_SIGNATURE_INVALID;
     }
 
     free(validation);
-    return true;
+    return CKR_OK;
 }
 
 #define P2_RC_HASH (TPM2_RC_HASH + TPM2_RC_P + TPM2_RC_2)
