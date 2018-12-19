@@ -56,8 +56,46 @@ bool tpm_flushcontext(tpm_ctx *ctx, uint32_t handle);
 
 twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth);
 
-bool tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen);
+/**
+ * Perform a signing operation using the TPM.
+ * @param ctx
+ *  The tpm context.
+ * @param tobj
+ *  The tertiary object (aka key) to sign with.
+ * @param mech
+ *  The PKCS11 mechanism.
+ * @param data
+ *  The data to sign, should be digested.
+ * @param datalen
+ *  The length of the data.
+ * @param sig
+ *  The signature buffer to output the data in.
+ * @param siglen
+ *  The length of the signature buffer.
+ * @return
+ *  Any CK_RV that C_Sign() can return.
+ */
+CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen);
 
+/**
+ * Perform a verification in the TPM.
+ * @param ctx
+ *  The tpm context.
+ * @param tobj
+ *  The tertiary object (aka key) to sign with.
+ * @param mech
+ *  The PKCS11 mechanism.
+ * @param data
+ *  The data to verify, should be digested.
+ * @param datalen
+ *  The length of the data.
+ * @param sig
+ *  The signature to verify.
+ * @param siglen
+ *  The length of the signature.
+ * @return
+ *  Any CK_RV that C_Verify() can return.
+ */
 CK_RV tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen);
 
 CK_RV tpm_hash_init(tpm_ctx *ctx, CK_MECHANISM_TYPE mode, uint32_t *sequence_handle);
