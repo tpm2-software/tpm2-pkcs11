@@ -375,8 +375,8 @@ CK_RV sign_final(token *tok, unsigned char *signature, unsigned long *signature_
             goto session_out;
         }
     } else {
-        bool res = tpm_sign(tpm, opdata->tobj, opdata->mtype, hash, hash_len, signature, signature_len);
-        if (!res) {
+        rv = tpm_sign(tpm, opdata->tobj, opdata->mtype, hash, hash_len, signature, signature_len);
+        if (rv != CKR_OK) {
             rv = CKR_GENERAL_ERROR;
             goto session_out;
         }

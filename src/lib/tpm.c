@@ -602,19 +602,21 @@ twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth) {
     return t;
 }
 
-bool flatten_rsassa(TPMS_SIGNATURE_RSASSA *rsassa, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+static CK_RV flatten_rsassa(TPMS_SIGNATURE_RSASSA *rsassa, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
 
     if (*siglen <  sizeof(rsassa->sig.size)) {
-        return false;
+        return CKR_BUFFER_TOO_SMALL;
     }
 
     *siglen = rsassa->sig.size;
     memcpy(sig, rsassa->sig.buffer, *siglen);
 
-    return true;
+    return CKR_OK;
 }
 
-bool flatten_ecdsa(TPMS_SIGNATURE_ECDSA *ecdsa, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+static CK_RV flatten_ecdsa(TPMS_SIGNATURE_ECDSA *ecdsa, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
 
     /*
      * This code is a bit of hack for converting from a TPM ECDSA
@@ -646,6 +648,7 @@ bool flatten_ecdsa(TPMS_SIGNATURE_ECDSA *ecdsa, CK_BYTE_PTR sig, CK_ULONG_PTR si
     ASN1_INTEGER *asn1_s = ASN1_INTEGER_new();
     if (!asn1_r || !asn1_s) {
         LOGE("oom");
+        rv = CKR_HOST_MEMORY;
         goto out;
     }
 
@@ -681,7 +684,8 @@ bool flatten_ecdsa(TPMS_SIGNATURE_ECDSA *ecdsa, CK_BYTE_PTR sig, CK_ULONG_PTR si
     }
 
     if (size_s + size_r + SEQ_HDR_SIZE > *siglen) {
-        return false;
+        rv = CKR_BUFFER_TOO_SMALL;
+        goto out;
     }
 
     unsigned char *p = sig;
@@ -697,6 +701,8 @@ bool flatten_ecdsa(TPMS_SIGNATURE_ECDSA *ecdsa, CK_BYTE_PTR sig, CK_ULONG_PTR si
 
     *siglen = size_r + size_s + SEQ_HDR_SIZE;
 
+    rv = CKR_OK;
+
 out:
     if (asn1_r) {
         ASN1_INTEGER_free(asn1_r);
@@ -709,10 +715,10 @@ out:
     free(buf_r);
     free(buf_s);
 
-    return true;
+    return rv;
 }
 
-bool sig_flatten(TPMT_SIGNATURE *signature, TPMT_SIG_SCHEME *scheme, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+static CK_RV sig_flatten(TPMT_SIGNATURE *signature, TPMT_SIG_SCHEME *scheme, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
 
     switch(scheme->scheme) {
     case TPM2_ALG_RSASSA:
@@ -725,20 +731,33 @@ bool sig_flatten(TPMT_SIGNATURE *signature, TPMT_SIG_SCHEME *scheme, CK_BYTE_PTR
     return false;
 }
 
-bool tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
 
     twist auth = tobj->unsealed_auth;
     TPMI_DH_OBJECT handle = tobj->handle;
 
+    TPM2B_DIGEST tdigest;
+    if (sizeof(tdigest.buffer) < datalen) {
+        return CKR_DATA_LEN_RANGE;
+    }
+    memcpy(tdigest.buffer, data, datalen);
+    tdigest.size = datalen;
+
     bool result = set_esys_auth(ctx->esys_ctx, handle, auth);
     if (!result) {
-        return false;
+        return CKR_GENERAL_ERROR;
     }
 
     TPMT_SIG_SCHEME in_scheme;
     result = get_signature_scheme(mech, &in_scheme);
+    assert(result);
     if (!result) {
-        return false;
+        /*
+         * do not return unsupported here
+         * this should be done in C_SignInit()
+         * In theory this cannot fail
+         */
+        return CKR_GENERAL_ERROR;
     }
 
     TPMT_TK_HASHCHECK validation = {
@@ -746,14 +765,6 @@ bool tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR d
         .hierarchy = TPM2_RH_NULL,
         .digest = TPM2B_EMPTY_INIT
     };
-
-    TPM2B_DIGEST tdigest;
-    if (sizeof(tdigest.buffer) < datalen) {
-        return false;
-    }
-
-    memcpy(tdigest.buffer, data, datalen);
-    tdigest.size = datalen;
 
     TPMT_SIGNATURE *signature = NULL;
     TSS2_RC rval = Esys_Sign(
@@ -771,15 +782,11 @@ bool tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR d
         return false;
     }
 
-    result = sig_flatten(signature, &in_scheme, sig, siglen);
-    if (!result) {
-        goto out;
-    }
+    CK_RV rv = sig_flatten(signature, &in_scheme, sig, siglen);
 
-out:
     free(signature);
 
-    return result;
+    return rv;
 }
 
 static CK_RV init_rsassa_sig(CK_BYTE_PTR sig, CK_ULONG siglen, TPMS_SIGNATURE_RSASSA *rsassa) {
