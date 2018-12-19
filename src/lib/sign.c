@@ -440,15 +440,13 @@ CK_RV verify_final (token *tok, unsigned char *signature, unsigned long signatur
 
     rv = digest_final_op(tok, opdata->digest_opdata, hash, &hash_len);
     if (rv != CKR_OK) {
-        return rv;
+        goto out;
     }
 
-    bool res = tpm_verify(tpm, opdata->tobj, hash, hash_len, signature, signature_len);
-    rv = res ? CKR_OK : CKR_GENERAL_ERROR;
-    if (rv != CKR_OK) {
-        return rv;
-    }
+    rv = tpm_verify(tpm, opdata->tobj, opdata->mtype, hash, hash_len, signature, signature_len);
 
+out:
+    digest_op_data_free(&opdata->digest_opdata);
     token_opdata_clear(tok);
     free(opdata);
 

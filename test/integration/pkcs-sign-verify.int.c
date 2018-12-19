@@ -178,6 +178,13 @@ static void test_sign_verify_CKM_RSA_PKCS_sha256(void **state) {
 
     assert_memory_equal(ckm_sha256_rsa_pkcs_sig, ckm_rsa_pkcs_sig,
             ckm_sha256_rsa_pkcs_siglen);
+
+    rv = C_VerifyInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Verify(session, (unsigned char *) _data, sizeof(_data),
+            ckm_sha256_rsa_pkcs_sig, ckm_sha256_rsa_pkcs_siglen);
+    assert_int_equal(rv, CKR_OK);
 }
 
 /*
@@ -312,8 +319,14 @@ static void test_sign_verify_CKM_ECDSA_SHA1(void **state) {
     rv = C_Sign(session, (unsigned char *) _data, sizeof(_data),
             ckm_ecdsa_sha1_sig, &ckm_ecdsa_sha1_siglen);
     assert_int_equal(rv, CKR_OK);
-}
 
+    rv = C_VerifyInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Verify(session, (unsigned char *) _data, sizeof(_data),
+            ckm_ecdsa_sha1_sig, ckm_ecdsa_sha1_siglen);
+    assert_int_equal(rv, CKR_OK);
+}
 
 int main() {
 
