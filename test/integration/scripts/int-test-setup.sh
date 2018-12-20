@@ -216,7 +216,7 @@ else
         echo "export TPM2_PKCS11_STORE=${SIM_TMP_DIR}"
         # execute the test script and capture exit code
         echo $@
-        env G_MESSAGES_DEBUG=all $@
+        env $@
         ret_test=$?
     fi
 fi
