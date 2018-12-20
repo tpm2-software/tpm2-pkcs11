@@ -16,7 +16,7 @@ function get_deps() {
 
 	# The list order is important and thus we can't use the keys of the dictionary as order is not preserved.
 	local github_deps=("tpm2-tss" "tpm2-abrmd" "tpm2-tools")
-	declare -A local config_flags=( ["tpm2-tss"]="--disable-doxygen-doc CFLAGS=-g" ["tpm2-abrmd"]="CFLAGS=-g" ["tpm2-tools"]="CFLAGS=-g")
+	declare -A local config_flags=( ["tpm2-tss"]="--disable-doxygen-doc CFLAGS=-g" ["tpm2-abrmd"]="CFLAGS=-g" ["tpm2-tools"]="--disable-hardening CFLAGS=-g")
 
 	echo "pwd starting: `pwd`"
 	pushd "$1"
