@@ -57,11 +57,6 @@ that *are outside of normal autoconf/automake options*, which are documented [he
 
 ### Configure Options
 1. `--enable-unit` - Enables the unit tests when running `make check`
-
-   **Note:** When enabling unit tests, it will be necessary to rebuild `src/lib/twist.c` if it was already built, e.g. by using
-   ```
-   make --assume-new src/lib/twist.c check
-   ```
 2. `--enable-integration` - Enables the integration tests when running `make check`
   * Requires the following items to be found on PATH:
     * [tpm2-ptool](../tools/tpm2_ptool.py)
