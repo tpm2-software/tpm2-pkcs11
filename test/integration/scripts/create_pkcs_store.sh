@@ -56,8 +56,8 @@ set -e
 tpm2_ptool.py init --pobj-pin=mypobjpin --path=$TPM2_PKCS11_STORE
 
 # Test the existing primary object init functionality
-tpm2_createprimary -p foopass -o primary.ctx -g sha256 -G rsa
-handle=`tpm2_evictcontrol -a o -c primary.ctx | cut -d\: -f2-2 | sed 's/^ *//g'`
+tpm2_createprimary -p foopass -o $TPM2_PKCS11_STORE/primary.ctx -g sha256 -G rsa
+handle=`tpm2_evictcontrol -a o -c $TPM2_PKCS11_STORE/primary.ctx | cut -d\: -f2-2 | sed 's/^ *//g'`
 
 tpm2_ptool.py init --pobj-pin=anotherpobjpin --primary-handle=$handle --primary-auth=foopass --path=$TPM2_PKCS11_STORE
 
