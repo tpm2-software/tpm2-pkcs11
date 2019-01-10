@@ -64,10 +64,7 @@ tpm2_ptool.py init --pobj-pin=anotherpobjpin --primary-handle=$handle --primary-
 # add 3 tokens
 tpm2_ptool.py addtoken --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=myuserpin --label=label --path $TPM2_PKCS11_STORE
 tpm2_ptool.py addtoken --wrap=software --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=myuserpin --label=wrap-sw --path $TPM2_PKCS11_STORE
-
-echo "bill 1"
 tpm2_ptool.py addtoken --pid=2 --pobj-pin=anotherpobjpin --sopin=anothersopin --userpin=anotheruserpin --label=import-keys --path $TPM2_PKCS11_STORE
-echo "bill 2"
 
 # add 2 aes and 2 rsa keys under tokens 1 and 2
 for t in "label" "wrap-sw"; do
