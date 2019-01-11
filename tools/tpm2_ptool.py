@@ -737,10 +737,8 @@ class InitCommand(Command):
                 try:
                     tpm2 = Tpm2(d, path)
 
-                    pobjkey = hash_pass(pobjpin.encode())
-
                     if not use_existing_primary:
-                        pobjauth = hash_pass(rand_str(32))['hash']
+                        pobjauth = hash_pass(rand_str(32))['hash'] if pobjpin and len(pobjpin) > 0 else ""
                         ctx = tpm2.createprimary(ownerauth, pobjauth)
                         handle = Tpm2.evictcontrol(ownerauth, ctx)
                     else:
@@ -758,10 +756,9 @@ class InitCommand(Command):
                         if handle not in y:
                             sys.exit('Handle 0x%x is not persistent' % (handle))
 
-
+                    pobjkey = hash_pass(pobjpin.encode())
                     c = AESCipher(pobjkey['rhash'])
                     pobjauth = c.encrypt(pobjauth)
-
                     pid = db.addprimary(handle, pobjauth, pobjkey['salt'], pobjkey['iters'])
 
                     action_word = "Added" if use_existing_primary else "Created"
