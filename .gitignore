@@ -67,6 +67,9 @@ test-suite.log
 *.diff
 *.patch
 
+# Tmp
+*.ctx
+
 nbproject/
 build/
 m4/
