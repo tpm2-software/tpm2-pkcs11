@@ -263,6 +263,7 @@ CK_RV token_login(token *tok, twist pin, CK_USER_TYPE user) {
     wrappingobject *wobj = &tok->wrappingobject;
     twist wobjauth = tpm_unseal(tpm, sealobjhandle, sealobjauth);
     if (!wobjauth) {
+        rv = CKR_PIN_INCORRECT;
         goto error;
     }
 
