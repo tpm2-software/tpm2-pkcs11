@@ -21,7 +21,7 @@ static int test_setup(void **state) {
     unsigned long count = ARRAY_LEN(slots);
     CK_RV rv = C_GetSlotList(true, slots, &count);
     assert_int_equal(rv, CKR_OK);
-    assert_int_equal(count, 3);
+    assert_int_equal(count, TEST_TOKEN_COUNT);
 
     /* open a session on slot 1 */
     CK_SESSION_HANDLE session;
@@ -48,7 +48,7 @@ static int test_setup_by_label(void **state) {
     unsigned long count = ARRAY_LEN(slots);
     CK_RV rv = C_GetSlotList(true, slots, &count);
     assert_int_equal(rv, CKR_OK);
-    assert_int_equal(count, 3);
+    assert_int_equal(count, TEST_TOKEN_COUNT);
 
     unsigned i;
     CK_SLOT_ID slot = ~0;

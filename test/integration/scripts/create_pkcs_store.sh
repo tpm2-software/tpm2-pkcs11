@@ -68,22 +68,22 @@ tpm2_ptool.py addtoken --pid=2 --pobj-pin=anotherpobjpin --sopin=anothersopin --
 
 # add 2 aes and 2 rsa keys under tokens 1 and 2
 for t in "label" "wrap-sw"; do
-  echo "Adding 2 AES 256 keys under token \"$t\""
-  tpm2_ptool.py addkey --algorithm=aes256 --label="$t" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
-  tpm2_ptool.py addkey --algorithm=aes256 --label="$t" --key-label=mykeylabel --userpin=myuserpin --path=$TPM2_PKCS11_STORE
-  echo "Added AES Keys"
+	echo "Adding 2 AES 256 keys under token \"$t\""
+	tpm2_ptool.py addkey --algorithm=aes256 --label="$t" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+	tpm2_ptool.py addkey --algorithm=aes256 --label="$t" --key-label=mykeylabel --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+	echo "Added AES Keys"
 
-  echo "Adding 2 RSA 2048 keys under token \"$t\""
-  for i in `seq 0 1`; do
-    tpm2_ptool.py addkey --algorithm=rsa2048 --label="$t" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
-  done;
-  echo "Added RSA Keys"
+	echo "Adding 2 RSA 2048 keys under token \"$t\""
+	for i in `seq 0 1`; do
+	  tpm2_ptool.py addkey --algorithm=rsa2048 --label="$t" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+	done;
+	echo "Added RSA Keys"
 
-  echo "Adding 2 EC p256 keys under token \"$t\""
-  for i in `seq 0 1`; do
-    tpm2_ptool.py addkey --algorithm=ecc256 --label="$t" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
-  done;
-  echo "Added EC Keys"
+	echo "Adding 2 EC p256 keys under token \"$t\""
+	for i in `seq 0 1`; do
+	  tpm2_ptool.py addkey --algorithm=ecc256 --label="$t" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+	done;
+	echo "Added EC Keys"
 done;
 
 # add 1 aes key under label "import-keys"

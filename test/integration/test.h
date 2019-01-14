@@ -30,6 +30,12 @@
 #define BAD_USERPIN "myBADuserpin"
 #define BAD_SOPIN   "myBADsopin"
 
+/*
+ * This value should match the total number of successful calls to add token in
+ * create_pkcs_store.sh
+ */
+#define TEST_TOKEN_COUNT 4
+
 typedef struct test_info test_info;
 
 static inline test_info *test_info_from_state(void **state) {
