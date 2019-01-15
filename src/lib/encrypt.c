@@ -10,71 +10,93 @@
 #include "token.h"
 #include "tpm.h"
 
-typedef struct encrypt_op_data encrypt_op_data;
-struct encrypt_op_data {
-    tobject *object;
-    twist iv;
-    CK_MECHANISM_TYPE mode;
-};
+typedef CK_RV (*tpm_op)(tpm_encrypt_data *tpm_enc_data, CK_BYTE_PTR in, CK_ULONG inlen, CK_BYTE_PTR out, CK_ULONG_PTR outlen);
 
-typedef CK_RV (*tpm_op)(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mode, twist iv, twist data_in, twist *data_out, twist *iv_out);
+encrypt_op_data *encrypt_op_data_new(void) {
 
-static CK_RV common_init (token *tok, operation op, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+    return (encrypt_op_data *)calloc(1, sizeof(encrypt_op_data));
+}
+
+void encrypt_op_data_free(encrypt_op_data **opdata) {
+
+    if (opdata) {
+        tpm_encrypt_data_free((*opdata)->tpm_enc_data);
+        free(*opdata);
+        *opdata = NULL;
+    }
+}
+
+static CK_RV common_init_op (token *tok, encrypt_op_data *supplied_opdata, operation op, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
     check_pointer(mechanism);
 
-    /*
-     * TODO how is mode determined? Does a key have a fixed mode or is it flexible?
-     */
-    twist iv;
-    CK_MECHANISM_TYPE mode;
-    switch(mechanism->mechanism) {
-    case CKM_AES_CBC_PAD:
-        iv = twistbin_new(mechanism->pParameter, mechanism->ulParameterLen);
-        if (!iv) {
-            return CKR_HOST_MEMORY;
+    if (!supplied_opdata) {
+        bool is_active = token_opdata_is_active(tok);
+        if (is_active) {
+            return CKR_OPERATION_ACTIVE;
         }
-        mode = CKM_AES_CBC;
-        break;
-    default:
-        return CKR_MECHANISM_INVALID;
-    }
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    bool is_active = token_opdata_is_active(tok);
-    if (is_active) {
-        rv = CKR_OPERATION_ACTIVE;
-        return rv;
     }
 
     tobject *tobj;
-    rv = token_load_object(tok, key, &tobj);
+    CK_RV rv = token_load_object(tok, key, &tobj);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    encrypt_op_data *opdata = (encrypt_op_data *)calloc(1, sizeof(*opdata));
-    if (!opdata) {
-        return CKR_HOST_MEMORY;
+    rv = object_mech_is_supported(tobj, mechanism);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
-    opdata->object = tobj;
-    opdata->mode = mode;
-    opdata->iv = iv;
+    encrypt_op_data *opdata;
+    if (!supplied_opdata) {
+        opdata = encrypt_op_data_new();
+        if (!opdata) {
+            return CKR_HOST_MEMORY;
+        }
+    } else {
+        opdata = supplied_opdata;
+    }
 
-    token_opdata_set(tok, op, opdata);
+    rv = tpm_encrypt_data_init(tok->tctx, tobj->handle, tobj->unsealed_auth, mechanism, &opdata->tpm_enc_data);
+    if (rv != CKR_OK) {
+        encrypt_op_data_free(&opdata);
+        return rv;
+    }
+
+    if (!supplied_opdata) {
+        token_opdata_set(tok, op, opdata);
+    }
 
     return CKR_OK;
 }
 
-static CK_RV common_update (token *tok, operation op,
+static CK_RV common_update_op (token *tok, encrypt_op_data *supplied_opdata, operation op,
         unsigned char *part, unsigned long part_len,
         unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
 
     check_pointer(part);
     check_pointer(encrypted_part);
     check_pointer(encrypted_part_len);
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    twist input = twistbin_new(part, part_len);
+    if (!input) {
+        return CKR_HOST_MEMORY;
+    }
+
+    twist output = NULL;
+
+    encrypt_op_data *opdata = NULL;
+    if (!supplied_opdata) {
+        rv = token_opdata_get(tok, op, &opdata);
+        if (rv != CKR_OK) {
+            goto out;
+        }
+    } else {
+        opdata = supplied_opdata;
+    }
 
     tpm_op fop;
     switch(op) {
@@ -88,46 +110,11 @@ static CK_RV common_update (token *tok, operation op,
         return CKR_GENERAL_ERROR;
     }
 
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    /*
-     * XXX
-     * Encrypted part len must be the same size as part
-     * Hardcode to AES block size of 16, we will need to make
-     * this check more robust later.
-     */
-    if (part_len != *encrypted_part_len && part_len != 16) {
-        return CKR_BUFFER_TOO_SMALL;
-    }
-
-    twist input = twistbin_new(part, part_len);
-    if (!input) {
-        return CKR_HOST_MEMORY;
-    }
-
-    twist output = NULL;
-    twist iv_out = NULL;
-
-    encrypt_op_data *opdata = NULL;
-    rv = token_opdata_get(tok, op, &opdata);
+    rv = fop(opdata->tpm_enc_data, part, part_len,
+            encrypted_part, encrypted_part_len);
     if (rv != CKR_OK) {
-        goto out;
+        return rv;
     }
-
-    tpm_ctx *tpm = tok->tctx;
-
-    rv = fop(tpm, opdata->object, opdata->mode, opdata->iv, input, &output, &iv_out);
-    if (rv != CKR_OK) {
-        goto out;
-    }
-
-    /* swap iv's */
-    twist_free(opdata->iv);
-    opdata->iv = iv_out;
-
-    /* copy ciphertext back to user structures */
-    *encrypted_part_len = twist_len(output);
-    memcpy(encrypted_part, output, *encrypted_part_len);
 
     rv = CKR_OK;
 
@@ -138,7 +125,7 @@ out:
     return rv;
 }
 
-static CK_RV common_final(token *tok, operation op,
+static CK_RV common_final_op(token *tok, encrypt_op_data *supplied_opdata, operation op,
         unsigned char *last_part, unsigned long *last_part_len) {
 
     /*
@@ -149,67 +136,71 @@ static CK_RV common_final(token *tok, operation op,
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
+    /* nothing to do if opdata is supplied externally */
+    if (supplied_opdata) {
+        return CKR_OK;
+    }
+
     encrypt_op_data *opdata = NULL;
     rv = token_opdata_get(tok, op, &opdata);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    twist_free(opdata->iv);
-    free(opdata);
+    encrypt_op_data_free(&opdata);
 
     token_opdata_clear(tok);
 
     return CKR_OK;
 }
 
-CK_RV encrypt_init (token *tok, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV encrypt_init_op (token *tok, encrypt_op_data *supplied_opdata, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
-    return common_init(tok, operation_encrypt, mechanism, key);
+    return common_init_op(tok, supplied_opdata, operation_encrypt, mechanism, key);
 }
 
-CK_RV decrypt_init (token *tok, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV decrypt_init_op (token *tok, encrypt_op_data *supplied_opdata, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
-    return common_init(tok, operation_decrypt, mechanism, key);
+    return common_init_op(tok, supplied_opdata, operation_decrypt, mechanism, key);
 }
 
-CK_RV encrypt_update (token *tok, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
+CK_RV encrypt_update_op (token *tok, encrypt_op_data *supplied_opdata, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
 
-    return common_update(tok, operation_encrypt, part, part_len, encrypted_part, encrypted_part_len);
+    return common_update_op(tok, supplied_opdata, operation_encrypt, part, part_len, encrypted_part, encrypted_part_len);
 }
 
-CK_RV decrypt_update (token *tok, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
+CK_RV decrypt_update_op (token *tok, encrypt_op_data *supplied_opdata, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
 
-    return common_update(tok, operation_decrypt, part, part_len, encrypted_part, encrypted_part_len);
+    return common_update_op(tok, supplied_opdata, operation_decrypt, part, part_len, encrypted_part, encrypted_part_len);
 }
 
-CK_RV encrypt_final (token *tok, unsigned char *last_encrypted_part, unsigned long *last_encrypted_part_len) {
+CK_RV encrypt_final_op (token *tok, encrypt_op_data *supplied_opdata, unsigned char *last_encrypted_part, unsigned long *last_encrypted_part_len) {
 
-    return common_final(tok, operation_encrypt, last_encrypted_part, last_encrypted_part_len);
+    return common_final_op(tok, supplied_opdata, operation_encrypt, last_encrypted_part, last_encrypted_part_len);
 }
 
-CK_RV decrypt_final (token *tok, unsigned char *last_part, unsigned long *last_part_len) {
+CK_RV decrypt_final_op (token *tok, encrypt_op_data *supplied_opdata, unsigned char *last_part, unsigned long *last_part_len) {
 
-    return common_final(tok, operation_decrypt, last_part, last_part_len);
+    return common_final_op(tok, supplied_opdata, operation_decrypt, last_part, last_part_len);
 }
 
-CK_RV decrypt_oneshot (token *tok, unsigned char *encrypted_data, unsigned long encrypted_data_len, unsigned char *data, unsigned long *data_len) {
+CK_RV decrypt_oneshot_op (token *tok, encrypt_op_data *supplied_opdata, unsigned char *encrypted_data, unsigned long encrypted_data_len, unsigned char *data, unsigned long *data_len) {
 
-    CK_RV rv = decrypt_update(tok, encrypted_data, encrypted_data_len,
+    CK_RV rv = decrypt_update_op(tok, supplied_opdata, encrypted_data, encrypted_data_len,
             data, data_len);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    return decrypt_final(tok, NULL, NULL);
+    return decrypt_final_op(tok, supplied_opdata, NULL, NULL);
 }
 
-CK_RV encrypt_oneshot (token *tok, unsigned char *data, unsigned long data_len, unsigned char *encrypted_data, unsigned long *encrypted_data_len) {
+CK_RV encrypt_oneshot_op (token *tok, encrypt_op_data *supplied_opdata, unsigned char *data, unsigned long data_len, unsigned char *encrypted_data, unsigned long *encrypted_data_len) {
 
-    CK_RV rv = encrypt_update(tok, data, data_len, encrypted_data, encrypted_data_len);
+    CK_RV rv = encrypt_update_op (tok, supplied_opdata, data, data_len, encrypted_data, encrypted_data_len);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    return encrypt_final(tok, NULL, NULL);
+    return encrypt_final_op(tok, supplied_opdata, NULL, NULL);
 }

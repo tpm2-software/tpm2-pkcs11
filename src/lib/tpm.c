@@ -981,6 +981,23 @@ CK_RV tpm_hash_update(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, 
     return CKR_OK;
 }
 
+CK_RV tpm_readpub(tpm_ctx *ctx,
+        uint32_t handle,
+
+        TPM2B_PUBLIC **public,
+        TPM2B_NAME **name,
+        TPM2B_NAME **qualified_name) {
+
+    TSS2_RC rval = TSS2_RETRY_EXP(Esys_ReadPublic(ctx->esys_ctx, handle, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+            public, name, qualified_name));
+    if (rval != TPM2_RC_SUCCESS) {
+        LOGE("Esys_ReadPublic: 0x%x", rval);
+        return CKR_GENERAL_ERROR;
+    }
+
+    return CKR_OK;
+}
+
 CK_RV tpm_hash_final(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
 
     TPM2B_MAX_BUFFER no_data = { .size = 0 };
@@ -1016,30 +1033,213 @@ CK_RV tpm_hash_final(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, C
     return CKR_OK;
 }
 
-TPM2_ALG_ID mech_to_rsa_dec_alg(CK_MECHANISM_TYPE mech) {
+struct tpm_encrypt_data {
+    tpm_ctx *ctx;
 
-    switch(mech) {
-    case CKM_RSA_PKCS:
-    case CKM_SHA1_RSA_PKCS:
-    case CKM_SHA256_RSA_PKCS:
-    case CKM_SHA384_RSA_PKCS:
-    case CKM_SHA512_RSA_PKCS:
-        /* RSA Decrypt expects padded data */
-        return TPM2_ALG_NULL;
+    uint32_t handle;
+    twist auth;
+
+    bool is_rsa;
+
+    union {
+        struct {
+            TPMT_RSA_DECRYPT scheme;
+            TPM2B_DATA label;
+        } rsa;
+        struct {
+            TPMI_ALG_SYM_MODE mode;
+            TPM2B_IV iv;
+        } sym;
+    };
+};
+
+static CK_RV mech_to_sym(CK_MECHANISM_PTR mech, tpm_encrypt_data *tpm_enc_data) {
+
+    switch(mech->mechanism) {
+    case CKM_AES_CBC:
+        tpm_enc_data->sym.mode = TPM2_ALG_CBC;
+        break;
+    case CKM_AES_ECB:
+        tpm_enc_data->sym.mode = TPM2_ALG_ECB;
+        break;
+    case CKM_AES_CFB1:
+        tpm_enc_data->sym.mode = TPM2_ALG_CFB;
+        break;
     default:
-        LOGE("Unsupported RSA cipher mechanism, got: %lu", mech);
-        return TPM2_ALG_ERROR;
+        LOGE("Unsupported mechanism: 0x%x", mech->mechanism);
+        return CKR_MECHANISM_INVALID;
     }
+
+    if (mech->ulParameterLen > 0) {
+
+        if (mech->ulParameterLen > sizeof(tpm_enc_data->sym.iv.buffer)) {
+            return CKR_MECHANISM_PARAM_INVALID;
+        }
+
+        tpm_enc_data->sym.iv.size = mech->ulParameterLen;
+        memcpy(tpm_enc_data->sym.iv.buffer, mech->pParameter, mech->ulParameterLen);
+    } else {
+        /* initialize to 16 zeros if IV not specified */
+        tpm_enc_data->sym.iv.size = sizeof(tpm_enc_data->sym.iv.buffer);
+        memset(tpm_enc_data->sym.iv.buffer, 0, sizeof(tpm_enc_data->sym.iv.buffer));
+    }
+
+    return CKR_OK;
 }
 
-CK_RV tpm_rsa_decrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech,
+static CK_RV mech_to_rsa_raw(CK_MECHANISM_PTR mech, tpm_encrypt_data *encdata) {
+    UNUSED(mech);
+
+    encdata->rsa.scheme.scheme = TPM2_ALG_NULL;
+
+    encdata->rsa.label.size = 0;
+
+    return CKR_OK;
+}
+
+static CK_RV get_oaep_mfg1_alg(tpm_ctx *tpm, uint32_t handle, CK_RSA_PKCS_MGF_TYPE_PTR mfg) {
+
+    TPM2B_PUBLIC *public = NULL;
+    TPM2B_NAME *name = NULL;
+    TPM2B_NAME *qualified_name = NULL;
+
+    CK_RV rv = tpm_readpub(tpm, handle, &public, &name, &qualified_name);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    switch(public->publicArea.nameAlg) {
+    case TPM2_ALG_SHA1:
+        *mfg = CKG_MGF1_SHA1;
+        break;
+    case TPM2_ALG_SHA256:
+        *mfg = CKG_MGF1_SHA256;
+        break;
+    case TPM2_ALG_SHA384:
+        *mfg = CKG_MGF1_SHA384;
+        break;
+    case TPM2_ALG_SHA512:
+        *mfg = CKG_MGF1_SHA512;
+        break;
+    default:
+        rv = CKR_GENERAL_ERROR;
+    }
+
+    free(public);
+    free(name);
+    free(qualified_name);
+
+    return rv;
+}
+
+static CK_RV mech_to_rsa_oaep(tpm_ctx *tpm, CK_MECHANISM_PTR mech, tpm_encrypt_data *encdata) {
+
+    encdata->rsa.scheme.scheme = TPM2_ALG_OAEP;
+
+    if (mech->ulParameterLen != sizeof(CK_RSA_PKCS_OAEP_PARAMS)) {
+        return CKR_MECHANISM_PARAM_INVALID;
+    }
+
+    CK_RSA_PKCS_OAEP_PARAMS_PTR params = (CK_RSA_PKCS_OAEP_PARAMS_PTR)mech->pParameter;
+
+    if (params->source != CKZ_DATA_SPECIFIED
+            && params->pSourceData != NULL
+            && params->ulSourceDataLen != 0) {
+        return CKR_MECHANISM_PARAM_INVALID;
+    }
+
+    /*
+     * TPM is hardcoded to MFG1 + <name alg> in the TPM, make sure what is requested is supported
+     */
+    CK_RSA_PKCS_MGF_TYPE supported_mfg;
+    CK_RV rv = get_oaep_mfg1_alg(tpm, encdata->handle, &supported_mfg);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    if (params->mgf != supported_mfg) {
+        return CKR_MECHANISM_PARAM_INVALID;
+    }
+
+    encdata->rsa.scheme.details.oaep.hashAlg = mech_to_hash_alg(params->hashAlg);
+    if (encdata->rsa.scheme.details.oaep.hashAlg == TPM2_ALG_ERROR) {
+        return CKR_MECHANISM_PARAM_INVALID;
+    }
+
+    if (params->ulSourceDataLen > sizeof(encdata->rsa.label.buffer)) {
+        return CKR_MECHANISM_PARAM_INVALID;
+    }
+
+    encdata->rsa.label.size = params->ulSourceDataLen;
+    if (params->ulSourceDataLen) {
+        if (!params->pSourceData) {
+            return CKR_MECHANISM_PARAM_INVALID;
+        }
+        memcpy(encdata->rsa.label.buffer, params->pSourceData, params->ulSourceDataLen);
+    }
+
+    return CKR_OK;
+}
+
+CK_RV tpm_encrypt_data_init(tpm_ctx *ctx, uint32_t handle, twist auth, CK_MECHANISM_PTR mech, tpm_encrypt_data **encdata) {
+
+    CK_RV rv = CKR_MECHANISM_INVALID;
+
+    tpm_encrypt_data *tpm_enc_data = calloc(1, sizeof(*tpm_enc_data));
+    if (!tpm_enc_data) {
+        return CKR_HOST_MEMORY;
+    }
+
+    tpm_enc_data->ctx = ctx;
+    tpm_enc_data->handle = handle;
+    tpm_enc_data->auth = auth;
+
+    switch(mech->mechanism) {
+        case CKM_RSA_X_509:
+        case CKM_RSA_PKCS:
+        case CKM_SHA1_RSA_PKCS:
+        case CKM_SHA256_RSA_PKCS:
+        case CKM_SHA384_RSA_PKCS:
+        case CKM_SHA512_RSA_PKCS:
+            tpm_enc_data->is_rsa = true;
+            rv = mech_to_rsa_raw(mech, tpm_enc_data);
+            break;
+
+        case CKM_RSA_PKCS_OAEP:
+            tpm_enc_data->is_rsa = true;
+            rv = mech_to_rsa_oaep(ctx, mech, tpm_enc_data);
+            break;
+
+        case CKM_AES_CBC:
+        case CKM_AES_ECB:
+        case CKM_AES_CFB1:
+            rv = mech_to_sym(mech, tpm_enc_data);
+            break;
+        /* no default */
+    }
+
+    if (rv == CKR_OK) {
+        *encdata = tpm_enc_data;
+    } else {
+        free(tpm_enc_data);
+    }
+
+    return rv;
+}
+
+void tpm_encrypt_data_free(tpm_encrypt_data *encdata) {
+
+    free(encdata);
+}
+
+CK_RV tpm_rsa_decrypt(tpm_encrypt_data *tpm_enc_data,
         CK_BYTE_PTR ctext, CK_ULONG ctextlen,
         CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen) {
 
-    TPM2_ALG_ID alg = mech_to_rsa_dec_alg(mech);
-    if (alg == TPM2_ALG_ERROR) {
-        return CKR_ARGUMENTS_BAD;
-    }
+    tpm_ctx *ctx = tpm_enc_data->ctx;
+
+    TPMT_RSA_DECRYPT *scheme = &tpm_enc_data->rsa.scheme;
+    TPM2B_DATA *label = &tpm_enc_data->rsa.label;
 
     /*
      * Validate that the data to perform the operation on, typically
@@ -1052,16 +1252,13 @@ CK_RV tpm_rsa_decrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech,
     }
     memcpy(tpm_ctext.buffer, ctext, ctextlen);
 
-    twist auth = tobj->unsealed_auth;
-    ESYS_TR handle = tobj->handle;
+    twist auth = tpm_enc_data->auth;
+    ESYS_TR handle = tpm_enc_data->handle;
     bool result = set_esys_auth(ctx->esys_ctx, handle, auth);
     if (!result) {
         return CKR_GENERAL_ERROR;
     }
 
-    TPMT_RSA_DECRYPT scheme  = { .scheme = alg };
-
-    TPM2B_DATA label = TPM2B_EMPTY_INIT;
     TPM2B_PUBLIC_KEY_RSA *tpm_ptext;
 
     TSS2_RC rval = Esys_RSA_Decrypt(
@@ -1071,8 +1268,8 @@ CK_RV tpm_rsa_decrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             &tpm_ctext,
-            &scheme,
-            &label,
+            scheme,
+            label,
             &tpm_ptext);
     if (rval != TPM2_RC_SUCCESS) {
         LOGE("Esys_RSA_Decrypt: 0x%x", rval);
@@ -1091,24 +1288,61 @@ CK_RV tpm_rsa_decrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech,
     return CKR_OK;
 }
 
-static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_MECHANISM_TYPE mode, TPMI_YES_NO is_decrypt,
-        twist iv_in, twist data_in, twist *data_out, twist *iv_out) {
+CK_RV tpm_rsa_encrypt(tpm_encrypt_data *tpm_enc_data,
+        CK_BYTE_PTR pptext, CK_ULONG pptextlen,
+        CK_BYTE_PTR cctext, CK_ULONG_PTR cctextlen) {
 
-    TPMI_ALG_SYM_MODE tpm_mode;
-    switch(mode) {
-    case CKM_AES_CBC:
-        tpm_mode = TPM2_ALG_CBC;
-        break;
-    case CKM_AES_ECB:
-        tpm_mode = TPM2_ALG_ECB;
-        break;
-    case CKM_AES_NULL:
-        tpm_mode = TPM2_ALG_NULL;
-        break;
-    default:
-        LOGE("Unsupported mode, got: %lu", mode);
+    tpm_ctx *ctx = tpm_enc_data->ctx;
+
+    TPMT_RSA_DECRYPT *scheme = &tpm_enc_data->rsa.scheme;
+    TPM2B_DATA *label = &tpm_enc_data->rsa.label;
+
+    /*
+     * Validate that plaintext data fits in a message buffer.
+     * Do this first since it requires no trip to the TPM
+     * to verify or memory allocation.
+     */
+    TPM2B_PUBLIC_KEY_RSA message = { .size = pptextlen };
+    if (pptextlen > sizeof(message.buffer)) {
         return CKR_ARGUMENTS_BAD;
     }
+    memcpy(message.buffer, pptext, pptextlen);
+
+    ESYS_TR handle = tpm_enc_data->handle;
+
+    TPM2B_PUBLIC_KEY_RSA *ctext;
+
+    TSS2_RC rval = Esys_RSA_Encrypt(
+            ctx->esys_ctx,
+            handle,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            &message,
+            scheme,
+            label,
+            &ctext);
+    if (rval != TPM2_RC_SUCCESS) {
+        LOGE("Esys_RSA_Encrypt: 0x%x", rval);
+        return CKR_GENERAL_ERROR;
+    }
+
+    if (*cctextlen < ctext->size) {
+        return CKR_BUFFER_TOO_SMALL;
+    }
+
+    *cctextlen = ctext->size;
+    memcpy(cctext, ctext->buffer, ctext->size);
+
+    free(ctext);
+
+    return CKR_OK;
+}
+
+static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_ALG_SYM_MODE mode, TPMI_YES_NO is_decrypt,
+        TPM2B_IV *iv, CK_BYTE_PTR data_in, CK_ULONG data_in_len, CK_BYTE_PTR data_out, CK_ULONG_PTR data_out_len) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
 
     bool result = set_esys_auth(ctx->esys_ctx, handle, objauth);
     if (!result) {
@@ -1119,26 +1353,20 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_ME
      * Copy the data into TPM structures
      */
     TPM2B_MAX_BUFFER tpm_data_in = {
-         .size = twist_len(data_in),
+         .size = data_in_len,
     };
 
-    if (tpm_data_in.size > sizeof(tpm_data_in.buffer)) {
+    if (data_in_len > sizeof(tpm_data_in.buffer)) {
         return false;
     }
 
     memcpy(tpm_data_in.buffer, data_in, tpm_data_in.size);
 
-    TPM2B_IV tpm_iv_in = {
-        .size = iv_in ? twist_len(iv_in) : sizeof(tpm_iv_in.buffer),
-    };
+    assert(iv);
 
-    if (iv_in) {
-        if (tpm_iv_in.size > sizeof(tpm_iv_in.buffer)) {
-            return false;
-        }
-        memcpy(tpm_iv_in.buffer, iv_in, tpm_iv_in.size);
-    } else {
-        memset(tpm_iv_in.buffer, 0, sizeof(tpm_iv_in.buffer));
+    if (!iv) {
+        TPM2B_IV empty_iv_in = { .size = sizeof(empty_iv_in.buffer), .buffer = { 0 } };
+        iv = &empty_iv_in;
     }
 
     /* setup the output structures */
@@ -1156,8 +1384,8 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_ME
             ESYS_TR_NONE,
             &tpm_data_in,
             is_decrypt,
-            tpm_mode,
-            &tpm_iv_in,
+            mode,
+            iv,
             &tpm_data_out,
             &tpm_iv_out);
 
@@ -1170,8 +1398,8 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_ME
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             is_decrypt,
-            tpm_mode,
-            &tpm_iv_in,
+            mode,
+            iv,
             &tpm_data_in,
             &tpm_data_out,
             &tpm_iv_out);
@@ -1182,26 +1410,26 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_ME
         return CKR_GENERAL_ERROR;
     }
 
-    /* copy output data from tpm into twist types */
-    if (iv_out) {
-        *iv_out = twistbin_new(tpm_iv_out->buffer, tpm_iv_out->size);
-        if (!*iv_out) {
-            return CKR_HOST_MEMORY;
-        }
+    /* copy the output data */
+    if (tpm_data_out->size > *data_out_len) {
+        rv = CKR_BUFFER_TOO_SMALL;
+        goto out;
     }
 
-    *data_out = twistbin_new(tpm_data_out->buffer, tpm_data_out->size);
-    if (!*data_out) {
-        if (iv_out) {
-            twist_free(*iv_out);
-        }
-        return CKR_HOST_MEMORY;
-    }
+    *data_out_len = tpm_data_out->size;
+    memcpy(data_out, tpm_data_out->buffer, tpm_data_out->size);
 
+
+    /* swap iv's */
+    memcpy(iv, tpm_iv_out, sizeof(*tpm_iv_out));
+
+    rv = CKR_OK;
+
+out:
     free(tpm_data_out);
     free(tpm_iv_out);
 
-    return CKR_OK;
+    return rv;
 }
 
 /*
@@ -1210,20 +1438,40 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_ME
 #define ENCRYPT 0
 #define DECRYPT 1
 
-CK_RV tpm_encrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mode, twist iv, twist plaintext, twist *ciphertext, twist *iv_out) {
+CK_RV tpm_encrypt(tpm_encrypt_data *tpm_enc_data,
+        CK_BYTE_PTR ptext, CK_ULONG ptextlen,
+        CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen) {
 
-    return encrypt_decrypt(ctx, tobj->handle, tobj->unsealed_auth, mode, ENCRYPT,
-            iv, plaintext, ciphertext, iv_out);
+    if (tpm_enc_data->is_rsa) {
+        return tpm_rsa_encrypt(tpm_enc_data, ptext, ptextlen, ctext, ctextlen);
+    }
+
+    tpm_ctx *ctx = tpm_enc_data->ctx;
+    TPMI_ALG_SYM_MODE mode = tpm_enc_data->sym.mode;
+    TPM2B_IV *iv = &tpm_enc_data->sym.iv;
+
+    twist auth = tpm_enc_data->auth;
+    ESYS_TR handle = tpm_enc_data->handle;
+
+    return encrypt_decrypt(ctx, handle, auth, mode, ENCRYPT,
+            iv, ptext, ptextlen, ctext, ctextlen);
 }
 
-CK_RV tpm_decrypt_handle(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_MECHANISM_TYPE mode, twist iv, twist ciphertext, twist *plaintext, twist *iv_out) {
+CK_RV tpm_decrypt(tpm_encrypt_data *tpm_enc_data,
+        CK_BYTE_PTR ctext, CK_ULONG ctextlen,
+        CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen) {
 
-    return encrypt_decrypt(ctx, handle, objauth, mode, DECRYPT,
-            iv, ciphertext, plaintext, iv_out);
-}
+    if (tpm_enc_data->is_rsa) {
+        return tpm_rsa_decrypt(tpm_enc_data, ctext, ctextlen, ptext, ptextlen);
+    }
 
-CK_RV tpm_decrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mode, twist iv, twist ciphertext, twist *plaintext, twist *iv_out) {
+    tpm_ctx *ctx = tpm_enc_data->ctx;
+    TPMI_ALG_SYM_MODE mode = tpm_enc_data->sym.mode;
+    TPM2B_IV *iv = &tpm_enc_data->sym.iv;
 
-    return encrypt_decrypt(ctx, tobj->handle, tobj->unsealed_auth, mode, DECRYPT,
-            iv, ciphertext, plaintext, iv_out);
+    twist auth = tpm_enc_data->auth;
+    ESYS_TR handle = tpm_enc_data->handle;
+
+    return encrypt_decrypt(ctx, handle, auth, mode, DECRYPT,
+            iv, ctext, ctextlen, ptext, ptextlen);
 }

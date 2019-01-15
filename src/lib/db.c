@@ -184,6 +184,10 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
     /* native endianess unsigned longs */
     case CKA_KEY_TYPE:
         /* falls through */
+    case CKA_VALUE_LEN:
+        /* falls through */
+    case CKA_VALUE_BITS:
+        /* falls through */
     case CKA_CLASS: {
 
         size_t val;
@@ -273,6 +277,80 @@ static bool alloc_mech(unsigned long count, void *userdata) {
     return true;
 }
 
+static bool on_CKM_RSA_PKCS_OAEP_mechs(const char *key, const char *value, size_t index, void *data) {
+
+    UNUSED(index);
+
+    assert(key);
+    assert(value);
+    assert(data);
+
+    CK_RSA_PKCS_OAEP_PARAMS_PTR params = (CK_RSA_PKCS_OAEP_PARAMS_PTR)data;
+
+    CK_ULONG_PTR p = NULL;
+    if (!strcmp(key, "mgf")) {
+         p = &params->mgf;
+    } else if (!strcmp(key, "hashalg")) {
+        p = &params->hashAlg;
+    } else {
+        LOGE("Unkown key: \"%s\"", key);
+        return false;
+    }
+
+    size_t val;
+    int rc = str_to_ul(value, &val);
+    if (rc) {
+        return false;
+    }
+
+    *p = val;
+
+    return true;
+}
+
+static bool handle_CKM_RSA_PKCS_OAEP_mechs(const char *value, CK_MECHANISM_PTR mech) {
+
+    bool result = false;
+
+    /* make a copy for strtok_r to modify */
+    char *copy = strdup(value);
+    if (!copy) {
+        LOGE("oom");
+        return false;
+    }
+
+    CK_RSA_PKCS_OAEP_PARAMS_PTR params = calloc(1, sizeof(*params));
+    if (!params) {
+        LOGE("oom");
+        goto out;
+    }
+
+    unsigned i = 0;
+    char *kvp;
+    char *saveptr = NULL;
+    char *tmp = copy;
+    while( (kvp=strtok_r(tmp, ",", &saveptr)) ) {
+        tmp = NULL;
+
+        bool result = generic_parse_kvp(kvp, i, params, on_CKM_RSA_PKCS_OAEP_mechs);
+        if (!result) {
+            free(params);
+            goto out;
+        }
+        i++;
+    }
+
+    mech->pParameter = params;
+    mech->ulParameterLen = sizeof(*params);
+
+    result = true;
+
+out:
+    free(copy);
+
+    return result;
+}
+
 static bool parse_mech(const char *key, const char *value, size_t index, void *userdata) {
 
     tobject *tobj = (tobject *)userdata;
@@ -288,34 +366,13 @@ static bool parse_mech(const char *key, const char *value, size_t index, void *u
 
     m->mechanism = mechanism;
 
-    switch(m->mechanism) {
-    /* unsigned longs */
+    switch (mechanism) {
     case CKM_RSA_PKCS_OAEP:
-        /* falls through */
-    case CKM_ECDSA:
-        /* falls through */
-    case CKM_AES_CBC: {
-        size_t val;
-        int rc = str_to_ul(key, &val);
-        if (rc) {
-            LOGE("Could not convert key \"%s\" value \"%s\" to unsigned long",
-                    key, value);
-            return false;
-        }
-
-        m->pParameter = calloc(1, sizeof(val));
-        if (!m->pParameter) {
-            LOGE("oom");
-            return false;
-        }
-
-        memcpy(m->pParameter, &val, sizeof(val));
-        m->ulParameterLen = sizeof(val);
-    } break;
-    default:
-        LOGE("Unknown key, got: \"%s\"", key);
-        return false;
+        return handle_CKM_RSA_PKCS_OAEP_mechs(value, m);
     }
+
+    /* Mechanisms that don't have values should have empty values */
+    assert(value[0] == '\0');
 
     return true;
 }

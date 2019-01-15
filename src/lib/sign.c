@@ -10,6 +10,7 @@
 
 #include "checks.h"
 #include "digest.h"
+#include "encrypt.h"
 #include "log.h"
 #include "session.h"
 #include "session_ctx.h"
@@ -24,6 +25,7 @@ struct sign_opdata {
     bool do_hash;
     twist buffer;
     digest_op_data *digest_opdata;
+    encrypt_op_data *encrypt_opdata;
 };
 
 static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
@@ -369,8 +371,29 @@ CK_RV sign_final(token *tok, unsigned char *signature, unsigned long *signature_
         }
 
         /* sign padded pkcs 1.5 structure */
-        rv = tpm_rsa_decrypt(tpm, opdata->tobj, opdata->mtype, (CK_BYTE_PTR)padded, padded_len, signature, signature_len);
+        encrypt_op_data *encrypt_opdata = encrypt_op_data_new();
+        if (!encrypt_opdata) {
+            free(padded);
+            rv = CKR_HOST_MEMORY;
+            goto session_out;
+        }
+
+        /* perform a RAW RSA encryption */
+        CK_MECHANISM mechanism = {
+                CKM_RSA_X_509, NULL, 0
+        };
+
+        /* RSA Decrypt is the RSA operation with the private key, which is what we want */
+        rv = decrypt_init_op(tok, encrypt_opdata, &mechanism, opdata->tobj->id);
+        if (rv != CKR_OK) {
+            free(padded);
+            encrypt_op_data_free(&encrypt_opdata);
+            goto session_out;
+        }
+
+        rv = decrypt_oneshot_op(tok, encrypt_opdata, (CK_BYTE_PTR)padded, padded_len, signature, signature_len);
         free(padded);
+        encrypt_op_data_free(&encrypt_opdata);
         if (rv != CKR_OK) {
             goto session_out;
         }

@@ -130,7 +130,7 @@ void session_ctx_logout_event(session_ctx *ctx) {
 
 CK_RV unwrap_objauth(token *tok, tpm_ctx *tpm, wrappingobject *wobj, twist objauth, twist *unwrapped_auth) {
 
-    twist unwrapped_raw;
+    twist unwrapped_raw = NULL;
     if (tok->config.sym_support) {
         twist objauthraw = twistbin_unhexlify(objauth);
         if (!objauthraw) {
@@ -138,13 +138,35 @@ CK_RV unwrap_objauth(token *tok, tpm_ctx *tpm, wrappingobject *wobj, twist objau
             return CKR_HOST_MEMORY;
         }
 
-        CK_RV rv = tpm_decrypt_handle(tpm, wobj->handle, wobj->objauth, CKM_AES_NULL,
-                NULL, objauthraw, &unwrapped_raw, NULL);
-        twist_free(objauthraw);
+        tpm_encrypt_data *encdata = NULL;
+        CK_MECHANISM mech = {
+                CKM_AES_CFB1, NULL, 0
+        };
+
+        CK_RV rv = tpm_encrypt_data_init(tpm, wobj->handle, wobj->objauth, &mech, &encdata);
         if (rv != CKR_OK) {
-            LOGE("tpm_decrypt_handle failed");
+            LOGE("tpm_encrypt_data_init failed: 0x%x", rv);
             return CKR_GENERAL_ERROR;
         }
+
+        CK_BYTE ptext[256];
+        CK_ULONG ptextlen = sizeof(ptext);
+
+        rv = tpm_decrypt(encdata,
+             (CK_BYTE_PTR)objauthraw, twist_len(objauthraw),
+             ptext, &ptextlen);
+        tpm_encrypt_data_free(encdata);
+        twist_free(objauthraw);
+        if (rv != CKR_OK) {
+            LOGE("tpm_decrypt_handle failed: 0x%x", rv);
+            return CKR_GENERAL_ERROR;
+        }
+
+        unwrapped_raw = twistbin_new(ptext, ptextlen);
+        if (!unwrapped_raw) {
+            return CKR_HOST_MEMORY;
+        }
+
     } else {
         twist swkey = twistbin_unhexlify(wobj->objauth);
         if (!swkey) {

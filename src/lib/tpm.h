@@ -102,17 +102,13 @@ CK_RV tpm_hash_init(tpm_ctx *ctx, CK_MECHANISM_TYPE mode, uint32_t *sequence_han
 CK_RV tpm_hash_update(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, CK_ULONG data_len);
 CK_RV tpm_hash_final(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, CK_ULONG_PTR data_len);
 
-#define CKM_AES_NULL (CKM_VENDOR_DEFINED | 0x1)
+typedef struct tpm_encrypt_data tpm_encrypt_data;
+CK_RV tpm_encrypt_data_init(tpm_ctx *ctx, uint32_t handle, twist auth, CK_MECHANISM_PTR, tpm_encrypt_data **encdata);
+void tpm_encrypt_data_free(tpm_encrypt_data *encdata);
 
-CK_RV tpm_encrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mode, twist iv, twist plaintext, twist *ciphertext, twist *iv_out);
+CK_RV tpm_encrypt(tpm_encrypt_data *tpm_enc_data, CK_BYTE_PTR ptext, CK_ULONG ptextlen, CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen);
 
-CK_RV tpm_decrypt_handle(tpm_ctx *ctx, uint32_t handle, twist objauth, CK_MECHANISM_TYPE mode, twist iv, twist ciphertext, twist *plaintext, twist *iv_out);
-
-CK_RV tpm_decrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mode, twist iv, twist ciphertext, twist *plaintext, twist *iv_out);
-
-CK_RV tpm_rsa_decrypt(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech,
-        CK_BYTE_PTR ctext, CK_ULONG ctextlen,
-        CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen);
+CK_RV tpm_decrypt(tpm_encrypt_data *tpm_enc_data, CK_BYTE_PTR ctext, CK_ULONG ctextlen, CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen);
 
 bool tpm_register_handle(tpm_ctx *ctx, uint32_t *handle);
 

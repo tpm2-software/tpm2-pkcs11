@@ -31,8 +31,13 @@ from subprocess import Popen, PIPE
 
 DEFAULT_STORE_PATH = os.path.join(os.environ.get("HOME"), ".tpm2_pkcs11") if os.environ.get("HOME") else os.getcwd()
 
-def kvp_row(d):
-    x = " ".join(["=".join([str(key), str(val)]) for key, val in d.items()])
+# The delimiter changes based on nesting level to make parsing easier. We assume one key-value entry per line
+# where a key can have N KVPs as a CSV.
+# For instance:
+#   9=hashalg=43,mgf=67\n
+#
+def kvp_row(d, delim=" "):
+    x = delim.join(["=".join([str(key), kvp_row(val, ",") if isinstance(val, dict) else str(val)]) for key, val in d.items()])
     return x
 
 def list_dict_to_kvp(l):
@@ -78,14 +83,20 @@ CKK_RSA = 0
 CKK_EC = 0x3
 CKK_AES = 0x1f
 
+CKM_RSA_X_509=0x3
 CKM_RSA_PKCS_OAEP = 9
 CKM_AES_CBC = 0x1082
 CKM_ECDSA = 0x1041
+
+CKM_SHA256 = 0x250
+CKG_MGF1_SHA256 = 0x2
 
 CKA_LABEL = 0x3
 CKA_ID = 0x102
 CKA_MODULUS = 0x120
 CKA_PUBLIC_EXPONENT = 0x122
+CKA_VALUE_BITS = 0x160
+CKA_VALUE_LEN = 0x161
 
 class AESCipher:
 
@@ -1214,7 +1225,12 @@ class NewKeyCommandBase(Command):
             ]
 
             mech = [
-                { CKM_RSA_PKCS_OAEP : "" },
+                { CKM_RSA_X_509 : "" },
+                { CKM_RSA_PKCS_OAEP :
+                  {  "hashalg" : CKM_SHA256,
+                     "mgf"     : CKG_MGF1_SHA256
+                  }
+                }
             ]
         elif alg.startswith('ecc'):
             attrs = [
@@ -1229,8 +1245,10 @@ class NewKeyCommandBase(Command):
             ]
         elif alg.startswith('aes'):
             attrs = [
-                { CKA_CLASS    : CKO_SECRET_KEY },
-                { CKA_KEY_TYPE : CKK_AES        }
+                { CKA_CLASS     : CKO_SECRET_KEY     },
+                { CKA_KEY_TYPE  : CKK_AES            },
+                { CKA_VALUE_BITS: y['sym-keybits']   },
+                { CKA_VALUE_LEN : y['sym-keybits']/8 }
             ]
 
             mech = [
