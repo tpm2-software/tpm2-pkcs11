@@ -13,6 +13,7 @@ struct test_info {
     bool is_logged_in;
     struct {
         CK_OBJECT_HANDLE aes;
+        CK_OBJECT_HANDLE rsa;
     } objects;
 };
 
@@ -45,8 +46,29 @@ static int test_setup(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     /* get a AES key */
-    CK_OBJECT_HANDLE objhandles[1];
-    rv = C_FindObjects(handle, objhandles, ARRAY_LEN(objhandles), &count);
+    CK_OBJECT_HANDLE objhandles[2];
+    rv = C_FindObjects(handle, objhandles, 1, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(handle);
+    assert_int_equal(rv, CKR_OK);
+
+    /* get an rsa key */
+    key_class = CKO_PRIVATE_KEY;
+    key_type = CKK_RSA;
+
+    tmpl[0].type = CKA_CLASS;
+    tmpl[0].pValue = &key_class;
+    tmpl[0].ulValueLen = sizeof(key_class);
+    tmpl[1].type = CKA_KEY_TYPE;
+    tmpl[1].pValue = &key_type;
+    tmpl[1].ulValueLen = sizeof(key_type);
+
+    rv = C_FindObjectsInit(handle, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjects(handle, &objhandles[1], 1, &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(count, 1);
 
@@ -57,6 +79,7 @@ static int test_setup(void **state) {
     info->handle = handle;
     info->slot = slots[1];
     info->objects.aes = objhandles[0];
+    info->objects.rsa = objhandles[1];
 
     *state = info;
 
@@ -105,7 +128,7 @@ static void test_aes_encrypt_decrypt_good(void **state) {
     };
 
     CK_MECHANISM mechanism = {
-        CKM_AES_CBC_PAD, iv, sizeof(iv)
+        CKM_AES_CBC, iv, sizeof(iv)
     };
 
     /*
@@ -180,7 +203,7 @@ static void test_aes_encrypt_decrypt_oneshot_good(void **state) {
     };
 
     CK_MECHANISM mechanism = {
-        CKM_AES_CBC_PAD, iv, sizeof(iv)
+        CKM_AES_CBC, iv, sizeof(iv)
     };
 
     /*
@@ -218,12 +241,68 @@ static void test_aes_encrypt_decrypt_oneshot_good(void **state) {
     assert_memory_equal(plaintext, plaintext2, sizeof(plaintext2));
 }
 
+#define MGF1_LABEL "mylabel"
+
+static void test_rsa_oaep_encrypt_decrypt_oneshot_good(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+
+    CK_SESSION_HANDLE session = ti->handle;
+
+    do_login(ti);
+
+    CK_RSA_PKCS_OAEP_PARAMS params = {
+        .hashAlg = CKM_SHA256,
+        .pSourceData = MGF1_LABEL,
+        .ulSourceDataLen = sizeof(MGF1_LABEL), // include NULL byte
+        .source = CKZ_DATA_SPECIFIED,
+        .mgf = CKG_MGF1_SHA256
+    };
+
+    CK_MECHANISM mechanism = {
+        CKM_RSA_PKCS_OAEP, &params, sizeof(params)
+    };
+
+    CK_BYTE plaintext[] = {
+        'm', 'y', ' ', 's', 'e', 'c', 'r', 'e', 't', ' ', 'i', 's', 'c', 'o', 'o', 'l',
+    };
+
+    /* size of RSA 2048 modulus length */
+    CK_BYTE ciphertext[256] = { 0 };
+
+    /* init */
+    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.rsa);
+    assert_int_equal(rv, CKR_OK);
+
+    /* part 1 */
+    unsigned long ciphertext_len = sizeof(ciphertext);
+    rv = C_Encrypt(session, plaintext, sizeof(plaintext),
+            ciphertext, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, sizeof(ciphertext));
+
+    rv = C_DecryptInit (session, &mechanism, ti->objects.rsa);
+    assert_int_equal(rv, CKR_OK);
+
+    unsigned char plaintext2[sizeof(ciphertext)];
+    unsigned long plaintext2_len = sizeof(plaintext2);
+
+    rv = C_Decrypt (session, ciphertext, ciphertext_len,
+            plaintext2, &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(plaintext2_len, sizeof(plaintext));
+
+    assert_memory_equal(plaintext, plaintext2, sizeof(plaintext));
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_aes_encrypt_decrypt_good,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_aes_encrypt_decrypt_oneshot_good,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_rsa_oaep_encrypt_decrypt_oneshot_good,
                 test_setup, test_teardown),
     };
 

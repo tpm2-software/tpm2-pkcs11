@@ -111,4 +111,6 @@ CK_RV object_get_attributes(token *tok, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *t
  */
 CK_ATTRIBUTE_PTR object_get_attribute(tobject *tobj, CK_ATTRIBUTE_TYPE atype);
 
+CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech);
+
 #endif /* SRC_PKCS11_OBJECT_H_ */

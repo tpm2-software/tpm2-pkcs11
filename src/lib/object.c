@@ -72,6 +72,73 @@ void sealobject_free(sealobject *sealobj) {
     twist_free(sealobj->userpriv);
 }
 
+static bool object_CKM_RSA_PKCS_OAEP_params_supported(
+        CK_RSA_PKCS_OAEP_PARAMS_PTR requested,
+        CK_RSA_PKCS_OAEP_PARAMS_PTR got) {
+
+    return requested->hashAlg == got->hashAlg &&
+            requested->mgf == got->mgf;
+}
+
+static bool object_CKM_AES_CBC_params_supported(
+        CK_MECHANISM_PTR requested
+        ) {
+
+    // IV is blocksize for AES
+    return requested->ulParameterLen == 16;
+}
+
+CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech) {
+
+    bool is_equal;
+    unsigned long i;
+    bool got_to_params = false;
+    for (i=0; i < tobj->mechanisms.count; i++) {
+        CK_MECHANISM_PTR m = &tobj->mechanisms.mech[i];
+
+        if (mech->mechanism != m->mechanism) {
+            continue;
+        }
+
+        got_to_params = true;
+
+        /*
+         * Ensure the parameters are supported, this would need to be done for each mechanism
+         * as things like label, etc are flexible. However, keep a default handler of strict
+         * memcmp for things that are empty or can be fully specified in the DB.
+         */
+        switch (mech->mechanism) {
+        case CKM_RSA_X_509:
+            /* no params */
+            is_equal = true;
+            break;
+        case CKM_RSA_PKCS_OAEP:
+            is_equal = object_CKM_RSA_PKCS_OAEP_params_supported(
+                    mech->pParameter,
+                    m->pParameter
+                    );
+            break;
+        case CKM_AES_CBC:
+            is_equal = object_CKM_AES_CBC_params_supported(
+                    mech);
+            break;
+        default:
+            is_equal =
+                mech->ulParameterLen == m->ulParameterLen
+            && !memcmp(mech->pParameter, m->pParameter, m->ulParameterLen);
+        }
+
+        if(!is_equal) {
+            continue;
+        }
+
+        /* match */
+        return CKR_OK;
+    }
+
+    return got_to_params ? CKR_MECHANISM_PARAM_INVALID : CKR_MECHANISM_INVALID;
+}
+
 tobject *object_attr_filter(tobject *tobj, CK_ATTRIBUTE_PTR templ, unsigned long count) {
 
     unsigned long i;
