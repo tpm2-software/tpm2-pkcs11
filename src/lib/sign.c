@@ -101,17 +101,20 @@ static CK_RV common_init(operation op, token *tok, CK_MECHANISM_PTR mechanism, C
 
     bool is_active = token_opdata_is_active(tok);
     if (is_active) {
+        digest_op_data_free(&digest_opdata);
         return CKR_OPERATION_ACTIVE;
     }
 
     sign_opdata *opdata = calloc(1, sizeof(*opdata));
     if (!opdata) {
+        digest_op_data_free(&digest_opdata);
         return CKR_HOST_MEMORY;
     }
 
 
     rv = token_load_object(tok, key, &opdata->tobj);
     if (rv != CKR_OK) {
+        digest_op_data_free(&digest_opdata);
         free(opdata);
         return rv;
     }
