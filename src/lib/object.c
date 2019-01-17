@@ -261,6 +261,7 @@ CK_RV object_find_init(token *tok, CK_ATTRIBUTE_PTR templ, unsigned long count) 
             match_cur->obj = tobj;
 
         } else {
+            assert(match_cur);
             match_cur->next = calloc(1, sizeof(*match_cur));
             if (!match_cur->next) {
                 rv = CKR_HOST_MEMORY;
