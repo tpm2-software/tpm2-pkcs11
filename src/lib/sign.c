@@ -112,6 +112,7 @@ static CK_RV common_init(operation op, token *tok, CK_MECHANISM_PTR mechanism, C
 
     rv = token_load_object(tok, key, &opdata->tobj);
     if (rv != CKR_OK) {
+        free(opdata);
         return rv;
     }
 
