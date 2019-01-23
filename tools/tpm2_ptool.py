@@ -629,6 +629,35 @@ class Db(object):
         for s in sql:
             c.execute(s)
 
+class TPMAuthUnwrapper(object):
+    def __init__(self, tpm2, pobjhandle, pobjauth, wrappingkeyauth, wrappingkeypriv, wrappingkeypub):
+        self._wrappingkeyauth = wrappingkeyauth
+        self._tpm2 = tpm2
+
+        wrappingkeyctx = tpm2.load(pobjhandle, pobjauth, wrappingkeypriv, wrappingkeypub)
+        self._wrappingkeyctx = wrappingkeyctx
+
+    def unwrap(self, value):
+        unhexlified = binascii.unhexlify(value)
+        unwrapped = self._tpm2.decrypt(self._wrappingkeyctx, self._wrappingkeyauth, unhexlified)
+        return unwrapped
+
+    def wrap(self, value):
+        wrapped = self._tpm2.encrypt(self._wrappingkeyctx, self._wrappingkeyauth, value)
+        hexlified = binascii.hexlify(wrapped)
+        return hexlified
+
+class AESAuthUnwrapper(object):
+    def __init__(self, key):
+
+        self._cipher = AESCipher(binascii.unhexlify(key))
+
+    def unwrap(self, value):
+        return self._cipher.decrypt(value)
+
+    def wrap(self, value):
+        return self._cipher.encrypt(value)
+
 class commandlet(object):
     '''Decorator class for commandlet. You can add commandlets to the tool with this decorator.'''
 
@@ -1001,10 +1030,11 @@ class AddTokenCommand(Command):
             sobjauth = hash_pass(os.urandom(32))['hash']
 
             if sym_support:
-                encsobjauth = tpm2.encrypt(wrappingctx, wrappingobjauth['hash'], sobjauth)
-                encsobjauth = binascii.hexlify(encsobjauth)
+                wrapper = TPMAuthUnwrapper(tpm2, pobject['handle'], pobjauthhash, wrappingobjauth['hash'], wrappingobjpriv, wrappingobjpub)
             else:
-                encsobjauth = AESCipher(wrappingobjauth['rhash']).encrypt(sobjauth)
+                wrapper = AESAuthUnwrapper(wrappingobjauth['hash'])
+
+            encsobjauth = wrapper.wrap(sobjauth)
 
             objattrs="restricted|decrypt|fixedtpm|fixedparent|sensitivedataorigin|userwithauth"
             sobjpriv, sobjpub, sobjpubdata = tpm2.create(pobject['handle'], pobjauthhash, sobjauth, objattrs=objattrs, alg='rsa2048')
@@ -1166,26 +1196,21 @@ class NewKeyCommandBase(Command):
         # Now that the sealobject is loaded, we need to unseal the wrapping key
         # object auth or the key when the TPM doesn't support encryptdecrypt
 
-        wrappingauth = tpm2.unseal(sealctx, sealauth)
+        wrappingkeyauth = tpm2.unseal(sealctx, sealauth)
 
         sym_support = str2bool(token_config['sym-support'])
         if sym_support:
-            # Now that we have the unsealed wrappingauth value
-            # Load the wrapping object
-            wrappingobj = db.getwrapping(token['id'])
-            wrappingctx = tpm2.load(pobj['handle'], pinpobjauth, wrappingobj['priv'], wrappingobj['pub'])
+            wrappingkey = db.getwrapping(token['id'])
+            wrapper = TPMAuthUnwrapper(tpm2, pobj['handle'], pinpobjauth, wrappingkeyauth, wrappingkey['priv'], wrappingkey['pub'])
+        else:
+            wrapper = AESAuthUnwrapper(wrappingkeyauth)
 
         # Now get the secondary object from db
         sobj = db.getsecondary(token['id'])
 
         # decrypt sobj auth with wrapping
-        sobjauth = sobj['objauth'];
-        if sym_support:
-            sobjauth = binascii.unhexlify(sobjauth)
-            sobjauth = tpm2.decrypt(wrappingctx, wrappingauth, sobjauth)
-        else:
-            c = AESCipher(binascii.unhexlify(wrappingauth))
-            sobjauth = c.decrypt(sobjauth)
+        encsobjauth = sobj['objauth']
+        sobjauth = wrapper.unwrap(encsobjauth)
 
         # load the secondary object
         sobjctx = tpm2.load(pobj['handle'], pinpobjauth, sobj['priv'], sobj['pub'])
@@ -1193,13 +1218,7 @@ class NewKeyCommandBase(Command):
         #create an auth value for the tertiary object.
         objauth = hash_pass(rand_str(32))['hash']
 
-        if sym_support:
-            # Encrypt tertiary object auth with secondary object via TPM
-            encobjauth = tpm2.encrypt(wrappingctx, wrappingauth, objauth)
-            encobjauth = binascii.hexlify(encobjauth)
-        else:
-            c = AESCipher(binascii.unhexlify(wrappingauth))
-            encobjauth = c.encrypt(objauth)
+        encobjauth = wrapper.wrap(objauth)
 
         return (sobjctx, sobjauth, encobjauth, objauth)
 
@@ -1528,15 +1547,21 @@ class VerifyCommand(Command):
 
                 print("USER pin valid!")
 
+            token_config =  dict_from_kvp(token['config'])
 
-            wrappingkeyctx = tpm2.load(pobj['handle'], pobjauth, wrappingkey['priv'], wrappingkey['pub'])
+            print('TOKEN CONFIG: {}'.format(token_config))
+
+            sym_support = str2bool(token_config['sym-support'])
+            if sym_support:
+                wrapper = TPMAuthUnwrapper(tpm2, pobj['handle'], pobjauth, wrappingkeyauth, wrappingkey['priv'], wrappingkey['pub'])
+            else:
+                wrapper = AESAuthUnwrapper(wrappingkeyauth)
 
             sobj = db.getsecondary(token['id'])
 
             sobjctx = tpm2.load(pobj['handle'], pobjauth, sobj['priv'], sobj['pub'])
 
-            sobjauth = binascii.unhexlify(sobj['objauth'])
-            sobjauth = tpm2.decrypt(wrappingkeyctx, wrappingkeyauth, sobjauth)
+            sobjauth = wrapper.unwrap(sobj['objauth'])
 
             print("Secondary object verified(%d), auth: %s" % (sobj['id'], sobjauth))
 
@@ -1544,8 +1569,8 @@ class VerifyCommand(Command):
 
             for tobj in tobjs:
                 tobjctx = tpm2.load(sobjctx, sobjauth, tobj['priv'], tobj['pub'])
-                tobjauth = binascii.unhexlify(tobj['objauth'])
-                tobjauth = tpm2._encryptdecrypt(wrappingkeyctx, wrappingkeyauth, tobjauth, decrypt=True)
+                tobjauth = wrapper.unwrap(tobj['objauth'])
+
                 print("Tertiary object verified(%d), auth: %s" % (tobj['id'], tobjauth))
 
     def __call__(self, args):
