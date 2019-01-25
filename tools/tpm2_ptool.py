@@ -317,6 +317,20 @@ class Tpm2(object):
         priv = self._move(priv)
         return priv, pub, stdout
 
+    def changeauth(self, pctx, objctx, oldobjauth, newobjauth):
+
+        newpriv = os.path.join(self._tmp, uuid.uuid4().hex + '.priv')
+
+        #tpm2_load -C $file_primary_key_ctx  -u $file_load_key_pub  -r $file_load_key_priv -n $file_load_key_name -o $file_load_key_ctx
+        cmd = ['tpm2_changeauth', '-a', str(pctx), '-c', str(objctx), '-P', 'hex:' + oldobjauth.decode(), '-p', 'hex:' + newobjauth.decode(), '-r', newpriv]
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+        stdout, stderr = p.communicate()
+        rc = p.wait()
+        if rc:
+            raise RuntimeError("Could not execute tpm2_load: %s", stderr)
+        newpriv = self._move(newpriv)
+        return newpriv
+
 class TemporaryDirectory(object):
     """Context manager for tempfile.mkdtemp() so it's usable with "with" statement."""
     def __enter__(self):
@@ -346,6 +360,8 @@ class Db(object):
         c = self._conn.cursor()
         c.execute("SELECT * from tokens WHERE label=?", (label,))
         x = c.fetchone()
+        if x == None:
+            sys.exit('No token labeled "%s"' % label)
         return x
 
     def getsealobject(self, tokid):
@@ -526,6 +542,28 @@ class Db(object):
         sql = 'UPDATE tobjects SET attrs=? WHERE id=?'
         c = self._conn.cursor()
         c.execute(sql, (x, id))
+
+    def updatepin(self, is_so, token, pobjkey, pobjauth, sealauth, sealpriv):
+
+        tokid = token['id']
+
+        c = self._conn.cursor()
+
+        # TABLE tokens UPDATE
+        # [user|so]pobjauthkeysalt TEXT,
+        # [user|so]pobjauthkeyiters NUMBER,
+        # [user|so]pobjauth TEXT,
+
+        sql = 'UPDATE tokens SET {}pobjauthkeysalt=?, {}pobjauthkeyiters=?, {}pobjauth=? WHERE id=?;'.format(*['so' if is_so else 'user'] * 3)
+        c.execute(sql, (pobjkey['salt'], pobjkey['iters'], pobjauth, tokid))
+
+        # TABLE sealobjects UPDATE
+        # [user|so]priv TEXT NOT NULL,
+        # [user|so]authsalt TEXT NOT NULL,
+        # [user|so]authiters NUMBER NOT NULL,
+
+        sql = 'UPDATE sealobjects SET {}authsalt=?, {}authiters=?, {}priv=? WHERE id=?;'.format(*['so' if is_so else 'user'] * 3)
+        c.execute(sql, (sealauth['salt'], sealauth['iters'], sealpriv, tokid))
 
     def commit(self):
         self._conn.commit()
@@ -1118,6 +1156,83 @@ class AddEmptyTokenCommand(AddTokenCommand):
         args['no_init'] = True
         super(self.__class__, self).__call__(args)
 
+class Utils(object):
+    @staticmethod
+    def check_pin(token, pin, is_so=False):
+
+        # Get the primary object encrypted auth value and sokey information
+        # to decode it. Based on the incoming pin
+        if is_so:
+            pinpobjauthkeysalt = token['sopobjauthkeysalt']
+            pinpobjauthkeyiters = token['sopobjauthkeyiters']
+            pinpobjauth = token['sopobjauth']
+        else:
+            pinpobjauthkeysalt = token['userpobjauthkeysalt']
+            pinpobjauthkeyiters = token['userpobjauthkeyiters']
+            pinpobjauth = token['userpobjauth']
+
+        pinpobjauthkeysalt = binascii.unhexlify(pinpobjauthkeysalt)
+        pinpobjauthkey = hash_pass(pin.encode(), iters=pinpobjauthkeyiters, salt=pinpobjauthkeysalt)
+
+        try:
+            pinpobjauth = AESCipher(pinpobjauthkey['rhash']).decrypt(pinpobjauth)
+        except InvalidTag:
+            sys.exit('Invalid {} pin'.format('so' if is_so else 'user'))
+
+        return pinpobjauth
+
+    @staticmethod
+    def load_sealobject(token, tpm2, db, pobjauth, pin, is_so):
+
+        pobj = db.getprimary(token['pid'])
+        sealobject = db.getsealobject(token['id'])
+        if is_so:
+            sealpub = sealobject['sopub']
+            sealpriv = sealobject['sopriv']
+            salt = sealobject['soauthsalt']
+            iters = sealobject['soauthiters']
+        else:
+            sealpub = sealobject['userpub']
+            sealpriv = sealobject['userpriv']
+            salt = sealobject['userauthsalt']
+            iters = sealobject['userauthiters']
+
+        salt = binascii.unhexlify(salt)
+        sealauth = hash_pass(pin.encode(), iters, salt)['hash']
+
+        # Load the so sealobject using the PARENTS AUTH (primaryobject)
+        sealctx = tpm2.load(pobj['handle'], pobjauth, sealpriv, sealpub)
+
+        return pobj, sealctx, sealauth
+
+    @staticmethod
+    def load_sobject(token, db, tpm2, wrapper, pobj, pobjauth):
+        # Now get the secondary object from db
+        sobj = db.getsecondary(token['id'])
+
+        # decrypt sobj auth with wrapping
+        encsobjauth = sobj['objauth']
+        sobjauth = wrapper.unwrap(encsobjauth)
+
+        # load the secondary object
+        sobjctx = tpm2.load(pobj['handle'], pobjauth, sobj['priv'], sobj['pub'])
+
+        return sobjctx, sobjauth
+
+    @staticmethod
+    def getwrapper(token, db, tpm2, pobjauth, wrappingkeyauth):
+        token_config = dict_from_kvp(token['config'])
+        sym_support = str2bool(token_config['sym-support'])
+
+        if sym_support:
+            pobj = db.getprimary(token['pid'])
+            wrappingkey = db.getwrapping(token['id'])
+            wrapper = TPMAuthUnwrapper(tpm2, pobj['handle'], pobjauth, wrappingkeyauth, wrappingkey['priv'], wrappingkey['pub'])
+        else:
+            wrapper = AESAuthUnwrapper(wrappingkeyauth)
+
+        return wrapper
+
 class NewKeyCommandBase(Command):
     '''
     creates a key to a token within a tpm2-pkcs11 store.
@@ -1142,78 +1257,27 @@ class NewKeyCommandBase(Command):
 
     @staticmethod
     def new_key_init(label, sopin, userpin, db, tpm2):
+
         token = db.gettoken(label)
-
-        if token is None:
-            sys.exit('Cannot find token by label "{}"'.format(label))
-
-        token_config =  dict_from_kvp(token['config'])
-        pobj = db.getprimary(token['pid'])
 
         # Get the primary object encrypted auth value and sokey information
         # to decode it. Based on the incoming pin
         is_so = sopin != None
-        if is_so:
-            pin = sopin
-            pinpobjauthkeysalt = token['sopobjauthkeysalt']
-            pinpobjauthkeyiters = token['sopobjauthkeyiters']
-            pinpobjauth = token['sopobjauth']
-        else:
-            pin = userpin
-            pinpobjauthkeysalt = token['userpobjauthkeysalt']
-            pinpobjauthkeyiters = token['userpobjauthkeyiters']
-            pinpobjauth = token['userpobjauth']
+        pin = sopin if is_so else userpin
 
-        pinpobjauthkeysalt = binascii.unhexlify(pinpobjauthkeysalt)
-        pinpobjauthkey = hash_pass(pin.encode(), iters=pinpobjauthkeyiters, salt=pinpobjauthkeysalt)
-
-        try:
-            pinpobjauth = AESCipher(pinpobjauthkey['rhash']).decrypt(pinpobjauth)
-        except InvalidTag:
-            sys.exit('Invalid {} pin'.format('so' if is_so else 'user'))
+        pobjauth = Utils.check_pin(token, pin, is_so)
 
         # At this point we have recovered the ACTUAL auth value for the primary object, so now we
         # can load up the seal objects
-        sealobject = db.getsealobject(token['id'])
-
-        if is_so:
-            sealpub = sealobject['sopub']
-            sealpriv = sealobject['sopriv']
-            salt = sealobject['soauthsalt']
-            iters = sealobject['soauthiters']
-        else:
-            sealpub = sealobject['userpub']
-            sealpriv = sealobject['userpriv']
-            salt = sealobject['userauthsalt']
-            iters = sealobject['userauthiters']
-
-        salt = binascii.unhexlify(salt)
-        sealauth = hash_pass(pin.encode(), iters, salt)['hash']
-
-        # Load the so sealobject using the PARENTS AUTH (primaryobject)
-        sealctx = tpm2.load(pobj['handle'], pinpobjauth, sealpriv, sealpub)
+        pobj, sealctx, sealauth = Utils.load_sealobject(token, tpm2, db, pobjauth, pin, is_so)
 
         # Now that the sealobject is loaded, we need to unseal the wrapping key
         # object auth or the key when the TPM doesn't support encryptdecrypt
-
         wrappingkeyauth = tpm2.unseal(sealctx, sealauth)
 
-        sym_support = str2bool(token_config['sym-support'])
-        if sym_support:
-            wrappingkey = db.getwrapping(token['id'])
-            wrapper = TPMAuthUnwrapper(tpm2, pobj['handle'], pinpobjauth, wrappingkeyauth, wrappingkey['priv'], wrappingkey['pub'])
-        else:
-            wrapper = AESAuthUnwrapper(wrappingkeyauth)
+        wrapper = Utils.getwrapper(token, db, tpm2, pobjauth, wrappingkeyauth)
 
-        # Now get the secondary object from db
-        sobj = db.getsecondary(token['id'])
-
-        # decrypt sobj auth with wrapping
-        encsobjauth = sobj['objauth']
-        sobjauth = wrapper.unwrap(encsobjauth)
-
-        # load the secondary object
-        sobjctx = tpm2.load(pobj['handle'], pinpobjauth, sobj['priv'], sobj['pub'])
+        sobjctx, sobjauth = Utils.load_sobject(token, db, tpm2, wrapper, pobj, pobjauth)
 
         #create an auth value for the tertiary object.
         objauth = hash_pass(rand_str(32))['hash']
@@ -1417,6 +1481,89 @@ class AddKeyCommand(NewKeyCommandBase):
         keylabel = super(self.__class__, self).__call__(args)
         print('Added key as label: "{keylabel}"'.format(keylabel=keylabel))
 
+@commandlet("changepin")
+class ChangePinCommand(Command):
+    '''
+    Changes the userpin and/or sopin for a given token.
+    '''
+
+    # adhere to an interface
+    # pylint: disable=no-self-use
+    def generate_options(self, group_parser):
+        group_parser.add_argument(
+            '--user',
+            choices=['so', 'user'],
+            default='user',
+            help='Which pin to change. Defaults to "user".\n')
+        group_parser.add_argument(
+            '--old',
+            type=str,
+            help='The old pin.\n',
+            required=True)
+        group_parser.add_argument(
+            '--new',
+            type=str,
+            help='The new pin.\n',
+            required=True)
+        group_parser.add_argument(
+            '--label',
+            type=str,
+            help='The label of the token.\n',
+            required=True)
+
+    @staticmethod
+    def changepin(db, tpm2, args):
+
+        label = args['label']
+
+        is_so = args['user'] == 'so'
+        oldpin = args['old']
+        newpin = args['new']
+
+        token = db.gettoken(label)
+
+        pobjauth = Utils.check_pin(token, oldpin, is_so)
+
+        pobj, sealctx, sealauth = Utils.load_sealobject(token, tpm2, db, pobjauth, oldpin, is_so)
+
+        wrappingkeyauth = tpm2.unseal(sealctx, sealauth)
+
+        sealobject = db.getsealobject(token['id'])
+
+        oldpriv = sealobject['{}priv'.format('so' if is_so else 'user')]
+
+        #
+        # Now we need to use the newpin to wrap the primaryobject auth value AND
+        # call tpm2_changeauth ON the seal key and update it's tpm private portion file
+        # and delete the old private file to prevent rollbacks
+        #
+
+        # Step 1 - Generate new wrapping key
+        pobjkey = hash_pass(newpin)
+
+        # Step 2 - Wrap pobjauth - defer db store until success
+        c = AESCipher(pobjkey['rhash'])
+        encpobjauth = c.encrypt(pobjauth)
+
+        # Step 3 - call tpm2_changeauth and get new private portion
+        newsealauth = hash_pass(newpin)
+        newsealpriv = tpm2.changeauth(pobj['handle'], sealctx, sealauth, newsealauth['hash'])
+
+        # Step 4 - update the database
+        db.updatepin(is_so, token, pobjkey, encpobjauth, newsealauth, newsealpriv)
+
+        # Step 5 - unlink the old private tpm object file.
+        os.unlink(oldpriv)
+
+    def __call__(self, args):
+
+        path = args['path']
+
+        with Db(path) as db:
+            with TemporaryDirectory() as d:
+                tpm2 = Tpm2(d, path)
+                ChangePinCommand.changepin(db, tpm2, args)
+
 @commandlet("rmtoken")
 class RmTokenCommand(Command):
     '''
@@ -1496,15 +1643,7 @@ class VerifyCommand(Command):
 
             if sopin != None:
 
-                # load the seal object under the primary object using the AES/GCM software protected
-                # primary object authorization value
-                sopobjauthkeyiters = token['sopobjauthkeyiters']
-                sopobjauthkeysalt = token['sopobjauthkeysalt']
-                sopobjauthkeysalt = binascii.unhexlify(sopobjauthkeysalt)
-
-                sopobjauthkey = hash_pass(sopin.encode(), salt=sopobjauthkeysalt, iters=sopobjauthkeyiters)
-
-                sopobjauth = AESCipher(sopobjauthkey['rhash']).decrypt(token['sopobjauth'])
+                sopobjauth = Utils.check_pin(token, sopin, True)
 
                 sosealctx = tpm2.load(pobj['handle'], sopobjauth, sealobj['sopriv'], sealobj['sopub'])
 
@@ -1522,15 +1661,8 @@ class VerifyCommand(Command):
                 print("SO pin valid!")
 
             if userpin != None:
-                # load the seal object under the primary object using the AES/GCM software protected
-                # primary object authorization value
-                userpobjauthkeyiters = token['userpobjauthkeyiters']
-                userpobjauthkeysalt = token['userpobjauthkeysalt']
-                userpobjauthkeysalt = binascii.unhexlify(userpobjauthkeysalt)
 
-                userpobjauthkey = hash_pass(userpin.encode(), salt=userpobjauthkeysalt, iters=userpobjauthkeyiters)
-
-                userpobjauth = AESCipher(userpobjauthkey['rhash']).decrypt(token['userpobjauth'])
+                userpobjauth = Utils.check_pin(token, userpin, False)
 
                 usersealctx = tpm2.load(pobj['handle'], userpobjauth, sealobj['userpriv'], sealobj['userpub'])
 
