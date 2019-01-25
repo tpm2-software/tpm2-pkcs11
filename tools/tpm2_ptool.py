@@ -543,7 +543,7 @@ class Db(object):
         c = self._conn.cursor()
         c.execute(sql, (x, id))
 
-    def updatepin(self, is_so, token, pobjkey, pobjauth, sealauth, sealpriv):
+    def updatepin(self, is_so, token, pobjkey, pobjauth, sealauth, sealpriv, sealpub=None):
 
         tokid = token['id']
 
@@ -559,11 +559,16 @@ class Db(object):
 
         # TABLE sealobjects UPDATE
         # [user|so]priv TEXT NOT NULL,
+        # [user|so]pub TEXT NOT NULL,
         # [user|so]authsalt TEXT NOT NULL,
         # [user|so]authiters NUMBER NOT NULL,
 
-        sql = 'UPDATE sealobjects SET {}authsalt=?, {}authiters=?, {}priv=? WHERE id=?;'.format(*['so' if is_so else 'user'] * 3)
-        c.execute(sql, (sealauth['salt'], sealauth['iters'], sealpriv, tokid))
+        if sealpub:
+            sql = 'UPDATE sealobjects SET {}authsalt=?, {}authiters=?, {}priv=?, {}pub=? WHERE id=?;'.format(*['so' if is_so else 'user'] * 4)
+            c.execute(sql, (sealauth['salt'], sealauth['iters'], sealpriv, sealpub, tokid))
+        else:
+            sql = 'UPDATE sealobjects SET {}authsalt=?, {}authiters=?, {}priv=? WHERE id=?;'.format(*['so' if is_so else 'user'] * 3)
+            c.execute(sql, (sealauth['salt'], sealauth['iters'], sealpriv, tokid))
 
     def commit(self):
         self._conn.commit()
@@ -1563,6 +1568,87 @@ class ChangePinCommand(Command):
             with TemporaryDirectory() as d:
                 tpm2 = Tpm2(d, path)
                 ChangePinCommand.changepin(db, tpm2, args)
+
+@commandlet("initpin")
+class InitPinCommand(Command):
+    '''
+    Resets the userpin given a sopin for a given token.
+    '''
+
+    # adhere to an interface
+    # pylint: disable=no-self-use
+    def generate_options(self, group_parser):
+        group_parser.add_argument(
+            '--sopin',
+            type=str,
+            help='The current sopin.\n',
+            required=True)
+        group_parser.add_argument(
+            '--userpin',
+            type=str,
+            help='The new user pin.\n',
+            required=True)
+        group_parser.add_argument(
+            '--label',
+            type=str,
+            help='The label of the token.\n',
+            required=True)
+
+    @staticmethod
+    def initpin(db, tpm2, args):
+
+        label = args['label']
+
+        sopin = args['sopin']
+        newpin = args['userpin']
+
+        token = db.gettoken(label)
+
+        # load and unseal the data from the SO seal object
+        pobjauth = Utils.check_pin(token, sopin, True)
+        pobj, sealctx, sealauth = Utils.load_sealobject(token, tpm2, db, pobjauth, sopin, True)
+        wrappingkeyauth = tpm2.unseal(sealctx, sealauth)
+
+        # get the public and private data files for the old/current user seal object, ie the one
+        # that is going to be replaced.
+        oldsealobject = db.getsealobject(token['id'])
+        oldsealpub = oldsealobject['userpub']
+        oldsealpriv = oldsealobject['userpriv']
+
+        #
+        # Now we need to create a new pobject auth wrapping key and seal object for the user,
+        # using the new pin and store
+        # the wrapping key auth to the seal object. After that, update the DB
+        #
+
+        # Step 1 - Generate new pobject wrapping key
+        pobjkey = hash_pass(newpin)
+
+        # Step 2 - Wrap pobjauth - defer db store until success
+        c = AESCipher(pobjkey['rhash'])
+        encpobjauth = c.encrypt(pobjauth)
+
+        # Step 3 - call tpm2_create and create a new sealobject protected by the seal auth and sealing
+        #    the wrapping key auth value
+        newsealauth = hash_pass(newpin)
+        newsealpriv, newsealpub, _ = tpm2.create(pobj['handle'], pobjauth,
+                                        newsealauth['hash'], seal=wrappingkeyauth)
+
+        # Step 4 - update the database
+        db.updatepin(False, token, pobjkey, encpobjauth, newsealauth, newsealpriv, newsealpub)
+
+        # Step 5 - unlink the old private and public tpm object file.
+        os.unlink(oldsealpriv)
+        os.unlink(oldsealpub)
+
+    def __call__(self, args):
+
+        path = args['path']
+
+        with Db(path) as db:
+            with TemporaryDirectory() as d:
+                tpm2 = Tpm2(d, path)
+                InitPinCommand.initpin(db, tpm2, args)
 
 @commandlet("rmtoken")
 class RmTokenCommand(Command):

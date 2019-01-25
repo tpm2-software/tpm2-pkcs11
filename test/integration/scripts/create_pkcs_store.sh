@@ -73,6 +73,15 @@ tpm2_ptool.py changepin --label=label --user=so --old=myBADsopin --new=mysopin -
 # verify the token
 tpm2_ptool.py verify --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 
+# Use initpin to change the user pin
+tpm2_ptool.py initpin --label=label --sopin=mysopin --userpin=myverynewuserpin --path=$TPM2_PKCS11_STORE
+
+# verify the pin change
+tpm2_ptool.py verify --label=label --sopin=mysopin --userpin=myverynewuserpin --path=$TPM2_PKCS11_STORE
+
+# change it back
+tpm2_ptool.py initpin --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+
 # add 2 aes and 2 rsa keys under tokens 1 and 2
 for t in "label" "wrap-sw"; do
 	echo "Adding 2 AES 256 keys under token \"$t\""
