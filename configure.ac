@@ -109,10 +109,6 @@ AC_DEFUN([integration_test_checks], [
   AS_IF([test "x$tpm_server" != "xyes"],
     [AC_MSG_ERROR([Integration tests enabled but tpm_server not found, try setting PATH])])
 
-  AC_CHECK_PROG([tpm2_ptool], [tpm2_ptool.py], [yes], [no])
-    AS_IF([test "x$tpm2_ptool" != "xyes"],
-      [AC_MSG_ERROR([Integration tests enabled but tpm2_ptool not found, try setting PATH])])
-
   AC_CHECK_PROG([netstat], [netstat], [yes], [no])
     AS_IF([test "x$netstat" != "xyes"],
       [AC_MSG_ERROR([Integration tests enabled but netstat executable not found.])])
