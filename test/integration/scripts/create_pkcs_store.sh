@@ -62,9 +62,16 @@ handle=`tpm2_evictcontrol -a o -c $TPM2_PKCS11_STORE/primary.ctx | cut -d\: -f2-
 tpm2_ptool.py init --pobj-pin=anotherpobjpin --primary-handle=$handle --primary-auth=foopass --path=$TPM2_PKCS11_STORE
 
 # add 3 tokens
-tpm2_ptool.py addtoken --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=myuserpin --label=label --path $TPM2_PKCS11_STORE
+tpm2_ptool.py addtoken --pid=1 --pobj-pin=mypobjpin --sopin=myBADsopin --userpin=myBADuserpin --label=label --path $TPM2_PKCS11_STORE
 tpm2_ptool.py addtoken --wrap=software --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=myuserpin --label=wrap-sw --path $TPM2_PKCS11_STORE
 tpm2_ptool.py addtoken --pid=2 --pobj-pin=anotherpobjpin --sopin=anothersopin --userpin=anotheruserpin --label=import-keys --path $TPM2_PKCS11_STORE
+
+# Change the bad pins to something good (test tpm2_ptool.py changepin commandlet)
+tpm2_ptool.py changepin --label=label --user=user --old=myBADuserpin --new=myuserpin --path=$TPM2_PKCS11_STORE
+tpm2_ptool.py changepin --label=label --user=so --old=myBADsopin --new=mysopin --path=$TPM2_PKCS11_STORE
+
+# verify the token
+tpm2_ptool.py verify --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 
 # add 2 aes and 2 rsa keys under tokens 1 and 2
 for t in "label" "wrap-sw"; do
