@@ -91,7 +91,9 @@ endif
 TEST_EXTENSIONS = .int
 AM_TESTS_ENVIRONMENT = \
     TEST_FUNC_LIB=$(srcdir)/test/integration/scripts/int-test-funcs.sh \
-    PATH=./src:$(PATH)
+    PATH=$(abs_top_srcdir)/tools:./src:$(PATH) \
+    PYTHONPATH=$(abs_top_srcdir)/tools
+
 INT_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
 
 TESTS_LDADD = $(noinst_LTLIBRARIES) $(lib_LTLIBRARIES) $(AM_LDFLAGS) $(CMOCKA_LIBS)
