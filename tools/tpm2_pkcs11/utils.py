@@ -6,9 +6,8 @@ import sys
 import shutil
 import tempfile
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.ciphers import (
-    Cipher, algorithms, modes
-)
+from cryptography.hazmat.primitives.ciphers import (Cipher, algorithms, modes)
+
 
 # The delimiter changes based on nesting level to make parsing easier. We assume one key-value entry per line
 # where a key can have N KVPs as a CSV.
@@ -16,18 +15,26 @@ from cryptography.hazmat.primitives.ciphers import (
 #   9=hashalg=43,mgf=67\n
 #
 def kvp_row(d, delim=" "):
-    x = delim.join(["=".join([str(key), kvp_row(val, ",") if isinstance(val, dict) else str(val)]) for key, val in d.items()])
+    x = delim.join([
+        "=".join([
+            str(key), kvp_row(val, ",") if isinstance(val, dict) else str(val)
+        ]) for key, val in d.items()
+    ])
     return x
+
 
 def list_dict_to_kvp(l):
     x = "\n".join(kvp_row(d) for d in l)
     return x
 
+
 def dict_from_kvp(kvp):
     return dict(x.split('=') for x in kvp.split('\n'))
 
+
 def rand_str(num):
     return binascii.hexlify(os.urandom(32))
+
 
 def hash_pass(password, iters=100000, salt=os.urandom(32)):
 
@@ -36,11 +43,13 @@ def hash_pass(password, iters=100000, salt=os.urandom(32)):
     salt = binascii.hexlify(salt)
     phash = binascii.hexlify(phash)
 
-    return { 'salt' : salt,
-             'iters' : iters,
-             'hash' : phash,
-             'rhash' : rhash,
-            }
+    return {
+        'salt': salt,
+        'iters': iters,
+        'hash': phash,
+        'rhash': rhash,
+    }
+
 
 def query_yes_no(question, default="no"):
     """Ask a yes/no question via raw_input() and return their answer.
@@ -52,8 +61,7 @@ def query_yes_no(question, default="no"):
 
     The "answer" return value is True for "yes" or False for "no".
     """
-    valid = {"yes": True, "y": True, "ye": True,
-             "no": False, "n": False}
+    valid = {"yes": True, "y": True, "ye": True, "no": False, "n": False}
     if default is None:
         prompt = " [y/n] "
     elif default == "yes":
@@ -74,6 +82,7 @@ def query_yes_no(question, default="no"):
             sys.stdout.write("Please respond with 'yes' or 'no' "
                              "(or 'y' or 'n').\n")
 
+
 def check_pin(token, pin, is_so=False):
 
     # Get the primary object encrypted auth value and sokey information
@@ -88,7 +97,8 @@ def check_pin(token, pin, is_so=False):
         pinpobjauth = token['userpobjauth']
 
     pinpobjauthkeysalt = binascii.unhexlify(pinpobjauthkeysalt)
-    pinpobjauthkey = hash_pass(pin.encode(), iters=pinpobjauthkeyiters, salt=pinpobjauthkeysalt)
+    pinpobjauthkey = hash_pass(
+        pin.encode(), iters=pinpobjauthkeyiters, salt=pinpobjauthkeysalt)
 
     try:
         pinpobjauth = AESCipher(pinpobjauthkey['rhash']).decrypt(pinpobjauth)
@@ -96,6 +106,7 @@ def check_pin(token, pin, is_so=False):
         sys.exit('Invalid {} pin'.format('so' if is_so else 'user'))
 
     return pinpobjauth
+
 
 def load_sealobject(token, tpm2, db, pobjauth, pin, is_so):
 
@@ -120,6 +131,7 @@ def load_sealobject(token, tpm2, db, pobjauth, pin, is_so):
 
     return pobj, sealctx, sealauth
 
+
 def load_sobject(token, db, tpm2, wrapper, pobj, pobjauth):
     # Now get the secondary object from db
     sobj = db.getsecondary(token['id'])
@@ -133,6 +145,7 @@ def load_sobject(token, db, tpm2, wrapper, pobj, pobjauth):
 
     return sobjctx, sobjauth
 
+
 def getwrapper(token, db, tpm2, pobjauth, wrappingkeyauth):
     token_config = dict_from_kvp(token['config'])
     sym_support = str2bool(token_config['sym-support'])
@@ -140,11 +153,14 @@ def getwrapper(token, db, tpm2, pobjauth, wrappingkeyauth):
     if sym_support:
         pobj = db.getprimary(token['pid'])
         wrappingkey = db.getwrapping(token['id'])
-        wrapper = TPMAuthUnwrapper(tpm2, pobj['handle'], pobjauth, wrappingkeyauth, wrappingkey['priv'], wrappingkey['pub'])
+        wrapper = TPMAuthUnwrapper(tpm2, pobj['handle'], pobjauth,
+                                   wrappingkeyauth, wrappingkey['priv'],
+                                   wrappingkey['pub'])
     else:
         wrapper = AESAuthUnwrapper(wrappingkeyauth)
 
     return wrapper
+
 
 class AESCipher:
 
@@ -158,10 +174,8 @@ class AESCipher:
         # Construct an AES-GCM Cipher object with the given key and a
         # randomly generated IV.
         encryptor = Cipher(
-            algorithms.AES(self.key),
-            modes.GCM(iv),
-            backend=default_backend()
-        ).encryptor()
+            algorithms.AES(self.key), modes.GCM(iv),
+            backend=default_backend()).encryptor()
 
         ciphertext = encryptor.update(plaintext) + encryptor.finalize()
 
@@ -180,15 +194,16 @@ class AESCipher:
         decryptor = Cipher(
             algorithms.AES(self.key),
             modes.GCM(iv, tag),
-            backend=default_backend()
-        ).decryptor()
+            backend=default_backend()).decryptor()
 
         plaintext = decryptor.update(ciphertext) + decryptor.finalize()
 
         return plaintext
 
+
 class TemporaryDirectory(object):
     """Context manager for tempfile.mkdtemp() so it's usable with "with" statement."""
+
     def __enter__(self):
         self.name = tempfile.mkdtemp()
         return self.name
@@ -196,25 +211,33 @@ class TemporaryDirectory(object):
     def __exit__(self, exc_type, exc_value, traceback):
         shutil.rmtree(self.name)
 
+
 class TPMAuthUnwrapper(object):
-    def __init__(self, tpm2, pobjhandle, pobjauth, wrappingkeyauth, wrappingkeypriv, wrappingkeypub):
+
+    def __init__(self, tpm2, pobjhandle, pobjauth, wrappingkeyauth,
+                 wrappingkeypriv, wrappingkeypub):
         self._wrappingkeyauth = wrappingkeyauth
         self._tpm2 = tpm2
 
-        wrappingkeyctx = tpm2.load(pobjhandle, pobjauth, wrappingkeypriv, wrappingkeypub)
+        wrappingkeyctx = tpm2.load(pobjhandle, pobjauth, wrappingkeypriv,
+                                   wrappingkeypub)
         self._wrappingkeyctx = wrappingkeyctx
 
     def unwrap(self, value):
         unhexlified = binascii.unhexlify(value)
-        unwrapped = self._tpm2.decrypt(self._wrappingkeyctx, self._wrappingkeyauth, unhexlified)
+        unwrapped = self._tpm2.decrypt(self._wrappingkeyctx,
+                                       self._wrappingkeyauth, unhexlified)
         return unwrapped
 
     def wrap(self, value):
-        wrapped = self._tpm2.encrypt(self._wrappingkeyctx, self._wrappingkeyauth, value)
+        wrapped = self._tpm2.encrypt(self._wrappingkeyctx,
+                                     self._wrappingkeyauth, value)
         hexlified = binascii.hexlify(wrapped)
         return hexlified
 
+
 class AESAuthUnwrapper(object):
+
     def __init__(self, key):
 
         self._cipher = AESCipher(binascii.unhexlify(key))
@@ -224,6 +247,7 @@ class AESAuthUnwrapper(object):
 
     def wrap(self, value):
         return self._cipher.encrypt(value)
+
 
 # XXX
 # TODO move to the argparse handler module

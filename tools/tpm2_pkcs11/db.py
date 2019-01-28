@@ -5,6 +5,7 @@ import sqlite3
 
 from .utils import list_dict_to_kvp
 
+
 #
 # With Db() as db:
 # // do stuff
@@ -59,36 +60,41 @@ class Db(object):
 
     def getsecondary(self, tokid):
         c = self._conn.cursor()
-        c.execute("SELECT * from sobjects WHERE id=?", (tokid, ))
+        c.execute("SELECT * from sobjects WHERE id=?", (tokid,))
         x = c.fetchone()
         return x
 
     def getwrapping(self, tokid):
         c = self._conn.cursor()
-        c.execute("SELECT * from wrappingobjects WHERE tokid=?", (tokid, ))
+        c.execute("SELECT * from wrappingobjects WHERE tokid=?", (tokid,))
         x = c.fetchone()
         return x
 
     def gettertiary(self, sid):
         c = self._conn.cursor()
-        c.execute("SELECT * from tobjects WHERE sid=?", (sid, ))
+        c.execute("SELECT * from tobjects WHERE sid=?", (sid,))
         x = c.fetchall()
         return x
 
-    def addtoken(self, pid, sopobjkey, sopobjauth, userpobjkey, userpobjauth, config, label=None):
+    def addtoken(self,
+                 pid,
+                 sopobjkey,
+                 sopobjauth,
+                 userpobjkey,
+                 userpobjauth,
+                 config,
+                 label=None):
 
         token = {
             # General Metadata
-            'pid'        : pid,
-
-            'sopobjauthkeysalt'  : sopobjkey['salt'],
-            'sopobjauthkeyiters' : sopobjkey['iters'],
-            'sopobjauth'         : sopobjauth,
-
-            'userpobjauthkeysalt'  : userpobjkey['salt'],
-            'userpobjauthkeyiters' : userpobjkey['iters'],
-            'userpobjauth'         : userpobjauth,
-            'config'               : list_dict_to_kvp(config)
+            'pid': pid,
+            'sopobjauthkeysalt': sopobjkey['salt'],
+            'sopobjauthkeyiters': sopobjkey['iters'],
+            'sopobjauth': sopobjauth,
+            'userpobjauthkeysalt': userpobjkey['salt'],
+            'userpobjauthkeyiters': userpobjkey['iters'],
+            'userpobjauth': userpobjauth,
+            'config': list_dict_to_kvp(config)
         }
 
         if 'token-init=True' in token['config'] and label is None:
@@ -99,55 +105,60 @@ class Db(object):
 
         columns = ', '.join(token.keys())
         placeholders = ', '.join('?' * len(token))
-        sql = 'INSERT INTO tokens ({}) VALUES ({})'.format(columns, placeholders)
+        sql = 'INSERT INTO tokens ({}) VALUES ({})'.format(columns,
+                                                           placeholders)
         c = self._conn.cursor()
         c.execute(sql, list(token.values()))
 
         return c.lastrowid
 
-    def addsealobjects(self, tokid, usersealauth, usersealpriv, usersealpub, sosealauth, sosealpriv, sosealpub):
+    def addsealobjects(self, tokid, usersealauth, usersealpriv, usersealpub,
+                       sosealauth, sosealpriv, sosealpub):
 
         sealobjects = {
             # General Metadata
-            'tokid'         : tokid,
-
-            'userpriv'  : usersealpriv,
-            'userpub'   : usersealpub,
-
-            'sopriv'    : sosealpriv,
-            'sopub'     : sosealpub,
-
-            'userauthsalt'  : usersealauth['salt'],
-            'userauthiters' : usersealauth['iters'],
-
-            'soauthsalt'    : sosealauth['salt'],
-            'soauthiters'   : sosealauth['iters'],
+            'tokid': tokid,
+            'userpriv': usersealpriv,
+            'userpub': usersealpub,
+            'sopriv': sosealpriv,
+            'sopub': sosealpub,
+            'userauthsalt': usersealauth['salt'],
+            'userauthiters': usersealauth['iters'],
+            'soauthsalt': sosealauth['salt'],
+            'soauthiters': sosealauth['iters'],
         }
 
         columns = ', '.join(sealobjects.keys())
         placeholders = ', '.join('?' * len(sealobjects))
-        sql = 'INSERT INTO sealobjects ({}) VALUES ({})'.format(columns, placeholders)
+        sql = 'INSERT INTO sealobjects ({}) VALUES ({})'.format(columns,
+                                                                placeholders)
         c = self._conn.cursor()
         c.execute(sql, list(sealobjects.values()))
 
         return c.lastrowid
 
-    def addprimary(self, handle, pobjauth, pobjauthsalt, pobjauthiters, hierarchy='o'):
+    def addprimary(self,
+                   handle,
+                   pobjauth,
+                   pobjauthsalt,
+                   pobjauthiters,
+                   hierarchy='o'):
 
         # Subordiante commands will need some of this data
         # when deriving subordinate objects, so pass it back
-        pobject= {
+        pobject = {
             # General Metadata
-            'hierarchy'     : hierarchy,
-            'handle'        : handle,
-            'pobjauth'      : pobjauth,
-            'pobjauthsalt'  : pobjauthsalt,
-            'pobjauthiters' : pobjauthiters,
+            'hierarchy': hierarchy,
+            'handle': handle,
+            'pobjauth': pobjauth,
+            'pobjauthsalt': pobjauthsalt,
+            'pobjauthiters': pobjauthiters,
         }
 
         columns = ', '.join(pobject.keys())
         placeholders = ', '.join('?' * len(pobject))
-        sql = 'INSERT INTO pobjects ({}) VALUES ({})'.format(columns, placeholders)
+        sql = 'INSERT INTO pobjects ({}) VALUES ({})'.format(columns,
+                                                             placeholders)
         c = self._conn.cursor()
         c.execute(sql, list(pobject.values()))
 
@@ -156,50 +167,53 @@ class Db(object):
     def addsecondary(self, tokid, objauth, priv, pub):
 
         sobject = {
-            'tokid'        : tokid,
-            'objauth'      : objauth,
-            'pub'          : pub,
-            'priv'         : priv,
+            'tokid': tokid,
+            'objauth': objauth,
+            'pub': pub,
+            'priv': priv,
         }
 
         columns = ', '.join(sobject.keys())
         placeholders = ', '.join('?' * len(sobject))
-        sql = 'INSERT INTO sobjects ({}) VALUES ({})'.format(columns, placeholders)
+        sql = 'INSERT INTO sobjects ({}) VALUES ({})'.format(columns,
+                                                             placeholders)
         c = self._conn.cursor()
         c.execute(sql, list(sobject.values()))
-        return  c.lastrowid
+        return c.lastrowid
 
     def addwrapping(self, tokid, priv, pub):
 
         wrapping = {
-            'tokid'        : tokid,
-            'pub'          : pub,
-            'priv'         : priv,
+            'tokid': tokid,
+            'pub': pub,
+            'priv': priv,
         }
 
         columns = ', '.join(wrapping.keys())
         placeholders = ', '.join('?' * len(wrapping))
-        sql = 'INSERT INTO wrappingobjects ({}) VALUES ({})'.format(columns, placeholders)
+        sql = 'INSERT INTO wrappingobjects ({}) VALUES ({})'.format(
+            columns, placeholders)
         c = self._conn.cursor()
         c.execute(sql, list(wrapping.values()))
-        return  c.lastrowid
+        return c.lastrowid
 
     def addtertiary(self, sid, priv, pub, objauth, attrs, mech):
         tobject = {
-            'sid'          : sid,
-            'pub'          : pub,
-            'priv'         : priv,
-            'objauth'      : objauth,
-            'attrs'        : list_dict_to_kvp(attrs),
-            'mech'         : list_dict_to_kvp(mech),
+            'sid': sid,
+            'pub': pub,
+            'priv': priv,
+            'objauth': objauth,
+            'attrs': list_dict_to_kvp(attrs),
+            'mech': list_dict_to_kvp(mech),
         }
 
         columns = ', '.join(tobject.keys())
         placeholders = ', '.join('?' * len(tobject))
-        sql = 'INSERT INTO tobjects ({}) VALUES ({})'.format(columns, placeholders)
+        sql = 'INSERT INTO tobjects ({}) VALUES ({})'.format(columns,
+                                                             placeholders)
         c = self._conn.cursor()
         c.execute(sql, list(tobject.values()))
-        return  c.lastrowid
+        return c.lastrowid
 
     def updatetertiaryattrs(self, tid, attrs):
 
@@ -208,7 +222,14 @@ class Db(object):
         c = self._conn.cursor()
         c.execute(sql, (x, tid))
 
-    def updatepin(self, is_so, token, pobjkey, pobjauth, sealauth, sealpriv, sealpub=None):
+    def updatepin(self,
+                  is_so,
+                  token,
+                  pobjkey,
+                  pobjauth,
+                  sealauth,
+                  sealpriv,
+                  sealpub=None):
 
         tokid = token['id']
 
@@ -219,7 +240,8 @@ class Db(object):
         # [user|so]pobjauthkeyiters NUMBER,
         # [user|so]pobjauth TEXT,
 
-        sql = 'UPDATE tokens SET {}pobjauthkeysalt=?, {}pobjauthkeyiters=?, {}pobjauth=? WHERE id=?;'.format(*['so' if is_so else 'user'] * 3)
+        sql = 'UPDATE tokens SET {}pobjauthkeysalt=?, {}pobjauthkeyiters=?, {}pobjauth=? WHERE id=?;'.format(
+            * ['so' if is_so else 'user'] * 3)
         c.execute(sql, (pobjkey['salt'], pobjkey['iters'], pobjauth, tokid))
 
         # TABLE sealobjects UPDATE
@@ -229,11 +251,15 @@ class Db(object):
         # [user|so]authiters NUMBER NOT NULL,
 
         if sealpub:
-            sql = 'UPDATE sealobjects SET {}authsalt=?, {}authiters=?, {}priv=?, {}pub=? WHERE id=?;'.format(*['so' if is_so else 'user'] * 4)
-            c.execute(sql, (sealauth['salt'], sealauth['iters'], sealpriv, sealpub, tokid))
+            sql = 'UPDATE sealobjects SET {}authsalt=?, {}authiters=?, {}priv=?, {}pub=? WHERE id=?;'.format(
+                * ['so' if is_so else 'user'] * 4)
+            c.execute(sql, (sealauth['salt'], sealauth['iters'], sealpriv,
+                            sealpub, tokid))
         else:
-            sql = 'UPDATE sealobjects SET {}authsalt=?, {}authiters=?, {}priv=? WHERE id=?;'.format(*['so' if is_so else 'user'] * 3)
-            c.execute(sql, (sealauth['salt'], sealauth['iters'], sealpriv, tokid))
+            sql = 'UPDATE sealobjects SET {}authsalt=?, {}authiters=?, {}priv=? WHERE id=?;'.format(
+                * ['so' if is_so else 'user'] * 3)
+            c.execute(sql,
+                      (sealauth['salt'], sealauth['iters'], sealpriv, tokid))
 
     def commit(self):
         self._conn.commit()

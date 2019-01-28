@@ -23,6 +23,7 @@ from .utils import AESCipher
 from .utils import load_sealobject
 from .tpm2 import Tpm2
 
+
 @commandlet("rmtoken")
 class RmTokenCommand(Command):
     '''
@@ -41,9 +42,7 @@ class RmTokenCommand(Command):
     # pylint: disable=no-self-use
     def generate_options(self, group_parser):
         group_parser.add_argument(
-            '--label',
-            help='The profile label to remove.\n',
-            required=True)
+            '--label', help='The profile label to remove.\n', required=True)
 
     def __call__(self, args):
 
@@ -54,6 +53,7 @@ class RmTokenCommand(Command):
             token = db.gettoken(label)
             RmTokenCommand.rmtokenfiles(db, token)
             db.rmtoken(token['label'])
+
 
 @commandlet("verify")
 class VerifyCommand(Command):
@@ -66,14 +66,14 @@ class VerifyCommand(Command):
     def generate_options(self, group_parser):
         group_parser.add_argument(
             '--sopin',
-            help='The Administrator pin. This pin is used for object recovery.\n')
+            help='The Administrator pin. This pin is used for object recovery.\n'
+        )
         group_parser.add_argument(
             '--userpin',
-            help='The user pin. This pin is used for authentication for object use.\n')
+            help='The user pin. This pin is used for authentication for object use.\n'
+        )
         group_parser.add_argument(
-            '--label',
-            help='The label to verify.\n',
-            required=True)
+            '--label', help='The label to verify.\n', required=True)
 
     @staticmethod
     def verify(db, args):
@@ -104,7 +104,8 @@ class VerifyCommand(Command):
 
                 sopobjauth = check_pin(token, sopin, True)
 
-                sosealctx = tpm2.load(pobj['handle'], sopobjauth, sealobj['sopriv'], sealobj['sopub'])
+                sosealctx = tpm2.load(pobj['handle'], sopobjauth,
+                                      sealobj['sopriv'], sealobj['sopub'])
 
                 # Unseal the wrapping key auth
                 sosealauthiters = sealobj['soauthiters']
@@ -112,7 +113,8 @@ class VerifyCommand(Command):
                 sosealauthsalt = sealobj['soauthsalt']
                 sosealauthsalt = binascii.unhexlify(sosealauthsalt)
 
-                sosealauth = hash_pass(sopin.encode(), salt=sosealauthsalt, iters=sosealauthiters)
+                sosealauth = hash_pass(
+                    sopin.encode(), salt=sosealauthsalt, iters=sosealauthiters)
 
                 wrappingkeyauth = tpm2.unseal(sosealctx, sosealauth['hash'])
                 pobjauth = sopobjauth
@@ -123,7 +125,8 @@ class VerifyCommand(Command):
 
                 userpobjauth = check_pin(token, userpin, False)
 
-                usersealctx = tpm2.load(pobj['handle'], userpobjauth, sealobj['userpriv'], sealobj['userpub'])
+                usersealctx = tpm2.load(pobj['handle'], userpobjauth,
+                                        sealobj['userpriv'], sealobj['userpub'])
 
                 # Unseal the wrapping key auth
                 usersealauthiters = sealobj['userauthiters']
@@ -131,30 +134,37 @@ class VerifyCommand(Command):
                 usersealauthsalt = sealobj['userauthsalt']
                 usersealauthsalt = binascii.unhexlify(usersealauthsalt)
 
-                usersealauth = hash_pass(userpin.encode(), salt=usersealauthsalt, iters=usersealauthiters)
+                usersealauth = hash_pass(
+                    userpin.encode(),
+                    salt=usersealauthsalt,
+                    iters=usersealauthiters)
 
                 wrappingkeyauth = tpm2.unseal(usersealctx, usersealauth['hash'])
                 pobjauth = userpobjauth
 
                 print("USER pin valid!")
 
-            token_config =  dict_from_kvp(token['config'])
+            token_config = dict_from_kvp(token['config'])
 
             print('TOKEN CONFIG: {}'.format(token_config))
 
             sym_support = str2bool(token_config['sym-support'])
             if sym_support:
-                wrapper = TPMAuthUnwrapper(tpm2, pobj['handle'], pobjauth, wrappingkeyauth, wrappingkey['priv'], wrappingkey['pub'])
+                wrapper = TPMAuthUnwrapper(tpm2, pobj['handle'], pobjauth,
+                                           wrappingkeyauth, wrappingkey['priv'],
+                                           wrappingkey['pub'])
             else:
                 wrapper = AESAuthUnwrapper(wrappingkeyauth)
 
             sobj = db.getsecondary(token['id'])
 
-            sobjctx = tpm2.load(pobj['handle'], pobjauth, sobj['priv'], sobj['pub'])
+            sobjctx = tpm2.load(pobj['handle'], pobjauth, sobj['priv'],
+                                sobj['pub'])
 
             sobjauth = wrapper.unwrap(sobj['objauth'])
 
-            print("Secondary object verified(%d), auth: %s" % (sobj['id'], sobjauth))
+            print("Secondary object verified(%d), auth: %s" %
+                  (sobj['id'], sobjauth))
 
             tobjs = db.gettertiary(token['id'])
 
@@ -162,7 +172,8 @@ class VerifyCommand(Command):
                 tpm2.load(sobjctx, sobjauth, tobj['priv'], tobj['pub'])
                 tobjauth = wrapper.unwrap(tobj['objauth'])
 
-                print("Tertiary object verified(%d), auth: %s" % (tobj['id'], tobjauth))
+                print("Tertiary object verified(%d), auth: %s" %
+                      (tobj['id'], tobjauth))
 
     def __call__(self, args):
         if args['userpin'] == None and args['sopin'] == None:
@@ -204,10 +215,11 @@ class AddTokenCommand(Command):
             required=True)
         group_parser.add_argument(
             "--wrap",
-            choices=[ 'auto', 'software', 'tpm' ],
+            choices=['auto', 'software', 'tpm'],
             default='auto',
             help='Configure usage of SW based crypto for internal object protection.\n'
-            + 'This is not recommended for production environments,as the tool will'
+            +
+            'This is not recommended for production environments,as the tool will'
             + 'auto-configure this option based on TPM support.')
 
     @staticmethod
@@ -263,23 +275,27 @@ class AddTokenCommand(Command):
             # Auto-configure only if the user didn't specify
             # explicitly what to do or specified auto.
             #
-            print("auto-detecting TPM encryptdecrypt interface for wrapping key usage")
+            print(
+                "auto-detecting TPM encryptdecrypt interface for wrapping key usage"
+            )
             commands = tpm2.getcap('commands')
             sym_support = 'encryptdecrypt'.encode() in commands
 
             if args['wrap'] != 'auto':
                 if args['wrap'] == 'software' and sym_support:
-                    print("Warning: confifuring software wrapping key when TPM has support.\n"
-                      "THIS IS NOT RECOMENDED")
+                    print(
+                        "Warning: confifuring software wrapping key when TPM has support.\n"
+                        "THIS IS NOT RECOMENDED")
                     sym_support = False
                 elif args['wrap'] == 'tpm' and not sym_support:
-                    sys.exit("TPM does not have symmetric wrapping key support and it was "
-                         + "explicitly requested.")
+                    sys.exit(
+                        "TPM does not have symmetric wrapping key support and it was "
+                        + "explicitly requested.")
                 else:
                     sym_support = True if args['wrap'] == 'tpm' else False
 
-            print('Using "%s" based object authorization protections'
-                  % ('TPM' if sym_support else "Software"))
+            print('Using "%s" based object authorization protections' %
+                  ('TPM' if sym_support else "Software"))
 
             # generate an auth for the wrapping object, which will be sealed
             # to that object.
@@ -293,10 +309,16 @@ class AddTokenCommand(Command):
             # auth values and sealing the wrappingobjauth value to it.
             # soobject will be an AES key used for decrypting tertiary object
             # auth values.
-            usersealpriv, usersealpub, _ = tpm2.create(pobject['handle'], pobjauthhash,
-                                                    usersealauth['hash'], seal=wrappingobjauth['hash'])
-            sosealpriv, sosealpub, _ = tpm2.create(pobject['handle'], pobjauthhash,
-                                                sosealauth['hash'], seal=wrappingobjauth['hash'])
+            usersealpriv, usersealpub, _ = tpm2.create(
+                pobject['handle'],
+                pobjauthhash,
+                usersealauth['hash'],
+                seal=wrappingobjauth['hash'])
+            sosealpriv, sosealpub, _ = tpm2.create(
+                pobject['handle'],
+                pobjauthhash,
+                sosealauth['hash'],
+                seal=wrappingobjauth['hash'])
 
             #
             # If the TPM supports encryptdecrypt we create the wrapping object in the TPM,
@@ -311,30 +333,50 @@ class AddTokenCommand(Command):
 
             if sym_support:
                 # Now we create the wrappingbject, with algorithm aes256
-                wrappingobjpriv, wrappingobjpub, _ = tpm2.create(pobject['handle'], pobjauthhash, wrappingobjauth['hash'], alg='aes{}cfb'.format(sym_size))
+                wrappingobjpriv, wrappingobjpub, _ = tpm2.create(
+                    pobject['handle'],
+                    pobjauthhash,
+                    wrappingobjauth['hash'],
+                    alg='aes{}cfb'.format(sym_size))
 
-            sopobjkey, sopobjauth, userpobjkey, userpobjauth = AddTokenCommand.protect_pobj_auth(pobjauthhash, sopin, userpin)
+            sopobjkey, sopobjauth, userpobjkey, userpobjauth = AddTokenCommand.protect_pobj_auth(
+                pobjauthhash, sopin, userpin)
 
             # Now we create the secondary object, which is just a parent dummy, wrapping it's
             # auth with the wrapping key
             sobjauth = hash_pass(os.urandom(32))['hash']
 
             if sym_support:
-                wrapper = TPMAuthUnwrapper(tpm2, pobject['handle'], pobjauthhash, wrappingobjauth['hash'], wrappingobjpriv, wrappingobjpub)
+                wrapper = TPMAuthUnwrapper(
+                    tpm2, pobject['handle'], pobjauthhash,
+                    wrappingobjauth['hash'], wrappingobjpriv, wrappingobjpub)
             else:
                 wrapper = AESAuthUnwrapper(wrappingobjauth['hash'])
 
             encsobjauth = wrapper.wrap(sobjauth)
 
-            objattrs="restricted|decrypt|fixedtpm|fixedparent|sensitivedataorigin|userwithauth"
-            sobjpriv, sobjpub, _ = tpm2.create(pobject['handle'], pobjauthhash, sobjauth, objattrs=objattrs, alg='rsa2048')
+            objattrs = "restricted|decrypt|fixedtpm|fixedparent|sensitivedataorigin|userwithauth"
+            sobjpriv, sobjpub, _ = tpm2.create(
+                pobject['handle'],
+                pobjauthhash,
+                sobjauth,
+                objattrs=objattrs,
+                alg='rsa2048')
 
             # If this succeeds, we update the token table
-            config = [ { 'sym-support' : sym_support}, {'token-init' : True } ]
-            tokid = db.addtoken(pobject['id'], sopobjkey, sopobjauth, userpobjkey, userpobjauth, config, label=label)
+            config = [{'sym-support': sym_support}, {'token-init': True}]
+            tokid = db.addtoken(
+                pobject['id'],
+                sopobjkey,
+                sopobjauth,
+                userpobjkey,
+                userpobjauth,
+                config,
+                label=label)
 
             # now we update the sealobject table with the tokid to seal objects mapping
-            db.addsealobjects(tokid, usersealauth, usersealpriv, usersealpub, sosealauth, sosealpriv, sosealpub)
+            db.addsealobjects(tokid, usersealauth, usersealpriv, usersealpub,
+                              sosealauth, sosealpriv, sosealpub)
 
             # Update the wrapping object table
             if sym_support:
@@ -361,11 +403,13 @@ class AddTokenCommand(Command):
 
         pobjauthhash = AddTokenCommand.verify_pobjpin(pobject, pobjpin)
 
-        sopobjkey, sopobjauth, userpobjkey, userpobjauth = AddTokenCommand.protect_pobj_auth(pobjauthhash, '', '')
+        sopobjkey, sopobjauth, userpobjkey, userpobjauth = AddTokenCommand.protect_pobj_auth(
+            pobjauthhash, '', '')
 
-        config = [ {'token-init' : False } ]
+        config = [{'token-init': False}]
 
-        tokid = db.addtoken(pobject['id'], sopobjkey, sopobjauth, userpobjkey, userpobjauth, config)
+        tokid = db.addtoken(pobject['id'], sopobjkey, sopobjauth, userpobjkey,
+                            userpobjauth, config)
 
         print('Created token id: {tokid}'.format(tokid=tokid))
 
@@ -376,16 +420,18 @@ class AddTokenCommand(Command):
 
         with Db(path) as db:
 
-                if do_token_init:
-                    AddTokenCommand.do_token_init(db, path, args)
-                else:
-                    AddTokenCommand.do_token_noninit(db, args)
+            if do_token_init:
+                AddTokenCommand.do_token_init(db, path, args)
+            else:
+                AddTokenCommand.do_token_noninit(db, args)
+
 
 @commandlet("addemptytoken")
 class AddEmptyTokenCommand(AddTokenCommand):
     '''
     Adds an un-initialized token to a tpm2-pkcs11 store.
     '''
+
     def generate_options(self, group_parser):
         group_parser.add_argument(
             '--pid',
@@ -398,15 +444,17 @@ class AddEmptyTokenCommand(AddTokenCommand):
             default="")
         group_parser.add_argument(
             "--wrap",
-            choices=[ 'auto', 'software', 'tpm' ],
+            choices=['auto', 'software', 'tpm'],
             default='auto',
             help='Configure usage of SW based crypto for internal object protection.\n'
-            + 'This is not recommended for production environments,as the tool will'
+            +
+            'This is not recommended for production environments,as the tool will'
             + 'auto-configure this option based on TPM support.')
 
     def __call__(self, args):
         args['no_init'] = True
         super(self.__class__, self).__call__(args)
+
 
 @commandlet("changepin")
 class ChangePinCommand(Command):
@@ -423,15 +471,9 @@ class ChangePinCommand(Command):
             default='user',
             help='Which pin to change. Defaults to "user".\n')
         group_parser.add_argument(
-            '--old',
-            type=str,
-            help='The old pin.\n',
-            required=True)
+            '--old', type=str, help='The old pin.\n', required=True)
         group_parser.add_argument(
-            '--new',
-            type=str,
-            help='The new pin.\n',
-            required=True)
+            '--new', type=str, help='The new pin.\n', required=True)
         group_parser.add_argument(
             '--label',
             type=str,
@@ -451,7 +493,8 @@ class ChangePinCommand(Command):
 
         pobjauth = check_pin(token, oldpin, is_so)
 
-        pobj, sealctx, sealauth = load_sealobject(token, tpm2, db, pobjauth, oldpin, is_so)
+        pobj, sealctx, sealauth = load_sealobject(token, tpm2, db, pobjauth,
+                                                  oldpin, is_so)
 
         sealobject = db.getsealobject(token['id'])
 
@@ -472,10 +515,12 @@ class ChangePinCommand(Command):
 
         # Step 3 - call tpm2_changeauth and get new private portion
         newsealauth = hash_pass(newpin)
-        newsealpriv = tpm2.changeauth(pobj['handle'], sealctx, sealauth, newsealauth['hash'])
+        newsealpriv = tpm2.changeauth(pobj['handle'], sealctx, sealauth,
+                                      newsealauth['hash'])
 
         # Step 4 - update the database
-        db.updatepin(is_so, token, pobjkey, encpobjauth, newsealauth, newsealpriv)
+        db.updatepin(is_so, token, pobjkey, encpobjauth, newsealauth,
+                     newsealpriv)
 
         # Step 5 - unlink the old private tpm object file.
         os.unlink(oldpriv)
@@ -489,6 +534,7 @@ class ChangePinCommand(Command):
                 tpm2 = Tpm2(d, path)
                 ChangePinCommand.changepin(db, tpm2, args)
 
+
 @commandlet("initpin")
 class InitPinCommand(Command):
     '''
@@ -499,15 +545,9 @@ class InitPinCommand(Command):
     # pylint: disable=no-self-use
     def generate_options(self, group_parser):
         group_parser.add_argument(
-            '--sopin',
-            type=str,
-            help='The current sopin.\n',
-            required=True)
+            '--sopin', type=str, help='The current sopin.\n', required=True)
         group_parser.add_argument(
-            '--userpin',
-            type=str,
-            help='The new user pin.\n',
-            required=True)
+            '--userpin', type=str, help='The new user pin.\n', required=True)
         group_parser.add_argument(
             '--label',
             type=str,
@@ -526,7 +566,8 @@ class InitPinCommand(Command):
 
         # load and unseal the data from the SO seal object
         pobjauth = check_pin(token, sopin, True)
-        pobj, sealctx, sealauth = load_sealobject(token, tpm2, db, pobjauth, sopin, True)
+        pobj, sealctx, sealauth = load_sealobject(token, tpm2, db, pobjauth,
+                                                  sopin, True)
         wrappingkeyauth = tpm2.unseal(sealctx, sealauth)
 
         # get the public and private data files for the old/current user seal object, ie the one
@@ -551,11 +592,12 @@ class InitPinCommand(Command):
         # Step 3 - call tpm2_create and create a new sealobject protected by the seal auth and sealing
         #    the wrapping key auth value
         newsealauth = hash_pass(newpin)
-        newsealpriv, newsealpub, _ = tpm2.create(pobj['handle'], pobjauth,
-                                        newsealauth['hash'], seal=wrappingkeyauth)
+        newsealpriv, newsealpub, _ = tpm2.create(
+            pobj['handle'], pobjauth, newsealauth['hash'], seal=wrappingkeyauth)
 
         # Step 4 - update the database
-        db.updatepin(False, token, pobjkey, encpobjauth, newsealauth, newsealpriv, newsealpub)
+        db.updatepin(False, token, pobjkey, encpobjauth, newsealauth,
+                     newsealpriv, newsealpub)
 
         # Step 5 - unlink the old private and public tpm object file.
         os.unlink(oldsealpriv)
