@@ -1,10 +1,13 @@
 import argparse
 import os
 
+
 class commandlet(object):
     '''Decorator class for commandlet. You can add commandlets to the tool with this decorator.'''
 
-    DEFAULT_STORE_PATH = os.path.join(os.environ.get("HOME"), ".tpm2_pkcs11") if os.environ.get("HOME") else os.getcwd()
+    DEFAULT_STORE_PATH = os.path.join(
+        os.environ.get("HOME"),
+        ".tpm2_pkcs11") if os.environ.get("HOME") else os.getcwd()
 
     _commandlets = {}
 
@@ -27,21 +30,19 @@ class commandlet(object):
 
     @staticmethod
     def init(description):
-        
-        opt_parser = argparse.ArgumentParser(
-            description=description)
 
-        
+        opt_parser = argparse.ArgumentParser(description=description)
+
         subparser = opt_parser.add_subparsers(help='commands')
-    
+
         commandlets = commandlet.get()
-    
+
         # for each commandlet, instantiate and set up their options
         for n, c in commandlets.items():
             p = subparser.add_parser(n, help=c.__doc__)
             p.set_defaults(which=n)
             # Instantiate
-    
+
             opt_gen = getattr(c, 'generate_options', None)
             if callable(opt_gen):
                 # get group help
@@ -49,18 +50,18 @@ class commandlet(object):
                 # get args
                 c.generate_options(g)
                 g.add_argument(
-                '--path',
-                type=os.path.expanduser,
-                help='The location of the store directory.',
-                default=commandlet.DEFAULT_STORE_PATH)
-    
+                    '--path',
+                    type=os.path.expanduser,
+                    help='The location of the store directory.',
+                    default=commandlet.DEFAULT_STORE_PATH)
+
         args = opt_parser.parse_args()
-    
+
         d = vars(args)
         which = d['which']
-    
+
         commandlet.get()[which](d)
-    
+
 
 class Command(object):
     '''Baseclass for a commandlet. Commandlets shall implement this interface.'''

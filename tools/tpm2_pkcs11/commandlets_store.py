@@ -17,13 +17,15 @@ from .utils import hash_pass
 from .utils import rand_str
 from .utils import query_yes_no
 
-from .tpm2 import Tpm2 
+from .tpm2 import Tpm2
+
 
 @commandlet("init")
 class InitCommand(Command):
     '''
     Initializes a tpm2-pkcs11 store
     '''
+
     # adhere to an interface
     # pylint: disable=no-self-use
     def generate_options(self, group_parser):
@@ -43,7 +45,8 @@ class InitCommand(Command):
             help='Use an existing primary key object, defaults to 0x81000001.')
         group_parser.add_argument(
             '--primary-auth',
-            help='Authorization value for existing primary key object, defaults to an empty auth value.')
+            help='Authorization value for existing primary key object, defaults to an empty auth value.'
+        )
 
     @staticmethod
     def str_to_int(arg):
@@ -51,10 +54,13 @@ class InitCommand(Command):
 
     @staticmethod
     def make_action(**kwargs):
+
         class customAction(argparse.Action):
+
             def __call__(self, parser, args, values, option_string=None):
                 args.__dict__.update(kwargs)
                 setattr(args, self.dest, values)
+
         return customAction
 
     def __call__(self, args):
@@ -62,7 +68,8 @@ class InitCommand(Command):
         use_existing_primary = 'primary' in args and args['primary']
 
         if not use_existing_primary and args['primary_auth'] != None:
-            sys.exit('Cannot specify "--primary-auth" without "--primary-handle"')
+            sys.exit(
+                'Cannot specify "--primary-auth" without "--primary-handle"')
 
         path = args['path']
         if not os.path.exists(path):
@@ -77,7 +84,7 @@ class InitCommand(Command):
         with Db(path) as db:
             db.create()
 
-            handle=None
+            handle = None
             with TemporaryDirectory() as d:
                 try:
                     tpm2 = Tpm2(d, path)
@@ -90,7 +97,8 @@ class InitCommand(Command):
                         handle = Tpm2.evictcontrol(ownerauth, ctx)
                     else:
                         # get the primary object auth value and convert it to hex
-                        pobjauth = args['primary_auth'] if args['primary_auth'] != None else ""
+                        pobjauth = args['primary_auth'] if args[
+                            'primary_auth'] != None else ""
                         pobjauth = binascii.hexlify(pobjauth.encode())
 
                         handle = args['primary_handle']
@@ -103,11 +111,11 @@ class InitCommand(Command):
                         if handle not in y:
                             sys.exit('Handle 0x%x is not persistent' % (handle))
 
-
                     c = AESCipher(pobjkey['rhash'])
                     pobjauth = c.encrypt(pobjauth)
 
-                    pid = db.addprimary(handle, pobjauth, pobjkey['salt'], pobjkey['iters'])
+                    pid = db.addprimary(handle, pobjauth, pobjkey['salt'],
+                                        pobjkey['iters'])
 
                     action_word = "Added" if use_existing_primary else "Created"
                     print("%s a primary object of id: %d" % (action_word, pid))
@@ -119,18 +127,18 @@ class InitCommand(Command):
                     traceback.print_exc(file=sys.stdout)
                     sys.exit(e)
 
+
 @commandlet("destroy")
 class DestroyCommand(Command):
     '''
     Destroys a tpm2-pkcs11 store
     '''
+
     # adhere to an interface
     # pylint: disable=no-self-use
     def generate_options(self, group_parser):
         group_parser.add_argument(
-            '--pid',
-            type=int,
-            help="The primary object id to remove.\n")
+            '--pid', type=int, help="The primary object id to remove.\n")
         group_parser.add_argument(
             '--owner-auth',
             default="",
@@ -138,7 +146,7 @@ class DestroyCommand(Command):
 
     def __call__(self, args):
         path = args['path']
-        pid=args['pid']
+        pid = args['pid']
         ownerauth = args['owner_auth']
 
         if not os.path.exists(path):
@@ -146,7 +154,9 @@ class DestroyCommand(Command):
         elif not os.path.isdir(path):
             sys.exit("Specified path is not a directory, got: %s" % (path))
 
-        proceed = query_yes_no('This will delete the primary object of id "%s" and all associated data from db under "%s"' % (pid, path))
+        proceed = query_yes_no(
+            'This will delete the primary object of id "%s" and all associated data from db under "%s"'
+            % (pid, path))
         if not proceed:
             sys.exit(0)
         # create the db
