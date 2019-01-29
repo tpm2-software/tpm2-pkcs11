@@ -71,7 +71,7 @@ else #GCC
 fi
 
 # Bootstrap the project
-./bootstrap -I /usr/share/gnulib/m4
+./bootstrap
 
 # clang has asan enabled with options exported that fail
 # make distcheck, so only do this with gcc.
