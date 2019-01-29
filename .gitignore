@@ -72,4 +72,5 @@ test-suite.log
 
 nbproject/
 build/
-m4/
+m4/*
+!m4/ld-version-script.m4

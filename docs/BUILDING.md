@@ -20,11 +20,6 @@ The project depends on:
      Others may not work, some distros package versions too old. Either install or just copy the contents of the
      autoconf-archive's m4 directory to the m4 subdirectory of the tpm2-pkcs11 project. If the m4 folder is not
      present, simply create it with mkdir.
-10. [gnulib](https://www.gnu.org/software/gnulib/): For ld-version-script.m4.
-    On Ubuntu, the ld-version-script.m4 file does not resolve in it's default location under /usr/share/gnulib/m4.
-    During bootstrap one can pass arguments to autoreconf and specify additional search paths via `-I`.
-    For example:
-      ```./bootstrap -I /usr/share/gnulib/m4```
 
 ### Notes:
 The tpm2-tss and tpm2-tools projects must be obtained via source. Packaged versions existing
@@ -41,7 +36,7 @@ in known package managers are likely too old.
 Run the `bootstrap` command.
 
 ```sh
-$ ./bootstrap -I /usr/share/gnulib/m4
+$ ./bootstrap
 ```
 
 ## Step 3 - Configuring

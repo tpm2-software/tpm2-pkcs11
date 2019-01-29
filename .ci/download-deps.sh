@@ -5,13 +5,6 @@
 # All rights reserved.
 #
 
-function install_m4_deps() {
-	# all of our projects need auto-conf archive up-to-date and
-	# distros tend to be outdated.
-	mkdir -p m4
-	cp /usr/share/gnulib/m4/ld-version-script.m4 m4/
-}
-
 function get_deps() {
 
 	# The list order is important and thus we can't use the keys of the dictionary as order is not preserved.
@@ -32,8 +25,6 @@ function get_deps() {
 		git clone "https://github.com/tpm2-software/$p.git"
 
 		pushd "$p"
-
-		install_m4_deps
 
 		./bootstrap
 		./configure $configure_flags
