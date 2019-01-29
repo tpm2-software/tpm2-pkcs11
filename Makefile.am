@@ -26,7 +26,7 @@
 #;**********************************************************************;
 
 INCLUDE_DIRS    = -I$(srcdir)/src -I$(top_srcdir)/src/lib
-ACLOCAL_AMFLAGS = -I m4
+ACLOCAL_AMFLAGS = -I m4 --install
 AM_CFLAGS       = $(INCLUDE_DIRS) $(EXTRA_CFLAGS) $(CODE_COVERAGE_CFLAGS) \
                   $(TSS2_ESYS_CFLAGS) $(SQLITE3_CFLAGS) $(PTHREAD_CFLAGS) \
                   $(CRYPTO_CFLAGS)
