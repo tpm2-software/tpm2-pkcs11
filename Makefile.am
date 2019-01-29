@@ -35,7 +35,14 @@ AM_LDFLAGS      = $(EXTRA_LDFLAGS) $(CODE_COVERAGE_LIBS) $(TSS2_ESYS_LIBS) \
                   $(SQLITE3_LIBS) $(PTHREAD_LIBS) $(CRYPTO_LIBS) \
                   $(TCTI_DEVICE_LIBS) $(TCTI_SOCKET_LIBS) $(TCTI_MSSIM_LIBS)
 
+# ax_code_coverage
+if AUTOCONF_CODE_COVERAGE_2019_01_06
+include $(top_srcdir)/aminclude_static.am
+clean-local: code-coverage-clean
+distclean-local: code-coverage-dist-clean
+else
 @CODE_COVERAGE_RULES@
+endif
 
 # Add source code files from bootstrap
 include src_vars.mk
