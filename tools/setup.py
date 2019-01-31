@@ -17,6 +17,7 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python',
     ],
+    packages=['tpm2_pkcs11'],
 
     # Dependencies got here aka install_requires=['tensorflow']
     install_requires=[],
