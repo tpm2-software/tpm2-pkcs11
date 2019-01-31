@@ -487,7 +487,7 @@ class ChangePinCommand(Command):
 
         is_so = args['user'] == 'so'
         oldpin = args['old']
-        newpin = args['new']
+        newpin = args['new'].encode()
 
         token = db.gettoken(label)
 
@@ -560,7 +560,7 @@ class InitPinCommand(Command):
         label = args['label']
 
         sopin = args['sopin']
-        newpin = args['userpin']
+        newpin = args['userpin'].encode()
 
         token = db.gettoken(label)
 
