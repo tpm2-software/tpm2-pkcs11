@@ -1,3 +1,2 @@
 #!/usr/bin/env bash
-
-python -m tpm2_pkcs11.tpm2_ptool $@
+"${PYTHON_INTERPRETER:-python}" -m tpm2_pkcs11.tpm2_ptool $@
