@@ -99,7 +99,8 @@ TEST_EXTENSIONS = .int
 AM_TESTS_ENVIRONMENT = \
     TEST_FUNC_LIB=$(srcdir)/test/integration/scripts/int-test-funcs.sh \
     PATH=$(abs_top_srcdir)/tools:./src:$(PATH) \
-    PYTHONPATH=$(abs_top_srcdir)/tools
+    PYTHONPATH=$(abs_top_srcdir)/tools \
+    dbus-run-session
 
 INT_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
 

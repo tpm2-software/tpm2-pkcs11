@@ -139,27 +139,3 @@ daemon_stop ()
     fi
     return ${ret}
 }
-# function to start the dbus-daemon
-# This dbus-daemon creates a session message bus used by the
-# communication between tpm2-abrmd and testcase. The dbus info
-# is told to testcase through DBUS_SESSION_BUS_ADDRESS and
-# DBUS_SESSION_BUS_PID.
-dbus_daemon_start ()
-{
-    local dbus_log_file="$1"
-    local dbus_pid_file="$2"
-    local dbus_opts="--session --print-address 3 --nofork --nopidfile"
-    local dbus_addr_file=`mktemp`
-    local dbus_env="DBUS_VERBOSE=1"
-
-    exec 3<>$dbus_addr_file
-    daemon_start dbus-daemon "${dbus_opts}" "${dbus_log_file}" "${dbus_pid_file}" \
-        "${dbus_env}"
-    local ret=$?
-    if [ $ret -eq 0 ]; then
-        export DBUS_SESSION_BUS_ADDRESS=`cat "${dbus_addr_file}"`
-        export DBUS_SESSION_BUS_PID=`cat "${dbus_pid_file}"`
-    fi
-    rm -f $dbus_addr_file
-    return $ret
-}
