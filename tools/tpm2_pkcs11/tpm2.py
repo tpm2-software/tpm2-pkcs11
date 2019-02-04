@@ -4,17 +4,16 @@ import os
 import shutil
 import sys
 import tempfile
+from tempfile import NamedTemporaryFile
 import uuid
 import yaml
 
 from subprocess import Popen, PIPE
 
-
 class Tpm2(object):
 
-    def __init__(self, tmp, final):
+    def __init__(self, tmp):
         self._tmp = tmp
-        self._final = final
 
     def createprimary(self, ownerauth, objauth):
         ctx = os.path.join(self._tmp, "context.out")
@@ -52,6 +51,18 @@ class Tpm2(object):
         return handle
 
     def load(self, pctx, pauth, priv, pub):
+
+        if not isinstance(priv, str):
+            sealprivf = NamedTemporaryFile()
+            sealprivf.write(priv)
+            sealprivf.flush()
+            priv = sealprivf.name
+
+        if not isinstance(pub, str):
+            sealpubf  = NamedTemporaryFile()
+            sealpubf.write(pub)
+            sealpubf.flush()
+            pub = sealpubf.name
 
         ctx = os.path.join(self._tmp, uuid.uuid4().hex + '.out')
 
@@ -99,12 +110,6 @@ class Tpm2(object):
     def decrypt(self, ctx, auth, data):
         return self._encryptdecrypt(ctx, auth, data, decrypt=True)
 
-    def _move(self, path):
-        b = os.path.basename(path)
-        n = os.path.join(self._final, b)
-        shutil.move(path, n)
-        return n
-
     def create(self,
                phandle,
                pauth,
@@ -142,8 +147,6 @@ class Tpm2(object):
             raise RuntimeError("Could not execute tpm2_create: %s" %
                                str(stderr))
 
-        pub = self._move(pub)
-        priv = self._move(priv)
         return priv, pub, stdout
 
     def getcap(self, cap):
@@ -207,8 +210,6 @@ class Tpm2(object):
             raise RuntimeError("Could not execute tpm2_import: %s" %
                                str(stderr))
 
-        pub = self._move(pub)
-        priv = self._move(priv)
         return priv, pub, stdout
 
     def changeauth(self, pctx, objctx, oldobjauth, newobjauth):
@@ -226,5 +227,5 @@ class Tpm2(object):
         rc = p.wait()
         if rc:
             raise RuntimeError("Could not execute tpm2_load: %s", stderr)
-        newpriv = self._move(newpriv)
+
         return newpriv

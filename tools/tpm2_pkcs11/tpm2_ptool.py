@@ -20,7 +20,6 @@ from .commandlets_token import ChangePinCommand  # pylint: disable=unused-import
 from .commandlets_keys import AddKeyCommand  # pylint: disable=unused-import
 from .commandlets_keys import ImportCommand  # pylint: disable=unused-import
 
-
 def main():
     '''The main entry point.'''
 

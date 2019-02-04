@@ -87,7 +87,7 @@ class InitCommand(Command):
             handle = None
             with TemporaryDirectory() as d:
                 try:
-                    tpm2 = Tpm2(d, path)
+                    tpm2 = Tpm2(d)
 
                     pobjkey = hash_pass(pobjpin.encode())
 

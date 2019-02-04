@@ -181,7 +181,7 @@ class NewKeyCommandBase(Command):
         with Db(path) as db:
 
             with TemporaryDirectory() as d:
-                tpm2 = Tpm2(d, path)
+                tpm2 = Tpm2(d)
 
                 label = args['label']
                 sopin = args['sopin']

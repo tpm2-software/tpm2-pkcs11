@@ -22,6 +22,12 @@ class Db(object):
 
         return self
 
+    @staticmethod
+    def _blobify(path):
+        with open(path, 'rb') as f:
+            ablob = f.read()
+            return sqlite3.Binary(ablob)
+
     def gettoken(self, label):
         c = self._conn.cursor()
         c.execute("SELECT * from tokens WHERE label=?", (label,))
@@ -118,10 +124,10 @@ class Db(object):
         sealobjects = {
             # General Metadata
             'tokid': tokid,
-            'userpriv': usersealpriv,
-            'userpub': usersealpub,
-            'sopriv': sosealpriv,
-            'sopub': sosealpub,
+            'userpriv': Db._blobify(usersealpriv),
+            'userpub': Db._blobify(usersealpub),
+            'sopriv': Db._blobify(sosealpriv),
+            'sopub': Db._blobify(sosealpub),
             'userauthsalt': usersealauth['salt'],
             'userauthiters': usersealauth['iters'],
             'soauthsalt': sosealauth['salt'],
@@ -169,8 +175,8 @@ class Db(object):
         sobject = {
             'tokid': tokid,
             'objauth': objauth,
-            'pub': pub,
-            'priv': priv,
+            'pub': Db._blobify(pub),
+            'priv': Db._blobify(priv),
         }
 
         columns = ', '.join(sobject.keys())
@@ -185,8 +191,8 @@ class Db(object):
 
         wrapping = {
             'tokid': tokid,
-            'pub': pub,
-            'priv': priv,
+            'pub': Db._blobify(pub),
+            'priv': Db._blobify(priv),
         }
 
         columns = ', '.join(wrapping.keys())
@@ -200,8 +206,8 @@ class Db(object):
     def addtertiary(self, sid, priv, pub, objauth, attrs, mech):
         tobject = {
             'sid': sid,
-            'pub': pub,
-            'priv': priv,
+            'pub': Db._blobify(pub),
+            'priv': Db._blobify(priv),
             'objauth': objauth,
             'attrs': list_dict_to_kvp(attrs),
             'mech': list_dict_to_kvp(mech),
@@ -253,13 +259,13 @@ class Db(object):
         if sealpub:
             sql = 'UPDATE sealobjects SET {}authsalt=?, {}authiters=?, {}priv=?, {}pub=? WHERE id=?;'.format(
                 * ['so' if is_so else 'user'] * 4)
-            c.execute(sql, (sealauth['salt'], sealauth['iters'], sealpriv,
-                            sealpub, tokid))
+            c.execute(sql, (sealauth['salt'], sealauth['iters'], Db._blobify(sealpriv),
+                            Db._blobify(sealpub), tokid))
         else:
             sql = 'UPDATE sealobjects SET {}authsalt=?, {}authiters=?, {}priv=? WHERE id=?;'.format(
                 * ['so' if is_so else 'user'] * 3)
             c.execute(sql,
-                      (sealauth['salt'], sealauth['iters'], sealpriv, tokid))
+                      (sealauth['salt'], sealauth['iters'], Db._blobify(sealpriv), tokid))
 
     def commit(self):
         self._conn.commit()
@@ -306,12 +312,12 @@ class Db(object):
             CREATE TABLE IF NOT EXISTS sealobjects(
                 id INTEGER PRIMARY KEY,
                 tokid INTEGER NOT NULL,
-                userpub TEXT NOT NULL,
-                userpriv TEXT NOT NULL,
+                userpub BLOB NOT NULL,
+                userpriv BLOB NOT NULL,
                 userauthsalt TEXT NOT NULL,
                 userauthiters NUMBER NOT NULL,
-                sopub TEXT NOT NULL,
-                sopriv TEXT NOT NULL,
+                sopub BLOB NOT NULL,
+                sopriv BLOB NOT NULL,
                 soauthsalt TEXT NOT NULL,
                 soauthiters NUMBER NOT NULL,
                 FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
@@ -321,8 +327,8 @@ class Db(object):
             CREATE TABLE IF NOT EXISTS wrappingobjects(
                 id INTEGER PRIMARY KEY,
                 tokid INTEGER NOT NULL,
-                pub TEXT NOT NULL,
-                priv TEXT NOT NULL,
+                pub BLOB NOT NULL,
+                priv BLOB NOT NULL,
                 FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
             );
             '''),
@@ -340,8 +346,8 @@ class Db(object):
             CREATE TABLE IF NOT EXISTS sobjects(
                 id INTEGER PRIMARY KEY,
                 tokid INTEGER NOT NULL,
-                pub TEXT NOT NULL,
-                priv TEXT NOT NULL,
+                pub BLOB NOT NULL,
+                priv BLOB NOT NULL,
                 objauth TEXT NOT NULL,
                 FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
             );
@@ -350,8 +356,8 @@ class Db(object):
             CREATE TABLE IF NOT EXISTS tobjects(
                 id INTEGER PRIMARY KEY,
                 sid INTEGER NOT NULL,
-                pub TEXT NOT NULL,
-                priv TEXT NOT NULL,
+                pub BLOB NOT NULL,
+                priv BLOB NOT NULL,
                 objauth TEXT NOT NULL,
                 attrs TEXT NOT NULL,
                 mech TEXT NOT NULL,
