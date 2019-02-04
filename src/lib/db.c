@@ -35,6 +35,7 @@
 #endif
 
 #define goto_oom(x, l) if (!x) { LOGE("oom"); goto l; }
+#define goto_error(x, l) if (x) { goto l; }
 
 static struct {
     sqlite3 *db;
@@ -89,6 +90,23 @@ static int get_token_count(size_t *cnt) {
 
     const char *sql = "SELECT COUNT(*) from tokens;";
     return sqlite3_exec(global.db, sql, token_count_cb, cnt, NULL);
+}
+
+static int get_blob(sqlite3_stmt *stmt, int i, twist *blob) {
+
+    int size = sqlite3_column_bytes(stmt, i);
+    if (size <= 0) {
+        return 1;
+    }
+
+    const void *data = sqlite3_column_blob(stmt, i);
+    *blob = twistbin_new(data, size);
+    if (!*blob) {
+        LOGE("oom");
+        return 1;
+    }
+
+    return 0;
 }
 
 typedef struct token_get_cb_ud token_get_cb_ud;
@@ -492,12 +510,10 @@ tobject *tobject_new(sqlite3_stmt *stmt) {
         } else if (!strcmp(name, "sid")) {
             // Ignore sid we don't need it as sobject has that data.
         } else if (!strcmp(name, "priv")) {
-            tobj->priv = twist_new((char *)sqlite3_column_text(stmt, i));
-            goto_oom(tobj->priv, error);
+            goto_error(get_blob(stmt, i, &tobj->priv), error);
 
         } else if (!strcmp(name, "pub")) {
-            tobj->pub = twist_new((char *)sqlite3_column_text(stmt, i));
-            goto_oom(tobj->pub, error);
+            goto_error(get_blob(stmt, i, &tobj->pub), error);
 
         } else if (!strcmp(name, "objauth")) {
             tobj->objauth = twist_new((char *)sqlite3_column_text(stmt, i));
@@ -625,12 +641,10 @@ int init_sobject(unsigned tokid, sobject *sobj) {
             sobj->id = sqlite3_column_int(stmt, i);
 
         } else if (!strcmp(name, "priv")) {
-            sobj->priv = twist_new((char *)sqlite3_column_text(stmt, i));
-            goto_oom(sobj->priv, error);
+            goto_error(get_blob(stmt, i, &sobj->priv), error);
 
         } else if (!strcmp(name, "pub")) {
-            sobj->pub = twist_new((char *)sqlite3_column_text(stmt, i));
-            goto_oom(sobj->pub, error);
+            goto_error(get_blob(stmt, i, &sobj->pub), error);
 
         } else if (!strcmp(name, "objauth")) {
             sobj->objauth = twist_new((char *)sqlite3_column_text(stmt, i));
@@ -729,11 +743,9 @@ int init_wrappingobject(unsigned tokid, wrappingobject *wobj) {
             wobj->objauth = twist_new((char *)sqlite3_column_text(stmt, i));
             goto_oom(wobj->objauth, error);
         } else if (!strcmp(name, "pub")) {
-            wobj->pub = twist_new((char *)sqlite3_column_text(stmt, i));
-            goto_oom(wobj->pub, error);
+            goto_error(get_blob(stmt, i, &wobj->pub), error);
         } else if (!strcmp(name, "priv")) {
-            wobj->priv = twist_new((char *)sqlite3_column_text(stmt, i));
-            goto_oom(wobj->priv, error);
+            goto_error(get_blob(stmt, i, &wobj->priv), error);
         } else if (!strcmp(name, "tokid")) {
             // pass
         } else {
@@ -787,22 +799,18 @@ int init_sealobjects(unsigned tokid, sealobject *sealobj) {
             sealobj->userauthsalt = twist_new((char *)sqlite3_column_text(stmt, i));
             goto_oom(sealobj->userauthsalt, error);
         } else if (!strcmp(name, "userpriv")) {
-            sealobj->userpriv = twist_new((char *)sqlite3_column_text(stmt, i));
-            goto_oom(sealobj->userpriv, error);
+            goto_error(get_blob(stmt, i, &sealobj->userpriv), error);
         } else if (!strcmp(name, "userpub")) {
-            sealobj->userpub = twist_new((char *)sqlite3_column_text(stmt, i));
-            goto_oom(sealobj->userpub, error);
+            goto_error(get_blob(stmt, i, &sealobj->userpub), error);
         } else if (!strcmp(name, "soauthiters")) {
             sealobj->soauthiters = sqlite3_column_int(stmt, i);
         } else if (!strcmp(name, "soauthsalt")) {
             sealobj->soauthsalt = twist_new((char *)sqlite3_column_text(stmt, i));
             goto_oom(sealobj->soauthsalt, error);
         } else if (!strcmp(name, "sopriv")) {
-            sealobj->sopriv = twist_new((char *)sqlite3_column_text(stmt, i));
-            goto_oom(sealobj->sopriv, error);
+            goto_error(get_blob(stmt, i, &sealobj->sopriv), error);
         } else if (!strcmp(name, "sopub")) {
-            sealobj->sopub = twist_new((char *)sqlite3_column_text(stmt, i));
-            goto_oom(sealobj->sopub, error);
+            goto_error(get_blob(stmt, i, &sealobj->sopub), error);
         } else if (!strcmp(name, "tokid")) {
             // pass
         } else {

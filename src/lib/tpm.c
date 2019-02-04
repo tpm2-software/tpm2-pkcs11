@@ -463,18 +463,26 @@ static bool set_esys_auth(ESYS_CONTEXT *esys_ctx, ESYS_TR handle, twist auth) {
 bool tpm_loadobj(
         tpm_ctx *ctx,
         uint32_t phandle, twist auth,
-        twist pub_path, twist priv_path,
+        twist pub_data, twist priv_data,
         uint32_t *handle) {
 
     TPM2B_PRIVATE priv = { .size = 0 };
-    bool res = files_load_private(priv_path, &priv);
-    if (!res) {
+    size_t len = twist_len(priv_data);
+
+    size_t offset = 0;
+    TSS2_RC rval = Tss2_MU_TPM2B_PRIVATE_Unmarshal((uint8_t *)priv_data, len, &offset, &priv);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Tss2_MU_TPM2B_PRIVATE_Unmarshal: 0x%x:", rval);
         return false;
     }
 
     TPM2B_PUBLIC pub = { .size = 0 };
-    res = files_load_public(pub_path, &pub);
-    if (!res) {
+    len = twist_len(pub_data);
+
+    offset = 0;
+    rval = Tss2_MU_TPM2B_PUBLIC_Unmarshal((uint8_t *)pub_data, len, &offset, &pub);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Tss2_MU_TPM2B_PRIVATE_Unmarshal: 0x%x:", rval);
         return false;
     }
 
@@ -483,15 +491,15 @@ bool tpm_loadobj(
         return false;
     }
 
-    TSS2_RC rval = Esys_Load(
-               ctx->esys_ctx,
-               phandle,
-               ESYS_TR_PASSWORD,
-               ESYS_TR_NONE,
-               ESYS_TR_NONE,
-               &priv,
-               &pub,
-               handle);
+    rval = Esys_Load(
+           ctx->esys_ctx,
+           phandle,
+           ESYS_TR_PASSWORD,
+           ESYS_TR_NONE,
+           ESYS_TR_NONE,
+           &priv,
+           &pub,
+           handle);
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Esys_Load: 0x%x:", rval);
         return false;

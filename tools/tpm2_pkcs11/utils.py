@@ -5,9 +5,10 @@ import argparse
 import sys
 import shutil
 import tempfile
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import (Cipher, algorithms, modes)
-
+from tempfile import NamedTemporaryFile
 
 # The delimiter changes based on nesting level to make parsing easier. We assume one key-value entry per line
 # where a key can have N KVPs as a CSV.
@@ -210,7 +211,6 @@ class TemporaryDirectory(object):
 
     def __exit__(self, exc_type, exc_value, traceback):
         shutil.rmtree(self.name)
-
 
 class TPMAuthUnwrapper(object):
 

@@ -98,7 +98,7 @@ class VerifyCommand(Command):
         wrappingkeyauth = None
 
         with TemporaryDirectory() as d:
-            tpm2 = Tpm2(d, path)
+            tpm2 = Tpm2(d)
 
             if sopin != None:
 
@@ -264,7 +264,7 @@ class AddTokenCommand(Command):
         pobjauthhash = AddTokenCommand.verify_pobjpin(pobject, pobjpin)
 
         with TemporaryDirectory() as d:
-            tpm2 = Tpm2(d, path)
+            tpm2 = Tpm2(d)
 
             #
             # Figure out if TPM supports encryptdecrypt
@@ -522,16 +522,13 @@ class ChangePinCommand(Command):
         db.updatepin(is_so, token, pobjkey, encpobjauth, newsealauth,
                      newsealpriv)
 
-        # Step 5 - unlink the old private tpm object file.
-        os.unlink(oldpriv)
-
     def __call__(self, args):
 
         path = args['path']
 
         with Db(path) as db:
             with TemporaryDirectory() as d:
-                tpm2 = Tpm2(d, path)
+                tpm2 = Tpm2(d)
                 ChangePinCommand.changepin(db, tpm2, args)
 
 
@@ -599,15 +596,11 @@ class InitPinCommand(Command):
         db.updatepin(False, token, pobjkey, encpobjauth, newsealauth,
                      newsealpriv, newsealpub)
 
-        # Step 5 - unlink the old private and public tpm object file.
-        os.unlink(oldsealpriv)
-        os.unlink(oldsealpub)
-
     def __call__(self, args):
 
         path = args['path']
 
         with Db(path) as db:
             with TemporaryDirectory() as d:
-                tpm2 = Tpm2(d, path)
+                tpm2 = Tpm2(d)
                 InitPinCommand.initpin(db, tpm2, args)
