@@ -175,6 +175,17 @@ void token_opdata_clear(token *tok);
 #define token_opdata_get(ctx, op, data) _token_opdata_get(ctx, op, (void **)data)
 CK_RV _token_opdata_get(token *tok, operation op, void **data);
 
+/**
+ * TODO
+ * @param tok
+ * @param old_pin
+ * @param old_len
+ * @param new_pin
+ * @param new_len
+ * @return
+ */
+CK_RV token_setpin (token *tok, CK_UTF8CHAR_PTR old_pin, CK_ULONG old_len,CK_UTF8CHAR_PTR new_pin, CK_ULONG new_len);
+
 void token_lock(token *t);
 void token_unlock(token *t);
 

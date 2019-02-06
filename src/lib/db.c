@@ -1009,6 +1009,178 @@ error:
 
 }
 
+static int start(void) {
+    return sqlite3_exec(global.db, "BEGIN TRANSACTION", NULL, NULL, NULL);
+}
+
+static int commit(void) {
+    return sqlite3_exec(global.db, "COMMIT", NULL, NULL, NULL);
+}
+
+static int rollback(void) {
+    return sqlite3_exec(global.db, "ROLLBACK", NULL, NULL, NULL);
+}
+
+#define gotobinderror(rc, msg) if (rc) { LOGE("cannot bind "msg); goto error; }
+
+CK_RV db_update_for_pinchange(
+        token *tok,
+        bool is_so,
+        /* primary object wrapping meta data */
+        twist newkeysalthex,
+        unsigned newkeyiters,
+        twist newpobjauth,
+
+        /* new seal object auth metadata */
+        twist newauthsalthex,
+        unsigned newauthiters,
+
+        /* private and public blobs */
+        twist newprivblob,
+        twist newpubblob) {
+
+    sqlite3_stmt *stmt[2] = { 0 };
+    unsigned i;
+
+    int rc = start();
+    if (rc != SQLITE_OK) {
+        return CKR_GENERAL_ERROR;
+    }
+
+    char *sql[2] = { NULL, NULL};
+    /* so update statements */
+    if (is_so) {
+            sql[0] = "UPDATE tokens SET"
+                 " sopobjauthkeysalt=?,"    /* index: 1 */
+                 " sopobjauthkeyiters=?,"   /* index: 2 */
+                 " sopobjauth=?"            /* index: 3 */
+                 " WHERE id=?";             /* index: 4 */
+
+        if (newpubblob) {
+            sql[1] = "UPDATE sealobjects SET"
+                     " soauthsalt=?,"           /* index: 1 */
+                     " soauthiters=?,"          /* index: 2 */
+                     " sopriv=?"                /* index: 3 */
+                     " soppub=?"                /* index: 4 */
+                     " WHERE tokid=?";          /* index: 5 */
+        } else {
+            sql[1] = "UPDATE sealobjects SET"
+                 " soauthsalt=?,"           /* index: 1 */
+                 " soauthiters=?,"          /* index: 2 */
+                 " sopriv=?"                /* index: 3 */
+                 " WHERE tokid=?";          /* index: 4 */
+        }
+    /* user */
+    } else {
+        sql[0] = "UPDATE tokens SET"
+                 " userpobjauthkeysalt=?,"    /* index: 1 */
+                 " userpobjauthkeyiters=?,"   /* index: 2 */
+                 " userpobjauth=?"            /* index: 3 */
+                 " WHERE id=?";               /* index: 4 */
+
+        if (newpubblob) {
+            sql[1] = "UPDATE sealobjects SET"
+                     " userauthsalt=?,"           /* index: 1 */
+                     " userauthiters=?,"          /* index: 2 */
+                     " userpriv=?"                /* index: 3 */
+                     " userppub=?"                /* index: 4 */
+                     " WHERE tokid=?" ;           /* index: 5 */
+        } else {
+            sql[1] = "UPDATE sealobjects SET"
+                 " userauthsalt=?,"           /* index: 1 */
+                 " userauthiters=?,"          /* index: 2 */
+                 " userpriv=?"                /* index: 3 */
+                 " WHERE tokid=?";            /* index: 4 */
+        }
+    }
+
+    /*
+     * Prepare statements
+     */
+    for (i=0; i < ARRAY_LEN(stmt); i++) {
+        rc = sqlite3_prepare(global.db, sql[i], -1, &stmt[i], NULL);
+        if (rc) {
+            LOGE("Could not prepare statement: \"%s\" error: \"%s\"",
+            sql[i], sqlite3_errmsg(global.db));
+            goto error;
+        }
+    }
+
+    /*
+     * bind values:
+     *  stmt[0] --> table: tokens
+     *  stmt[1] --> table: sealobjects
+     */
+    rc = sqlite3_bind_text(stmt[0], 1, newkeysalthex, -1, SQLITE_STATIC);
+    gotobinderror(rc, "newkeysalthex");
+
+    rc = sqlite3_bind_int(stmt[0],  2, newkeyiters);
+    gotobinderror(rc, "newkeyiters");
+
+    rc = sqlite3_bind_text(stmt[0], 3, newpobjauth,   -1, SQLITE_STATIC);
+    gotobinderror(rc, "newpobjauth");
+
+    rc = sqlite3_bind_int(stmt[0],  4, tok->id);
+    gotobinderror(rc, "id");
+
+    /* sealobjects */
+
+    int index = 1;
+    rc = sqlite3_bind_text(stmt[1], index++, newauthsalthex, -1, SQLITE_STATIC);
+    gotobinderror(rc, "newauthsalthex");
+
+    rc = sqlite3_bind_int(stmt[1],  index++, newauthiters);
+    gotobinderror(rc, "newauthiters");
+
+    rc = sqlite3_bind_blob(stmt[1], index++, newprivblob, twist_len(newprivblob), SQLITE_STATIC);
+    gotobinderror(rc, "newprivblob");
+
+    if (newpubblob) {
+        rc = sqlite3_bind_blob(stmt[1], index++, newpubblob, twist_len(newpubblob), SQLITE_STATIC);
+        gotobinderror(rc, "newpubblob");
+    }
+
+    rc = sqlite3_bind_int(stmt[1],  index++, tok->id);
+    gotobinderror(rc, "tokid");
+
+    /*
+     * Everything is bound, fire off the sql statements
+     */
+    for (i=0; i < ARRAY_LEN(stmt); i++) {
+        rc = sqlite3_step(stmt[i]);
+        if (rc != SQLITE_DONE) {
+            LOGE("Could not execute stmt %u", i);
+            goto error;
+        }
+
+        rc = sqlite3_finalize(stmt[i]);
+        if (rc != SQLITE_OK) {
+            LOGE("Could not finalize stmt %u", i);
+            goto error;
+        }
+    }
+
+    rc = commit();
+    if (rc != SQLITE_OK) {
+        goto error;
+    }
+
+    return CKR_OK;
+
+error:
+
+    for (i=0; i < ARRAY_LEN(stmt); i++) {
+        rc = sqlite3_finalize(stmt[i]);
+        if (rc != SQLITE_OK) {
+            LOGW("Could not finalize stmt %u", i);
+        }
+    }
+
+    rollback();
+    return CKR_GENERAL_ERROR;
+}
+
+
 CK_RV db_init(void) {
 
     return db_new(&global.db);

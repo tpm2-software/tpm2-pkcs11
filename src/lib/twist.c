@@ -390,17 +390,12 @@ twist twistbin_create(const binarybuffer data[], size_t len) {
 	return internal_create(data, len);
 }
 
-twist twist_hexlify(const twist data) {
+static twist hexlify(const char *data, size_t datalen) {
 
-	if (!data) {
-		return NULL;
-	}
-
-	size_t datalen = twist_len(data);
-	twist_hdr *hdr = internal_realloc(NULL, datalen * 2);
-	if (!hdr) {
-		return NULL;
-	}
+    twist_hdr *hdr = internal_realloc(NULL, datalen * 2);
+    if (!hdr) {
+        return NULL;
+    }
 
     size_t i;
     for (i = 0; i < datalen; i++) {
@@ -410,7 +405,28 @@ twist twist_hexlify(const twist data) {
     hdr->data[datalen *2] = '\0';
     hdr->end = &hdr->data[datalen * 2];
 
-	return from_hdr_to_twist(hdr);
+    return from_hdr_to_twist(hdr);
+
+}
+
+twist twist_hex_new(const char *data, size_t len) {
+
+    if (!data) {
+        return NULL;
+    }
+
+    return hexlify(data, len);
+}
+
+twist twist_hexlify(const twist data) {
+
+	if (!data) {
+		return NULL;
+	}
+
+	size_t datalen = twist_len(data);
+
+	return hexlify(data, datalen);
 }
 
 static bool hex2bin(char hexchr, char *out) {

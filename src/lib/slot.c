@@ -62,7 +62,8 @@ CK_RV slot_get_list (unsigned char token_present, CK_SLOT_ID *slot_list, unsigne
 
     size_t i;
     for (i=0; i < global.token_cnt; i++) {
-        slot_list[i] = global.token[i].id;
+        token *t = &global.token[i];
+        slot_list[i] = t->id;
     }
 
     *count = global.token_cnt;

@@ -112,4 +112,8 @@ CK_RV tpm_decrypt(tpm_encrypt_data *tpm_enc_data, CK_BYTE_PTR ctext, CK_ULONG ct
 
 bool tpm_register_handle(tpm_ctx *ctx, uint32_t *handle);
 
+CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handle,
+        twist oldauth, twist newauth,
+        twist *newblob);
+
 #endif /* SRC_PKCS11_TPM_H_ */

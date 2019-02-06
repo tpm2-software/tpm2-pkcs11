@@ -10,6 +10,7 @@
 
 #include "pkcs11.h"
 #include "token.h"
+#include "twist.h"
 
 /*
  * This HAS to be smaller than 1 byte, as this is embedded
@@ -24,5 +25,21 @@ CK_RV db_new(sqlite3 **db);
 CK_RV db_free(sqlite3 **db);
 
 CK_RV db_get_tokens(token **t, size_t *len);
+
+CK_RV db_update_for_pinchange(
+        token *tok,
+        bool is_so,
+        /* primary object wrapping meta data */
+        twist newkeysalthex,
+        unsigned newkeyiters,
+        twist newpobjauth,
+
+        /* new seal object auth metadata */
+        twist newauthsalthex,
+        unsigned newauthiters,
+
+        /* private and public blobs */
+        twist newprivblob,
+        twist newpubblob);
 
 #endif /* SRC_PKCS11_LIB_DB_H_ */

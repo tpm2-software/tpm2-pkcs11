@@ -314,9 +314,6 @@ bool files_load_bytes_from_path(const char *path, UINT8 *buf, UINT16 *size) {
     return result;
 }
 
-#define xstr(s) str(s)
-#define str(s) #s
-
 #define LOAD_TYPE(type, name) \
     bool files_load_##name(const char *path, type *name) { \
     \
@@ -1482,4 +1479,54 @@ CK_RV tpm_decrypt(tpm_encrypt_data *tpm_enc_data,
 
     return encrypt_decrypt(ctx, handle, auth, mode, DECRYPT,
             iv, ctext, ctextlen, ptext, ptextlen);
+}
+
+CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handle,
+        twist oldauth, twist newauth,
+        twist *newblob) {
+
+    /* Set up the new auth value */
+    TPM2B_AUTH new_tpm_auth;
+    size_t newauthlen = twist_len(newauth);
+    if (newauthlen > sizeof(new_tpm_auth.buffer)) {
+        return CKR_PIN_LEN_RANGE;
+    }
+
+    new_tpm_auth.size = newauthlen;
+    memcpy(new_tpm_auth.buffer, newauth, newauthlen);
+
+    /* set the old auth value */
+    bool result = set_esys_auth(ctx->esys_ctx, object_handle, oldauth);
+    if (!result) {
+        return CKR_GENERAL_ERROR;
+    }
+
+    /* call changeauth */
+    TPM2B_PRIVATE *newprivate = NULL;
+    TSS2_RC rval = Esys_ObjectChangeAuth(ctx->esys_ctx,
+                        object_handle,
+                        parent_handle,
+                        ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+                        &new_tpm_auth, &newprivate);
+
+    if (rval != TPM2_RC_SUCCESS) {
+        LOGE("Esys_ObjectChangeAuth: 0x%x", rval);
+        return CKR_GENERAL_ERROR;
+    }
+
+    uint8_t serialized[sizeof(*newprivate)];
+
+    /* serialize the new blob private */
+    size_t offset = 0;
+    rval = Tss2_MU_TPM2B_PRIVATE_Marshal(newprivate, serialized, sizeof(*newprivate), &offset);
+    if (rval != TSS2_RC_SUCCESS) {
+        free(newprivate);
+        LOGE("Tss2_MU_TPM2B_PRIVATE_Marshal: 0x%x", rval);
+        return CKR_GENERAL_ERROR;
+    }
+
+    *newblob = twistbin_new(serialized, offset);
+    free(newprivate);
+
+    return *newblob ? CKR_OK : CKR_HOST_MEMORY;
 }
