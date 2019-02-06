@@ -72,6 +72,8 @@ struct sealobject {
     twist sopriv;
     twist soauthsalt;
     unsigned soauthiters;
+
+    uint32_t handle;
 };
 
 typedef struct wrappingobject wrappingobject;

@@ -22,6 +22,8 @@ struct test_session_handle {
  */
 #define MAX_TEST_SESSIONS 3
 
+#define C(x) ((CK_UTF8CHAR_PTR)x)
+
 typedef struct test_slot test_slot;
 struct test_slot {
     CK_SLOT_ID slot_id; /* slot id */
@@ -420,6 +422,64 @@ static void test_user_login_logout_time_two(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
+static void swap_pin(CK_SESSION_HANDLE handle, CK_USER_TYPE user_type, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldpinlen) {
+
+    CK_UTF8CHAR_PTR newpin = user_type == CKU_SO ? C("newsopin") : C("newuserpin");
+    CK_ULONG newpinlen = user_type == CKU_SO ? (sizeof("newsopin") - 1): (sizeof("newuserpin") - 1);
+
+    // Set the new pin
+    CK_RV rv = C_SetPIN(handle, oldpin, oldpinlen, newpin, newpinlen);
+    assert_int_equal(rv, CKR_OK);
+    logout(handle);
+
+    // new pin should work for login
+    login_expects(handle, user_type, CKR_OK, newpin, newpinlen);
+
+    // swap the pin back
+    rv = C_SetPIN(handle, newpin, newpinlen, oldpin, oldpinlen);
+    assert_int_equal(rv, CKR_OK);
+    logout(handle);
+}
+
+static void test_so_state_pin_change_good(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE handle = ti->slots[0].sessions[0].handle;
+
+    so_login(handle);
+
+    swap_pin(handle, CKU_SO, C(GOOD_SOPIN), sizeof(GOOD_SOPIN) - 1);
+}
+
+static void test_user_state_pin_change_good(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE handle = ti->slots[0].sessions[0].handle;
+
+    user_login(handle);
+
+    swap_pin(handle, CKU_USER, C(GOOD_USERPIN), sizeof(GOOD_USERPIN) - 1);
+}
+
+static void test_ro_function_state_pin_change_bad(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE handle = ti->slots[0].sessions[0].handle;
+
+    /*
+     * NO LOGIN - should leave us in R/O Functions state
+     */
+    CK_UTF8CHAR_PTR oldpin = C("doesntmatter");
+    CK_ULONG oldpinlen = sizeof("doesntmatter") - 1;
+
+    CK_UTF8CHAR_PTR newpin = C("whocares");
+    CK_ULONG newpinlen = sizeof("whocares") - 1;
+
+    // Set the new pin
+    CK_RV rv = C_SetPIN(handle, oldpin, oldpinlen, newpin, newpinlen);
+    assert_int_equal(rv, CKR_SESSION_READ_ONLY);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
@@ -454,6 +514,18 @@ int main() {
                 test_setup_rw, test_teardown),
         cmocka_unit_test_setup_teardown(test_so_global_login_logout_good,
                 test_setup_rw, test_teardown),
+        /*
+         * Changepin tests, These should stay last, if they fail they could leave the token
+         * in a weird state causing subsequent test failures.
+         */
+        cmocka_unit_test_setup_teardown(test_user_state_pin_change_good,
+                test_setup_rw, test_teardown),
+        cmocka_unit_test_setup_teardown(test_user_state_pin_change_good,
+                test_setup_rw, test_teardown),
+        cmocka_unit_test_setup_teardown(test_so_state_pin_change_good,
+                test_setup_rw, test_teardown),
+        cmocka_unit_test_setup_teardown(test_ro_function_state_pin_change_bad,
+                test_setup_ro, test_teardown),
     };
 
     return cmocka_run_group_tests(tests, group_setup_locking, group_teardown);

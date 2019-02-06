@@ -11,10 +11,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <openssl/sha.h>
-
 #include "pkcs11.h"
 #include "twist.h"
+
+#define xstr(s) str(s)
+#define str(s) #s
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
 
@@ -33,7 +34,24 @@ static inline void str_padded_copy(unsigned char * dst, const unsigned char * sr
     memcpy(dst, src, min(strlen((char *)(src)), dst_len));
 }
 
+/**
+ *
+ * @param pin
+ * @param salt
+ * @param iterations
+ * @return
+ */
 twist utils_pdkdf2_hmac_sha256_raw(const twist pin, const twist salt,
+        int iterations);
+
+/**
+ *
+ * @param pin
+ * @param binsalt
+ * @param iterations
+ * @return
+ */
+twist utils_pdkdf2_hmac_sha256_bin_raw(const twist pin, const twist binsalt,
         int iterations);
 
 twist utils_pdkdf2_hmac_sha256(const twist pin, const twist salt, int iterations);
@@ -41,6 +59,8 @@ twist utils_pdkdf2_hmac_sha256(const twist pin, const twist salt, int iterations
 twist decrypt(const twist pin, const twist salt, unsigned iters, const twist objauth);
 
 twist aes256_gcm_decrypt(const twist key, const twist objauth);
+
+twist aes256_gcm_encrypt(twist keybin, twist plaintextbin);
 
 /**
  * Retrieves the size in bytes of a hash algorithm
@@ -71,5 +91,12 @@ bool utils_mech_is_raw_sign(CK_MECHANISM_TYPE mech);
  *  True if it is, false otherwise.
  */
 bool utils_mech_is_rsa_pkcs(CK_MECHANISM_TYPE mech);
+
+/**
+ *
+ * @param size
+ * @return
+ */
+twist utils_get_rand(size_t size);
 
 #endif /* SRC_PKCS11_UTILS_H_ */

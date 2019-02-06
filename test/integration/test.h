@@ -87,18 +87,22 @@ static inline void logout(CK_SESSION_HANDLE handle) {
     logout_expects(handle, CKR_OK);
 }
 
+static inline void login_expects(CK_SESSION_HANDLE handle, CK_USER_TYPE user_type, CK_RV expected, unsigned char *pin, CK_ULONG len) {
+
+    CK_RV rv = C_Login(handle, user_type, pin, len);
+    assert_int_equal(rv, expected);
+}
+
 static inline void user_login_expects(CK_SESSION_HANDLE handle, CK_RV expected) {
 
     unsigned char upin[] = GOOD_USERPIN;
-    CK_RV rv = C_Login(handle, CKU_USER, upin, sizeof(upin) - 1);
-    assert_int_equal(rv, expected);
+    login_expects(handle, CKU_USER, expected, upin, sizeof(upin) - 1);
 }
 
 static inline void user_login_bad_pin(CK_SESSION_HANDLE handle) {
 
     unsigned char upin[] = BAD_USERPIN;
-    CK_RV rv = C_Login(handle, CKU_SO, upin, sizeof(upin) - 1);
-    assert_int_equal(rv, CKR_PIN_INCORRECT);
+    login_expects(handle, CKU_USER, CKR_PIN_INCORRECT, upin, sizeof(upin) - 1);
 }
 
 static inline void user_login(CK_SESSION_HANDLE handle) {
@@ -109,8 +113,7 @@ static inline void user_login(CK_SESSION_HANDLE handle) {
 static inline void so_login_expects(CK_SESSION_HANDLE handle, CK_RV expected) {
 
     unsigned char sopin[] = GOOD_SOPIN;
-    CK_RV rv = C_Login(handle, CKU_SO, sopin, sizeof(sopin) - 1);
-    assert_int_equal(rv, expected);
+    login_expects(handle, CKU_SO, expected, sopin, sizeof(sopin) - 1);
 }
 
 static inline void so_login(CK_SESSION_HANDLE handle) {
@@ -121,8 +124,7 @@ static inline void so_login(CK_SESSION_HANDLE handle) {
 static inline void so_login_bad_pin(CK_SESSION_HANDLE handle) {
 
     unsigned char sopin[] = BAD_SOPIN;
-    CK_RV rv = C_Login(handle, CKU_SO, sopin, sizeof(sopin) - 1);
-    assert_int_equal(rv, CKR_PIN_INCORRECT);
+    login_expects(handle, CKU_SO, CKR_PIN_INCORRECT, sopin, sizeof(sopin) - 1);
 }
 
 #endif /* TEST_INTEGRATION_TEST_H_ */

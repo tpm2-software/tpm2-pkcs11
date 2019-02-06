@@ -273,4 +273,17 @@ twist twistbin_unhexlify(const char *hexdata);
  */
 twist twist_hexlify(const twist data);
 
+/**
+ * Given a binary data string, converts it to a hex encoded string without a leaded 0x
+ * and is guaranteed to be NULL terminated.
+ *
+ * @param data
+ *  The data to encode as hex.
+ * @param len
+ *  The length of the data.
+ * @return
+ *  A twist on success, NULL on failure.
+ */
+twist twist_hex_new(const char *data, size_t len);
+
 #endif /* TWIST_H_ */

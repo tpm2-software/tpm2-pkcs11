@@ -6,11 +6,132 @@
 #include <ctype.h>
 
 #include <openssl/evp.h>
+#include <openssl/rand.h>
 #include <openssl/sha.h>
 
 #include "log.h"
 #include "token.h"
 #include "utils.h"
+
+static twist encrypt_parts_to_twist(unsigned char tag[16], unsigned char iv[12], unsigned char *ctextbin, int ctextbinlen) {
+
+    /*
+     * Build the <iv>:<tag>:<ctext> data format
+     * and convert from binary formats to hex encoded.
+     */
+
+    twist ivhex = NULL;
+    twist taghex = NULL;
+    twist ctexthex = NULL;
+    twist constructed = NULL;
+
+    taghex = twist_hex_new((char *)tag, 16);
+    if (!taghex) {
+        LOGE("oom");
+        goto out;
+    }
+
+    ivhex = twist_hex_new((char *)iv, 12);
+    if (!ivhex) {
+        LOGE("oom");
+        goto out;
+    }
+
+    ctexthex = twist_hex_new((char *)ctextbin, ctextbinlen);
+    if (!ctexthex) {
+        LOGE("oom");
+        goto out;
+    }
+
+    /*
+     * create a buffer with enough space for hex encoded <iv>:<tag>:<ctext>
+     * (note + 3 is for 2 : delimiters and a NULL byte.
+     */
+    size_t constructed_len = twist_len(taghex) + twist_len(ivhex)
+            + twist_len(ctexthex) + 3;
+    constructed = twist_calloc(constructed_len);
+    if (!constructed) {
+        LOGE("oom");
+        goto out;
+    }
+
+    /* impossible to have truncation */
+    snprintf((char *)constructed, constructed_len, "%s:%s:%s", ivhex, taghex, ctexthex);
+
+out:
+    twist_free(ivhex);
+    twist_free(taghex);
+    twist_free(ctexthex);
+
+    return constructed;
+}
+
+twist aes256_gcm_encrypt(twist keybin, twist plaintextbin) {
+
+    twist constructed = NULL;
+    unsigned char *ctextbin = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+
+    unsigned char ivbin[12];
+    int rc = RAND_bytes(ivbin, sizeof(ivbin));
+    if (rc != 1) {
+        LOGE("Could not generate random bytes");
+        return NULL;
+    }
+
+    ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        LOGE("oom");
+        goto out;
+    }
+
+    int ret = EVP_EncryptInit(ctx, EVP_aes_256_gcm(),
+            (const unsigned char *)keybin, (const unsigned char *)ivbin);
+    if (!ret) {
+        LOGE("EVP_DecryptInit failed");
+        goto out;
+    }
+
+    ctextbin = calloc(1, twist_len(plaintextbin));
+    if (!ctextbin) {
+        LOGE("oom");
+        goto out;
+    }
+
+    int len = 0;
+    ret = EVP_EncryptUpdate(ctx, (unsigned char *)ctextbin, &len, (unsigned char *)plaintextbin, twist_len(plaintextbin));
+    if (!ret) {
+        LOGE("EVP_EncryptUpdate failed");
+        goto out;
+    }
+
+    assert((size_t)len == twist_len(plaintextbin));
+
+    int left = 0;
+    ret = EVP_EncryptFinal_ex(ctx, ctextbin + len, &left);
+    if (!ret) {
+        LOGE("AES GCM verification failed!");
+        goto out;
+    }
+
+    assert(left == 0);
+
+    unsigned char tagbin[16];
+    ret = EVP_CIPHER_CTX_ctrl (ctx, EVP_CTRL_GCM_GET_TAG, sizeof(tagbin), tagbin);
+    if (!ret) {
+        LOGE("EVP_CIPHER_CTX_ctrl failed");
+        goto out;
+    }
+
+    constructed = encrypt_parts_to_twist(tagbin, ivbin, ctextbin, len);
+
+out:
+
+    EVP_CIPHER_CTX_free(ctx);
+    free(ctextbin);
+
+    return constructed;
+}
 
 twist aes256_gcm_decrypt(const twist key, const twist objauth) {
 
@@ -128,13 +249,12 @@ out:
 
 }
 
-twist utils_pdkdf2_hmac_sha256_raw(const twist pin, const twist salt,
+twist utils_pdkdf2_hmac_sha256_bin_raw(const twist pin, const twist binsalt,
         int iterations) {
 
     twist digest = twist_calloc(SHA256_DIGEST_LENGTH);
-    twist binsalt = twistbin_unhexlify(salt);
-    if (!digest || !binsalt) {
-        goto error;
+    if (!digest) {
+        return NULL;
     }
 
     int rc = PKCS5_PBKDF2_HMAC(pin, twist_len(pin),
@@ -145,7 +265,6 @@ twist utils_pdkdf2_hmac_sha256_raw(const twist pin, const twist salt,
         LOGE("Error pdkdf2_hmac_sha256");
         goto error;
     }
-    twist_free(binsalt);
 
     return digest;
 
@@ -153,6 +272,20 @@ error:
     twist_free(digest);
     twist_free(binsalt);
     return NULL;
+}
+
+twist utils_pdkdf2_hmac_sha256_raw(const twist pin, const twist salt,
+        int iterations) {
+
+    twist binsalt = twistbin_unhexlify(salt);
+    if (!binsalt) {
+        return NULL;
+    }
+
+    twist x = utils_pdkdf2_hmac_sha256_bin_raw(pin, binsalt, iterations);
+    twist_free(binsalt);
+
+    return x;
 }
 
 twist decrypt(const twist pin, const twist salt, unsigned iters,
@@ -232,4 +365,24 @@ bool utils_mech_is_rsa_pkcs(CK_MECHANISM_TYPE mech) {
     default:
         return false;
     }
+}
+
+twist utils_get_rand(size_t size) {
+
+    if (size == 0) {
+        return NULL;
+    }
+
+    twist salt = twist_calloc(size);
+    if (!salt) {
+        return NULL;
+    }
+
+    int rc = RAND_bytes((unsigned char *)salt, size);
+    if (rc != 1) {
+        LOGE("Could not generate random bytes");
+        return NULL;
+    }
+
+    return salt;
 }

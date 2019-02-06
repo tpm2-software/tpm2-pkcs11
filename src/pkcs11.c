@@ -168,6 +168,28 @@ static inline CK_RV auth_any_logged_in(session_ctx *ctx) {
 }
 
 /*
+ * C_SetPIN can only be called in the:
+ *  - “R/W Public Session” state
+ *  - “R/W SO Functions” state
+ *  - “R/W User Functions” state
+ *
+ * An attempt to call it from a session in any other state fails with
+ * error CKR_SESSION_READ_ONLY.
+ */
+static inline CK_RV auth_set_pin_state(session_ctx *ctx) {
+    CK_STATE state = session_ctx_state_get(ctx);
+    switch(state) {
+    case CKS_RW_PUBLIC_SESSION:
+    case CKS_RW_SO_FUNCTIONS:
+    case CKS_RW_USER_FUNCTIONS:
+        return CKR_OK;
+        /* no default */
+    }
+
+    return CKR_SESSION_READ_ONLY;
+}
+
+/*
  * The macros below are used to call into the cryptoki API and perform a myriad of checking using certain
  * auth models. Not using these is dangerous.
  */
@@ -206,6 +228,8 @@ static inline CK_RV auth_any_logged_in(session_ctx *ctx) {
  * Does what __TOKEN_WITH_LOCK_BY_SESSION does, and checks that the session is at least RO User. Ie user or so logged in and R/O or R/W session.
  */
 #define TOKEN_WITH_LOCK_BY_SESSION_LOGGED_IN(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION(auth_any_logged_in, userfunc, session, ##__VA_ARGS__)
+
+#define TOKEN_WITH_LOCK_BY_SESSION_SET_PIN_STATE(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION(auth_set_pin_state, userfunc, session, ##__VA_ARGS__)
 
 CK_RV C_Initialize (void *init_args) {
     TRACE_CALL;
@@ -269,9 +293,11 @@ CK_RV C_InitPIN (CK_SESSION_HANDLE session, unsigned char *pin, unsigned long pi
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_SetPIN (CK_SESSION_HANDLE session, unsigned char *old_pin, unsigned long old_len, unsigned char *new_pin, unsigned long new_len) {
+CK_RV C_SetPIN (CK_SESSION_HANDLE session, CK_UTF8CHAR_PTR old_pin, CK_ULONG old_len,CK_UTF8CHAR_PTR new_pin, CK_ULONG new_len) {
     TRACE_CALL;
-    TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
+    CK_RV rv = CKR_GENERAL_ERROR;
+    TOKEN_WITH_LOCK_BY_SESSION_SET_PIN_STATE(token_setpin, session, old_pin, old_len, new_pin, new_len);
+    TRACE_RET(rv);
 }
 
 CK_RV C_OpenSession (CK_SLOT_ID slotID, CK_FLAGS flags, void *application, CK_NOTIFY notify, CK_SESSION_HANDLE *session) {
