@@ -184,7 +184,9 @@ CK_RV _token_opdata_get(token *tok, operation op, void **data);
  * @param new_len
  * @return
  */
-CK_RV token_setpin (token *tok, CK_UTF8CHAR_PTR old_pin, CK_ULONG old_len,CK_UTF8CHAR_PTR new_pin, CK_ULONG new_len);
+CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR old_pin, CK_ULONG old_len, CK_UTF8CHAR_PTR new_pin, CK_ULONG new_len);
+
+CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR new_pin, CK_ULONG new_len);
 
 void token_lock(token *t);
 void token_unlock(token *t);

@@ -58,6 +58,14 @@ How to check that the pin is valid. The pin value shown is based off of section 
 ```sh
 pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --label="label" --test --pin mynewpin
 ```
+
+## Initializing USER pin
+
+How to reset or initialize the user pin given the so pin.
+```sh
+pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --label="label" --init-pin --so-pin mysopin --pin mynewpin
+```
+
 ## Generating Random Data
 
 The below example will generate 4 bytes of random data and assumes the pin has been changed as in section

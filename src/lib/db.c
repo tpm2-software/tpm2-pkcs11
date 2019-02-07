@@ -1060,8 +1060,8 @@ CK_RV db_update_for_pinchange(
             sql[1] = "UPDATE sealobjects SET"
                      " soauthsalt=?,"           /* index: 1 */
                      " soauthiters=?,"          /* index: 2 */
-                     " sopriv=?"                /* index: 3 */
-                     " soppub=?"                /* index: 4 */
+                     " sopriv=?,"               /* index: 3 */
+                     " sopub=?"                 /* index: 4 */
                      " WHERE tokid=?";          /* index: 5 */
         } else {
             sql[1] = "UPDATE sealobjects SET"
@@ -1082,8 +1082,8 @@ CK_RV db_update_for_pinchange(
             sql[1] = "UPDATE sealobjects SET"
                      " userauthsalt=?,"           /* index: 1 */
                      " userauthiters=?,"          /* index: 2 */
-                     " userpriv=?"                /* index: 3 */
-                     " userppub=?"                /* index: 4 */
+                     " userpriv=?,"               /* index: 3 */
+                     " userpub=?"                 /* index: 4 */
                      " WHERE tokid=?" ;           /* index: 5 */
         } else {
             sql[1] = "UPDATE sealobjects SET"

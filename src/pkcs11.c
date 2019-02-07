@@ -154,6 +154,18 @@ static inline CK_RV auth_min_ro_user(session_ctx *ctx) {
     return CKR_USER_NOT_LOGGED_IN;
 }
 
+static inline CK_RV auth_min_rw_so(session_ctx *ctx) {
+
+    CK_STATE state = session_ctx_state_get(ctx);
+    switch(state) {
+    case CKS_RW_SO_FUNCTIONS:
+        return CKR_OK;
+        /* no default */
+    }
+
+    return CKR_USER_NOT_LOGGED_IN;
+}
+
 static inline CK_RV auth_any_logged_in(session_ctx *ctx) {
     CK_STATE state = session_ctx_state_get(ctx);
     switch(state) {
@@ -182,6 +194,18 @@ static inline CK_RV auth_set_pin_state(session_ctx *ctx) {
     case CKS_RW_PUBLIC_SESSION:
     case CKS_RW_SO_FUNCTIONS:
     case CKS_RW_USER_FUNCTIONS:
+        return CKR_OK;
+        /* no default */
+    }
+
+    return CKR_SESSION_READ_ONLY;
+}
+
+static inline CK_RV auth_init_pin_state(session_ctx *ctx) {
+
+    CK_STATE state = session_ctx_state_get(ctx);
+    switch(state) {
+    case CKS_RW_SO_FUNCTIONS:
         return CKR_OK;
         /* no default */
     }
@@ -220,7 +244,7 @@ static inline CK_RV auth_set_pin_state(session_ctx *ctx) {
 #define TOKEN_WITH_LOCK_BY_SESSION_USER_RW(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION(auth_min_rw_user, userfunc, session, ##__VA_ARGS__)
 
 /*
- * Does what __TOKEN_WITH_LOCK_BY_SESSION does, and checks that the session is at least RO User. Ie so logged in and R/W session.
+ * Does what __TOKEN_WITH_LOCK_BY_SESSION does, and checks that the session is at least RW So. Ie so logged in and R/W session.
  */
 #define TOKEN_WITH_LOCK_BY_SESSION_SO_RW(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION(auth_min_rw_so, userfunc, session, ##__VA_ARGS__)
 
@@ -230,6 +254,9 @@ static inline CK_RV auth_set_pin_state(session_ctx *ctx) {
 #define TOKEN_WITH_LOCK_BY_SESSION_LOGGED_IN(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION(auth_any_logged_in, userfunc, session, ##__VA_ARGS__)
 
 #define TOKEN_WITH_LOCK_BY_SESSION_SET_PIN_STATE(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION(auth_set_pin_state, userfunc, session, ##__VA_ARGS__)
+
+#define TOKEN_WITH_LOCK_BY_SESSION_INIT_PIN_STATE(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION(auth_init_pin_state, userfunc, session, ##__VA_ARGS__)
+
 
 CK_RV C_Initialize (void *init_args) {
     TRACE_CALL;
@@ -288,12 +315,14 @@ CK_RV C_InitToken (CK_SLOT_ID slotID, unsigned char *pin, unsigned long pin_len,
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_InitPIN (CK_SESSION_HANDLE session, unsigned char *pin, unsigned long pin_len) {
+CK_RV C_InitPIN (CK_SESSION_HANDLE session, CK_UTF8CHAR_PTR pin, CK_ULONG pin_len) {
     TRACE_CALL;
-    TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
+    CK_RV rv = CKR_GENERAL_ERROR;
+    TOKEN_WITH_LOCK_BY_SESSION_INIT_PIN_STATE(token_initpin, session, pin, pin_len);
+    TRACE_RET(rv);
 }
 
-CK_RV C_SetPIN (CK_SESSION_HANDLE session, CK_UTF8CHAR_PTR old_pin, CK_ULONG old_len,CK_UTF8CHAR_PTR new_pin, CK_ULONG new_len) {
+CK_RV C_SetPIN (CK_SESSION_HANDLE session, CK_UTF8CHAR_PTR old_pin, CK_ULONG old_len, CK_UTF8CHAR_PTR new_pin, CK_ULONG new_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_SET_PIN_STATE(token_setpin, session, old_pin, old_len, new_pin, new_len);
