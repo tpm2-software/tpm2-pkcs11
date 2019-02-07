@@ -28,6 +28,7 @@
 struct tpm_ctx {
     TSS2_TCTI_CONTEXT *tcti_ctx;
     ESYS_CONTEXT *esys_ctx;
+    ESYS_TR hmac_session;
 };
 
 #define TPM2B_INIT(xsize) { .size = xsize, }
@@ -184,9 +185,23 @@ CK_RV tpm_ctx_new(tpm_ctx **tctx) {
         goto error;
     }
 
+    /* set up an HMAC session */
+    ESYS_TR session = ESYS_TR_NONE;
+    TPMT_SYM_DEF symmetric = { .algorithm = TPM2_ALG_NULL };
+    TSS2_RC rc = Esys_StartAuthSession(esys, ESYS_TR_NONE, ESYS_TR_NONE,
+                              ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+                              NULL,
+                              TPM2_SE_HMAC, &symmetric, TPM2_ALG_SHA256,
+                              &session);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Esys_StartAuthSession: 0x%x", rc);
+        goto error;
+    }
+
     /* populate */
     t->esys_ctx = esys;
     t->tcti_ctx = tcti;
+    t->hmac_session = session;
 
     /* assign back (return via pointer) */
     *tctx = t;
@@ -491,7 +506,7 @@ bool tpm_loadobj(
     rval = Esys_Load(
            ctx->esys_ctx,
            phandle,
-           ESYS_TR_PASSWORD,
+           ctx->hmac_session,
            ESYS_TR_NONE,
            ESYS_TR_NONE,
            &priv,
@@ -591,7 +606,7 @@ twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth) {
     TSS2_RC rval = Esys_Unseal(
             ctx->esys_ctx,
             handle,
-            ESYS_TR_PASSWORD,
+            ctx->hmac_session,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             &unsealed_data);
@@ -775,7 +790,7 @@ CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR 
     TSS2_RC rval = Esys_Sign(
             ctx->esys_ctx,
             handle,
-            ESYS_TR_PASSWORD,
+            ctx->hmac_session,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             &tdigest,
@@ -971,7 +986,7 @@ CK_RV tpm_hash_update(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, 
         TSS2_RC rval = Esys_SequenceUpdate(
                     ctx->esys_ctx,
                     sequence_handle,
-                    ESYS_TR_PASSWORD,
+                    ctx->hmac_session,
                     ESYS_TR_NONE,
                     ESYS_TR_NONE,
                     &buffer);
@@ -1013,7 +1028,7 @@ CK_RV tpm_hash_final(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, C
     TSS2_RC rval = Esys_SequenceComplete(
             ctx->esys_ctx,
             sequence_handle,
-            ESYS_TR_PASSWORD,
+            ctx->hmac_session,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             &no_data,
@@ -1269,7 +1284,7 @@ CK_RV tpm_rsa_decrypt(tpm_encrypt_data *tpm_enc_data,
     TSS2_RC rval = Esys_RSA_Decrypt(
             ctx->esys_ctx,
             handle,
-            ESYS_TR_PASSWORD,
+            ctx->hmac_session,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             &tpm_ctext,
@@ -1384,7 +1399,7 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
         Esys_EncryptDecrypt2(
             ctx->esys_ctx,
             handle,
-            ESYS_TR_PASSWORD,
+            ctx->hmac_session,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             &tpm_data_in,
@@ -1399,7 +1414,7 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
         rval = Esys_EncryptDecrypt(
             ctx->esys_ctx,
             handle,
-            ESYS_TR_PASSWORD,
+            ctx->hmac_session,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             is_decrypt,
@@ -1506,7 +1521,7 @@ CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handl
     TSS2_RC rval = Esys_ObjectChangeAuth(ctx->esys_ctx,
                         object_handle,
                         parent_handle,
-                        ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+                        ctx->hmac_session, ESYS_TR_NONE, ESYS_TR_NONE,
                         &new_tpm_auth, &newprivate);
 
     if (rval != TPM2_RC_SUCCESS) {
@@ -1609,7 +1624,7 @@ CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handl
     rc = Esys_CreateLoaded(
             ctx->esys_ctx,
             parent_handle,
-            ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+            ctx->hmac_session, ESYS_TR_NONE, ESYS_TR_NONE,
             &sensitive,
             &template,
             handle,
