@@ -188,6 +188,7 @@ static void test_user_login_logout_good(void **state) {
     CK_SESSION_HANDLE session = ti->slots[0].sessions[0].handle;
 
     user_login(session);
+    logout(session);
 }
 
 /**
@@ -295,10 +296,10 @@ static void test_so_global_login_logout_good(void **state) {
     so_login(slot0_session0);
     so_login_expects(slot0_session1, CKR_USER_ALREADY_LOGGED_IN);
 
+    logout(slot0_session1);
     logout_expects(slot1_session0, CKR_USER_NOT_LOGGED_IN);
 
-    logout(slot0_session1);
-    logout_expects(slot0_session1, CKR_USER_NOT_LOGGED_IN);
+    logout_expects(slot1_session0, CKR_USER_NOT_LOGGED_IN);
 }
 
 /**
