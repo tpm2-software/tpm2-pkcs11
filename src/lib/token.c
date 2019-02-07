@@ -360,21 +360,165 @@ void token_unlock(token *t) {
 #define ITERS 10000
 #define SALT_SIZE 32
 
+static CK_RV setup_new_pobjwrapping_data(pobject *pobj, twist newpin, twist *newkeysalthex, twist *newpobjauthhex) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    twist newpobjkeybin = NULL;
+    twist newkeysaltbin = NULL;
+    twist oldpobjauthhex = NULL;
+
+    newkeysaltbin = utils_get_rand(SALT_SIZE);
+    if (!newkeysaltbin) {
+        goto out;
+    }
+
+    *newkeysalthex = twist_hexlify(newkeysaltbin);
+    if (!*newkeysalthex) {
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    newpobjkeybin = utils_pdkdf2_hmac_sha256_bin_raw(newpin, newkeysaltbin, ITERS);
+    if (!newpobjkeybin) {
+        goto out;
+    }
+
+    oldpobjauthhex = twist_hexlify(pobj->objauth);
+    if (!oldpobjauthhex) {
+        LOGE("oom");
+        goto out;
+    }
+
+    *newpobjauthhex = aes256_gcm_encrypt(newpobjkeybin, oldpobjauthhex);
+    if (!*newpobjauthhex) {
+        goto out;
+    }
+
+    rv = CKR_OK;
+
+out:
+
+    if (rv != CKR_OK) {
+        twist_free(*newkeysalthex);
+        twist_free(*newpobjauthhex);
+        *newkeysalthex = NULL;
+        *newpobjauthhex = NULL;
+    }
+
+    twist_free(newpobjkeybin);
+    twist_free(newkeysaltbin);
+    twist_free(oldpobjauthhex);
+
+    return rv;
+}
+
+static CK_RV setup_new_object_auth(twist newpin, twist *newauthbin, twist *newauthhex, twist *newsalthex) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    twist newsaltbin = NULL;
+
+    newsaltbin = utils_get_rand(SALT_SIZE);
+    if (!newsaltbin) {
+        goto out;
+    }
+
+    *newsalthex = twist_hexlify(newsaltbin);
+    if (!*newsalthex) {
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    *newauthbin = utils_pdkdf2_hmac_sha256_bin_raw(newpin, newsaltbin, ITERS);
+    if (!newauthbin) {
+        goto out;
+    }
+
+    *newauthhex = twist_hexlify(*newauthbin);
+    if (!*newauthhex) {
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    rv = CKR_OK;
+
+out:
+
+    if (rv != CKR_OK) {
+        twist_free(*newauthhex);
+        twist_free(*newsalthex);
+        twist_free(*newauthbin);
+        *newsalthex = NULL;
+        *newauthhex = NULL;
+        *newauthbin = NULL;
+    }
+
+    twist_free(newsaltbin);
+
+    return rv;
+}
+
+static void change_token_mem_data(token *tok, bool is_so, uint32_t new_seal_handle, twist newkeysalthex, twist newpobjauthhex, twist newsalthex, twist newprivblob, twist newpubblob) {
+
+    tok->sealobject.handle = new_seal_handle;
+    twist *pobjauthkeysalt;
+    twist *sopobjauth;
+    twist *authsalt;
+    twist *priv;
+    twist *pub;
+    unsigned *pobjauthkeyiters;
+    unsigned *authiters;
+    if (is_so) {
+        pobjauthkeysalt  = &tok->sopobjauthkeysalt;
+        pobjauthkeyiters = &tok->sopobjauthkeyiters;
+
+        sopobjauth = &tok->sopobjauth;
+        authiters = &tok->sealobject.soauthiters;
+        authsalt = &tok->sealobject.soauthsalt;
+        priv = &tok->sealobject.sopriv;
+        pub = &tok->sealobject.sopub;
+    } else {
+        pobjauthkeysalt  = &tok->userpobjauthkeysalt;
+        pobjauthkeyiters = &tok->userpobjauthkeyiters;
+
+        sopobjauth = &tok->userpobjauth;
+        authiters = &tok->sealobject.userauthiters;
+        authsalt = &tok->sealobject.userauthsalt;
+        priv = &tok->sealobject.userpriv;
+        pub = &tok->sealobject.userpub;
+    }
+
+    twist_free(*pobjauthkeysalt);
+    twist_free(*sopobjauth);
+    twist_free(*authsalt);
+    twist_free(*priv);
+
+    *pobjauthkeysalt = newkeysalthex;
+    *pobjauthkeyiters = ITERS;
+    *sopobjauth = newpobjauthhex;
+    *authiters = ITERS;
+    *authsalt = newsalthex;
+    *priv = newprivblob;
+
+    if (newpubblob) {
+        twist_free(*pub);
+        *pub = newpubblob;
+    }
+}
+
 CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
 
-    CK_RV pkcs11_rval = CKR_GENERAL_ERROR;
+    CK_RV rv = CKR_GENERAL_ERROR;
 
     /* new primary auth wrapping data */
-    twist newpobjkeybin = NULL;
     twist newpobjauthhex = NULL;
-    twist newkeysaltbin = NULL;
     twist newkeysalthex = NULL;
 
     /* old primary object data */
     twist oldpobjauthhex = NULL;
 
     /* new seal auth data */
-    twist newsaltbin = NULL;
     twist newsalthex = NULL;
     twist newauthbin = NULL;
     twist newauthhex = NULL;
@@ -389,13 +533,13 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
 
     toldpin = twistbin_new(oldpin, oldlen);
     if (!toldpin) {
-        pkcs11_rval = CKR_HOST_MEMORY;
+        rv = CKR_HOST_MEMORY;
         goto out;
     }
 
     tnewpin = twistbin_new(newpin, newlen);
     if (!tnewpin) {
-        pkcs11_rval = CKR_HOST_MEMORY;
+        rv = CKR_HOST_MEMORY;
         goto out;
     }
 
@@ -407,31 +551,8 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
      *  - (so|user)pobjauthkeyiters --> newiters
      *  - (so|user)pobjauth         --> newpobjauth
      */
-
-    newkeysaltbin = utils_get_rand(SALT_SIZE);
-    if (!newkeysaltbin) {
-        goto out;
-    }
-
-    newkeysalthex = twist_hexlify(newkeysaltbin);
-    if (!newkeysalthex) {
-        pkcs11_rval = CKR_HOST_MEMORY;
-        goto out;
-    }
-
-    newpobjkeybin = utils_pdkdf2_hmac_sha256_bin_raw(tnewpin, newkeysaltbin, ITERS);
-    if (!newpobjkeybin) {
-        goto out;
-    }
-
-    oldpobjauthhex = twist_hexlify(tok->pobject.objauth);
-    if (!oldpobjauthhex) {
-        LOGE("oom");
-        goto out;
-    }
-
-    newpobjauthhex = aes256_gcm_encrypt(newpobjkeybin, oldpobjauthhex);
-    if (!newpobjauthhex) {
+    rv = setup_new_pobjwrapping_data(&tok->pobject, tnewpin, &newkeysalthex, &newpobjauthhex);
+    if (rv != CKR_OK) {
         goto out;
     }
 
@@ -442,25 +563,8 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
      *  - (so|user)authsalt  --> newsalt
      *  - (so|user)authiters --> ITERS
      */
-    newsaltbin = utils_get_rand(SALT_SIZE);
-    if (!newsaltbin) {
-        goto out;
-    }
-
-    newsalthex = twist_hexlify(newsaltbin);
-    if (!newsalthex) {
-        pkcs11_rval = CKR_HOST_MEMORY;
-        goto out;
-    }
-
-    newauthbin = utils_pdkdf2_hmac_sha256_bin_raw(tnewpin, newsaltbin, ITERS);
-    if (!newauthbin) {
-        goto out;
-    }
-
-    newauthhex = twist_hexlify(newauthbin);
-    if (!newauthhex) {
-        pkcs11_rval = CKR_HOST_MEMORY;
+    rv = setup_new_object_auth(tnewpin, &newauthbin, &newauthhex, &newsalthex);
+    if (rv != CKR_OK) {
         goto out;
     }
 
@@ -480,7 +584,7 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
      *
      * This private blob will update table sealobjects (user|so)priv
      */
-    CK_RV rv = tpm_changeauth(tok->tctx, tok->pobject.handle, tok->sealobject.handle,
+    rv = tpm_changeauth(tok->tctx, tok->pobject.handle, tok->sealobject.handle,
             oldauth, newauthbin,
             &newprivblob);
     twist_free(oldauth);
@@ -505,7 +609,7 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
     /*
      * Step X - update the db data
      */
-    pkcs11_rval = db_update_for_pinchange(
+    rv = db_update_for_pinchange(
             tok,
             is_so,
             /* primary object wrapping meta data */
@@ -520,7 +624,7 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
             /* private and public blobs */
             newprivblob,
             NULL);
-    if (pkcs11_rval != CKR_OK) {
+    if (rv != CKR_OK) {
         goto out;
     }
 
@@ -529,61 +633,21 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
     /*
      * step 6 - update in-memory metadata for seal object and primary object
      */
-    tok->sealobject.handle = new_seal_handle;
-    twist *pobjauthkeysalt;
-    twist *sopobjauth;
-    twist *authsalt;
-    twist *priv;
-    unsigned *pobjauthkeyiters;
-    unsigned *authiters;
-    if (is_so) {
-        pobjauthkeysalt  = &tok->sopobjauthkeysalt;
-        pobjauthkeyiters = &tok->sopobjauthkeyiters;
+    change_token_mem_data(tok, is_so, new_seal_handle, newkeysalthex, newpobjauthhex, newsalthex, newprivblob, NULL);
 
-        sopobjauth = &tok->sopobjauth;
-        authiters = &tok->sealobject.soauthiters;
-        authsalt = &tok->sealobject.soauthsalt;
-        priv = &tok->sealobject.sopriv;
-    } else {
-        pobjauthkeysalt  = &tok->userpobjauthkeysalt;
-        pobjauthkeyiters = &tok->userpobjauthkeyiters;
-
-        sopobjauth = &tok->userpobjauth;
-        authiters = &tok->sealobject.userauthiters;
-        authsalt = &tok->sealobject.userauthsalt;
-        priv = &tok->sealobject.userpriv;
-    }
-
-    twist_free(*pobjauthkeysalt);
-    twist_free(*sopobjauth);
-    twist_free(*authsalt);
-    twist_free(*priv);
-
-    *pobjauthkeysalt = newkeysalthex;
-    *pobjauthkeyiters = ITERS;
-    *sopobjauth = newpobjauthhex;
-    *authiters = ITERS;
-    *authsalt = newsalthex;
-    *priv = newprivblob;
-
-    pkcs11_rval = CKR_OK;
+    rv = CKR_OK;
 
 out:
 
     /* If the function failed, then these pointers ARE NOT CLAIMED and must be free'd */
-    if (pkcs11_rval != CKR_OK) {
+    if (rv != CKR_OK) {
         twist_free(newkeysalthex);
         twist_free(newpobjauthhex);
         twist_free(newsalthex);
         twist_free(newprivblob);
     }
 
-    twist_free(newpobjkeybin);
-
     twist_free(oldpobjauthhex);
-
-    twist_free(newkeysaltbin);
-    twist_free(newsaltbin);
 
     twist_free(newauthbin);
     twist_free(newauthhex);
@@ -591,6 +655,105 @@ out:
     twist_free(toldpin);
     twist_free(tnewpin);
 
-    return pkcs11_rval;
+    return rv;
+}
+
+CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    twist tnewpin = NULL;
+
+    twist newkeysalthex = NULL;
+    twist newpobjauthhex = NULL;
+
+    twist newsalthex = NULL;
+    twist newauthhex = NULL;
+    twist newauthbin = NULL;
+
+    twist sealdata = NULL;
+
+    twist newpubblob = NULL;
+    twist newprivblob = NULL;
+
+    tnewpin = twistbin_new(newpin, newlen);
+    if (!tnewpin) {
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    /* Generate a new key to wrap the primary object data with based on new pin */
+    rv = setup_new_pobjwrapping_data(&tok->pobject, tnewpin, &newkeysalthex, &newpobjauthhex);
+    if (rv != CKR_OK) {
+        goto out;
+    }
+
+    /* generate a new auth */
+    rv = setup_new_object_auth(tnewpin, &newauthbin, &newauthhex, &newsalthex);
+    if (rv != CKR_OK) {
+        goto out;
+    }
+
+    /* we store the seal data in hex form, but it's in binary form in memory, so convert it */
+    sealdata = twist_hexlify(tok->wrappingobject.objauth);
+    if (!sealdata) {
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    /* create a new seal object and seal the data */
+    uint32_t new_seal_handle = 0;
+    rv = tpm2_create_seal_obj(tok->tctx,
+            tok->pobject.objauth, tok->pobject.handle,
+            newauthbin, tok->sealobject.userpub,
+            sealdata,
+            &newpubblob, &newprivblob, &new_seal_handle);
+    if (rv != CKR_OK) {
+        goto out;
+    }
+
+    /* update the db data */
+    rv = db_update_for_pinchange(
+            tok,
+            false,
+            /* primary object wrapping meta data */
+            newkeysalthex,
+            ITERS,
+            newpobjauthhex,
+
+            /* new seal object auth metadata */
+            newsalthex,
+            ITERS,
+
+            /* private and public blobs */
+            newprivblob,
+            newpubblob);
+    if (rv != CKR_OK) {
+        goto out;
+    }
+
+     /* update in-memory metadata for seal object and primary object */
+    change_token_mem_data(tok, false, new_seal_handle, newkeysalthex, newpobjauthhex, newsalthex, newprivblob, newpubblob);
+
+    rv = CKR_OK;
+
+out:
+
+    /* If the function failed, then these pointers ARE NOT CLAIMED and must be free'd */
+    if (rv != CKR_OK) {
+        twist_free(newkeysalthex);
+        twist_free(newpobjauthhex);
+        twist_free(newsalthex);
+        twist_free(newprivblob);
+        twist_free(newpubblob);
+    }
+
+    twist_free(newauthbin);
+    twist_free(newauthhex);
+    twist_free(sealdata);
+
+    twist_free(tnewpin);
+
+    return rv;
 }
 

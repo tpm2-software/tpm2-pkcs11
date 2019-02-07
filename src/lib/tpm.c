@@ -1530,3 +1530,134 @@ CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handl
 
     return *newblob ? CKR_OK : CKR_HOST_MEMORY;
 }
+/*
+ * Esys_CreateLoaded(
+    ESYS_CONTEXT *esysContext,
+    ESYS_TR parentHandle,
+    ESYS_TR shandle1,
+    ESYS_TR shandle2,
+    ESYS_TR shandle3,
+    const TPM2B_SENSITIVE_CREATE *inSensitive,
+    const TPM2B_TEMPLATE *inPublic,
+    ESYS_TR *objectHandle,
+    TPM2B_PRIVATE **outPrivate,
+    TPM2B_PUBLIC **outPublic);
+ */
+
+CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handle, twist objauth, twist oldpubblob, twist sealdata, twist *newpubblob, twist *newprivblob, uint32_t *handle) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    /*
+     * clone the public portion from the existing object by unmarshaling (aka unserializing) it from the
+     * pub blob and converting it to a TPM2B_TEMPLATE
+     */
+    TPM2B_PUBLIC pub = { .size = 0 };
+    size_t len = twist_len(oldpubblob);
+
+    size_t offset = 0;
+    TSS2_RC rc = Tss2_MU_TPM2B_PUBLIC_Unmarshal((uint8_t *)oldpubblob, len, &offset, &pub);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Tss2_MU_TPM2B_PUBLIC_Unmarshal: 0x%x", rc);
+        return CKR_GENERAL_ERROR;
+    }
+
+    offset = 0;
+    TPM2B_TEMPLATE template = { .size = 0 };
+    rc = Tss2_MU_TPMT_PUBLIC_Marshal(&pub.publicArea, &template.buffer[0],
+                                    sizeof(TPMT_PUBLIC), &offset);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Tss2_MU_TPMT_PUBLIC_Marshal: 0x%x:", rc);
+        return CKR_GENERAL_ERROR;
+    }
+
+    template.size = offset;
+
+    /*
+     * Set the seal data and auth value in the sensitive portion
+     */
+    TPM2B_SENSITIVE_CREATE sensitive = { .size = 0 };
+
+    len = twist_len(sealdata);
+    if (len > sizeof(sensitive.sensitive.data.buffer)) {
+        LOGE("Seal data too big");
+        return CKR_GENERAL_ERROR;
+    }
+
+    memcpy(sensitive.sensitive.data.buffer, sealdata, len);
+    sensitive.sensitive.data.size = len;
+
+    len = twist_len(objauth);
+    if (len > sizeof(sensitive.sensitive.userAuth.buffer)) {
+        LOGE("Auth value too big");
+        return CKR_GENERAL_ERROR;
+    }
+
+    memcpy(sensitive.sensitive.userAuth.buffer, objauth, len);
+    sensitive.sensitive.userAuth.size = len;
+
+    /*
+     * Set the parent object auth
+     */
+    bool res = set_esys_auth(ctx->esys_ctx, parent_handle, parentauth);
+    if (!res) {
+        return CKR_GENERAL_ERROR;
+    }
+
+    TPM2B_PRIVATE *newpriv = NULL;
+    TPM2B_PUBLIC *newpub = NULL;
+    rc = Esys_CreateLoaded(
+            ctx->esys_ctx,
+            parent_handle,
+            ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+            &sensitive,
+            &template,
+            handle,
+            &newpriv,
+            &newpub
+    );
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Esys_CreateLoaded: 0x%x:", rc);
+        return CKR_GENERAL_ERROR;
+    }
+
+    uint8_t serialized[sizeof(*newpriv) > sizeof(*newpub) ? sizeof(*newpriv) : sizeof(*newpub)];
+
+    /* serialize the new blob private */
+    offset = 0;
+    rc = Tss2_MU_TPM2B_PRIVATE_Marshal(newpriv, serialized, sizeof(*newpriv), &offset);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Tss2_MU_TPM2B_PRIVATE_Marshal: 0x%x", rc);
+        goto out;
+    }
+
+    *newprivblob = twistbin_new(serialized, offset);
+    if (!*newprivblob) {
+        goto out;
+    }
+
+    /* serialize the new blob public */
+    offset = 0;
+    rc = Tss2_MU_TPM2B_PUBLIC_Marshal(newpub, serialized, sizeof(*newpub), &offset);
+    if (rc != TSS2_RC_SUCCESS) {
+        twist_free(*newprivblob);
+        *newprivblob = NULL;
+        LOGE("Tss2_MU_TPM2B_PUBLIC_Marshal: 0x%x", rc);
+        goto out;
+    }
+
+    *newpubblob = twistbin_new(serialized, offset);
+    if (!*newpubblob) {
+        twist_free(*newprivblob);
+        *newprivblob = NULL;
+        goto out;
+    }
+
+    rv = CKR_OK;
+
+out:
+    free(newpriv);
+    free(newpub);
+
+    return rv;
+}

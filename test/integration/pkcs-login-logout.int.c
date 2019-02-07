@@ -441,16 +441,6 @@ static void swap_pin(CK_SESSION_HANDLE handle, CK_USER_TYPE user_type, CK_UTF8CH
     logout(handle);
 }
 
-static void test_so_state_pin_change_good(void **state) {
-
-    test_info *ti = test_info_from_state(state);
-    CK_SESSION_HANDLE handle = ti->slots[0].sessions[0].handle;
-
-    so_login(handle);
-
-    swap_pin(handle, CKU_SO, C(GOOD_SOPIN), sizeof(GOOD_SOPIN) - 1);
-}
-
 static void test_user_state_pin_change_good(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -459,6 +449,16 @@ static void test_user_state_pin_change_good(void **state) {
     user_login(handle);
 
     swap_pin(handle, CKU_USER, C(GOOD_USERPIN), sizeof(GOOD_USERPIN) - 1);
+}
+
+static void test_so_state_pin_change_good(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE handle = ti->slots[0].sessions[0].handle;
+
+    so_login(handle);
+
+    swap_pin(handle, CKU_SO, C(GOOD_SOPIN), sizeof(GOOD_SOPIN) - 1);
 }
 
 static void test_ro_function_state_pin_change_bad(void **state) {
@@ -478,6 +478,33 @@ static void test_ro_function_state_pin_change_bad(void **state) {
     // Set the new pin
     CK_RV rv = C_SetPIN(handle, oldpin, oldpinlen, newpin, newpinlen);
     assert_int_equal(rv, CKR_SESSION_READ_ONLY);
+}
+
+static void test_so_state_pin_init_good(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE handle = ti->slots[0].sessions[0].handle;
+
+    so_login(handle);
+
+    const char newpin[] = "mynewuserpin";
+
+    CK_RV rv = C_InitPIN(handle, C(newpin), sizeof(newpin) - 1);
+    assert_int_equal(rv, CKR_OK);
+
+    /*
+     * loging in as user with the old pin should fail
+     */
+    logout(handle);
+    login_expects(handle, CKU_USER, CKR_PIN_INCORRECT, C(GOOD_USERPIN), sizeof(GOOD_USERPIN) - 1);
+
+    /*
+     * log back in as so and change it back
+     */
+    so_login(handle);
+
+    rv = C_InitPIN(handle, C(GOOD_USERPIN), sizeof(GOOD_USERPIN) - 1);
+    assert_int_equal(rv, CKR_OK);
 }
 
 int main() {
@@ -526,6 +553,13 @@ int main() {
                 test_setup_rw, test_teardown),
         cmocka_unit_test_setup_teardown(test_ro_function_state_pin_change_bad,
                 test_setup_ro, test_teardown),
+
+        /*
+         * C_InitPIN tests should also stay last as if they fail they can leave the token
+         * in a weird state
+         */
+        cmocka_unit_test_setup_teardown(test_so_state_pin_init_good,
+                test_setup_rw, test_teardown),
     };
 
     return cmocka_run_group_tests(tests, group_setup_locking, group_teardown);
