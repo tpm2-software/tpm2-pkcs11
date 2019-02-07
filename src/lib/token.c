@@ -197,10 +197,14 @@ CK_RV token_logout(token *tok) {
      */
     tok->login_state = token_no_one_logged_in;
 
+    tpm_session_stop(tok->tctx);
+
     return CKR_OK;
 }
 
 CK_RV token_login(token *tok, twist pin, CK_USER_TYPE user) {
+
+    bool on_error_flush_session = false;
 
     twist sealobjauth = NULL;
     twist dpobjauth = NULL;
@@ -238,6 +242,13 @@ CK_RV token_login(token *tok, twist pin, CK_USER_TYPE user) {
     }
 
     tok->pobject.objauth = dpobjauth;
+
+    CK_RV tmp = tpm_sesion_start(tok->tctx, tok->pobject.objauth, tok->pobject.handle);
+    if (tmp != CKR_OK) {
+        return tmp;
+    }
+
+    on_error_flush_session = true;
 
     tpm_ctx *tpm = tok->tctx;
 
@@ -313,9 +324,14 @@ CK_RV token_login(token *tok, twist pin, CK_USER_TYPE user) {
      */
     session_table_login_event(tok->s_table, user);
 
+    on_error_flush_session = false;
     rv = CKR_OK;
 
 error:
+
+    if (on_error_flush_session) {
+        tpm_session_stop(tok->tctx);
+    }
 
     twist_free(sealobjauth);
 
