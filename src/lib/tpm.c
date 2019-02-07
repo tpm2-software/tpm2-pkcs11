@@ -29,6 +29,8 @@ struct tpm_ctx {
     TSS2_TCTI_CONTEXT *tcti_ctx;
     ESYS_CONTEXT *esys_ctx;
     ESYS_TR hmac_session;
+    TPMA_SESSION old_flags;
+    TPMA_SESSION original_flags;
 };
 
 #define TPM2B_INIT(xsize) { .size = xsize, }
@@ -153,6 +155,26 @@ static ESYS_CONTEXT* esys_ctx_init(TSS2_TCTI_CONTEXT *tcti_ctx) {
     return esys_ctx;
 }
 
+static void flags_turndown(tpm_ctx *ctx, TPMA_SESSION flags) {
+
+    TSS2_RC rc = Esys_TRSess_GetAttributes(ctx->esys_ctx, ctx->hmac_session, &ctx->old_flags);
+    assert(rc == TPM2_RC_SUCCESS);
+
+    assert(ctx->old_flags == ctx->original_flags);
+
+    TPMA_SESSION new_flags = (ctx->old_flags & (~flags));
+    rc = Esys_TRSess_SetAttributes(ctx->esys_ctx, ctx->hmac_session, new_flags, 0xff);
+    assert(rc == TPM2_RC_SUCCESS);
+}
+
+static void flags_restore(tpm_ctx *ctx) {
+
+    assert(ctx->old_flags == ctx->original_flags);
+
+    TSS2_RC rc = Esys_TRSess_SetAttributes(ctx->esys_ctx, ctx->hmac_session, ctx->old_flags, 0xff);
+    assert(rc == TPM2_RC_SUCCESS);
+}
+
 void tpm_ctx_free(tpm_ctx *ctx) {
 
     if (!ctx) {
@@ -164,6 +186,98 @@ void tpm_ctx_free(tpm_ctx *ctx) {
     free(ctx->tcti_ctx);
     free(ctx);
 }
+
+static bool set_esys_auth(ESYS_CONTEXT *esys_ctx, ESYS_TR handle, twist auth) {
+
+    TPM2B_AUTH tpm_auth = TPM2B_EMPTY_INIT;
+
+    if (auth) {
+        size_t auth_len = twist_len(auth);
+        if (auth_len > sizeof(tpm_auth.buffer)) {
+            LOGE("Auth value too large, got %zu expected < %zu",
+                    auth_len, sizeof(tpm_auth.buffer));
+            return false;
+        }
+
+        tpm_auth.size = auth_len;
+        memcpy(tpm_auth.buffer, auth, auth_len);
+    }
+
+    TSS2_RC rval = Esys_TR_SetAuth(esys_ctx, handle, &tpm_auth);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_TR_SetAuth: 0x%x:", rval);
+        return false;
+    }
+
+    return true;
+}
+
+CK_RV tpm_sesion_start(tpm_ctx *ctx, twist auth, uint32_t handle) {
+
+    assert(!ctx->hmac_session);
+
+    bool res = set_esys_auth(ctx->esys_ctx, handle, auth);
+    if (!res) {
+        return CKR_GENERAL_ERROR;
+    }
+
+    TPMT_SYM_DEF symmetric = {
+        .algorithm = TPM2_ALG_AES,
+        .keyBits = { .aes = 128 },
+        .mode = { .aes = TPM2_ALG_CFB }
+    };
+
+    TPMA_SESSION session_attrs =
+        TPMA_SESSION_CONTINUESESSION
+      | TPMA_SESSION_DECRYPT
+      | TPMA_SESSION_ENCRYPT;
+
+    ESYS_TR session = ESYS_TR_NONE;
+    TSS2_RC rc = Esys_StartAuthSession(ctx->esys_ctx,
+            handle, //tpmkey
+            handle, //bind
+            ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+            NULL,
+            TPM2_SE_HMAC, &symmetric, TPM2_ALG_SHA256,
+            &session);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Esys_StartAuthSession: 0x%x", rc);
+        return CKR_GENERAL_ERROR;
+    }
+
+    rc = Esys_TRSess_SetAttributes(ctx->esys_ctx, session, session_attrs,
+                                      0xff);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Esys_TRSess_SetAttributes: 0x%x", rc);
+        rc = Esys_FlushContext(ctx->esys_ctx,
+                session);
+        if (rc != TSS2_RC_SUCCESS) {
+            LOGW("Esys_FlushContext: 0x%x", rc);
+        }
+        return CKR_GENERAL_ERROR;
+    }
+
+    ctx->original_flags = session_attrs;
+
+    ctx->hmac_session = session;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_session_stop(tpm_ctx *ctx) {
+
+    TSS2_RC rc = Esys_FlushContext(ctx->esys_ctx,
+            ctx->hmac_session);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Esys_FlushContext: 0x%x", rc);
+        return CKR_GENERAL_ERROR;
+    }
+
+    ctx->hmac_session = 0;
+
+    return CKR_OK;
+}
+
 
 CK_RV tpm_ctx_new(tpm_ctx **tctx) {
 
@@ -185,23 +299,9 @@ CK_RV tpm_ctx_new(tpm_ctx **tctx) {
         goto error;
     }
 
-    /* set up an HMAC session */
-    ESYS_TR session = ESYS_TR_NONE;
-    TPMT_SYM_DEF symmetric = { .algorithm = TPM2_ALG_NULL };
-    TSS2_RC rc = Esys_StartAuthSession(esys, ESYS_TR_NONE, ESYS_TR_NONE,
-                              ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
-                              NULL,
-                              TPM2_SE_HMAC, &symmetric, TPM2_ALG_SHA256,
-                              &session);
-    if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Esys_StartAuthSession: 0x%x", rc);
-        goto error;
-    }
-
     /* populate */
     t->esys_ctx = esys;
     t->tcti_ctx = tcti;
-    t->hmac_session = session;
 
     /* assign back (return via pointer) */
     *tctx = t;
@@ -447,31 +547,6 @@ bool tpm_register_handle(tpm_ctx *ctx, uint32_t *handle) {
     return true;
 }
 
-static bool set_esys_auth(ESYS_CONTEXT *esys_ctx, ESYS_TR handle, twist auth) {
-
-    TPM2B_AUTH tpm_auth = TPM2B_EMPTY_INIT;
-
-    if (auth) {
-        size_t auth_len = twist_len(auth);
-        if (auth_len > sizeof(tpm_auth.buffer)) {
-            LOGE("Auth value too large, got %zu expected < %zu",
-                    auth_len, sizeof(tpm_auth.buffer));
-            return false;
-        }
-
-        tpm_auth.size = auth_len;
-        memcpy(tpm_auth.buffer, auth, auth_len);
-    }
-
-    TSS2_RC rval = Esys_TR_SetAuth(esys_ctx, handle, &tpm_auth);
-    if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_TR_SetAuth: 0x%x:", rval);
-        return false;
-    }
-
-    return true;
-}
-
 bool tpm_loadobj(
         tpm_ctx *ctx,
         uint32_t phandle, twist auth,
@@ -603,22 +678,26 @@ twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth) {
 
     TPM2B_SENSITIVE_DATA *unsealed_data = NULL;
 
-    TSS2_RC rval = Esys_Unseal(
+    flags_turndown(ctx, TPMA_SESSION_DECRYPT);
+
+    TSS2_RC rc = Esys_Unseal(
             ctx->esys_ctx,
             handle,
             ctx->hmac_session,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             &unsealed_data);
-    if (rval != TPM2_RC_SUCCESS) {
-        LOGE("Tss2_Sys_Unseal: 0x%X", rval);
-        return NULL;
+    if (rc != TPM2_RC_SUCCESS) {
+        LOGE("Tss2_Sys_Unseal: 0x%X", rc);
+        goto out;
     }
 
     t = twistbin_new(unsealed_data->buffer, unsealed_data->size);
 
     free(unsealed_data);
+out:
 
+    flags_restore(ctx);
     return t;
 }
 
@@ -786,6 +865,8 @@ CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR 
         .digest = TPM2B_EMPTY_INIT
     };
 
+    flags_turndown(ctx, TPMA_SESSION_ENCRYPT);
+
     TPMT_SIGNATURE *signature = NULL;
     TSS2_RC rval = Esys_Sign(
             ctx->esys_ctx,
@@ -797,6 +878,7 @@ CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR 
             &in_scheme,
             &validation,
             &signature);
+    flags_restore(ctx);
     if (rval != TPM2_RC_SUCCESS) {
         LOGE("Esys_Sign: 0x%0x", rval);
         return false;
@@ -968,6 +1050,12 @@ CK_RV tpm_hash_init(tpm_ctx *ctx, CK_MECHANISM_TYPE mode, uint32_t *sequence_han
         return CKR_GENERAL_ERROR;
     }
 
+    rval = Esys_TR_SetAuth(ctx->esys_ctx, *sequence_handle, &null_auth);
+    if (rval != TPM2_RC_SUCCESS) {
+        LOGE("Esys_TR_SetAuth: 0x%x", rval);
+        return CKR_GENERAL_ERROR;
+    }
+
     return CKR_OK;
 }
 
@@ -983,6 +1071,8 @@ CK_RV tpm_hash_update(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, 
         buffer.size = send;
         memcpy(buffer.buffer, &data[offset], send);
 
+        flags_turndown(ctx, TPMA_SESSION_ENCRYPT);
+
         TSS2_RC rval = Esys_SequenceUpdate(
                     ctx->esys_ctx,
                     sequence_handle,
@@ -990,6 +1080,7 @@ CK_RV tpm_hash_update(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, 
                     ESYS_TR_NONE,
                     ESYS_TR_NONE,
                     &buffer);
+        flags_restore(ctx);
         if (rval != TPM2_RC_SUCCESS) {
             LOGE("Esys_SequenceUpdate: 0x%x", rval);
             return CKR_GENERAL_ERROR;
