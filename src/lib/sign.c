@@ -92,7 +92,7 @@ static CK_RV common_init(operation op, token *tok, CK_MECHANISM_PTR mechanism, C
             return CKR_HOST_MEMORY;
         }
 
-        rv = digest_init_op(tok, digest_opdata, mechanism);
+        rv = digest_init_op(tok, digest_opdata, mechanism->mechanism);
         if (rv != CKR_OK) {
             digest_op_data_free(&digest_opdata);
             return rv;
@@ -269,8 +269,9 @@ static CK_RV apply_pkcs_1_5_pad(tobject *tobj, char *built, size_t built_len, ch
 
 CK_RV sign_final(token *tok, unsigned char *signature, unsigned long *signature_len) {
 
-    check_pointer(signature);
     check_pointer(signature_len);
+
+    bool reset_ctx = false;
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -287,9 +288,6 @@ CK_RV sign_final(token *tok, unsigned char *signature, unsigned long *signature_
 
     tpm_ctx *tpm = tok->tctx;
 
-    /*
-     * Double checking of opdata to silence scan-build
-     */
     if (opdata->do_hash) {
 
         hash_len = utils_get_halg_size(opdata->mtype);
@@ -398,30 +396,59 @@ CK_RV sign_final(token *tok, unsigned char *signature, unsigned long *signature_
         rv = decrypt_oneshot_op(tok, encrypt_opdata, (CK_BYTE_PTR)padded, padded_len, signature, signature_len);
         free(padded);
         encrypt_op_data_free(&encrypt_opdata);
-        if (rv != CKR_OK) {
+        if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
             goto session_out;
         }
     } else {
         rv = tpm_sign(tpm, opdata->tobj, opdata->mtype, hash, hash_len, signature, signature_len);
-        if (rv != CKR_OK) {
-            rv = CKR_GENERAL_ERROR;
+        if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
             goto session_out;
         }
     }
 
-    rv = CKR_OK;
+    /*
+     * Detect 1 of 3 states:
+     *   - 1 - everything is ok from enc/sign and sig is set (continue normally)
+     *   - 2 - buffer too small from enc/sign and sig is set (reset hashing state and keep sign operation alive)
+     *   - 3 - everything is ok but sig is NULL, handle like state 2.
+     */
+    reset_ctx = (rv == CKR_BUFFER_TOO_SMALL || !signature);
+    if (reset_ctx) {
+        /* reset the hashing state */
+        digest_op_data *new_digest_state = digest_op_data_new();
+        if (!new_digest_state) {
+            rv = CKR_HOST_MEMORY;
+            reset_ctx = false;
+            goto session_out;
+        }
 
-session_out:
+        assert(opdata->digest_opdata);
 
-    free(hash);
+        CK_RV tmp = digest_init_op(tok, new_digest_state, opdata->digest_opdata->mechanism);
+        if (tmp != CKR_OK) {
+            digest_op_data_free(&new_digest_state);
+            reset_ctx = false;
+            goto session_out;
+        }
 
-    if (opdata && !opdata->do_hash) {
-        twist_free(opdata->buffer);
+        digest_op_data_free(&opdata->digest_opdata);
+        opdata->digest_opdata = new_digest_state;
+    } else {
+        /* not resetting the state, and all is well */
+        rv = CKR_OK;
     }
 
-    token_opdata_clear(tok);
-    digest_op_data_free(&opdata->digest_opdata);
-    free(opdata);
+session_out:
+    if (!reset_ctx) {
+        digest_op_data_free(&opdata->digest_opdata);
+        token_opdata_clear(tok);
+        if (opdata && !opdata->do_hash) {
+            twist_free(opdata->buffer);
+        }
+        free(opdata);
+    }
+
+    free(hash);
 
     return rv;
 }
