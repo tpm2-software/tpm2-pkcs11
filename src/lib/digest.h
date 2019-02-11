@@ -20,7 +20,7 @@ typedef struct digest_op_data digest_op_data;
 struct digest_op_data {
     bool use_sw_hash;
     tobject *tobj;
-    CK_MECHANISM_TYPE mode;
+    CK_MECHANISM_TYPE mechanism;
     union {
         uint32_t sequence_handle;
         EVP_MD_CTX *mdctx;
@@ -30,9 +30,9 @@ struct digest_op_data {
 digest_op_data *digest_op_data_new(void);
 void digest_op_data_free(digest_op_data **opdata);
 
-CK_RV digest_init_op(token *tok, digest_op_data *opdata, CK_MECHANISM *mechanism);
+CK_RV digest_init_op(token *tok, digest_op_data *opdata, CK_MECHANISM_TYPE mechanism);
 static inline CK_RV digest_init(token *tok, CK_MECHANISM *mechanism) {
-    return digest_init_op(tok, NULL, mechanism);
+    return digest_init_op(tok, NULL, mechanism->mechanism);
 }
 
 CK_RV digest_update_op(token *tok, digest_op_data *opdata, unsigned char *part, unsigned long part_len);

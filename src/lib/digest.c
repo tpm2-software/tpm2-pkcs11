@@ -47,7 +47,7 @@ const EVP_MD *ossl_halg_from_mech(CK_MECHANISM_TYPE mech) {
 
 static CK_RV digest_sw_init(digest_op_data *opdata) {
 
-    const EVP_MD *md = ossl_halg_from_mech(opdata->mode);
+    const EVP_MD *md = ossl_halg_from_mech(opdata->mechanism);
     if (!md) {
         return CKR_MECHANISM_INVALID;
     }
@@ -107,9 +107,7 @@ out:
     return rv;
 }
 
-CK_RV digest_init_op(token *tok, digest_op_data *supplied_opdata, CK_MECHANISM *mechanism) {
-
-    check_pointer(mechanism);
+CK_RV digest_init_op(token *tok, digest_op_data *supplied_opdata, CK_MECHANISM_TYPE mechanism) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -128,7 +126,7 @@ CK_RV digest_init_op(token *tok, digest_op_data *supplied_opdata, CK_MECHANISM *
     bool use_sw_hash = false;
 
     uint32_t sequence_handle;
-    rv = tpm_hash_init(tpm, mechanism->mechanism, &sequence_handle);
+    rv = tpm_hash_init(tpm, mechanism, &sequence_handle);
     if (rv != CKR_OK) {
         if (rv == CKR_MECHANISM_INVALID) {
             use_sw_hash = true;
@@ -148,7 +146,7 @@ CK_RV digest_init_op(token *tok, digest_op_data *supplied_opdata, CK_MECHANISM *
     }
 
     opdata->use_sw_hash = use_sw_hash;
-    opdata->mode = mechanism->mechanism;
+    opdata->mechanism = mechanism;
 
     if (use_sw_hash) {
         rv = digest_sw_init(opdata);

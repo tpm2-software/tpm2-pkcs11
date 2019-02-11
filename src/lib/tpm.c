@@ -703,12 +703,16 @@ out:
 
 static CK_RV flatten_rsassa(TPMS_SIGNATURE_RSASSA *rsassa, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
 
-    if (*siglen <  sizeof(rsassa->sig.size)) {
+    if (sig && *siglen < rsassa->sig.size) {
+        *siglen = rsassa->sig.size;
         return CKR_BUFFER_TOO_SMALL;
     }
 
     *siglen = rsassa->sig.size;
-    memcpy(sig, rsassa->sig.buffer, *siglen);
+
+    if (sig) {
+        memcpy(sig, rsassa->sig.buffer, *siglen);
+    }
 
     return CKR_OK;
 }
@@ -782,7 +786,14 @@ static CK_RV flatten_ecdsa(TPMS_SIGNATURE_ECDSA *ecdsa, CK_BYTE_PTR sig, CK_ULON
         goto out;
     }
 
+    if (!sig) {
+        *siglen = size_r + size_s + SEQ_HDR_SIZE;
+        rv = CKR_OK;
+        goto out;
+    }
+
     if (size_s + size_r + SEQ_HDR_SIZE > *siglen) {
+        *siglen = size_r + size_s + SEQ_HDR_SIZE;
         rv = CKR_BUFFER_TOO_SMALL;
         goto out;
     }
