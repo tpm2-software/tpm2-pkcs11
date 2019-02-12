@@ -1208,7 +1208,7 @@ static CK_RV mech_to_rsa_raw(CK_MECHANISM_PTR mech, tpm_encrypt_data *encdata) {
     return CKR_OK;
 }
 
-static CK_RV get_oaep_mfg1_alg(tpm_ctx *tpm, uint32_t handle, CK_RSA_PKCS_MGF_TYPE_PTR mfg) {
+static CK_RV get_oaep_mgf1_alg(tpm_ctx *tpm, uint32_t handle, CK_RSA_PKCS_MGF_TYPE_PTR mgf) {
 
     TPM2B_PUBLIC *public = NULL;
     TPM2B_NAME *name = NULL;
@@ -1221,16 +1221,16 @@ static CK_RV get_oaep_mfg1_alg(tpm_ctx *tpm, uint32_t handle, CK_RSA_PKCS_MGF_TY
 
     switch(public->publicArea.nameAlg) {
     case TPM2_ALG_SHA1:
-        *mfg = CKG_MGF1_SHA1;
+        *mgf = CKG_MGF1_SHA1;
         break;
     case TPM2_ALG_SHA256:
-        *mfg = CKG_MGF1_SHA256;
+        *mgf = CKG_MGF1_SHA256;
         break;
     case TPM2_ALG_SHA384:
-        *mfg = CKG_MGF1_SHA384;
+        *mgf = CKG_MGF1_SHA384;
         break;
     case TPM2_ALG_SHA512:
-        *mfg = CKG_MGF1_SHA512;
+        *mgf = CKG_MGF1_SHA512;
         break;
     default:
         rv = CKR_GENERAL_ERROR;
@@ -1260,15 +1260,15 @@ static CK_RV mech_to_rsa_oaep(tpm_ctx *tpm, CK_MECHANISM_PTR mech, tpm_encrypt_d
     }
 
     /*
-     * TPM is hardcoded to MFG1 + <name alg> in the TPM, make sure what is requested is supported
+     * TPM is hardcoded to MGF1 + <name alg> in the TPM, make sure what is requested is supported
      */
-    CK_RSA_PKCS_MGF_TYPE supported_mfg;
-    CK_RV rv = get_oaep_mfg1_alg(tpm, encdata->handle, &supported_mfg);
+    CK_RSA_PKCS_MGF_TYPE supported_mgf;
+    CK_RV rv = get_oaep_mgf1_alg(tpm, encdata->handle, &supported_mgf);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    if (params->mgf != supported_mfg) {
+    if (params->mgf != supported_mgf) {
         return CKR_MECHANISM_PARAM_INVALID;
     }
 
