@@ -203,8 +203,8 @@ CK_RV slot_mechanism_list_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE *mechanism_
         return CKR_BUFFER_TOO_SMALL;
     }
 
-    *count = sizeof(mechs);
-    memcpy(mechanism_list, mechs, ARRAY_LEN(mechs));
+    *count = ARRAY_LEN(mechs);
+    memcpy(mechanism_list, mechs, sizeof(mechs));
 
     return CKR_OK;
 }
