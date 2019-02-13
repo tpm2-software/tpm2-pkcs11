@@ -1502,6 +1502,8 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
 
     if (tpm2_error_get(rval) == TPM2_RC_COMMAND_CODE) {
         version = 1;
+
+        flags_turndown(ctx, TPMA_SESSION_DECRYPT);
         rval = Esys_EncryptDecrypt(
             ctx->esys_ctx,
             handle,
@@ -1514,6 +1516,7 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
             &tpm_data_in,
             &tpm_data_out,
             &tpm_iv_out);
+        flags_restore(ctx);
     }
 
     if(rval != TSS2_RC_SUCCESS) {
