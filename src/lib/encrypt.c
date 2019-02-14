@@ -76,7 +76,6 @@ static CK_RV common_update_op (token *tok, encrypt_op_data *supplied_opdata, ope
         unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
 
     check_pointer(part);
-    check_pointer(encrypted_part);
     check_pointer(encrypted_part_len);
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -113,7 +112,7 @@ static CK_RV common_update_op (token *tok, encrypt_op_data *supplied_opdata, ope
     rv = fop(opdata->tpm_enc_data, part, part_len,
             encrypted_part, encrypted_part_len);
     if (rv != CKR_OK) {
-        return rv;
+        goto out;
     }
 
     rv = CKR_OK;

@@ -1358,6 +1358,8 @@ CK_RV tpm_rsa_decrypt(tpm_encrypt_data *tpm_enc_data,
         CK_BYTE_PTR ctext, CK_ULONG ctextlen,
         CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen) {
 
+    CK_RV rv = CKR_GENERAL_ERROR;
+
     tpm_ctx *ctx = tpm_enc_data->ctx;
 
     TPMT_RSA_DECRYPT *scheme = &tpm_enc_data->rsa.scheme;
@@ -1383,7 +1385,7 @@ CK_RV tpm_rsa_decrypt(tpm_encrypt_data *tpm_enc_data,
 
     TPM2B_PUBLIC_KEY_RSA *tpm_ptext;
 
-    TSS2_RC rval = Esys_RSA_Decrypt(
+    TSS2_RC rc = Esys_RSA_Decrypt(
             ctx->esys_ctx,
             handle,
             ctx->hmac_session,
@@ -1393,26 +1395,39 @@ CK_RV tpm_rsa_decrypt(tpm_encrypt_data *tpm_enc_data,
             scheme,
             label,
             &tpm_ptext);
-    if (rval != TPM2_RC_SUCCESS) {
-        LOGE("Esys_RSA_Decrypt: 0x%x", rval);
+    if (rc != TPM2_RC_SUCCESS) {
+        LOGE("Esys_RSA_Decrypt: 0x%x", rc);
         return CKR_GENERAL_ERROR;
     }
 
+    if (!ptext) {
+        *ptextlen = tpm_ctext.size;
+        rv = CKR_OK;
+        goto out;
+    }
+
     if (*ptextlen < tpm_ctext.size) {
-        return CKR_BUFFER_TOO_SMALL;
+        *ptextlen = tpm_ctext.size;
+        rv = CKR_BUFFER_TOO_SMALL;
+        goto out;
     }
 
     *ptextlen = tpm_ptext->size;
     memcpy(ptext, tpm_ptext->buffer, tpm_ptext->size);
 
+    rv = CKR_OK;
+
+out:
     free(tpm_ptext);
 
-    return CKR_OK;
+    return rv;
 }
 
 CK_RV tpm_rsa_encrypt(tpm_encrypt_data *tpm_enc_data,
         CK_BYTE_PTR pptext, CK_ULONG pptextlen,
         CK_BYTE_PTR cctext, CK_ULONG_PTR cctextlen) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
 
     tpm_ctx *ctx = tpm_enc_data->ctx;
 
@@ -1434,7 +1449,7 @@ CK_RV tpm_rsa_encrypt(tpm_encrypt_data *tpm_enc_data,
 
     TPM2B_PUBLIC_KEY_RSA *ctext;
 
-    TSS2_RC rval = Esys_RSA_Encrypt(
+    TSS2_RC rc = Esys_RSA_Encrypt(
             ctx->esys_ctx,
             handle,
             ESYS_TR_NONE,
@@ -1444,21 +1459,32 @@ CK_RV tpm_rsa_encrypt(tpm_encrypt_data *tpm_enc_data,
             scheme,
             label,
             &ctext);
-    if (rval != TPM2_RC_SUCCESS) {
-        LOGE("Esys_RSA_Encrypt: 0x%x", rval);
+    if (rc != TPM2_RC_SUCCESS) {
+        LOGE("Esys_RSA_Encrypt: 0x%x", rc);
         return CKR_GENERAL_ERROR;
     }
 
+    if (!ctext) {
+        *cctextlen = ctext->size;
+        rv = CKR_OK;
+        goto out;
+    }
+
     if (*cctextlen < ctext->size) {
-        return CKR_BUFFER_TOO_SMALL;
+        *cctextlen = ctext->size;
+        rv = CKR_BUFFER_TOO_SMALL;
+        goto out;
     }
 
     *cctextlen = ctext->size;
     memcpy(cctext, ctext->buffer, ctext->size);
 
+    rv = CKR_OK;
+
+out:
     free(ctext);
 
-    return CKR_OK;
+    return rv;
 }
 
 static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_ALG_SYM_MODE mode, TPMI_YES_NO is_decrypt,
@@ -1535,15 +1561,20 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
         return CKR_GENERAL_ERROR;
     }
 
-    /* copy the output data */
+    if (!data_out) {
+        *data_out_len = tpm_data_out->size;
+        rv = CKR_OK;
+        goto out;
+    }
+
     if (tpm_data_out->size > *data_out_len) {
+        *data_out_len = tpm_data_out->size;
         rv = CKR_BUFFER_TOO_SMALL;
         goto out;
     }
 
     *data_out_len = tpm_data_out->size;
     memcpy(data_out, tpm_data_out->buffer, tpm_data_out->size);
-
 
     /* swap iv's */
     memcpy(iv, tpm_iv_out, sizeof(*tpm_iv_out));

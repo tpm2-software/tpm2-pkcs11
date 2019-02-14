@@ -328,7 +328,7 @@ static void test_sign_verify_CKM_ECDSA_SHA1(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
-static void test_double_sign_call_for_size(void **state) {
+static void test_double_sign_call_for_size_SHA256(void **state) {
 
     test_info *ti = test_info_from_state(state);
     CK_SESSION_HANDLE session = ti->handle;
@@ -384,7 +384,62 @@ static void test_double_sign_call_for_size(void **state) {
 
 }
 
-static void test_double_sign_final_call_for_size(void **state) {
+static void test_double_sign_call_for_size_SHA512(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_OBJECT_CLASS key_class = CKO_PRIVATE_KEY;
+    CK_KEY_TYPE key_type = CKK_RSA;
+    CK_ATTRIBUTE tmpl[] = { { CKA_CLASS, &key_class, sizeof(key_class) }, {
+            CKA_KEY_TYPE, &key_type, sizeof(key_type) }, };
+
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    /* Find an RSA key */
+    unsigned long count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    user_login(session);
+
+    /* initialize a signing operation */
+    CK_MECHANISM mech = { .mechanism = CKM_SHA512_RSA_PKCS };
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE sig[4096];
+    CK_ULONG siglen = 0;
+
+    CK_BYTE_PTR msg=(unsigned char *)"my very cool message";
+
+    /* get the size of the buffer for a sign */
+    rv = C_Sign(session, msg, sizeof(msg), NULL,
+            &siglen);
+    assert_int_equal(rv, CKR_OK);
+    assert_true(siglen > 0);
+
+    /* Fail again on a size too small buffer CKR_BUFFER_TOO_SMALL case */
+    CK_ULONG toosmallsiglen = siglen - 1;
+    rv = C_Sign(session, msg, sizeof(msg), sig,
+            &toosmallsiglen);
+    assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
+
+    rv = C_Sign(session, msg, sizeof(msg), sig,
+            &siglen);
+    assert_int_equal(rv, CKR_OK);
+}
+
+static void test_double_sign_final_call_for_size_SHA256(void **state) {
 
     test_info *ti = test_info_from_state(state);
     CK_SESSION_HANDLE session = ti->handle;
@@ -438,19 +493,77 @@ static void test_double_sign_final_call_for_size(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
+static void test_double_sign_final_call_for_size_SHA512(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_OBJECT_CLASS key_class = CKO_PRIVATE_KEY;
+    CK_KEY_TYPE key_type = CKK_RSA;
+    CK_ATTRIBUTE tmpl[] = { { CKA_CLASS, &key_class, sizeof(key_class) }, {
+            CKA_KEY_TYPE, &key_type, sizeof(key_type) }, };
+
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    /* Find an RSA key */
+    unsigned long count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    user_login(session);
+
+    /* initialize a signing operation */
+    CK_MECHANISM mech = { .mechanism = CKM_SHA512_RSA_PKCS };
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE sig[4096];
+    CK_BYTE_PTR msg=(unsigned char *)"my very cool message";
+
+    rv = C_SignUpdate(session, msg, sizeof(msg));
+    assert_int_equal(rv, CKR_OK);
+
+    /* get the size of the buffer for a sign */
+    CK_ULONG siglen = 0;
+    rv = C_SignFinal(session, NULL, &siglen);
+    assert_int_equal(rv, CKR_OK);
+
+    /* Fail again on a size too small buffer CKR_BUFFER_TOO_SMALL case */
+    CK_ULONG toosmallsiglen = siglen - 1;
+    rv = C_SignFinal(session, sig,
+            &toosmallsiglen);
+    assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
+
+    rv = C_SignFinal(session, sig, &siglen);
+    assert_int_equal(rv, CKR_OK);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup_teardown(test_double_sign_call_for_size,
+        cmocka_unit_test_setup_teardown(test_double_sign_call_for_size_SHA512,
             test_setup, test_teardown),
-        cmocka_unit_test_setup_teardown(test_double_sign_final_call_for_size,
-                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_double_sign_final_call_for_size_SHA512,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_double_sign_call_for_size_SHA256,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_double_sign_final_call_for_size_SHA256,
+            test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_RSA_PKCS_sha256,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_RSA_PKCS_sha512,
-                test_setup, test_teardown),
+            test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_ECDSA_SHA1,
-                test_setup, test_teardown),
+            test_setup, test_teardown),
     };
 
     return cmocka_run_group_tests(tests, group_setup, group_teardown);
