@@ -81,7 +81,7 @@ static CK_RV digest_sw_update(digest_op_data *opdata, const void *d, size_t cnt)
     return CKR_OK;
 }
 
-static CK_RV digest_sw_final(digest_op_data *opdata, unsigned char *md, unsigned long *s) {
+static CK_RV digest_sw_final(digest_op_data *opdata, CK_BYTE_PTR md, CK_ULONG_PTR s) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -168,7 +168,7 @@ CK_RV digest_init_op(token *tok, digest_op_data *supplied_opdata, CK_MECHANISM_T
     return CKR_OK;
 }
 
-CK_RV digest_update_op(token *tok, digest_op_data *supplied_opdata, unsigned char *part, unsigned long part_len) {
+CK_RV digest_update_op(token *tok, digest_op_data *supplied_opdata, CK_BYTE_PTR part, CK_ULONG part_len) {
 
     check_pointer(part);
 
@@ -194,7 +194,7 @@ CK_RV digest_update_op(token *tok, digest_op_data *supplied_opdata, unsigned cha
     return rv;
 }
 
-CK_RV digest_final_op(token *tok, digest_op_data *supplied_opdata, unsigned char *digest, unsigned long *digest_len) {
+CK_RV digest_final_op(token *tok, digest_op_data *supplied_opdata, CK_BYTE_PTR digest, CK_ULONG_PTR digest_len) {
 
     check_pointer(digest);
     check_pointer(digest_len);
@@ -226,7 +226,7 @@ CK_RV digest_final_op(token *tok, digest_op_data *supplied_opdata, unsigned char
     return rv;
 }
 
-CK_RV digest_oneshot(token *tok, unsigned char *data, unsigned long data_len, unsigned char *digest, unsigned long *digest_len) {
+CK_RV digest_oneshot(token *tok, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR digest, CK_ULONG_PTR digest_len) {
 
     CK_RV rv = digest_update(tok, data, data_len);
     if (rv != CKR_OK) {

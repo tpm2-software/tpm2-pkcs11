@@ -20,7 +20,7 @@
 
 static CK_RV check_max_sessions(session_table *s_table) {
 
-    unsigned long all;
+    CK_ULONG all;
 
     session_table_get_cnt(s_table, &all, NULL, NULL);
 
@@ -145,7 +145,7 @@ CK_RV session_lookup(CK_SESSION_HANDLE session, token **tok, session_ctx **ctx) 
 
 
 CK_RV session_login(token *tok, CK_USER_TYPE user_type,
-        unsigned char *pin, unsigned long pin_len) {
+        CK_BYTE_PTR pin, CK_ULONG pin_len) {
 
     twist tpin = NULL;
     CK_RV rv = CKR_GENERAL_ERROR;

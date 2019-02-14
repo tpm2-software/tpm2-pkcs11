@@ -13,7 +13,7 @@
 #include "token.h"
 #include "utils.h"
 
-static twist encrypt_parts_to_twist(unsigned char tag[16], unsigned char iv[12], unsigned char *ctextbin, int ctextbinlen) {
+static twist encrypt_parts_to_twist(CK_BYTE tag[16], CK_BYTE iv[12], CK_BYTE_PTR ctextbin, int ctextbinlen) {
 
     /*
      * Build the <iv>:<tag>:<ctext> data format
@@ -69,10 +69,10 @@ out:
 twist aes256_gcm_encrypt(twist keybin, twist plaintextbin) {
 
     twist constructed = NULL;
-    unsigned char *ctextbin = NULL;
+    CK_BYTE_PTR ctextbin = NULL;
     EVP_CIPHER_CTX *ctx = NULL;
 
-    unsigned char ivbin[12];
+    CK_BYTE ivbin[12];
     int rc = RAND_bytes(ivbin, sizeof(ivbin));
     if (rc != 1) {
         LOGE("Could not generate random bytes");
@@ -86,7 +86,7 @@ twist aes256_gcm_encrypt(twist keybin, twist plaintextbin) {
     }
 
     int ret = EVP_EncryptInit(ctx, EVP_aes_256_gcm(),
-            (const unsigned char *)keybin, (const unsigned char *)ivbin);
+            (const CK_BYTE_PTR )keybin, (const CK_BYTE_PTR )ivbin);
     if (!ret) {
         LOGE("EVP_DecryptInit failed");
         goto out;
@@ -99,7 +99,7 @@ twist aes256_gcm_encrypt(twist keybin, twist plaintextbin) {
     }
 
     int len = 0;
-    ret = EVP_EncryptUpdate(ctx, (unsigned char *)ctextbin, &len, (unsigned char *)plaintextbin, twist_len(plaintextbin));
+    ret = EVP_EncryptUpdate(ctx, (CK_BYTE_PTR )ctextbin, &len, (CK_BYTE_PTR )plaintextbin, twist_len(plaintextbin));
     if (!ret) {
         LOGE("EVP_EncryptUpdate failed");
         goto out;
@@ -116,7 +116,7 @@ twist aes256_gcm_encrypt(twist keybin, twist plaintextbin) {
 
     assert(left == 0);
 
-    unsigned char tagbin[16];
+    CK_BYTE tagbin[16];
     ret = EVP_CIPHER_CTX_ctrl (ctx, EVP_CTRL_GCM_GET_TAG, sizeof(tagbin), tagbin);
     if (!ret) {
         LOGE("EVP_CIPHER_CTX_ctrl failed");
@@ -205,14 +205,14 @@ twist aes256_gcm_decrypt(const twist key, const twist objauth) {
     }
 
     int ret = EVP_DecryptInit (ctx, EVP_aes_256_gcm(),
-            (const unsigned char *)key, (const unsigned char *)ivbin);
+            (const CK_BYTE_PTR )key, (const CK_BYTE_PTR )ivbin);
     if (!ret) {
         LOGE("EVP_DecryptInit failed");
         goto out;
     }
 
     int len = 0;
-    ret = EVP_DecryptUpdate(ctx, (unsigned char *)plaintext, &len, (unsigned char *)ctextbin,
+    ret = EVP_DecryptUpdate(ctx, (CK_BYTE_PTR )plaintext, &len, (CK_BYTE_PTR )ctextbin,
             twist_len(ctextbin));
     if (!ret) {
         LOGE("EVP_DecryptUpdate failed");
@@ -225,7 +225,7 @@ twist aes256_gcm_decrypt(const twist key, const twist objauth) {
         goto out;
     }
 
-    ret = EVP_DecryptFinal_ex(ctx, ((unsigned char *)plaintext) + len, &len);
+    ret = EVP_DecryptFinal_ex(ctx, ((CK_BYTE_PTR )plaintext) + len, &len);
     if (!ret) {
         LOGE("AES GCM verification failed!");
         goto out;
@@ -258,9 +258,9 @@ twist utils_pdkdf2_hmac_sha256_bin_raw(const twist pin, const twist binsalt,
     }
 
     int rc = PKCS5_PBKDF2_HMAC(pin, twist_len(pin),
-            (const unsigned char *)binsalt, twist_len(binsalt),
+            (const CK_BYTE_PTR )binsalt, twist_len(binsalt),
             iterations,
-            EVP_sha256(), SHA256_DIGEST_LENGTH, (unsigned char *)digest);
+            EVP_sha256(), SHA256_DIGEST_LENGTH, (CK_BYTE_PTR )digest);
     if (!rc) {
         LOGE("Error pdkdf2_hmac_sha256");
         goto error;
@@ -378,7 +378,7 @@ twist utils_get_rand(size_t size) {
         return NULL;
     }
 
-    int rc = RAND_bytes((unsigned char *)salt, size);
+    int rc = RAND_bytes((CK_BYTE_PTR )salt, size);
     if (rc != 1) {
         LOGE("Could not generate random bytes");
         return NULL;

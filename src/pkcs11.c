@@ -278,7 +278,7 @@ CK_RV C_GetFunctionList (CK_FUNCTION_LIST **function_list) {
     TRACE_RET(general_get_func_list(function_list));
 }
 
-CK_RV C_GetSlotList (unsigned char token_present, CK_SLOT_ID *slot_list, unsigned long *count) {
+CK_RV C_GetSlotList (CK_BYTE token_present, CK_SLOT_ID *slot_list, CK_ULONG_PTR count) {
     TRACE_CALL;
     TRACE_RET(slot_get_list(token_present, slot_list, count));
 }
@@ -300,7 +300,7 @@ CK_RV C_WaitForSlotEvent (CK_FLAGS flags, CK_SLOT_ID *slot, void *pReserved) {
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_GetMechanismList (CK_SLOT_ID slotID, CK_MECHANISM_TYPE *mechanism_list, unsigned long *count) {
+CK_RV C_GetMechanismList (CK_SLOT_ID slotID, CK_MECHANISM_TYPE *mechanism_list, CK_ULONG_PTR count) {
     TRACE_CALL;
     TRACE_RET(slot_mechanism_list_get(slotID, mechanism_list, count));
 }
@@ -310,7 +310,7 @@ CK_RV C_GetMechanismInfo (CK_SLOT_ID slotID, CK_MECHANISM_TYPE type, CK_MECHANIS
     TRACE_RET(slot_mechanism_info_get(slotID, type, info));
 }
 
-CK_RV C_InitToken (CK_SLOT_ID slotID, unsigned char *pin, unsigned long pin_len, unsigned char *label) {
+CK_RV C_InitToken (CK_SLOT_ID slotID, CK_BYTE_PTR pin, CK_ULONG pin_len, CK_BYTE_PTR label) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
@@ -351,17 +351,17 @@ CK_RV C_GetSessionInfo (CK_SESSION_HANDLE session, CK_SESSION_INFO *info) {
     TRACE_RET(rv);
 }
 
-CK_RV C_GetOperationState (CK_SESSION_HANDLE session, unsigned char *operation_state, unsigned long *operation_state_len) {
+CK_RV C_GetOperationState (CK_SESSION_HANDLE session, CK_BYTE_PTR operation_state, CK_ULONG_PTR operation_state_len) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_SetOperationState (CK_SESSION_HANDLE session, unsigned char *operation_state, unsigned long operation_state_len, CK_OBJECT_HANDLE encryption_key, CK_OBJECT_HANDLE authentiation_key) {
+CK_RV C_SetOperationState (CK_SESSION_HANDLE session, CK_BYTE_PTR operation_state, CK_ULONG operation_state_len, CK_OBJECT_HANDLE encryption_key, CK_OBJECT_HANDLE authentiation_key) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_Login (CK_SESSION_HANDLE session, CK_USER_TYPE user_type, unsigned char *pin, unsigned long pin_len) {
+CK_RV C_Login (CK_SESSION_HANDLE session, CK_USER_TYPE user_type, CK_BYTE_PTR pin, CK_ULONG pin_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(session_login, session, user_type, pin, pin_len);
@@ -375,12 +375,12 @@ CK_RV C_Logout (CK_SESSION_HANDLE session) {
     TRACE_RET(rv);
 }
 
-CK_RV C_CreateObject (CK_SESSION_HANDLE session, CK_ATTRIBUTE *templ, unsigned long count, CK_OBJECT_HANDLE *object) {
+CK_RV C_CreateObject (CK_SESSION_HANDLE session, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OBJECT_HANDLE *object) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_CopyObject (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count, CK_OBJECT_HANDLE *new_object) {
+CK_RV C_CopyObject (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OBJECT_HANDLE *new_object) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
@@ -390,31 +390,31 @@ CK_RV C_DestroyObject (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object) {
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_GetObjectSize (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, unsigned long *size) {
+CK_RV C_GetObjectSize (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ULONG_PTR size) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_GetAttributeValue (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count) {
+CK_RV C_GetAttributeValue (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(object_get_attributes, session, object, templ, count);
     TRACE_RET(rv);
 }
 
-CK_RV C_SetAttributeValue (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count) {
+CK_RV C_SetAttributeValue (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_FindObjectsInit (CK_SESSION_HANDLE session, CK_ATTRIBUTE *templ, unsigned long count) {
+CK_RV C_FindObjectsInit (CK_SESSION_HANDLE session, CK_ATTRIBUTE *templ, CK_ULONG count) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(object_find_init, session, templ, count);
     TRACE_RET(rv);
 }
 
-CK_RV C_FindObjects (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE *object, unsigned long max_object_count, unsigned long *object_count) {
+CK_RV C_FindObjects (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE *object, CK_ULONG max_object_count, CK_ULONG_PTR object_count) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(object_find, session, object, max_object_count, object_count);
@@ -435,21 +435,21 @@ CK_RV C_EncryptInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJE
     TRACE_RET(rv);
 }
 
-CK_RV C_Encrypt (CK_SESSION_HANDLE session, unsigned char *data, unsigned long data_len, unsigned char *encrypted_data, unsigned long *encrypted_data_len) {
+CK_RV C_Encrypt (CK_SESSION_HANDLE session, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR encrypted_data, CK_ULONG_PTR encrypted_data_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(encrypt_oneshot, session, data, data_len, encrypted_data, encrypted_data_len);
     TRACE_RET(rv);
 }
 
-CK_RV C_EncryptUpdate (CK_SESSION_HANDLE session, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
+CK_RV C_EncryptUpdate (CK_SESSION_HANDLE session, CK_BYTE_PTR part, CK_ULONG part_len, CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(encrypt_update, session, part, part_len, encrypted_part, encrypted_part_len);
     TRACE_RET(rv);
 }
 
-CK_RV C_EncryptFinal (CK_SESSION_HANDLE session, unsigned char *last_encrypted_part, unsigned long *last_encrypted_part_len) {
+CK_RV C_EncryptFinal (CK_SESSION_HANDLE session, CK_BYTE_PTR last_encrypted_part, CK_ULONG_PTR last_encrypted_part_len) {
 
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -464,21 +464,21 @@ CK_RV C_DecryptInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJE
     TRACE_RET(rv);
 }
 
-CK_RV C_Decrypt (CK_SESSION_HANDLE session, unsigned char *encrypted_data, unsigned long encrypted_data_len, unsigned char *data, unsigned long *data_len) {
+CK_RV C_Decrypt (CK_SESSION_HANDLE session, CK_BYTE_PTR encrypted_data, CK_ULONG encrypted_data_len, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(decrypt_oneshot, session, encrypted_data, encrypted_data_len, data, data_len);
     TRACE_RET(rv);
 }
 
-CK_RV C_DecryptUpdate (CK_SESSION_HANDLE session, unsigned char *encrypted_part, unsigned long encrypted_part_len, unsigned char *part, unsigned long *part_len) {
+CK_RV C_DecryptUpdate (CK_SESSION_HANDLE session, CK_BYTE_PTR encrypted_part, CK_ULONG encrypted_part_len, CK_BYTE_PTR part, CK_ULONG_PTR part_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(decrypt_update, session, encrypted_part, encrypted_part_len, part, part_len);
     TRACE_RET(rv);
 }
 
-CK_RV C_DecryptFinal (CK_SESSION_HANDLE session, unsigned char *last_part, unsigned long *last_part_len) {
+CK_RV C_DecryptFinal (CK_SESSION_HANDLE session, CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(decrypt_final, session, last_part, last_part_len);
@@ -492,14 +492,14 @@ CK_RV C_DigestInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism) {
     TRACE_RET(rv);
 }
 
-CK_RV C_Digest (CK_SESSION_HANDLE session, unsigned char *data, unsigned long data_len, unsigned char *digest, unsigned long *digest_len) {
+CK_RV C_Digest (CK_SESSION_HANDLE session, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR digest, CK_ULONG_PTR digest_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(digest_oneshot, session, data, data_len, digest, digest_len);
     TRACE_RET(rv);
 }
 
-CK_RV C_DigestUpdate (CK_SESSION_HANDLE session, unsigned char *part, unsigned long part_len) {
+CK_RV C_DigestUpdate (CK_SESSION_HANDLE session, CK_BYTE_PTR part, CK_ULONG part_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(digest_update, session, part, part_len);
@@ -511,7 +511,7 @@ CK_RV C_DigestKey (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE key) {
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_DigestFinal (CK_SESSION_HANDLE session, unsigned char *digest, unsigned long *digest_len) {
+CK_RV C_DigestFinal (CK_SESSION_HANDLE session, CK_BYTE_PTR digest, CK_ULONG_PTR digest_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(digest_final, session, digest, digest_len);
@@ -525,21 +525,21 @@ CK_RV C_SignInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_
     TRACE_RET(rv);
 }
 
-CK_RV C_Sign (CK_SESSION_HANDLE session, unsigned char *data, unsigned long data_len, unsigned char *signature, unsigned long *signature_len) {
+CK_RV C_Sign (CK_SESSION_HANDLE session, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG_PTR signature_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(sign, session, data, data_len, signature, signature_len);
     TRACE_RET(rv);
 }
 
-CK_RV C_SignUpdate (CK_SESSION_HANDLE session, unsigned char *part, unsigned long part_len) {
+CK_RV C_SignUpdate (CK_SESSION_HANDLE session, CK_BYTE_PTR part, CK_ULONG part_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(sign_update, session, part, part_len);
     TRACE_RET(rv);
 }
 
-CK_RV C_SignFinal (CK_SESSION_HANDLE session, unsigned char *signature, unsigned long *signature_len) {
+CK_RV C_SignFinal (CK_SESSION_HANDLE session, CK_BYTE_PTR signature, CK_ULONG_PTR signature_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(sign_final, session, signature, signature_len);
@@ -551,7 +551,7 @@ CK_RV C_SignRecoverInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_SignRecover (CK_SESSION_HANDLE session, unsigned char *data, unsigned long data_len, unsigned char *signature, unsigned long *signature_len) {
+CK_RV C_SignRecover (CK_SESSION_HANDLE session, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG_PTR signature_len) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
@@ -563,21 +563,21 @@ CK_RV C_VerifyInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJEC
     TRACE_RET(rv);
 }
 
-CK_RV C_Verify (CK_SESSION_HANDLE session, unsigned char *data, unsigned long data_len, unsigned char *signature, unsigned long signature_len) {
+CK_RV C_Verify (CK_SESSION_HANDLE session, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG signature_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(verify, session, data, data_len, signature, signature_len);
     TRACE_RET(rv);
 }
 
-CK_RV C_VerifyUpdate (CK_SESSION_HANDLE session, unsigned char *part, unsigned long part_len) {
+CK_RV C_VerifyUpdate (CK_SESSION_HANDLE session, CK_BYTE_PTR part, CK_ULONG part_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(verify_update, session, part, part_len);
     TRACE_RET(rv);
 }
 
-CK_RV C_VerifyFinal (CK_SESSION_HANDLE session, unsigned char *signature, unsigned long signature_len) {
+CK_RV C_VerifyFinal (CK_SESSION_HANDLE session, CK_BYTE_PTR signature, CK_ULONG signature_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(verify_final, session, signature, signature_len);
@@ -589,66 +589,66 @@ CK_RV C_VerifyRecoverInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, C
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_VerifyRecover (CK_SESSION_HANDLE session, unsigned char *signature, unsigned long signature_len, unsigned char *data, unsigned long *data_len) {
+CK_RV C_VerifyRecover (CK_SESSION_HANDLE session, CK_BYTE_PTR signature, CK_ULONG signature_len, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_DigestEncryptUpdate (CK_SESSION_HANDLE session, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
+CK_RV C_DigestEncryptUpdate (CK_SESSION_HANDLE session, CK_BYTE_PTR part, CK_ULONG part_len, CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_DecryptDigestUpdate (CK_SESSION_HANDLE session, unsigned char *encrypted_part, unsigned long encrypted_part_len, unsigned char *part, unsigned long *part_len) {
+CK_RV C_DecryptDigestUpdate (CK_SESSION_HANDLE session, CK_BYTE_PTR encrypted_part, CK_ULONG encrypted_part_len, CK_BYTE_PTR part, CK_ULONG_PTR part_len) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_SignEncryptUpdate (CK_SESSION_HANDLE session, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
+CK_RV C_SignEncryptUpdate (CK_SESSION_HANDLE session, CK_BYTE_PTR part, CK_ULONG part_len, CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_DecryptVerifyUpdate (CK_SESSION_HANDLE session, unsigned char *encrypted_part, unsigned long encrypted_part_len, unsigned char *part, unsigned long *part_len) {
+CK_RV C_DecryptVerifyUpdate (CK_SESSION_HANDLE session, CK_BYTE_PTR encrypted_part, CK_ULONG encrypted_part_len, CK_BYTE_PTR part, CK_ULONG_PTR part_len) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_GenerateKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_ATTRIBUTE *templ, unsigned long count, CK_OBJECT_HANDLE *key) {
+CK_RV C_GenerateKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OBJECT_HANDLE *key) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_GenerateKeyPair (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_ATTRIBUTE *public_key_template, unsigned long public_key_attribute_count, CK_ATTRIBUTE *private_key_template, unsigned long private_key_attribute_count, CK_OBJECT_HANDLE *public_key, CK_OBJECT_HANDLE *private_key) {
+CK_RV C_GenerateKeyPair (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_ATTRIBUTE *public_key_template, CK_ULONG public_key_attribute_count, CK_ATTRIBUTE *private_key_template, CK_ULONG private_key_attribute_count, CK_OBJECT_HANDLE *public_key, CK_OBJECT_HANDLE *private_key) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(key_gen, session, mechanism, public_key_template, public_key_attribute_count, private_key_template, private_key_attribute_count, public_key, private_key);
     TRACE_RET(rv);
 }
 
-CK_RV C_WrapKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE wrapping_key, CK_OBJECT_HANDLE key, unsigned char *wrapped_key, unsigned long *wrapped_key_len) {
+CK_RV C_WrapKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE wrapping_key, CK_OBJECT_HANDLE key, CK_BYTE_PTR wrapped_key, CK_ULONG_PTR wrapped_key_len) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_UnwrapKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE unwrapping_key, unsigned char *wrapped_key, unsigned long wrapped_key_len, CK_ATTRIBUTE *templ, unsigned long attribute_count, CK_OBJECT_HANDLE *key) {
+CK_RV C_UnwrapKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE unwrapping_key, CK_BYTE_PTR wrapped_key, CK_ULONG wrapped_key_len, CK_ATTRIBUTE *templ, CK_ULONG attribute_count, CK_OBJECT_HANDLE *key) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_DeriveKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE base_key, CK_ATTRIBUTE *templ, unsigned long attribute_count, CK_OBJECT_HANDLE *key) {
+CK_RV C_DeriveKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE base_key, CK_ATTRIBUTE *templ, CK_ULONG attribute_count, CK_OBJECT_HANDLE *key) {
     TRACE_CALL;
     TRACE_RET(CKR_FUNCTION_NOT_SUPPORTED);
 }
 
-CK_RV C_SeedRandom (CK_SESSION_HANDLE session, unsigned char *seed, unsigned long seed_len) {
+CK_RV C_SeedRandom (CK_SESSION_HANDLE session, CK_BYTE_PTR seed, CK_ULONG seed_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(seed_random, session, seed, seed_len);
     TRACE_RET(rv);
 }
 
-CK_RV C_GenerateRandom (CK_SESSION_HANDLE session, unsigned char *random_data, unsigned long random_len) {
+CK_RV C_GenerateRandom (CK_SESSION_HANDLE session, CK_BYTE_PTR random_data, CK_ULONG random_len) {
     TRACE_CALL;
     CK_RV rv = CKR_GENERAL_ERROR;
     TOKEN_WITH_LOCK_BY_SESSION_USER_RO(random_get, session, random_data, random_len);

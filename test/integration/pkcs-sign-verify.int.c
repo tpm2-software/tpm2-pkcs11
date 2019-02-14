@@ -19,7 +19,7 @@ static test_info *test_info_new(void) {
 
     /* get the slots */
     CK_SLOT_ID slots[6];
-    unsigned long count = ARRAY_LEN(slots);
+    CK_ULONG count = ARRAY_LEN(slots);
     CK_RV rv = C_GetSlotList(true, slots, &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(count, 3);
@@ -83,19 +83,19 @@ static int test_teardown(void **state) {
 /*
  * The message to sign.
  */
-static const unsigned char _data[] = { 'F', 'O', 'O', ' ', 'B', 'A', 'R' };
+static const CK_BYTE _data[] = { 'F', 'O', 'O', ' ', 'B', 'A', 'R' };
 
 /*
  * The hash of the message to sign computed externally.
  */
-static const unsigned char _data_hash_sha256[] = {
+static const CK_BYTE _data_hash_sha256[] = {
     0x8d, 0x35, 0xc9, 0x7b, 0xcd,
     0x90, 0x2b, 0x96, 0xd1, 0xb5, 0x51, 0x74, 0x1b, 0xbe, 0x8a, 0x7f, 0x50,
     0xbb, 0x5a, 0x69, 0x0b, 0x4d, 0x02, 0x25, 0x48, 0x2e, 0xaa, 0x63, 0xdb,
     0xfb, 0x9d, 0xed
 };
 
-static const unsigned char _data_hash_sha512[] = {
+static const CK_BYTE _data_hash_sha512[] = {
   0xcf, 0x4a, 0xca, 0x20, 0x77, 0xda, 0x02, 0xe6, 0x56, 0xc5, 0xe5, 0xed,
   0x26, 0xd7, 0x81, 0x6b, 0xfc, 0x20, 0x2f, 0x7d, 0x40, 0xfe, 0x01, 0x27,
   0x5f, 0x62, 0xd4, 0x91, 0x18, 0xa3, 0xbc, 0x5b, 0x20, 0xef, 0x94, 0x27,
@@ -118,7 +118,7 @@ static void test_sign_verify_CKM_RSA_PKCS_sha256(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     /* Find an RSA key */
-    unsigned long count;
+    CK_ULONG count;
     CK_OBJECT_HANDLE objhandles[1];
     rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
     assert_int_equal(rv, CKR_OK);
@@ -141,7 +141,7 @@ static void test_sign_verify_CKM_RSA_PKCS_sha256(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     /* 19 byte ASN1 header + sha256 32 byte size */
-    unsigned char digest_info[19 + sizeof(_data_hash_sha256)] = {
+    CK_BYTE digest_info[19 + sizeof(_data_hash_sha256)] = {
         /* 19 byte ASN1 structure from the IETF rfc3447 for SHA256*/
         0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
         0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20,
@@ -152,8 +152,8 @@ static void test_sign_verify_CKM_RSA_PKCS_sha256(void **state) {
 
     memcpy(&digest_info[19], _data_hash_sha256, sizeof(_data_hash_sha256));
 
-    unsigned char ckm_rsa_pkcs_sig[4096];
-    unsigned long ckm_rsa_pkcs_siglen = sizeof(ckm_rsa_pkcs_sig);
+    CK_BYTE ckm_rsa_pkcs_sig[4096];
+    CK_ULONG ckm_rsa_pkcs_siglen = sizeof(ckm_rsa_pkcs_sig);
 
     rv = C_Sign(session, digest_info, sizeof(digest_info), ckm_rsa_pkcs_sig,
             &ckm_rsa_pkcs_siglen);
@@ -166,10 +166,10 @@ static void test_sign_verify_CKM_RSA_PKCS_sha256(void **state) {
     rv = C_SignInit(session, &mech, objhandles[0]);
     assert_int_equal(rv, CKR_OK);
 
-    unsigned char ckm_sha256_rsa_pkcs_sig[4096];
-    unsigned long ckm_sha256_rsa_pkcs_siglen = sizeof(ckm_rsa_pkcs_sig);
+    CK_BYTE ckm_sha256_rsa_pkcs_sig[4096];
+    CK_ULONG ckm_sha256_rsa_pkcs_siglen = sizeof(ckm_rsa_pkcs_sig);
 
-    rv = C_Sign(session, (unsigned char *) _data, sizeof(_data),
+    rv = C_Sign(session, (CK_BYTE_PTR ) _data, sizeof(_data),
             ckm_sha256_rsa_pkcs_sig, &ckm_sha256_rsa_pkcs_siglen);
     assert_int_equal(rv, CKR_OK);
 
@@ -182,7 +182,7 @@ static void test_sign_verify_CKM_RSA_PKCS_sha256(void **state) {
     rv = C_VerifyInit(session, &mech, objhandles[0]);
     assert_int_equal(rv, CKR_OK);
 
-    rv = C_Verify(session, (unsigned char *) _data, sizeof(_data),
+    rv = C_Verify(session, (CK_BYTE_PTR ) _data, sizeof(_data),
             ckm_sha256_rsa_pkcs_sig, ckm_sha256_rsa_pkcs_siglen);
     assert_int_equal(rv, CKR_OK);
 }
@@ -311,7 +311,7 @@ static void test_sign_verify_CKM_RSA_PKCS_sha512(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     /* Find an RSA key */
-    unsigned long count;
+    CK_ULONG count;
     CK_OBJECT_HANDLE objhandles[1];
     rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
     assert_int_equal(rv, CKR_OK);
@@ -334,7 +334,7 @@ static void test_sign_verify_CKM_RSA_PKCS_sha512(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     /* 19 byte ASN1 header + sha512 64 byte size */
-    unsigned char digest_info[19 + sizeof(_data_hash_sha512)] = {
+    CK_BYTE digest_info[19 + sizeof(_data_hash_sha512)] = {
         /* https://www.ietf.org/rfc/rfc3447.txt
          * Page 42
          * 19 byte ASN1 structure from the IETF rfc3447 for SHA512
@@ -351,8 +351,8 @@ static void test_sign_verify_CKM_RSA_PKCS_sha512(void **state) {
 
     memcpy(&digest_info[19], _data_hash_sha512, sizeof(_data_hash_sha512));
 
-    unsigned char ckm_rsa_pkcs_sig[4096];
-    unsigned long ckm_rsa_pkcs_siglen = sizeof(ckm_rsa_pkcs_sig);
+    CK_BYTE ckm_rsa_pkcs_sig[4096];
+    CK_ULONG ckm_rsa_pkcs_siglen = sizeof(ckm_rsa_pkcs_sig);
 
     rv = C_Sign(session, digest_info, sizeof(digest_info), ckm_rsa_pkcs_sig,
             &ckm_rsa_pkcs_siglen);
@@ -365,10 +365,10 @@ static void test_sign_verify_CKM_RSA_PKCS_sha512(void **state) {
     rv = C_SignInit(session, &mech, objhandles[0]);
     assert_int_equal(rv, CKR_OK);
 
-    unsigned char ckm_sha512_rsa_pkcs_sig[4096];
-    unsigned long ckm_sha512_rsa_pkcs_siglen = sizeof(ckm_rsa_pkcs_sig);
+    CK_BYTE ckm_sha512_rsa_pkcs_sig[4096];
+    CK_ULONG ckm_sha512_rsa_pkcs_siglen = sizeof(ckm_rsa_pkcs_sig);
 
-    rv = C_Sign(session, (unsigned char *) _data, sizeof(_data),
+    rv = C_Sign(session, (CK_BYTE_PTR ) _data, sizeof(_data),
             ckm_sha512_rsa_pkcs_sig, &ckm_sha512_rsa_pkcs_siglen);
     assert_int_equal(rv, CKR_OK);
 
@@ -394,7 +394,7 @@ static void test_sign_verify_CKM_ECDSA_SHA1(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     /* Find an EC key */
-    unsigned long count;
+    CK_ULONG count;
     CK_OBJECT_HANDLE objhandles[1];
     rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
     assert_int_equal(rv, CKR_OK);
@@ -410,17 +410,17 @@ static void test_sign_verify_CKM_ECDSA_SHA1(void **state) {
     rv = C_SignInit(session, &mech, objhandles[0]);
     assert_int_equal(rv, CKR_OK);
 
-    unsigned char ckm_ecdsa_sha1_sig[4096];
-    unsigned long ckm_ecdsa_sha1_siglen = sizeof(ckm_ecdsa_sha1_sig);
+    CK_BYTE ckm_ecdsa_sha1_sig[4096];
+    CK_ULONG ckm_ecdsa_sha1_siglen = sizeof(ckm_ecdsa_sha1_sig);
 
-    rv = C_Sign(session, (unsigned char *) _data, sizeof(_data),
+    rv = C_Sign(session, (CK_BYTE_PTR ) _data, sizeof(_data),
             ckm_ecdsa_sha1_sig, &ckm_ecdsa_sha1_siglen);
     assert_int_equal(rv, CKR_OK);
 
     rv = C_VerifyInit(session, &mech, objhandles[0]);
     assert_int_equal(rv, CKR_OK);
 
-    rv = C_Verify(session, (unsigned char *) _data, sizeof(_data),
+    rv = C_Verify(session, (CK_BYTE_PTR ) _data, sizeof(_data),
             ckm_ecdsa_sha1_sig, ckm_ecdsa_sha1_siglen);
     assert_int_equal(rv, CKR_OK);
 }

@@ -72,8 +72,8 @@ static CK_RV common_init_op (token *tok, encrypt_op_data *supplied_opdata, opera
 }
 
 static CK_RV common_update_op (token *tok, encrypt_op_data *supplied_opdata, operation op,
-        unsigned char *part, unsigned long part_len,
-        unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
+        CK_BYTE_PTR part, CK_ULONG part_len,
+        CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
 
     check_pointer(part);
     check_pointer(encrypted_part_len);
@@ -125,7 +125,7 @@ out:
 }
 
 static CK_RV common_final_op(token *tok, encrypt_op_data *supplied_opdata, operation op,
-        unsigned char *last_part, unsigned long *last_part_len) {
+        CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
 
     /*
      * We have no use for these.
@@ -163,27 +163,27 @@ CK_RV decrypt_init_op (token *tok, encrypt_op_data *supplied_opdata, CK_MECHANIS
     return common_init_op(tok, supplied_opdata, operation_decrypt, mechanism, key);
 }
 
-CK_RV encrypt_update_op (token *tok, encrypt_op_data *supplied_opdata, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
+CK_RV encrypt_update_op (token *tok, encrypt_op_data *supplied_opdata, CK_BYTE_PTR part, CK_ULONG part_len, CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
 
     return common_update_op(tok, supplied_opdata, operation_encrypt, part, part_len, encrypted_part, encrypted_part_len);
 }
 
-CK_RV decrypt_update_op (token *tok, encrypt_op_data *supplied_opdata, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
+CK_RV decrypt_update_op (token *tok, encrypt_op_data *supplied_opdata, CK_BYTE_PTR part, CK_ULONG part_len, CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
 
     return common_update_op(tok, supplied_opdata, operation_decrypt, part, part_len, encrypted_part, encrypted_part_len);
 }
 
-CK_RV encrypt_final_op (token *tok, encrypt_op_data *supplied_opdata, unsigned char *last_encrypted_part, unsigned long *last_encrypted_part_len) {
+CK_RV encrypt_final_op (token *tok, encrypt_op_data *supplied_opdata, CK_BYTE_PTR last_encrypted_part, CK_ULONG_PTR last_encrypted_part_len) {
 
     return common_final_op(tok, supplied_opdata, operation_encrypt, last_encrypted_part, last_encrypted_part_len);
 }
 
-CK_RV decrypt_final_op (token *tok, encrypt_op_data *supplied_opdata, unsigned char *last_part, unsigned long *last_part_len) {
+CK_RV decrypt_final_op (token *tok, encrypt_op_data *supplied_opdata, CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
 
     return common_final_op(tok, supplied_opdata, operation_decrypt, last_part, last_part_len);
 }
 
-CK_RV decrypt_oneshot_op (token *tok, encrypt_op_data *supplied_opdata, unsigned char *encrypted_data, unsigned long encrypted_data_len, unsigned char *data, unsigned long *data_len) {
+CK_RV decrypt_oneshot_op (token *tok, encrypt_op_data *supplied_opdata, CK_BYTE_PTR encrypted_data, CK_ULONG encrypted_data_len, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
 
     CK_RV rv = decrypt_update_op(tok, supplied_opdata, encrypted_data, encrypted_data_len,
             data, data_len);
@@ -194,7 +194,7 @@ CK_RV decrypt_oneshot_op (token *tok, encrypt_op_data *supplied_opdata, unsigned
     return decrypt_final_op(tok, supplied_opdata, NULL, NULL);
 }
 
-CK_RV encrypt_oneshot_op (token *tok, encrypt_op_data *supplied_opdata, unsigned char *data, unsigned long data_len, unsigned char *encrypted_data, unsigned long *encrypted_data_len) {
+CK_RV encrypt_oneshot_op (token *tok, encrypt_op_data *supplied_opdata, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR encrypted_data, CK_ULONG_PTR encrypted_data_len) {
 
     CK_RV rv = encrypt_update_op (tok, supplied_opdata, data, data_len, encrypted_data, encrypted_data_len);
     if (rv != CKR_OK || !encrypted_data) {

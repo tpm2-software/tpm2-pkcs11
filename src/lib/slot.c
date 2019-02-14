@@ -41,7 +41,7 @@ token *slot_get_token(CK_SLOT_ID slot_id) {
     return NULL;
 }
 
-CK_RV slot_get_list (unsigned char token_present, CK_SLOT_ID *slot_list, unsigned long *count) {
+CK_RV slot_get_list (CK_BYTE token_present, CK_SLOT_ID *slot_list, CK_ULONG_PTR count) {
 
     /*
      * True for token present only returns slots with tokens, False all slots. All
@@ -73,8 +73,8 @@ CK_RV slot_get_list (unsigned char token_present, CK_SLOT_ID *slot_list, unsigne
 
 CK_RV slot_get_info (CK_SLOT_ID slot_id, CK_SLOT_INFO *info) {
 
-    const unsigned char manufacturerID[] = "foo";
-    const unsigned char slotDescription[] = "bar";
+    const CK_BYTE manufacturerID[] = "foo";
+    const CK_BYTE slotDescription[] = "bar";
 
     check_pointer(info);
 
@@ -99,7 +99,7 @@ CK_RV slot_get_info (CK_SLOT_ID slot_id, CK_SLOT_INFO *info) {
     return CKR_OK;
 }
 
-CK_RV slot_mechanism_list_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE *mechanism_list, unsigned long *count) {
+CK_RV slot_mechanism_list_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE *mechanism_list, CK_ULONG_PTR count) {
 
     check_is_init();
 

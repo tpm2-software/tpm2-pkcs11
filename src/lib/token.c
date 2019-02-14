@@ -65,11 +65,11 @@ CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
 
     check_pointer(info);
 
-    const unsigned char token_sn[]   = TPM2_TOKEN_SERIAL_NUMBER;
-    const unsigned char token_manuf[]  = TPM2_TOKEN_MANUFACTURER;
-    const unsigned char token_model[]  = TPM2_TOKEN_MODEL;
-    const unsigned char token_hwver[2] = TPM2_SLOT_HW_VERSION;
-    const unsigned char token_fwver[2] = TPM2_SLOT_FW_VERSION;
+    const CK_BYTE token_sn[]   = TPM2_TOKEN_SERIAL_NUMBER;
+    const CK_BYTE token_manuf[]  = TPM2_TOKEN_MANUFACTURER;
+    const CK_BYTE token_model[]  = TPM2_TOKEN_MODEL;
+    const CK_BYTE token_hwver[2] = TPM2_SLOT_HW_VERSION;
+    const CK_BYTE token_fwver[2] = TPM2_SLOT_FW_VERSION;
     time_t rawtime;
     struct tm * tminfo;
 
@@ -216,7 +216,7 @@ CK_RV token_login(token *tok, twist pin, CK_USER_TYPE user) {
         return CKR_USER_ALREADY_LOGGED_IN;
     }
 
-    unsigned long ro;
+    CK_ULONG ro;
     session_table_get_cnt(tok->s_table, NULL, NULL, &ro);
 
     if (user == CKU_SO && ro) {
