@@ -1464,7 +1464,7 @@ CK_RV tpm_rsa_encrypt(tpm_encrypt_data *tpm_enc_data,
         return CKR_GENERAL_ERROR;
     }
 
-    if (!ctext) {
+    if (!cctext) {
         *cctextlen = ctext->size;
         rv = CKR_OK;
         goto out;
@@ -1509,8 +1509,6 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
     }
 
     memcpy(tpm_data_in.buffer, data_in, tpm_data_in.size);
-
-    assert(iv);
 
     if (!iv) {
         TPM2B_IV empty_iv_in = { .size = sizeof(empty_iv_in.buffer), .buffer = { 0 } };
@@ -1560,6 +1558,9 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
         LOGE("Esys_EncryptDecrypt%u: 0x%x", version, rval);
         return CKR_GENERAL_ERROR;
     }
+
+    assert(tpm_data_out);
+    assert(tpm_iv_out);
 
     if (!data_out) {
         *data_out_len = tpm_data_out->size;

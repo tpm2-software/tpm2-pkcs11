@@ -186,6 +186,113 @@ static void test_aes_encrypt_decrypt_good(void **state) {
     assert_memory_equal(plaintext, plaintext2, sizeof(plaintext2));
 }
 
+static void test_aes_encrypt_decrypt_5_2_returns(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+
+    CK_SESSION_HANDLE session = ti->handle;
+
+    /* now that we have an object, login */
+    do_login(ti);
+
+    /* init encryption */
+    CK_BYTE iv[16] = {
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xDE, 0xAD, 0xBE, 0xEF,
+    };
+
+    CK_MECHANISM mechanism = {
+        CKM_AES_CBC, iv, sizeof(iv)
+    };
+
+    /*
+     * We're not dealing with padding schemes yet, but we do want to handle multi stage encrypt and decrypt.
+     */
+    CK_BYTE plaintext[] = {
+        'm', 'y', ' ', 's', 'e', 'c', 'r', 'e', 't', ' ', 'i', 's', 'c', 'o', 'o', 'l',
+        'm', 'y', ' ', 's', 'e', 'c', 'r', 'e', 't', ' ', 'i', 's', 'c', 'o', 'o', 'l',
+    };
+
+    CK_BYTE ciphertext[sizeof(plaintext)] = { 0 };
+
+    /* init */
+    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.aes);
+    assert_int_equal(rv, CKR_OK);
+
+    /* get buffer size on NULL case */
+    CK_ULONG tmp = 42; // something not 16 to help verify it's ignored
+    rv = C_EncryptUpdate(session, plaintext, 16,
+            NULL, &tmp);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(tmp, 16);
+
+    /* get buffer size on CKR_BUFFER_TOO_SMALL case */
+    tmp--;
+    rv = C_EncryptUpdate(session, plaintext, 16,
+            ciphertext, &tmp);
+    assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
+    assert_int_equal(tmp, 16);
+
+    /* part 1 */
+    unsigned long ciphertext_len = 16;
+    rv = C_EncryptUpdate(session, plaintext, 16,
+            ciphertext, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, 16);
+
+    /* part 2 */
+    ciphertext_len = 16;
+    rv = C_EncryptUpdate(session, plaintext, 16,
+            &ciphertext[16], &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, 16);
+
+    /* final, shouldn't have anything left over */
+    rv = C_EncryptFinal(session, NULL, NULL);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_DecryptInit (session, &mechanism, ti->objects.aes);
+    assert_int_equal(rv, CKR_OK);
+
+    unsigned char plaintext2[sizeof(plaintext)];
+    unsigned long plaintext2_len = ciphertext_len = 16;
+
+    /* figure out buffer size via NULL*/
+    tmp = 42;
+    rv = C_DecryptUpdate (session, ciphertext, ciphertext_len,
+            NULL, &tmp);
+    assert_int_equal(rv, CKR_OK);
+
+    assert_int_equal(tmp, plaintext2_len);
+
+    /* figure out buffer size via CKR_BUFFER_TOO_SMALL*/
+    tmp--;
+    rv = C_DecryptUpdate (session, ciphertext, ciphertext_len,
+            plaintext2, &tmp);
+    assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
+
+    /* do decrypt */
+    assert_int_equal(tmp, plaintext2_len);
+
+    rv = C_DecryptUpdate (session, ciphertext, ciphertext_len,
+            plaintext2, &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+
+    assert_int_equal(plaintext2_len, 16);
+
+    rv = C_DecryptUpdate (session, &ciphertext[ciphertext_len], ciphertext_len,
+            &plaintext2[plaintext2_len], &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(plaintext2_len, 16);
+
+    rv = C_DecryptFinal (session, NULL, NULL);
+    assert_int_equal(rv, CKR_OK);
+
+    assert_memory_equal(plaintext, plaintext2, sizeof(plaintext2));
+}
+
 static void test_aes_encrypt_decrypt_oneshot_good(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -233,6 +340,92 @@ static void test_aes_encrypt_decrypt_oneshot_good(void **state) {
     unsigned char plaintext2[sizeof(plaintext)];
     unsigned long plaintext2_len = sizeof(plaintext2);
 
+    rv = C_Decrypt (session, ciphertext, ciphertext_len,
+            plaintext2, &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(plaintext2_len, sizeof(plaintext2));
+
+    assert_memory_equal(plaintext, plaintext2, sizeof(plaintext2));
+}
+
+static void test_aes_encrypt_decrypt_oneshot_5_2_returns(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+
+    CK_SESSION_HANDLE session = ti->handle;
+
+    do_login(ti);
+
+    /* init encryption */
+    CK_BYTE iv[16] = {
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xDE, 0xAD, 0xBE, 0xEF,
+    };
+
+    CK_MECHANISM mechanism = {
+        CKM_AES_CBC, iv, sizeof(iv)
+    };
+
+    /*
+     * We're not dealing with padding schemes yet, but we do want to handle multi stage encrypt and decrypt.
+     */
+    CK_BYTE plaintext[] = {
+        'm', 'y', ' ', 's', 'e', 'c', 'r', 'e', 't', ' ', 'i', 's', 'c', 'o', 'o', 'l',
+        'm', 'y', ' ', 's', 'e', 'c', 'r', 'e', 't', ' ', 'i', 's', 'c', 'o', 'o', 'l',
+    };
+
+    CK_BYTE ciphertext[sizeof(plaintext)] = { 0 };
+
+    /* init */
+    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.aes);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG plaintext_len = sizeof(plaintext);
+
+    /* NULL size */
+    CK_ULONG tmp = 42;
+    rv = C_Encrypt(session, plaintext, plaintext_len,
+            NULL, &tmp);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(tmp, sizeof(plaintext));
+
+    /* CKR_BUFFER_TOO_SMALL */
+    tmp--;
+    rv = C_Encrypt(session, plaintext, plaintext_len,
+            ciphertext, &tmp);
+    assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
+    assert_int_equal(tmp, sizeof(plaintext));
+
+    /* part 1 */
+    unsigned long ciphertext_len = sizeof(plaintext);
+    rv = C_Encrypt(session, plaintext, ciphertext_len,
+            ciphertext, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, sizeof(plaintext));
+
+    rv = C_DecryptInit (session, &mechanism, ti->objects.aes);
+    assert_int_equal(rv, CKR_OK);
+
+    unsigned char plaintext2[sizeof(plaintext)];
+    unsigned long plaintext2_len = sizeof(plaintext2);
+
+    /* NULL size */
+    tmp = 42;
+    rv = C_Decrypt (session, ciphertext, ciphertext_len,
+            NULL, &tmp);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(tmp, sizeof(plaintext2));
+
+    /* CKR_BUFFER_TOO_SMALL size */
+    tmp--;
+    rv = C_Decrypt (session, ciphertext, ciphertext_len,
+            plaintext2, &tmp);
+    assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
+    assert_int_equal(tmp, sizeof(plaintext2));
+
+    /* good size */
     rv = C_Decrypt (session, ciphertext, ciphertext_len,
             plaintext2, &plaintext2_len);
     assert_int_equal(rv, CKR_OK);
@@ -298,6 +491,10 @@ static void test_rsa_oaep_encrypt_decrypt_oneshot_good(void **state) {
 int main() {
 
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_aes_encrypt_decrypt_oneshot_5_2_returns,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_aes_encrypt_decrypt_5_2_returns,
+                test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_aes_encrypt_decrypt_good,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_aes_encrypt_decrypt_oneshot_good,

@@ -187,7 +187,7 @@ CK_RV decrypt_oneshot_op (token *tok, encrypt_op_data *supplied_opdata, unsigned
 
     CK_RV rv = decrypt_update_op(tok, supplied_opdata, encrypted_data, encrypted_data_len,
             data, data_len);
-    if (rv != CKR_OK) {
+    if (rv != CKR_OK || !data) {
         return rv;
     }
 
@@ -197,7 +197,7 @@ CK_RV decrypt_oneshot_op (token *tok, encrypt_op_data *supplied_opdata, unsigned
 CK_RV encrypt_oneshot_op (token *tok, encrypt_op_data *supplied_opdata, unsigned char *data, unsigned long data_len, unsigned char *encrypted_data, unsigned long *encrypted_data_len) {
 
     CK_RV rv = encrypt_update_op (tok, supplied_opdata, data, data_len, encrypted_data, encrypted_data_len);
-    if (rv != CKR_OK) {
+    if (rv != CKR_OK || !encrypted_data) {
         return rv;
     }
 
