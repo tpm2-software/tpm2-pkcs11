@@ -267,7 +267,7 @@ static CK_RV apply_pkcs_1_5_pad(tobject *tobj, char *built, size_t built_len, ch
     return CKR_OK;
 }
 
-CK_RV sign_final(token *tok, unsigned char *signature, unsigned long *signature_len) {
+CK_RV sign_final_ex(token *tok, unsigned char *signature, unsigned long *signature_len, bool is_oneshot) {
 
     check_pointer(signature_len);
 
@@ -411,28 +411,35 @@ CK_RV sign_final(token *tok, unsigned char *signature, unsigned long *signature_
      *   - 1 - everything is ok from enc/sign and sig is set (continue normally)
      *   - 2 - buffer too small from enc/sign and sig is set (reset hashing state and keep sign operation alive)
      *   - 3 - everything is ok but sig is NULL, handle like state 2.
+     *
+     * Reset the hashing state IF we're actually doing the hash internally
      */
     reset_ctx = (rv == CKR_BUFFER_TOO_SMALL || !signature);
     if (reset_ctx) {
-        /* reset the hashing state */
-        digest_op_data *new_digest_state = digest_op_data_new();
-        if (!new_digest_state) {
-            rv = CKR_HOST_MEMORY;
-            reset_ctx = false;
-            goto session_out;
+        if (opdata->do_hash) {
+            /* reset the hashing state */
+            digest_op_data *new_digest_state = digest_op_data_new();
+            if (!new_digest_state) {
+                rv = CKR_HOST_MEMORY;
+                reset_ctx = false;
+                goto session_out;
+            }
+
+            assert(opdata->digest_opdata);
+
+            CK_RV tmp = digest_init_op(tok, new_digest_state, opdata->digest_opdata->mechanism);
+            if (tmp != CKR_OK) {
+                digest_op_data_free(&new_digest_state);
+                reset_ctx = false;
+                goto session_out;
+            }
+
+            digest_op_data_free(&opdata->digest_opdata);
+            opdata->digest_opdata = new_digest_state;
+        } else if (is_oneshot) {
+            twist_free(opdata->buffer);
+            opdata->buffer = NULL;
         }
-
-        assert(opdata->digest_opdata);
-
-        CK_RV tmp = digest_init_op(tok, new_digest_state, opdata->digest_opdata->mechanism);
-        if (tmp != CKR_OK) {
-            digest_op_data_free(&new_digest_state);
-            reset_ctx = false;
-            goto session_out;
-        }
-
-        digest_op_data_free(&opdata->digest_opdata);
-        opdata->digest_opdata = new_digest_state;
     } else {
         /* not resetting the state, and all is well */
         rv = CKR_OK;
@@ -460,7 +467,7 @@ CK_RV sign(token *tok, unsigned char *data, unsigned long data_len, unsigned cha
         return rv;
     }
 
-    return sign_final(tok, signature, signature_len);
+    return sign_final_ex(tok, signature, signature_len, true);
 }
 
 CK_RV verify_init (token *tok, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
