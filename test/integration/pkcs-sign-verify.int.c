@@ -136,7 +136,7 @@ static void test_sign_verify_CKM_RSA_PKCS_sha256(void **state) {
      * Now that we have a key for sign, build up what we need to sign,
      * which is the ASN1 digest info for CKM_RSA_PKCS
      */
-    CK_MECHANISM mech = { .mechanism = CKM_RSA_PKCS };
+    CK_MECHANISM mech = { .mechanism =  CKM_RSA_PKCS };
     rv = C_SignInit(session, &mech, objhandles[0]);
     assert_int_equal(rv, CKR_OK);
 
@@ -175,6 +175,103 @@ static void test_sign_verify_CKM_RSA_PKCS_sha256(void **state) {
 
     assert_int_equal(ckm_sha256_rsa_pkcs_siglen, ckm_rsa_pkcs_siglen);
 
+
+    assert_memory_equal(ckm_sha256_rsa_pkcs_sig, ckm_rsa_pkcs_sig,
+            ckm_sha256_rsa_pkcs_siglen);
+
+    rv = C_VerifyInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Verify(session, (unsigned char *) _data, sizeof(_data),
+            ckm_sha256_rsa_pkcs_sig, ckm_sha256_rsa_pkcs_siglen);
+    assert_int_equal(rv, CKR_OK);
+}
+
+static void test_sign_verify_CKM_RSA_PKCS_5_2_returns(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_OBJECT_CLASS key_class = CKO_PRIVATE_KEY;
+    CK_KEY_TYPE key_type = CKK_RSA;
+    CK_ATTRIBUTE tmpl[] = { { CKA_CLASS, &key_class, sizeof(key_class) }, {
+            CKA_KEY_TYPE, &key_type, sizeof(key_type) }, };
+
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    /* Find an RSA key */
+    unsigned long count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    user_login(session);
+
+    /*
+     * Now that we have a key for sign, build up what we need to sign,
+     * which is the ASN1 digest info for CKM_RSA_PKCS
+     */
+    CK_MECHANISM mech = { .mechanism =  CKM_RSA_PKCS };
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    /* 19 byte ASN1 header + sha256 32 byte size */
+    unsigned char digest_info[19 + sizeof(_data_hash_sha256)] = {
+        /* 19 byte ASN1 structure from the IETF rfc3447 for SHA256*/
+        0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20,
+
+        /* the hash bytes, 0 them out */
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, };
+
+    memcpy(&digest_info[19], _data_hash_sha256, sizeof(_data_hash_sha256));
+
+    unsigned char ckm_rsa_pkcs_sig[4096];
+    unsigned long ckm_rsa_pkcs_siglen = sizeof(ckm_rsa_pkcs_sig);
+
+    /* NULL size */
+    CK_ULONG tmp = 42;
+    rv = C_Sign(session, digest_info, sizeof(digest_info), NULL,
+            &tmp);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(tmp, 256);
+
+    /* CKR_BUFFER_TOO_SMALL */
+    tmp = 42;
+    rv = C_Sign(session, digest_info, sizeof(digest_info), ckm_rsa_pkcs_sig,
+            &tmp);
+    assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
+    assert_int_equal(tmp, 256);
+
+    /* OK */
+    rv = C_Sign(session, digest_info, sizeof(digest_info), ckm_rsa_pkcs_sig,
+            &ckm_rsa_pkcs_siglen);
+    assert_int_equal(rv, CKR_OK);
+
+    /*
+     * OK now internally hash/sign the data via CKM_SHA256_RSA_PKCS
+     */
+    mech.mechanism = CKM_SHA256_RSA_PKCS;
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    unsigned char ckm_sha256_rsa_pkcs_sig[4096];
+    unsigned long ckm_sha256_rsa_pkcs_siglen = sizeof(ckm_rsa_pkcs_sig);
+
+    rv = C_Sign(session, (unsigned char *) _data, sizeof(_data),
+            ckm_sha256_rsa_pkcs_sig, &ckm_sha256_rsa_pkcs_siglen);
+    assert_int_equal(rv, CKR_OK);
+
+    assert_int_equal(ckm_sha256_rsa_pkcs_siglen, ckm_rsa_pkcs_siglen);
 
     assert_memory_equal(ckm_sha256_rsa_pkcs_sig, ckm_rsa_pkcs_sig,
             ckm_sha256_rsa_pkcs_siglen);
@@ -550,6 +647,8 @@ static void test_double_sign_final_call_for_size_SHA512(void **state) {
 int main() {
 
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_sign_verify_CKM_RSA_PKCS_5_2_returns,
+                test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_double_sign_call_for_size_SHA512,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_double_sign_final_call_for_size_SHA512,
