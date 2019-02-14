@@ -33,7 +33,7 @@ static int test_setup(void **state) {
 
     /* get the slots */
     CK_SLOT_ID slots[32];
-    unsigned long count = ARRAY_LEN(slots);
+    CK_ULONG count = ARRAY_LEN(slots);
     CK_RV rv = C_GetSlotList(true, slots, &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_not_equal(count, 0);
@@ -61,7 +61,7 @@ void test_get_mechanism_list_good(void **state) {
     test_info *ti = test_info_from_state(state);
     CK_SLOT_ID slot_id = ti->slot;
 
-    unsigned long mech_cnt;
+    CK_ULONG mech_cnt;
     CK_MECHANISM_TYPE mechs[256];
     // Only return the number of mechanisms
     CK_RV rv = C_GetMechanismList(slot_id, NULL, &mech_cnt);
@@ -78,7 +78,7 @@ void test_get_mechanism_list_bad(void **state) {
     test_info *ti = test_info_from_state(state);
     CK_SLOT_ID slot_id = ti->slot;
 
-    unsigned long mech_cnt;
+    CK_ULONG mech_cnt;
 
     // Invalid Slot
     CK_RV rv = C_GetMechanismList((CK_ULONG)-10, NULL, &mech_cnt);
@@ -92,7 +92,7 @@ void test_get_mechanism_list_bad(void **state) {
     assert_int_equal(rv, CKR_OK);
     assert_int_not_equal(mech_cnt, ARRAY_LEN(mechs));
 
-    unsigned long value = 0;
+    CK_ULONG value = 0;
     rv = C_GetMechanismList(slot_id, mechs, &value);
     assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
 

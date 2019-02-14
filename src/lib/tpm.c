@@ -157,6 +157,9 @@ static ESYS_CONTEXT* esys_ctx_init(TSS2_TCTI_CONTEXT *tcti_ctx) {
 
 static void flags_turndown(tpm_ctx *ctx, TPMA_SESSION flags) {
 
+    UNUSED(ctx);
+    UNUSED(flags);
+
     TSS2_RC rc = Esys_TRSess_GetAttributes(ctx->esys_ctx, ctx->hmac_session, &ctx->old_flags);
     assert(rc == TPM2_RC_SUCCESS);
 
@@ -168,6 +171,8 @@ static void flags_turndown(tpm_ctx *ctx, TPMA_SESSION flags) {
 }
 
 static void flags_restore(tpm_ctx *ctx) {
+
+    UNUSED(ctx);
 
     assert(ctx->old_flags == ctx->original_flags);
 
@@ -313,7 +318,7 @@ error:
     return CKR_GENERAL_ERROR;
 }
 
-bool files_get_file_size(FILE *fp, unsigned long *file_size, const char *path) {
+bool files_get_file_size(FILE *fp, CK_ULONG_PTR file_size, const char *path) {
 
     long current = ftell(fp);
     if (current < 0) {
@@ -348,7 +353,7 @@ bool files_get_file_size(FILE *fp, unsigned long *file_size, const char *path) {
     }
 
     /* size cannot be negative at this point */
-    *file_size = (unsigned long)size;
+    *file_size = (CK_ULONG)size;
     return true;
 }
 
@@ -382,7 +387,7 @@ bool files_read_bytes(FILE *out, UINT8 bytes[], size_t len) {
 
 static bool read_bytes_from_file(FILE *f, UINT8 *buf, UINT16 *size,
                                  const char *path) {
-    unsigned long file_size;
+    CK_ULONG file_size;
     bool result = files_get_file_size(f, &file_size, path);
     if (!result) {
         /* get_file_size() logs errors */
@@ -495,7 +500,7 @@ out:
     return result;
 }
 
-CK_RV tpm_stirrandom(tpm_ctx *ctx, unsigned char *seed, unsigned long seed_len) {
+CK_RV tpm_stirrandom(tpm_ctx *ctx, CK_BYTE_PTR seed, CK_ULONG seed_len) {
 
     TSS2_RC rc = TSS2_TCTI_RC_GENERAL_FAILURE;;
 
@@ -733,8 +738,8 @@ static CK_RV flatten_ecdsa(TPMS_SIGNATURE_ECDSA *ecdsa, CK_BYTE_PTR sig, CK_ULON
      */
     static const unsigned SEQ_HDR_SIZE = 2;
 
-    unsigned char *buf_r = NULL;
-    unsigned char *buf_s = NULL;
+    CK_BYTE_PTR buf_r = NULL;
+    CK_BYTE_PTR buf_s = NULL;
 
     TPM2B_ECC_PARAMETER *R = &ecdsa->signatureR;
     TPM2B_ECC_PARAMETER *S = &ecdsa->signatureS;
@@ -798,7 +803,7 @@ static CK_RV flatten_ecdsa(TPMS_SIGNATURE_ECDSA *ecdsa, CK_BYTE_PTR sig, CK_ULON
         goto out;
     }
 
-    unsigned char *p = sig;
+    CK_BYTE_PTR p = sig;
 
     /* populate header and skip */
     p[0] = 0x30;
@@ -919,9 +924,9 @@ static CK_RV init_ecdsa_sig(CK_BYTE_PTR sig, CK_ULONG siglen, TPMS_SIGNATURE_ECD
     int tag;
     int class;
     long len;
-    const unsigned char *p = sig;
+    const CK_BYTE_PTR p = sig;
 
-    int j = ASN1_get_object(&p, &len, &tag, &class, siglen);
+    int j = ASN1_get_object((const unsigned char **)&p, &len, &tag, &class, siglen);
     if (!(j & V_ASN1_CONSTRUCTED)) {
         LOGE("Expected ECDSA signature to start as ASN1 Constructed object");
         return CKR_GENERAL_ERROR;
@@ -936,7 +941,7 @@ static CK_RV init_ecdsa_sig(CK_BYTE_PTR sig, CK_ULONG siglen, TPMS_SIGNATURE_ECD
      * Get R
      */
     TPM2B_ECC_PARAMETER *R = &ecdsa->signatureR;
-    ASN1_INTEGER *r = d2i_ASN1_INTEGER(NULL, &p, len);
+    ASN1_INTEGER *r = d2i_ASN1_INTEGER(NULL, (const unsigned char **)&p, len);
     if (!r) {
         LOGE("oom");
         return CKR_HOST_MEMORY;
@@ -949,7 +954,7 @@ static CK_RV init_ecdsa_sig(CK_BYTE_PTR sig, CK_ULONG siglen, TPMS_SIGNATURE_ECD
      * Get S
      */
     TPM2B_ECC_PARAMETER *S = &ecdsa->signatureS;
-    ASN1_INTEGER *s = d2i_ASN1_INTEGER(NULL, &p, len);
+    ASN1_INTEGER *s = d2i_ASN1_INTEGER(NULL, (const unsigned char **)&p, len);
     if (!s) {
         LOGE("oom");
         return CKR_HOST_MEMORY;

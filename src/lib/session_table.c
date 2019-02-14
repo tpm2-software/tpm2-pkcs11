@@ -14,8 +14,8 @@
 #include "utils.h"
 
 struct session_table {
-    unsigned long cnt;
-    unsigned long rw_cnt;
+    CK_ULONG cnt;
+    CK_ULONG rw_cnt;
     CK_SESSION_HANDLE free_handle;
     session_ctx *table[MAX_NUM_OF_SESSIONS];
 };
@@ -41,7 +41,7 @@ void session_table_free(session_table *t) {
     free(t);
 }
 
-void session_table_get_cnt(session_table *t, unsigned long *all, unsigned long *rw, unsigned long *ro) {
+void session_table_get_cnt(session_table *t, CK_ULONG_PTR all, CK_ULONG_PTR rw, CK_ULONG_PTR ro) {
 
     /* All counts should always be greater than or equal to rw count */
     assert(t->cnt >= t->rw_cnt);

@@ -29,7 +29,7 @@ void tobject_free(tobject *tobj) {
     twist_free(tobj->objauth);
     twist_free(tobj->unsealed_auth);
 
-    unsigned long i = 0;
+    CK_ULONG i = 0;
     for (i=0; i < tobj->atributes.count; i++) {
         CK_ATTRIBUTE_PTR a = &tobj->atributes.attrs[i];
         if (a->pValue) {
@@ -91,7 +91,7 @@ static bool object_CKM_AES_CBC_params_supported(
 CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech) {
 
     bool is_equal;
-    unsigned long i;
+    CK_ULONG i;
     bool got_to_params = false;
     for (i=0; i < tobj->mechanisms.count; i++) {
         CK_MECHANISM_PTR m = &tobj->mechanisms.mech[i];
@@ -139,9 +139,9 @@ CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech) {
     return got_to_params ? CKR_MECHANISM_PARAM_INVALID : CKR_MECHANISM_INVALID;
 }
 
-tobject *object_attr_filter(tobject *tobj, CK_ATTRIBUTE_PTR templ, unsigned long count) {
+tobject *object_attr_filter(tobject *tobj, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
 
-    unsigned long i;
+    CK_ULONG i;
     // If ulCount is set to 0 all items match automatically.
     if (count == 0) {
 	    return tobj;
@@ -152,7 +152,7 @@ tobject *object_attr_filter(tobject *tobj, CK_ATTRIBUTE_PTR templ, unsigned long
 
         CK_ATTRIBUTE_PTR compare = NULL;
         bool is_attr_match = false;
-        unsigned long j;
+        CK_ULONG j;
         for(j=0; j < tobj->atributes.count; j++) {
             compare = &tobj->atributes.attrs[j];
 
@@ -208,7 +208,7 @@ void free_object_find_data(object_find_data *fd) {
     free(fd);
 }
 
-CK_RV object_find_init(token *tok, CK_ATTRIBUTE_PTR templ, unsigned long count) {
+CK_RV object_find_init(token *tok, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
 
     // if count is 0 template is not used and all objects are requested so templ can be NULL.
     if (count > 0) {
@@ -289,7 +289,7 @@ out:
     return rv;
 }
 
-CK_RV object_find(token *tok, CK_OBJECT_HANDLE *object, unsigned long max_object_count, unsigned long *object_count) {
+CK_RV object_find(token *tok, CK_OBJECT_HANDLE *object, CK_ULONG max_object_count, CK_ULONG_PTR object_count) {
 
     check_pointer(object);
     check_pointer(object_count);
@@ -304,7 +304,7 @@ CK_RV object_find(token *tok, CK_OBJECT_HANDLE *object, unsigned long max_object
         return rv;
     }
 
-    unsigned long count = 0;
+    CK_ULONG count = 0;
     while(opdata->cur && count < max_object_count) {
 
         // Get the current object, and grab it's id for the object handle
@@ -358,7 +358,7 @@ static tobject *find_object_by_id(CK_OBJECT_HANDLE handle, token *tok) {
 
 CK_ATTRIBUTE_PTR object_get_attribute(tobject *tobj, CK_ATTRIBUTE_TYPE atype) {
 
-    unsigned long i;
+    CK_ULONG i;
     for (i=0; i < tobj->atributes.count; i++) {
 
         CK_ATTRIBUTE_PTR a = &tobj->atributes.attrs[i];
@@ -371,7 +371,7 @@ CK_ATTRIBUTE_PTR object_get_attribute(tobject *tobj, CK_ATTRIBUTE_TYPE atype) {
     return NULL;
 }
 
-CK_RV object_get_attributes(token *tok, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count) {
+CK_RV object_get_attributes(token *tok, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
 
     tobject *tobj = find_object_by_id(object, tok);
     /* no match */
@@ -384,7 +384,7 @@ CK_RV object_get_attributes(token *tok, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *t
      * and copy the size and possibly data (if allocated).
      */
 
-    unsigned long i;
+    CK_ULONG i;
     for (i=0; i < count; i++) {
 
         CK_ATTRIBUTE_PTR t = &templ[i];

@@ -117,7 +117,7 @@ struct token_get_cb_ud {
 };
 
 typedef bool (*pfn_onkvp)(const char *key, const char *value, size_t index, void *data);
-typedef bool (*pfn_onkvp_allocator)(unsigned long count, void *data);
+typedef bool (*pfn_onkvp_allocator)(CK_ULONG count, void *data);
 
 bool generic_parse_kvp(char *line, size_t index, void *data, pfn_onkvp cb) {
 
@@ -146,7 +146,7 @@ bool generic_parse_kvp(char *line, size_t index, void *data, pfn_onkvp cb) {
     return true;
 }
 
-static bool alloc_attrs(unsigned long count, void *userdata) {
+static bool alloc_attrs(CK_ULONG count, void *userdata) {
 
     tobject *tobj = (tobject *)userdata;
 
@@ -191,7 +191,7 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
     size_t type;
     int rc = str_to_ul(key, &type);
     if (rc) {
-        LOGE("Could not convert key \"%s\" to unsigned long",
+        LOGE("Could not convert key \"%s\" to CK_ULONG",
                 key);
         return false;
     }
@@ -199,7 +199,7 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
     a->type = type;
 
     switch(a->type) {
-    /* native endianess unsigned longs */
+    /* native endianess CK_ULONGs */
     case CKA_KEY_TYPE:
         /* falls through */
     case CKA_VALUE_LEN:
@@ -216,14 +216,14 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
             return false;
         }
 
-        a->pValue = calloc(1, sizeof(unsigned long));
+        a->pValue = calloc(1, sizeof(CK_ULONG));
         if (!a->pValue) {
             LOGE("oom");
             return false;
         }
 
-        memcpy(a->pValue, &val, sizeof(unsigned long));
-        a->ulValueLen = sizeof(unsigned long);
+        memcpy(a->pValue, &val, sizeof(CK_ULONG));
+        a->ulValueLen = sizeof(CK_ULONG);
     } break;
     /* base10 encoded big integers */
     case CKA_PUBLIC_EXPONENT: {
@@ -280,7 +280,7 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
     return true;
 }
 
-static bool alloc_mech(unsigned long count, void *userdata) {
+static bool alloc_mech(CK_ULONG count, void *userdata) {
 
     tobject *tobj = (tobject *)userdata;
 
@@ -377,7 +377,7 @@ static bool parse_mech(const char *key, const char *value, size_t index, void *u
     size_t mechanism;
     int rc = str_to_ul(key, &mechanism);
     if (rc) {
-        LOGE("Could not convert key \"%s\" to unsigned long",
+        LOGE("Could not convert key \"%s\" to CK_ULONG",
                 key);
         return false;
     }
@@ -434,7 +434,7 @@ CK_RV parse_generic_kvp_line(const char *kvplines,
     char *tmp = kvpstr;
     char *saveptr = NULL;
 
-    unsigned long count = 0;
+    CK_ULONG count = 0;
     while ((line = strtok_r(tmp, "\r\n", &saveptr))) {
         tmp = NULL;
         count++;

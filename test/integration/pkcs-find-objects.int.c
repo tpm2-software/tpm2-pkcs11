@@ -18,7 +18,7 @@ static int test_setup(void **state) {
 
     /* get the slots */
     CK_SLOT_ID slots[6];
-    unsigned long count = ARRAY_LEN(slots);
+    CK_ULONG count = ARRAY_LEN(slots);
     CK_RV rv = C_GetSlotList(true, slots, &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(count, 3);
@@ -45,7 +45,7 @@ static int test_setup_by_label(void **state) {
 
     /* get the slots */
     CK_SLOT_ID slots[6];
-    unsigned long count = ARRAY_LEN(slots);
+    CK_ULONG count = ARRAY_LEN(slots);
     CK_RV rv = C_GetSlotList(true, slots, &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(count, 3);
@@ -114,7 +114,7 @@ static void test_find_objects_aes_good(void **state) {
      * C_FindObject like read, where it keeps moving the file pointer ahead,
      * and eventually returns EOF, in our case, count == 0.
      */
-    unsigned long count;
+    CK_ULONG count;
     CK_OBJECT_HANDLE objhandles[1];
     rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
     assert_int_equal(rv, CKR_OK);
@@ -147,7 +147,7 @@ static void do_test_find_objects_by_label(void **state, const char *key_label, u
     /*
      * There is only one key in the test db with the label "mykeylabel"
      */
-    unsigned long count;
+    CK_ULONG count;
     CK_OBJECT_HANDLE objhandles[1024];
     rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
     assert_int_equal(rv, CKR_OK);
@@ -178,7 +178,7 @@ static void test_find_objects_via_empty_template(void **state) {
     /*
      * There are 4 keys in the test db with
      */
-    unsigned long count;
+    CK_ULONG count;
     CK_OBJECT_HANDLE objhandles[6];
     rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
     assert_int_equal(rv, CKR_OK);

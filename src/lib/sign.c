@@ -131,7 +131,7 @@ static CK_RV common_init(operation op, token *tok, CK_MECHANISM_PTR mechanism, C
     return CKR_OK;
 }
 
-static CK_RV common_update(operation op, token *tok, unsigned char *part, unsigned long part_len) {
+static CK_RV common_update(operation op, token *tok, CK_BYTE_PTR part, CK_ULONG part_len) {
 
     check_pointer(part);
 
@@ -164,7 +164,7 @@ CK_RV sign_init(token *tok, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
     return common_init(operation_sign, tok, mechanism, key);
 }
 
-CK_RV sign_update(token *tok, unsigned char *part, unsigned long part_len) {
+CK_RV sign_update(token *tok, CK_BYTE_PTR part, CK_ULONG part_len) {
 
     return common_update(operation_sign, tok, part, part_len);
 }
@@ -177,27 +177,27 @@ static CK_RV pkcs1_5_build_struct(CK_MECHANISM_TYPE mech,
      *   - https://www.ietf.org/rfc/rfc3447.txt
      *     - Page 42
      */
-    static const unsigned char pkcs1_5_hdr_sha1[15] = {
+    static const CK_BYTE pkcs1_5_hdr_sha1[15] = {
         0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a,
         0x05, 0x00, 0x04, 0x14,
     };
 
-    static const unsigned char pkcs1_5_hdr_sha256[19] = {
+    static const CK_BYTE pkcs1_5_hdr_sha256[19] = {
         0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
         0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20,
     };
 
-    static const unsigned char pkcs1_5_hdr_sha384[19] = {
+    static const CK_BYTE pkcs1_5_hdr_sha384[19] = {
         0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
         0x04, 0x02, 0x02, 0x05, 0x00, 0x04, 0x30,
     };
 
-    static const unsigned char pkcs1_5_hdr_sha512[19] = {
+    static const CK_BYTE pkcs1_5_hdr_sha512[19] = {
         0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
         0x04, 0x02, 0x03, 0x05, 0x00, 0x04, 0x40,
     };
 
-    const unsigned char *hdr;
+    const CK_BYTE *hdr;
     size_t hdr_size;
 
     switch(mech) {
@@ -255,8 +255,8 @@ static CK_RV apply_pkcs_1_5_pad(tobject *tobj, char *built, size_t built_len, ch
     }
 
     /* Apply the PKCS1.5 padding */
-    int rc = RSA_padding_add_PKCS1_type_1((unsigned char *)out, out_len,
-            (const unsigned char *)built, built_len);
+    int rc = RSA_padding_add_PKCS1_type_1((CK_BYTE_PTR )out, out_len,
+            (const CK_BYTE_PTR )built, built_len);
     if (!rc) {
         LOGE("Applying RSA padding failed");
     }
@@ -267,7 +267,7 @@ static CK_RV apply_pkcs_1_5_pad(tobject *tobj, char *built, size_t built_len, ch
     return CKR_OK;
 }
 
-CK_RV sign_final_ex(token *tok, unsigned char *signature, unsigned long *signature_len, bool is_oneshot) {
+CK_RV sign_final_ex(token *tok, CK_BYTE_PTR signature, CK_ULONG_PTR signature_len, bool is_oneshot) {
 
     check_pointer(signature_len);
 
@@ -460,7 +460,7 @@ session_out:
     return rv;
 }
 
-CK_RV sign(token *tok, unsigned char *data, unsigned long data_len, unsigned char *signature, unsigned long *signature_len) {
+CK_RV sign(token *tok, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG *signature_len) {
 
     CK_RV rv = sign_update(tok, data, data_len);
     if (rv != CKR_OK) {
@@ -475,12 +475,12 @@ CK_RV verify_init (token *tok, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
     return common_init(operation_verify, tok, mechanism, key);
 }
 
-CK_RV verify_update (token *tok, unsigned char *part, unsigned long part_len) {
+CK_RV verify_update (token *tok, CK_BYTE_PTR part, CK_ULONG part_len) {
 
     return common_update(operation_verify, tok, part, part_len);
 }
 
-CK_RV verify_final (token *tok, unsigned char *signature, unsigned long signature_len) {
+CK_RV verify_final (token *tok, CK_BYTE_PTR signature, CK_ULONG signature_len) {
 
     check_pointer(signature);
     check_pointer(signature_len);
@@ -514,7 +514,7 @@ out:
     return rv;
 }
 
-CK_RV verify(token *tok, unsigned char *data, unsigned long data_len, unsigned char *signature, unsigned long signature_len) {
+CK_RV verify(token *tok, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG signature_len) {
 
     CK_RV rv = verify_update(tok, data, data_len);
     if (rv != CKR_OK) {

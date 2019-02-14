@@ -19,7 +19,7 @@ static test_info *test_info_new(void) {
 
     /* get the slots */
     CK_SLOT_ID slots[6];
-    unsigned long count = ARRAY_LEN(slots);
+    CK_ULONG count = ARRAY_LEN(slots);
     CK_RV rv = C_GetSlotList(true, slots, &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(count, 3);
@@ -78,7 +78,7 @@ static void test_get_slot_list(void **state) {
     UNUSED(state);
 
     CK_SLOT_ID slots[6];
-    unsigned long count;
+    CK_ULONG count;
     // Case 1: Good test to get the count of slots
     CK_RV rv = C_GetSlotList(true, NULL, &count);
     assert_int_equal(rv, CKR_OK);
@@ -109,7 +109,7 @@ static void test_random_good(void **state) {
 
     user_login(ti->handles[0]);
 
-    unsigned char buf[4];
+    CK_BYTE buf[4];
 
     // Case 1: Good test
     CK_RV rv = C_GenerateRandom(handle++, buf, sizeof(buf));
@@ -122,7 +122,7 @@ static void test_random_bad_session_handle(void **state) {
     /* make the handle bad */
     CK_SESSION_HANDLE handle = ~ti->handles[0];
 
-    unsigned char buf[4];
+    CK_BYTE buf[4];
 
     // Case 2: Test bad session
     CK_RV rv = C_GenerateRandom(handle, buf, sizeof(buf));
@@ -131,7 +131,7 @@ static void test_random_bad_session_handle(void **state) {
 
 static void test_seed(void **state) {
 
-    static unsigned char buf[]="ksadjfhjkhfsiudgfkjewsdjbkfcoidugshbvfewug";
+    static CK_BYTE buf[]="ksadjfhjkhfsiudgfkjewsdjbkfcoidugshbvfewug";
 
     test_info *ti = test_info_from_state(state);
     CK_SESSION_HANDLE handle = ti->handles[0];
@@ -169,10 +169,10 @@ static void test_digest_good(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     // sizeof a sha256 hash
-    unsigned char data[] = "Hello World This is My First Digest Message";
+    CK_BYTE data[] = "Hello World This is My First Digest Message";
 
-    unsigned char hash[32];
-    unsigned long hashlen = sizeof(hash);
+    CK_BYTE hash[32];
+    CK_ULONG hashlen = sizeof(hash);
 
     rv = C_DigestUpdate(handle, data, sizeof(data) - 1);
     assert_int_equal(rv, CKR_OK);
@@ -180,8 +180,8 @@ static void test_digest_good(void **state) {
     rv = C_DigestFinal(handle, hash, &hashlen);
     assert_int_equal(rv, CKR_OK);
 
-    unsigned char hash2[32];
-    unsigned long hash2len = sizeof(hash);
+    CK_BYTE hash2[32];
+    CK_ULONG hash2len = sizeof(hash);
 
     rv = C_DigestInit(handle, &smech);
     assert_int_equal(rv, CKR_OK);
@@ -198,7 +198,7 @@ static void test_digest_good(void **state) {
     /*
      * expected hash of data
      */
-    unsigned char expected_digest[] = {
+    CK_BYTE expected_digest[] = {
       0xce, 0x89, 0xe6, 0x32, 0xe2, 0x56, 0x4c, 0x7b, 0xdb, 0x3c, 0x01, 0xca,
       0x28, 0x20, 0x9b, 0x02, 0x9b, 0x80, 0x05, 0x99, 0x65, 0xb2, 0x8e, 0x58,
       0xe0, 0xb3, 0xec, 0x88, 0x16, 0xe0, 0x77, 0x77

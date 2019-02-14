@@ -10,7 +10,7 @@
 #include "token.h"
 #include "tpm.h"
 
-CK_RV random_get(token *tok, unsigned char *random_data, unsigned long random_len) {
+CK_RV random_get(token *tok, CK_BYTE_PTR random_data, CK_ULONG random_len) {
 
     check_pointer(random_data);
 
@@ -21,7 +21,7 @@ CK_RV random_get(token *tok, unsigned char *random_data, unsigned long random_le
     return res ? CKR_OK: CKR_GENERAL_ERROR;
 }
 
-CK_RV seed_random(token *tok, unsigned char *seed, unsigned long seed_len) {
+CK_RV seed_random(token *tok, CK_BYTE_PTR seed, CK_ULONG seed_len) {
 
     check_pointer(seed);
 

@@ -24,7 +24,7 @@ static int test_setup(void **state) {
 
     /* get the slots */
     CK_SLOT_ID slots[6];
-    unsigned long count = ARRAY_LEN(slots);
+    CK_ULONG count = ARRAY_LEN(slots);
     CK_RV rv = C_GetSlotList(true, slots, &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(count, 3);
@@ -146,7 +146,7 @@ static void test_aes_encrypt_decrypt_good(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     /* part 1 */
-    unsigned long ciphertext_len = 16;
+    CK_ULONG ciphertext_len = 16;
     rv = C_EncryptUpdate(session, plaintext, 16,
             ciphertext, &ciphertext_len);
     assert_int_equal(rv, CKR_OK);
@@ -166,8 +166,8 @@ static void test_aes_encrypt_decrypt_good(void **state) {
     rv = C_DecryptInit (session, &mechanism, ti->objects.aes);
     assert_int_equal(rv, CKR_OK);
 
-    unsigned char plaintext2[sizeof(plaintext)];
-    unsigned long plaintext2_len = ciphertext_len = 16;
+    CK_BYTE plaintext2[sizeof(plaintext)];
+    CK_ULONG plaintext2_len = ciphertext_len = 16;
 
     rv = C_DecryptUpdate (session, ciphertext, ciphertext_len,
             plaintext2, &plaintext2_len);
@@ -328,7 +328,7 @@ static void test_aes_encrypt_decrypt_oneshot_good(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     /* part 1 */
-    unsigned long ciphertext_len = sizeof(plaintext);
+    CK_ULONG ciphertext_len = sizeof(plaintext);
     rv = C_Encrypt(session, plaintext, ciphertext_len,
             ciphertext, &ciphertext_len);
     assert_int_equal(rv, CKR_OK);
@@ -337,8 +337,8 @@ static void test_aes_encrypt_decrypt_oneshot_good(void **state) {
     rv = C_DecryptInit (session, &mechanism, ti->objects.aes);
     assert_int_equal(rv, CKR_OK);
 
-    unsigned char plaintext2[sizeof(plaintext)];
-    unsigned long plaintext2_len = sizeof(plaintext2);
+    CK_BYTE plaintext2[sizeof(plaintext)];
+    CK_ULONG plaintext2_len = sizeof(plaintext2);
 
     rv = C_Decrypt (session, ciphertext, ciphertext_len,
             plaintext2, &plaintext2_len);
@@ -468,7 +468,7 @@ static void test_rsa_oaep_encrypt_decrypt_oneshot_good(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     /* part 1 */
-    unsigned long ciphertext_len = sizeof(ciphertext);
+    CK_ULONG ciphertext_len = sizeof(ciphertext);
     rv = C_Encrypt(session, plaintext, sizeof(plaintext),
             ciphertext, &ciphertext_len);
     assert_int_equal(rv, CKR_OK);
@@ -477,8 +477,8 @@ static void test_rsa_oaep_encrypt_decrypt_oneshot_good(void **state) {
     rv = C_DecryptInit (session, &mechanism, ti->objects.rsa);
     assert_int_equal(rv, CKR_OK);
 
-    unsigned char plaintext2[sizeof(ciphertext)];
-    unsigned long plaintext2_len = sizeof(plaintext2);
+    CK_BYTE plaintext2[sizeof(ciphertext)];
+    CK_ULONG plaintext2_len = sizeof(plaintext2);
 
     rv = C_Decrypt (session, ciphertext, ciphertext_len,
             plaintext2, &plaintext2_len);

@@ -69,7 +69,7 @@ static test_info *_test_info_new(void) {
 
     /* get the slots */
     CK_SLOT_ID slots[6];
-    unsigned long count = ARRAY_LEN(slots);
+    CK_ULONG count = ARRAY_LEN(slots);
     CK_RV rv = C_GetSlotList(true, slots, &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(count, 3);
@@ -201,7 +201,7 @@ static void test_user_login_incorrect_pin(void **state) {
     test_info *ti = test_info_from_state(state);
     CK_SESSION_HANDLE session = ti->slots[0].sessions[0].handle;
 
-    unsigned char upin[] = BAD_USERPIN;
+    CK_BYTE upin[] = BAD_USERPIN;
 
     CK_RV rv = C_Login(session, CKU_USER, upin, sizeof(upin) - 1);
     assert_int_equal(rv, CKR_PIN_INCORRECT);
