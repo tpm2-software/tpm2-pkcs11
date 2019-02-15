@@ -142,10 +142,6 @@ CK_RV general_init(void *init_args) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    if (_g_is_init) {
-        return CKR_CRYPTOKI_ALREADY_INITIALIZED;
-    }
-
     if (init_args) {
         CK_C_INITIALIZE_ARGS *args = (CK_C_INITIALIZE_ARGS *)init_args;
         if(args->pReserved) {
@@ -220,7 +216,6 @@ err:
 
 CK_RV general_finalize(void *reserved) {
 
-    check_is_init();
     if (reserved) {
         return CKR_ARGUMENTS_BAD;
     }

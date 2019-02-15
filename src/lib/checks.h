@@ -21,6 +21,4 @@
         }\
     } while (0)
 
-#define check_is_init() if (!general_is_init()) { return CKR_CRYPTOKI_NOT_INITIALIZED; }
-
 #endif /* SRC_PKCS11_CHECKS_H_ */

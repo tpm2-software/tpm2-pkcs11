@@ -101,8 +101,6 @@ CK_RV slot_get_info (CK_SLOT_ID slot_id, CK_SLOT_INFO *info) {
 
 CK_RV slot_mechanism_list_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE *mechanism_list, CK_ULONG_PTR count) {
 
-    check_is_init();
-
     if (!slot_get_token(slot_id)) {
         return CKR_SLOT_ID_INVALID;
     }
@@ -211,7 +209,6 @@ CK_RV slot_mechanism_list_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE *mechanism_
 
 CK_RV slot_mechanism_info_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE type, CK_MECHANISM_INFO *info) {
 
-    check_is_init();
     check_pointer(info);
 
     if (!slot_get_token(slot_id)) {
