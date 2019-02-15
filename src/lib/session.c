@@ -72,7 +72,6 @@ CK_RV session_open(CK_SLOT_ID slot_id, CK_FLAGS flags, void *application,
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    check_is_init();
 	check_pointer(session);
 
 	token *t = slot_get_token(slot_id);
@@ -104,8 +103,6 @@ CK_RV session_open(CK_SLOT_ID slot_id, CK_FLAGS flags, void *application,
 
 CK_RV session_close(CK_SESSION_HANDLE session) {
 
-    check_is_init();
-
     token *t = NULL;
     unsigned tokid = get_tokid_from_session_handle_and_cleanse(&session);
     check_slot_id(tokid, t, CKR_SESSION_HANDLE_INVALID);
@@ -114,8 +111,6 @@ CK_RV session_close(CK_SESSION_HANDLE session) {
 }
 
 CK_RV session_closeall(CK_SLOT_ID slot_id) {
-
-    check_is_init();
 
     token *t;
     check_slot_id(slot_id, t, CKR_SLOT_ID_INVALID);
