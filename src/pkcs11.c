@@ -59,6 +59,13 @@
     _TRACE_RET(rv); \
     return rv;
 
+#define TOKEN_CALL(fn, ...) \
+     CK_RV rv = CKR_GENERAL_ERROR; \
+    _TRACE_CALL; \
+    rv = fn(__VA_ARGS__); \
+    _TRACE_RET(rv); \
+    return rv;
+
 #define TOKEN_CALL_NO_INIT(fn, ...) \
     CK_RV rv = CKR_GENERAL_ERROR; \
     _TRACE_CALL; \
@@ -360,7 +367,7 @@ CK_RV C_GetInfo (CK_INFO *info) {
 }
 
 CK_RV C_GetFunctionList (CK_FUNCTION_LIST **function_list) {
-    TOKEN_CALL_INIT(general_get_func_list, function_list);
+    TOKEN_CALL(general_get_func_list, function_list);
 }
 
 CK_RV C_GetSlotList (CK_BYTE token_present, CK_SLOT_ID *slot_list, CK_ULONG_PTR count) {
