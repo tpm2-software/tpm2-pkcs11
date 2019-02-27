@@ -454,7 +454,7 @@ CK_RV C_GetObjectSize (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_UL
     TOKEN_UNSUPPORTED;
 }
 
-CK_RV C_GetAttributeValue (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
+CK_RV C_GetAttributeValue (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
     TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(object_get_attributes, session, object, templ, count);
 }
 
