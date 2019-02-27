@@ -5,6 +5,11 @@
  * All rights reserved.
  ***********************************************************************/
 
+#include <openssl/evp.h>
+#include <openssl/rsa.h>
+#include <openssl/bn.h>
+#include <openssl/err.h>
+
 #include "test.h"
 
 struct test_info {
@@ -644,11 +649,164 @@ static void test_double_sign_final_call_for_size_SHA512(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
+static CK_ATTRIBUTE_PTR get_attr(CK_ATTRIBUTE_TYPE type, CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_len) {
+
+    CK_ULONG i;
+    for (i=0; i < attr_len; i++) {
+        CK_ATTRIBUTE_PTR a = &attrs[i];
+        if (a->type == type) {
+            return a;
+        }
+    }
+
+    return NULL;
+}
+
+#if (OPENSSL_VERSION_NUMBER < 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)) || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x20700000L) /* OpenSSL 1.1.0 */
+#define LIB_TPM2_OPENSSL_OPENSSL_PRE11
+#endif
+
+RSA *template_to_rsa_pub_key(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_len) {
+
+    bool ret = false;
+    RSA *ssl_rsa_key = NULL;
+    BIGNUM *e = NULL, *n = NULL;
+
+    /* get the exponent */
+    CK_ATTRIBUTE_PTR a = get_attr(CKA_PUBLIC_EXPONENT, attrs, attr_len);
+    assert_non_null(a);
+
+    e = BN_bin2bn((void*)a->pValue, a->ulValueLen, NULL);
+    assert_non_null(e);
+
+    /* get the modulus */
+    a = get_attr(CKA_MODULUS, attrs, attr_len);
+    assert_non_null(a);
+
+    n = BN_bin2bn(a->pValue, a->ulValueLen,
+                  NULL);
+    assert_non_null(n);
+
+    ssl_rsa_key = RSA_new();
+    assert_non_null(ssl_rsa_key);
+
+#if defined(LIB_TPM2_OPENSSL_OPENSSL_PRE11)
+    ssl_rsa_key->e = e;
+    ssl_rsa_key->n = n;
+#else
+    int rc = RSA_set0_key(ssl_rsa_key, n, e, NULL);
+    assert_int_equal(rc, 1);
+#endif
+
+    return ssl_rsa_key;
+
+error:
+    BN_free(n);
+    BN_free(e);
+    RSA_free(ssl_rsa_key);
+
+    return NULL;
+}
+
+static void verify(RSA *pub, CK_BYTE_PTR msg, CK_ULONG msg_len, CK_BYTE_PTR sig, CK_ULONG sig_len) {
+
+    EVP_PKEY *pkey = EVP_PKEY_new();
+    assert_non_null(pkey);
+
+    int rc = EVP_PKEY_set1_RSA(pkey, pub);
+    assert_int_equal(rc, 1);
+
+    EVP_MD_CTX *ctx = EVP_MD_CTX_create();
+    const EVP_MD* md = EVP_get_digestbyname("SHA256");
+    assert_non_null(md);
+
+    rc = EVP_DigestInit_ex(ctx, md, NULL);
+    assert_int_equal(rc, 1);
+
+    rc = EVP_DigestVerifyInit(ctx, NULL, md, NULL, pkey);
+    assert_int_equal(rc, 1);
+
+    rc = EVP_DigestVerifyUpdate(ctx, msg, msg_len);
+    assert_int_equal(rc, 1);
+
+    rc = EVP_DigestVerifyFinal(ctx, sig, sig_len);
+    assert_int_equal(rc, 1);
+
+    EVP_PKEY_free(pkey);
+    EVP_MD_CTX_destroy(ctx);
+}
+
+static void test_sign_verify_public(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_OBJECT_CLASS key_class = CKO_PRIVATE_KEY;
+    CK_KEY_TYPE key_type = CKK_RSA;
+    CK_ATTRIBUTE tmpl[] = {
+        { CKA_CLASS, &key_class, sizeof(key_class)  },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+    };
+
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    /* Find an RSA key */
+    CK_ULONG count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    user_login(session);
+
+    /*
+     * Now that we have a key for sign, build up what we need to sign,
+     * which is the ASN1 digest info for CKM_RSA_PKCS
+     */
+    CK_MECHANISM mech = { .mechanism =  CKM_SHA256_RSA_PKCS };
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE msg[] = "my foo msg";
+    CK_BYTE sig[1024];
+    CK_ULONG siglen = sizeof(sig);
+
+    rv = C_Sign(session, msg, sizeof(msg) - 1, sig,
+            &siglen);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(siglen, 256);
+
+    /* build an OSSL RSA key from parts */
+    CK_BYTE _tmp_bufs[2][1024];
+    CK_ATTRIBUTE attrs[] = {
+        { .type = CKA_PUBLIC_EXPONENT, .ulValueLen = sizeof(_tmp_bufs[0]), .pValue = &_tmp_bufs[0] },
+        { .type = CKA_MODULUS,         .ulValueLen = sizeof(_tmp_bufs[1]), .pValue = &_tmp_bufs[1] },
+    };
+
+    rv = C_GetAttributeValue(session, objhandles[0], attrs, ARRAY_LEN(attrs));
+    assert_int_equal(rv, CKR_OK);
+
+    RSA *r = template_to_rsa_pub_key(attrs, ARRAY_LEN(attrs));
+    assert_non_null(r);
+
+    verify(r, msg, sizeof(msg) - 1, sig, siglen);
+    RSA_free(r);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup_teardown(test_sign_verify_CKM_RSA_PKCS_5_2_returns,
+        cmocka_unit_test_setup_teardown(test_sign_verify_public,
                 test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_verify_CKM_RSA_PKCS_5_2_returns,
+            test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_double_sign_call_for_size_SHA512,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_double_sign_final_call_for_size_SHA512,
