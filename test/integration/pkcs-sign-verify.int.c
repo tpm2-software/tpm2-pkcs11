@@ -668,7 +668,6 @@ static CK_ATTRIBUTE_PTR get_attr(CK_ATTRIBUTE_TYPE type, CK_ATTRIBUTE_PTR attrs,
 
 RSA *template_to_rsa_pub_key(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_len) {
 
-    bool ret = false;
     RSA *ssl_rsa_key = NULL;
     BIGNUM *e = NULL, *n = NULL;
 
@@ -700,7 +699,6 @@ RSA *template_to_rsa_pub_key(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_len) {
 
     return ssl_rsa_key;
 
-error:
     BN_free(n);
     BN_free(e);
     RSA_free(ssl_rsa_key);
