@@ -3,9 +3,10 @@
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
  */
+#include "config.h"
+#include <assert.h>
 #include <stdlib.h>
 
-#include "assert.h"
 #include "mutex.h"
 #include "pkcs11.h"
 #include "session_ctx.h"
@@ -85,21 +86,20 @@ CK_RV session_table_new_entry(session_table *t, CK_SESSION_HANDLE *handle,
     return CKR_OK;
 }
 
-static void do_logout_if_needed(token *tok) {
+static CK_RV do_logout_if_needed(token *tok) {
 
-    if (tok->login_state != token_no_one_logged_in) {
-        /*
-         * This should never fail, if it does the state is so borked
-         * recovery is impossible.
-         */
-        CK_RV rv = token_logout(tok);
-        assert(rv == CKR_OK);
+    if (tok->login_state == token_no_one_logged_in) {
+        return CKR_OK;
     }
+
+    return token_logout(tok);
 }
 
 static CK_RV session_table_free_ctx_by_ctx(token *t, session_ctx **ctx) {
 
     session_table *stable = t->s_table;
+
+    CK_RV rv = CKR_OK;
 
     CK_STATE state = session_ctx_state_get(*ctx);
     if(state == CKS_RW_PUBLIC_SESSION
@@ -113,14 +113,17 @@ static CK_RV session_table_free_ctx_by_ctx(token *t, session_ctx **ctx) {
 
     /* Per the spec, when session count hits 0, logout */
     if (!stable->cnt) {
-        do_logout_if_needed(t);
+        rv = do_logout_if_needed(t);
+        if (rv != CKR_OK) {
+            LOGE("do_logout_if_needed failed: 0x%x", rv);
+        }
     }
 
     session_ctx_free(*ctx);
 
     *ctx = NULL;
 
-    return CKR_OK;
+    return rv;
 }
 
 CK_RV session_table_free_ctx_by_handle(token *t, CK_SESSION_HANDLE handle) {
@@ -135,7 +138,9 @@ CK_RV session_table_free_ctx_by_handle(token *t, CK_SESSION_HANDLE handle) {
     return session_table_free_ctx_by_ctx(t, ctx);
 }
 
-void session_table_free_ctx_all(token *t) {
+CK_RV session_table_free_ctx_all(token *t) {
+
+    bool had_error = false;
 
     unsigned i;
     for (i=0; i < ARRAY_LEN(t->s_table->table); i++) {
@@ -149,8 +154,14 @@ void session_table_free_ctx_all(token *t) {
             continue;
         }
 
-        session_table_free_ctx_by_ctx(t, ctx);
+        CK_RV rv = session_table_free_ctx_by_ctx(t, ctx);
+        if (rv != CKR_OK) {
+            LOGE("Failed to free session_ctx: 0x%x", rv);
+            had_error = true;
+        }
     }
+
+    return !had_error ? CKR_OK : CKR_GENERAL_ERROR;
 }
 
 CK_RV session_table_free_ctx(token *t, CK_SESSION_HANDLE handle) {

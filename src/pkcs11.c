@@ -3,6 +3,8 @@
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
  */
+#include "config.h"
+
 #include <assert.h>
 #include <string.h>
 

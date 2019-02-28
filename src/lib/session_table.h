@@ -26,7 +26,7 @@ session_ctx *session_table_lookup(session_table *t, CK_SESSION_HANDLE handle);
 
 CK_RV session_table_free_ctx_by_handle(token *t, CK_SESSION_HANDLE handle);
 CK_RV session_table_free_ctx(token *t, CK_SESSION_HANDLE handle);
-void session_table_free_ctx_all(token *t);
+CK_RV session_table_free_ctx_all(token *t);
 
 /**
  * performs a session_ctx_login_event() call for each item in the table
