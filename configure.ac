@@ -59,6 +59,14 @@ PKG_CHECK_MODULES([TSS2_ESYS],   [tss2-esys])
 PKG_CHECK_MODULES([TCTI_DEVICE], [tss2-tcti-device])
 PKG_CHECK_MODULES([TCTI_MSSIM],  [tss2-tcti-mssim])
 
+AC_DEFUN([do_esapi_manage_flags], [
+  AC_DEFINE([ESAPI_MANAGE_FLAGS], [1],
+    [ESAPI versions below 2.2.1 are known to require manual session flag management.])
+])
+
+# Check for ESYS version below 2.2.1 which requires us to manage ESYS session flags
+PKG_CHECK_EXISTS([tss2-esys >= 2.2.1], [do_esapi_manage_flags])
+
 # require sqlite3 and libcrypto
 PKG_CHECK_MODULES([SQLITE3],     [sqlite3])
 PKG_CHECK_MODULES([CRYPTO],      [libcrypto >= 1.0.2g])
@@ -68,6 +76,14 @@ AX_PTHREAD([],[AC_MSG_ERROR([Cannot find pthread])])
 
 # gnulib m4 dependency: check for linker script support
 gl_LD_VERSION_SCRIPT
+
+AC_ARG_ENABLE(
+  [esapi-session-manage-flags],
+  [AS_HELP_STRING([--enable-esapi-session-manage-flags],
+    [Force the TPM module to manage ESAPI session flags (default is autodetect)])],
+  [esapi_sf=$enableval])
+AS_IF([test "x$esapi_sf" = "xyes"],
+       [do_esapi_manage_flags])
 
 # START ENABLE UNIT
 #

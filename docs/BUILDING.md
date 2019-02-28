@@ -68,6 +68,10 @@ that *are outside of normal autoconf/automake options*, which are documented [he
 4. `--disable-hardening` - Compiler flag hardening options, this is enabled by default. Disabling hardening is **NOT RECOMMENDED FOR PRODUCTION BUILDS**,
       however, is often useful when adding in compiler flags for testing via `CFLAGS`. For example, one would need to disable this if configuring
       [clang](#step-1---satisfy-dependencies) with [ASAN](https://clang.llvm.org/docs/AddressSanitizer.html).
+5. `--disable-esapi-session-manage-flags` - Disables ESAPI session flag management and causes the pkcs11 library to do it. This is autodetected and
+      overiding it should only be done in specific coditions, since ESYS with this feature has no official release.
+      This can also be configured at run time by setting the environment variable `TPM2_PKCS11_ESAPI_MANAGE_FLAGS` to any value.
+      **These options may go away in future versions**.
 
 ## Step 4 - Building
 
