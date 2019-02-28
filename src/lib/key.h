@@ -11,7 +11,18 @@
 typedef struct token token;
 typedef struct session_ctx session_ctx;
 
-CK_RV key_gen (token *tok,
-        CK_MECHANISM *mechanism, CK_ATTRIBUTE *public_key_template, unsigned long public_key_attribute_count, CK_ATTRIBUTE *private_key_template, unsigned long private_key_attribute_count, CK_OBJECT_HANDLE *public_key, CK_OBJECT_HANDLE *private_key);
+CK_RV key_gen (
+        token *tok,
+
+        CK_MECHANISM_PTR mechanism,
+
+        CK_ATTRIBUTE_PTR public_key_template,
+        CK_ULONG public_key_attribute_count,
+
+        CK_ATTRIBUTE_PTR private_key_template,
+        CK_ULONG private_key_attribute_count,
+
+        CK_OBJECT_HANDLE_PTR public_key,
+        CK_OBJECT_HANDLE_PTR private_key);
 
 #endif /* SRC_PKCS11_KEY_H_ */

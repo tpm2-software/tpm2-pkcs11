@@ -129,69 +129,6 @@ void session_ctx_logout_event(session_ctx *ctx) {
     }
 }
 
-CK_RV unwrap_objauth(token *tok, tpm_ctx *tpm, wrappingobject *wobj, twist objauth, twist *unwrapped_auth) {
-
-    twist unwrapped_raw = NULL;
-    if (tok->config.sym_support) {
-        twist objauthraw = twistbin_unhexlify(objauth);
-        if (!objauthraw) {
-            LOGE("unhexlify objauth failed: %u-%s", twist_len(objauth), objauth);
-            return CKR_HOST_MEMORY;
-        }
-
-        tpm_encrypt_data *encdata = NULL;
-        CK_MECHANISM mech = {
-                CKM_AES_CFB1, NULL, 0
-        };
-
-        CK_RV rv = tpm_encrypt_data_init(tpm, wobj->handle, wobj->objauth, &mech, &encdata);
-        if (rv != CKR_OK) {
-            LOGE("tpm_encrypt_data_init failed: 0x%x", rv);
-            return CKR_GENERAL_ERROR;
-        }
-
-        CK_BYTE ptext[256];
-        CK_ULONG ptextlen = sizeof(ptext);
-
-        rv = tpm_decrypt(encdata,
-             (CK_BYTE_PTR)objauthraw, twist_len(objauthraw),
-             ptext, &ptextlen);
-        tpm_encrypt_data_free(encdata);
-        twist_free(objauthraw);
-        if (rv != CKR_OK) {
-            LOGE("tpm_decrypt_handle failed: 0x%x", rv);
-            return CKR_GENERAL_ERROR;
-        }
-
-        unwrapped_raw = twistbin_new(ptext, ptextlen);
-        if (!unwrapped_raw) {
-            return CKR_HOST_MEMORY;
-        }
-
-    } else {
-        twist swkey = twistbin_unhexlify(wobj->objauth);
-        if (!swkey) {
-            return CKR_GENERAL_ERROR;
-        }
-        unwrapped_raw = aes256_gcm_decrypt(swkey, objauth);
-        twist_free(swkey);
-        if (!unwrapped_raw) {
-            return CKR_GENERAL_ERROR;
-        }
-    }
-
-    twist objauth_unwrapped = twistbin_unhexlify(unwrapped_raw);
-    twist_free(unwrapped_raw);
-    if (!objauth_unwrapped) {
-        LOGE("unhexlify failed");
-        return CKR_HOST_MEMORY;
-    }
-
-    *unwrapped_auth = objauth_unwrapped;
-
-    return CKR_OK;
-}
-
 CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj) {
 
     tpm_ctx *tpm = tok->tctx;
@@ -215,31 +152,17 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
         }
 
         sobject *sobj = &tok->sobject;
-        wrappingobject *wobj = &tok->wrappingobject;
-
-        /*
-         * Decrypt the secondary object auth value with either
-         * the TPM wrapping key, or in the case of lack of TPM
-         * support use Software.
-         */
-        twist sobjauthraw = NULL;
-        CK_RV rv = unwrap_objauth(tok, tpm, wobj, sobj->objauth, &sobjauthraw);
-        if (rv != CKR_OK) {
-            LOGE("Error unwrapping secondary object auth");
-            return rv;
-        }
 
         bool result = tpm_loadobj(
                 tpm,
-                tok->sobject.handle, sobjauthraw,
+                tok->sobject.handle, sobj->authraw,
                 tobj->pub, tobj->priv,
                 &tobj->handle);
-        twist_free(sobjauthraw);
         if (!result) {
             return CKR_GENERAL_ERROR;
         }
 
-        rv = unwrap_objauth(tok, tpm, wobj, tobj->objauth,
+        CK_RV rv = utils_ctx_unwrap_objauth(tok, tobj->objauth,
                 &tobj->unsealed_auth);
         if (rv != CKR_OK) {
             LOGE("Error unwrapping tertiary object auth");

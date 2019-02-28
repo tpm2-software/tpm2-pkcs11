@@ -252,6 +252,21 @@ static inline CK_RV auth_min_ro_user(session_ctx *ctx) {
     return CKR_USER_NOT_LOGGED_IN;
 }
 
+static inline CK_RV auth_min_rw_user(session_ctx *ctx) {
+
+    CK_STATE state = session_ctx_state_get(ctx);
+    switch(state) {
+    case CKS_RO_USER_FUNCTIONS:
+        return CKR_SESSION_READ_ONLY;
+    case CKS_RW_USER_FUNCTIONS:
+        return CKR_OK;
+        /* no default */
+    }
+
+    return CKR_USER_NOT_LOGGED_IN;
+}
+
+
 static inline CK_RV auth_min_rw_so(session_ctx *ctx) {
 
     CK_STATE state = session_ctx_state_get(ctx);
@@ -597,7 +612,7 @@ CK_RV C_GenerateKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_ATTR
 }
 
 CK_RV C_GenerateKeyPair (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_ATTRIBUTE *public_key_template, CK_ULONG public_key_attribute_count, CK_ATTRIBUTE *private_key_template, CK_ULONG private_key_attribute_count, CK_OBJECT_HANDLE *public_key, CK_OBJECT_HANDLE *private_key) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(key_gen, session, mechanism, public_key_template, public_key_attribute_count, private_key_template, private_key_attribute_count, public_key, private_key);
+    TOKEN_WITH_LOCK_BY_SESSION_USER_RW(key_gen, session, mechanism, public_key_template, public_key_attribute_count, private_key_template, private_key_attribute_count, public_key, private_key);
 }
 
 CK_RV C_WrapKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE wrapping_key, CK_OBJECT_HANDLE key, CK_BYTE_PTR wrapped_key, CK_ULONG_PTR wrapped_key_len) {

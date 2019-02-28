@@ -122,5 +122,38 @@ CK_RV tpm_sesion_start(tpm_ctx *ctx, twist auth, uint32_t handle);
 
 CK_RV tpm_session_stop(tpm_ctx *ctx);
 
+typedef struct tpm_object_data tpm_object_data;
+struct tpm_object_data {
+
+    uint32_t handle;
+
+    union {
+        struct {
+            twist modulus;
+            uint32_t exponent;
+        } rsa;
+    };
+
+    twist pubblob;
+    twist privblob;
+};
+
+CK_RV tpm2_generate_key(
+        tpm_ctx *tpm,
+
+        uint32_t parent,
+        twist parentauth,
+
+        twist newauthbin,
+
+        CK_MECHANISM_PTR mechanism,
+
+        CK_ULONG pubcnt,
+        CK_ATTRIBUTE_PTR pubattrs,
+
+        CK_ULONG privcnt,
+        CK_ATTRIBUTE_PTR privattrs,
+
+        tpm_object_data *objdata);
 
 #endif /* SRC_PKCS11_TPM_H_ */

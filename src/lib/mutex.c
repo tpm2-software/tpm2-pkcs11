@@ -96,6 +96,10 @@ static CK_RV default_mutex_create(void **mutex) {
 static CK_RV default_mutex_destroy(void *mutex) {
 
     pthread_mutex_t *p = (pthread_mutex_t *)mutex;
+    if (!p) {
+        return CKR_OK;
+    }
+
     int rc = pthread_mutex_destroy(p);
     if (rc) {
         LOGE("Could not destroy mutex: %s", strerror(rc));

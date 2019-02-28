@@ -13,6 +13,75 @@
 #include "token.h"
 #include "utils.h"
 
+CK_RV utils_setup_new_object_auth(twist newpin, twist *newauthbin, twist *newauthhex, twist *newsalthex) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    bool allocated_pin_to_use = false;
+    twist pin_to_use = NULL;
+    twist newsaltbin = NULL;
+
+    newsaltbin = utils_get_rand(SALT_SIZE);
+    if (!newsaltbin) {
+        goto out;
+    }
+
+    if (!newpin) {
+        allocated_pin_to_use = true;
+        pin_to_use = utils_get_rand(32);
+        if (!pin_to_use) {
+            goto out;
+        }
+    } else {
+        pin_to_use = newpin;
+    }
+
+    *newauthbin = utils_pdkdf2_hmac_sha256_bin_raw(pin_to_use, newsaltbin, ITERS);
+    if (!newauthbin) {
+        goto out;
+    }
+
+    if (newsalthex) {
+        *newsalthex = twist_hexlify(newsaltbin);
+        if (!*newsalthex) {
+            rv = CKR_HOST_MEMORY;
+            goto out;
+        }
+    }
+
+    if (newauthhex) {
+        *newauthhex = twist_hexlify(*newauthbin);
+        if (!*newauthhex) {
+            rv = CKR_HOST_MEMORY;
+            goto out;
+        }
+    }
+
+    rv = CKR_OK;
+
+out:
+
+    if (rv != CKR_OK) {
+        twist_free(*newauthhex);
+        twist_free(*newauthbin);
+        if (newsalthex) {
+            twist_free(*newsalthex);
+            *newsalthex = NULL;
+        }
+
+        *newauthhex = NULL;
+        *newauthbin = NULL;
+    }
+
+    if (allocated_pin_to_use) {
+        twist_free(pin_to_use);
+    }
+
+    twist_free(newsaltbin);
+
+    return rv;
+}
+
 static twist encrypt_parts_to_twist(CK_BYTE tag[16], CK_BYTE iv[12], CK_BYTE_PTR ctextbin, int ctextbinlen) {
 
     /*
@@ -385,4 +454,322 @@ twist utils_get_rand(size_t size) {
     }
 
     return salt;
+}
+
+CK_RV utils_ctx_unwrap_objauth(token *tok, twist objauth, twist *unwrapped_auth) {
+    assert(tok);
+    assert(objauth);
+    assert(unwrapped_auth);
+
+    twist unwrapped_raw = NULL;
+    wrappingobject *wobj = &tok->wrappingobject;
+    tpm_ctx *tpm = tok->tctx;
+
+    if (tok->config.sym_support) {
+        twist objauthraw = twistbin_unhexlify(objauth);
+        if (!objauthraw) {
+            LOGE("unhexlify objauth failed: %u-%s", twist_len(objauth), objauth);
+            return CKR_HOST_MEMORY;
+        }
+
+        tpm_encrypt_data *encdata = NULL;
+        CK_MECHANISM mech = {
+                CKM_AES_CFB1, NULL, 0
+        };
+
+        CK_RV rv = tpm_encrypt_data_init(tpm, wobj->handle, wobj->objauth, &mech, &encdata);
+        if (rv != CKR_OK) {
+            LOGE("tpm_encrypt_data_init failed: 0x%x", rv);
+            return CKR_GENERAL_ERROR;
+        }
+
+        CK_BYTE ptext[256];
+        CK_ULONG ptextlen = sizeof(ptext);
+
+        rv = tpm_decrypt(encdata,
+             (CK_BYTE_PTR)objauthraw, twist_len(objauthraw),
+             ptext, &ptextlen);
+        tpm_encrypt_data_free(encdata);
+        twist_free(objauthraw);
+        if (rv != CKR_OK) {
+            LOGE("tpm_decrypt_handle failed: 0x%x", rv);
+            return CKR_GENERAL_ERROR;
+        }
+
+        unwrapped_raw = twistbin_new(ptext, ptextlen);
+        if (!unwrapped_raw) {
+            return CKR_HOST_MEMORY;
+        }
+
+    } else {
+        twist swkey = twistbin_unhexlify(wobj->objauth);
+        if (!swkey) {
+            return CKR_GENERAL_ERROR;
+        }
+        unwrapped_raw = aes256_gcm_decrypt(swkey, objauth);
+        twist_free(swkey);
+        if (!unwrapped_raw) {
+            return CKR_GENERAL_ERROR;
+        }
+    }
+
+    twist objauth_unwrapped = twistbin_unhexlify(unwrapped_raw);
+    twist_free(unwrapped_raw);
+    if (!objauth_unwrapped) {
+        LOGE("unhexlify failed");
+        return CKR_HOST_MEMORY;
+    }
+
+    *unwrapped_auth = objauth_unwrapped;
+
+    return CKR_OK;
+}
+
+CK_RV utils_ctx_wrap_objauth(token *tok, twist data, twist *wrapped_auth) {
+    assert(tok);
+    assert(data);
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    twist wrapped = NULL;
+
+    wrappingobject *wobj = &tok->wrappingobject;
+
+    if (tok->config.sym_support) {
+        tpm_encrypt_data *encdata = NULL;
+        CK_MECHANISM mech = {
+                CKM_AES_CFB1, NULL, 0
+        };
+
+        rv = tpm_encrypt_data_init(tok->tctx, wobj->handle, wobj->objauth, &mech, &encdata);
+        if (rv != CKR_OK) {
+            LOGE("tpm_encrypt_data_init failed: 0x%x", rv);
+            goto out;
+        }
+
+        CK_BYTE xtext[256];
+        CK_ULONG xtextlen = sizeof(xtext);
+
+        rv = tpm_encrypt(encdata,
+             (CK_BYTE_PTR)data, twist_len(data),
+             xtext, &xtextlen);
+        tpm_encrypt_data_free(encdata);
+        if (rv != CKR_OK) {
+            LOGE("tpm_encrypt failed: 0x%x", rv);
+            goto out;
+        }
+
+        wrapped = twist_hex_new((char *)xtext, xtextlen);
+
+    } else {
+        twist swkey = twistbin_unhexlify(wobj->objauth);
+        if (!swkey) {
+            goto out;
+        }
+        wrapped = aes256_gcm_encrypt(swkey, data);
+        twist_free(swkey);
+    }
+
+    if (!wrapped) {
+        goto out;
+    }
+
+    *wrapped_auth = wrapped;
+    rv = CKR_OK;
+
+out:
+    return rv;
+}
+
+CK_RV generic_attr_copy(CK_ATTRIBUTE_PTR in, CK_ULONG count, void *udata) {
+    CK_ATTRIBUTE_PTR out = &((CK_ATTRIBUTE_PTR)udata)[count];
+
+
+    void *newval = NULL;
+
+    if (in->pValue) {
+        newval = calloc(1, in->ulValueLen);
+        if (!newval) {
+            return CKR_HOST_MEMORY;
+        }
+        memcpy(newval, in->pValue, in->ulValueLen);
+    }
+
+    out->ulValueLen = in->ulValueLen;
+    out->type = in->type;
+    out->pValue = newval;
+
+    return CKR_OK;
+}
+
+CK_RV utils_attr_deep_copy(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_count, CK_ATTRIBUTE_PTR copy) {
+
+    static const attr_handler deep_copy_attr_handlers[] = {
+        { CKA_CLASS,             generic_attr_copy },
+        { CKA_TOKEN,             generic_attr_copy },
+        { CKA_MODULUS,           generic_attr_copy },
+        { CKA_PRIVATE,           generic_attr_copy },
+        { CKA_KEY_TYPE,          generic_attr_copy },
+        { CKA_ID,                generic_attr_copy },
+        { CKA_LABEL,             generic_attr_copy },
+        { CKA_VERIFY,            generic_attr_copy },
+        { CKA_ENCRYPT,           generic_attr_copy },
+        { CKA_DECRYPT,           generic_attr_copy },
+        { CKA_SIGN,              generic_attr_copy },
+        { CKA_MODULUS_BITS,      generic_attr_copy },
+        { CKA_PUBLIC_EXPONENT,   generic_attr_copy },
+        { CKA_SENSITIVE,         generic_attr_copy },
+        { CKA_ALWAYS_SENSITIVE,  generic_attr_copy },
+        { CKA_EXTRACTABLE,       generic_attr_copy },
+        { CKA_NEVER_EXTRACTABLE, generic_attr_copy },
+    };
+
+    return utils_handle_attrs(deep_copy_attr_handlers, ARRAY_LEN(deep_copy_attr_handlers), attrs, attr_count, copy);
+}
+
+CK_RV utils_handle_attrs(const attr_handler *handlers, size_t handler_count, CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_count, void *udata) {
+
+    CK_ULONG i;
+    for (i=0; i < attr_count; i++) {
+        CK_ATTRIBUTE_PTR a = &attrs[i];
+
+        size_t k = 0;
+        bool handled = false;
+        for (k=0; k < handler_count; k++) {
+            const attr_handler *h = &handlers[k];
+            if (a->type == h->value) {
+                if (h->handler) {
+                    CK_RV tmp = h->handler(a, i, udata);
+                    if (tmp != CKR_OK) {
+                        return tmp;
+                    }
+                }
+                handled = true;
+                break;
+            }
+        }
+
+        if (!handled) {
+            LOGE("Attribute 0x%x not handled", a->type);
+            return CKR_ATTRIBUTE_TYPE_INVALID;
+        }
+    }
+
+    return CKR_OK;
+}
+
+CK_RV generic_mech_copy(CK_MECHANISM_PTR in, CK_ULONG count, void *udata) {
+    CK_MECHANISM_PTR out = &((CK_MECHANISM_PTR)udata)[count];
+
+
+    void *newval = NULL;
+
+    if (in->pParameter) {
+        newval = calloc(1, in->ulParameterLen);
+        if (!newval) {
+            return CKR_HOST_MEMORY;
+        }
+        memcpy(newval, in->pParameter, in->ulParameterLen);
+    }
+
+    out->ulParameterLen = in->ulParameterLen;
+    out->mechanism = in->mechanism;
+    out->pParameter = newval;
+
+    return CKR_OK;
+}
+
+static CK_RV generic_attr_free(CK_ATTRIBUTE_PTR in, CK_ULONG count, void *udata) {
+    UNUSED(count);
+    UNUSED(udata);
+
+    free(in->pValue);
+
+    return CKR_OK;
+}
+
+CK_RV utils_attr_free(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_count) {
+
+    static const attr_handler free_attr_handlers[] = {
+        { CKA_CLASS,             generic_attr_free },
+        { CKA_TOKEN,             generic_attr_free },
+        { CKA_MODULUS,           generic_attr_free },
+        { CKA_PRIVATE,           generic_attr_free },
+        { CKA_KEY_TYPE,          generic_attr_free },
+        { CKA_ID,                generic_attr_free },
+        { CKA_LABEL,             generic_attr_free },
+        { CKA_VERIFY,            generic_attr_free },
+        { CKA_ENCRYPT,           generic_attr_free },
+        { CKA_DECRYPT,           generic_attr_free },
+        { CKA_SIGN,              generic_attr_free },
+        { CKA_MODULUS_BITS,      generic_attr_free },
+        { CKA_PUBLIC_EXPONENT,   generic_attr_free },
+        { CKA_SENSITIVE,         generic_attr_free },
+        { CKA_EXTRACTABLE,       generic_attr_free },
+        { CKA_ALWAYS_SENSITIVE,  generic_attr_free },
+        { CKA_NEVER_EXTRACTABLE, generic_attr_free },
+        { CKA_VALUE_BITS,        generic_attr_free },
+        { CKA_VALUE_LEN,         generic_attr_free },
+    };
+
+    return utils_handle_attrs(free_attr_handlers, ARRAY_LEN(free_attr_handlers), attrs, attr_count, NULL);
+}
+
+CK_RV utils_handle_mechs(const mech_handler *handlers, size_t handler_count, CK_MECHANISM_PTR mechs, CK_ULONG mech_count, void *udata) {
+
+    CK_ULONG i;
+    for (i=0; i < mech_count; i++) {
+        CK_MECHANISM_PTR m = &mechs[i];
+
+        size_t k = 0;
+        bool handled = false;
+        for (k=0; k < handler_count; k++) {
+            const mech_handler *h = &handlers[k];
+            if (m->mechanism == h->mechanism) {
+                if (h->handler) {
+                    CK_RV tmp = h->handler(m, i, udata);
+                    if (tmp != CKR_OK) {
+                        return tmp;
+                    }
+                }
+                handled = true;
+                break;
+            }
+        }
+
+        if (!handled) {
+            return CKR_MECHANISM_INVALID;
+        }
+    }
+
+    return CKR_OK;
+}
+
+CK_RV utils_mech_deep_copy(CK_MECHANISM_PTR mechs, CK_ULONG mech_count, CK_MECHANISM_PTR copy) {
+
+    static const mech_handler mech_deep_copy_handlers[] = {
+        { CKM_RSA_X_509,     generic_mech_copy },
+        { CKM_RSA_PKCS_OAEP, generic_mech_copy },
+    };
+
+    return utils_handle_mechs(mech_deep_copy_handlers, ARRAY_LEN(mech_deep_copy_handlers), mechs, mech_count, copy);
+}
+
+static CK_RV generic_mech_free(CK_MECHANISM_PTR in, CK_ULONG count, void *udata) {
+    UNUSED(count);
+    UNUSED(udata);
+
+    free(in->pParameter);
+
+    return CKR_OK;
+}
+
+CK_RV utils_mech_free(CK_MECHANISM_PTR mechs, CK_ULONG mech_count, CK_MECHANISM_PTR copy) {
+
+    static const mech_handler mech_free_handlers[] = {
+        { CKM_RSA_X_509,     generic_mech_free },
+        { CKM_RSA_PKCS_OAEP, generic_mech_free },
+    };
+
+    return utils_handle_mechs(mech_free_handlers, ARRAY_LEN(mech_free_handlers), mechs, mech_count, copy);
 }

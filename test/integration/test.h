@@ -127,4 +127,16 @@ static inline void so_login_bad_pin(CK_SESSION_HANDLE handle) {
     login_expects(handle, CKU_SO, CKR_PIN_INCORRECT, sopin, sizeof(sopin) - 1);
 }
 
+#define GENERIC_ATTR_TYPE_CONVERT(T) \
+    static CK_RV generic_##T(CK_ATTRIBUTE_PTR attr, T *x) { \
+    \
+        if (attr->ulValueLen != sizeof(*x)) { \
+            return CKR_ATTRIBUTE_VALUE_INVALID; \
+        } \
+    \
+        *x = *(T *)attr->pValue; \
+    \
+        return CKR_OK; \
+    }
+
 #endif /* TEST_INTEGRATION_TEST_H_ */

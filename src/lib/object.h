@@ -31,6 +31,7 @@ struct sobject {
     twist pub;
     twist priv;
     twist objauth;
+    twist authraw;
 };
 
 typedef struct tobject tobject;
@@ -88,7 +89,16 @@ struct wrappingobject {
     twist objauth;
 };
 
+tobject *tobject_new(void);
+
+void tobject_set_blob_data(tobject *tobj, twist pub, twist priv);
+void tobject_set_auth(tobject *tobj, twist authbin, twist wrappedauthhex);
+void tobject_set_handle(tobject *tobj, uint32_t handle);
+CK_RV tobject_append_attrs(tobject *tobj, CK_ATTRIBUTE_PTR attrs, CK_ULONG count);
+CK_RV tobject_append_mechs(tobject *tobj, CK_MECHANISM_PTR mech, CK_ULONG count);
+void tobject_set_id(tobject *tobj, unsigned id);
 void tobject_free(tobject *tobj);
+
 void sobject_free(sobject *sobj);
 
 void wrappingobject_free(wrappingobject *wobj);
@@ -111,7 +121,9 @@ CK_RV object_get_attributes(token *tok, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *t
  * @return
  *  A pointer to the attribute or NULL if nothing found.
  */
-CK_ATTRIBUTE_PTR object_get_attribute(tobject *tobj, CK_ATTRIBUTE_TYPE atype);
+CK_ATTRIBUTE_PTR object_get_attribute_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE atype);
+
+CK_ATTRIBUTE_PTR object_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR attr);
 
 CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech);
 

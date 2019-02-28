@@ -42,4 +42,6 @@ CK_RV db_update_for_pinchange(
         twist newprivblob,
         twist newpubblob);
 
+CK_RV db_add_new_object(token *tok, tobject *tobj);
+
 #endif /* SRC_PKCS11_LIB_DB_H_ */
