@@ -698,12 +698,6 @@ RSA *template_to_rsa_pub_key(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_len) {
 #endif
 
     return ssl_rsa_key;
-
-    BN_free(n);
-    BN_free(e);
-    RSA_free(ssl_rsa_key);
-
-    return NULL;
 }
 
 static void verify(RSA *pub, CK_BYTE_PTR msg, CK_ULONG msg_len, CK_BYTE_PTR sig, CK_ULONG sig_len) {
