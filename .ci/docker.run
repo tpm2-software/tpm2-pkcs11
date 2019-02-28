@@ -61,7 +61,7 @@ fi
 # Do a make distcheck in the root, clear it and than
 # cd to the variant directory.
 if [ "$CC" == "gcc" ]; then
-    ./configure
+    ./configure --enable-esapi-session-manage-flags
     make distcheck
     make distclean
 fi
@@ -80,7 +80,7 @@ if [[ "$CC" == gcc* ]]; then
     # rebuild after running scan-build.
 fi
 
-../configure --enable-unit --enable-integration $config_flags
+../configure --enable-unit --enable-integration --enable-esapi-session-manage-flags $config_flags
 make -j$(nproc)
 make -j$(nproc) check
 

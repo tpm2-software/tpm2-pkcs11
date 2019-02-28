@@ -19,6 +19,7 @@
 #include <tss2/tss2_esys.h>
 #include <openssl/sha.h>
 
+#include "config.h"
 #include "pkcs11.h"
 #include "log.h"
 #include "mutex.h"
@@ -28,6 +29,7 @@
 struct tpm_ctx {
     TSS2_TCTI_CONTEXT *tcti_ctx;
     ESYS_CONTEXT *esys_ctx;
+    bool esapi_manage_session_flags;
     ESYS_TR hmac_session;
     TPMA_SESSION old_flags;
     TPMA_SESSION original_flags;
@@ -157,27 +159,40 @@ static ESYS_CONTEXT* esys_ctx_init(TSS2_TCTI_CONTEXT *tcti_ctx) {
 
 static void flags_turndown(tpm_ctx *ctx, TPMA_SESSION flags) {
 
-    UNUSED(ctx);
-    UNUSED(flags);
+    if (ctx->esapi_manage_session_flags) {
+        return;
+    }
 
     TSS2_RC rc = Esys_TRSess_GetAttributes(ctx->esys_ctx, ctx->hmac_session, &ctx->old_flags);
     assert(rc == TPM2_RC_SUCCESS);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGW("Esys_TRSess_SetAttributes: 0x%x", rc);
+        return;
+    }
 
     assert(ctx->old_flags == ctx->original_flags);
 
     TPMA_SESSION new_flags = (ctx->old_flags & (~flags));
     rc = Esys_TRSess_SetAttributes(ctx->esys_ctx, ctx->hmac_session, new_flags, 0xff);
-    assert(rc == TPM2_RC_SUCCESS);
+    assert(rc == TSS2_RC_SUCCESS);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGW("Esys_TRSess_SetAttributes: 0x%x", rc);
+    }
 }
 
 static void flags_restore(tpm_ctx *ctx) {
 
-    UNUSED(ctx);
+    if (ctx->esapi_manage_session_flags) {
+        return;
+    }
 
     assert(ctx->old_flags == ctx->original_flags);
 
     TSS2_RC rc = Esys_TRSess_SetAttributes(ctx->esys_ctx, ctx->hmac_session, ctx->old_flags, 0xff);
-    assert(rc == TPM2_RC_SUCCESS);
+    assert(rc == TSS2_RC_SUCCESS);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGW("Esys_TRSess_SetAttributes: 0x%x", rc);
+    }
 }
 
 void tpm_ctx_free(tpm_ctx *ctx) {
@@ -283,6 +298,9 @@ CK_RV tpm_session_stop(tpm_ctx *ctx) {
     return CKR_OK;
 }
 
+#ifndef ESAPI_MANAGE_FLAGS
+#define ESAPI_MANAGE_FLAGS 0
+#endif
 
 CK_RV tpm_ctx_new(tpm_ctx **tctx) {
 
@@ -307,6 +325,13 @@ CK_RV tpm_ctx_new(tpm_ctx **tctx) {
     /* populate */
     t->esys_ctx = esys;
     t->tcti_ctx = tcti;
+
+    /*
+     * allow TPM2_PKCS11_ESAPI_MANAGE_FLAGS to override the configure time default on whether or
+     * not ESAPI should manage the flags ot if the TPM code should do it.
+     */
+    const char *c = getenv("TPM2_PKCS11_ESAPI_MANAGE_FLAGS");
+    t->esapi_manage_session_flags = c ? true : !!ESAPI_MANAGE_FLAGS;
 
     /* assign back (return via pointer) */
     *tctx = t;

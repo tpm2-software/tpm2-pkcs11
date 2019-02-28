@@ -4,6 +4,10 @@
    the dlclose() and works around that bug */
 #undef DISABLE_DLCLOSE
 
+/* ESAPI versions below 2.2.1 are known to require manual session flag
+   management. */
+#undef ESAPI_MANAGE_FLAGS
+
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
 
