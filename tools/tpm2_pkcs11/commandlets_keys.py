@@ -30,7 +30,7 @@ class NewKeyCommandBase(Command):
         group_parser.add_argument(
             '--id',
             help='The key id. Defaults to a random 8 bytes of hex.\n',
-            default=binascii.hexlify(os.urandom(8)))
+            default=binascii.hexlify(os.urandom(8)).decode())
         pinopts = group_parser.add_mutually_exclusive_group(required=True)
         pinopts.add_argument('--sopin', help='The Administrator pin.\n'),
         pinopts.add_argument('--userpin', help='The User pin.\n'),
@@ -97,9 +97,6 @@ class NewKeyCommandBase(Command):
                     CKA_CLASS: CKO_PUBLIC_KEY
                 },
                 {
-                    CKA_ID: tid
-                },
-                {
                     CKA_MODULUS: y['rsa']
                 },
                 {
@@ -126,9 +123,6 @@ class NewKeyCommandBase(Command):
                 {
                     CKA_CLASS: CKO_PUBLIC_KEY
                 },
-                {
-                    CKA_ID: tid
-                },
             ]
 
             mech = [{CKM_ECDSA: ""},]
@@ -147,9 +141,18 @@ class NewKeyCommandBase(Command):
         else:
             sys.exit('Cannot handle algorithm: "{}"'.format(alg))
 
+        # add the id
+        attrs.append({CKA_ID: binascii.hexlify(tid.encode()).decode()})
+
+        attrs.append({CKA_TOKEN: True })
+        attrs.append({CKA_SENSITIVE: True })
+        attrs.append({CKA_ALWAYS_SENSITIVE: True })
+        attrs.append({CKA_EXTRACTABLE: False })
+        attrs.append({CKA_NEVER_EXTRACTABLE: True })
+
         # Add keylabel for ALL objects if set
         if keylabel is not None:
-            attrs.append({CKA_LABEL: keylabel})
+            attrs.append({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
 
         # Now get the secondary object from db
         sobj = db.getsecondary(token['id'])
@@ -168,7 +171,7 @@ class NewKeyCommandBase(Command):
         #   - https://stackoverflow.com/questions/107005/predict-next-auto-inserted-row-tid-sqlite
         if keylabel is None:
             keylabel = str(rowid)
-            attrs.append({CKA_LABEL: keylabel})
+            attrs.append({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
             db.updatetertiaryattrs(rowid, attrs)
 
         db.commit()

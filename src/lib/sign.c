@@ -242,7 +242,7 @@ static CK_RV pkcs1_5_build_struct(CK_MECHANISM_TYPE mech,
 
 static CK_RV apply_pkcs_1_5_pad(tobject *tobj, char *built, size_t built_len, char **padded, size_t *padded_len) {
 
-    CK_ATTRIBUTE_PTR a = object_get_attribute(tobj, CKA_MODULUS);
+    CK_ATTRIBUTE_PTR a = object_get_attribute_by_type(tobj, CKA_MODULUS);
     if (!a) {
         LOGE("Signing key has no modulus");
         return CKR_GENERAL_ERROR;

@@ -9,6 +9,7 @@
 #include "pkcs11.h"
 #include "session_ctx.h"
 #include "token.h"
+#include "utils.h"
 
 typedef struct tobject_match_list tobject_match_list;
 struct tobject_match_list {
@@ -30,13 +31,8 @@ void tobject_free(tobject *tobj) {
     twist_free(tobj->unsealed_auth);
 
     CK_ULONG i = 0;
-    for (i=0; i < tobj->atributes.count; i++) {
-        CK_ATTRIBUTE_PTR a = &tobj->atributes.attrs[i];
-        if (a->pValue) {
-            free(a->pValue);
-        }
-    }
-
+    CK_RV rv = utils_attr_free(tobj->atributes.attrs, tobj->atributes.count);
+    assert(rv == CKR_OK);
     free(tobj->atributes.attrs);
 
     for (i=0; i < tobj->mechanisms.count; i++) {
@@ -55,6 +51,7 @@ void sobject_free(sobject *sobj) {
     twist_free(sobj->priv);
     twist_free(sobj->pub);
     twist_free(sobj->objauth);
+    twist_free(sobj->authraw);
 }
 
 void wrappingobject_free(wrappingobject *wobj) {
@@ -356,7 +353,7 @@ static tobject *find_object_by_id(CK_OBJECT_HANDLE handle, token *tok) {
     return NULL;
 }
 
-CK_ATTRIBUTE_PTR object_get_attribute(tobject *tobj, CK_ATTRIBUTE_TYPE atype) {
+CK_ATTRIBUTE_PTR object_get_attribute_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE atype) {
 
     CK_ULONG i;
     for (i=0; i < tobj->atributes.count; i++) {
@@ -364,6 +361,28 @@ CK_ATTRIBUTE_PTR object_get_attribute(tobject *tobj, CK_ATTRIBUTE_TYPE atype) {
         CK_ATTRIBUTE_PTR a = &tobj->atributes.attrs[i];
 
         if (a->type == atype) {
+            return a;
+        }
+    }
+
+    return NULL;
+}
+
+CK_ATTRIBUTE_PTR object_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR attr) {
+
+    CK_ULONG i;
+    for (i=0; i < tobj->atributes.count; i++) {
+
+        CK_ATTRIBUTE_PTR a = &tobj->atributes.attrs[i];
+
+        if (a->type == attr->type
+         && a->ulValueLen == attr->ulValueLen) {
+            if (a->ulValueLen > 0
+             && memcmp(a->pValue, attr->pValue, attr->ulValueLen)) {
+                /* length is greater then 0 and don't match, keep looking */
+                continue;
+            }
+            /* length is both 0 OR length > 0 and matched on memcmp */
             return a;
         }
     }
@@ -389,7 +408,7 @@ CK_RV object_get_attributes(token *tok, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *t
 
         CK_ATTRIBUTE_PTR t = &templ[i];
 
-        CK_ATTRIBUTE_PTR found = object_get_attribute(tobj, t->type);
+        CK_ATTRIBUTE_PTR found = object_get_attribute_by_type(tobj, t->type);
         if (found) {
             if (!t->pValue) {
                 /* only populate size if the buffer is null */
@@ -412,4 +431,90 @@ CK_RV object_get_attributes(token *tok, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *t
     }
 
     return CKR_OK;
+}
+
+tobject *tobject_new(void) {
+
+    tobject *tobj = calloc(1, sizeof(tobject));
+    if (!tobj) {
+        LOGE("oom");
+        return NULL;
+    }
+
+    return tobj;
+}
+
+void tobject_set_blob_data(tobject *tobj, twist pub, twist priv) {
+    assert(priv);
+    assert(pub);
+
+    tobj->priv = priv;
+    tobj->pub = pub;
+}
+
+void tobject_set_auth(tobject *tobj, twist authbin, twist wrappedauthhex) {
+    assert(tobj);
+    assert(authbin);
+    assert(wrappedauthhex);
+
+    tobj->unsealed_auth = authbin;
+    tobj->objauth = wrappedauthhex;
+}
+
+void tobject_set_handle(tobject *tobj, uint32_t handle) {
+    assert(tobj);
+
+    tobj->handle = handle;
+}
+
+CK_RV tobject_append_attrs(tobject *tobj, CK_ATTRIBUTE_PTR attrs, CK_ULONG count) {
+    assert(tobj);
+    assert(attrs);
+
+    if (!attrs->ulValueLen) {
+        return CKR_OK;
+    }
+
+    size_t offset = tobj->atributes.count;
+    size_t newlen = (tobj->atributes.count + count);
+    size_t newbytes = sizeof(*tobj->atributes.attrs) * newlen;
+    void *newattrs = realloc(tobj->atributes.attrs, newbytes);
+    if (!newattrs) {
+        return CKR_HOST_MEMORY;
+    }
+
+    tobj->atributes.count = newlen;
+    tobj->atributes.attrs = newattrs;
+
+    /* clear out the newly allocated memory */
+    memset(&tobj->atributes.attrs[offset], 0, count * sizeof(*tobj->atributes.attrs));
+
+    return utils_attr_deep_copy(attrs, count, &tobj->atributes.attrs[offset]);
+}
+
+void tobject_set_id(tobject *tobj, unsigned id) {
+    assert(tobj);
+    tobj->id = id;
+}
+
+CK_RV tobject_append_mechs(tobject *tobj, CK_MECHANISM_PTR mech, CK_ULONG count) {
+    assert(tobj);
+
+    size_t offset = tobj->mechanisms.count;
+    size_t newcnt = tobj->mechanisms.count + count;
+    size_t newbytes = sizeof(*tobj->mechanisms.mech) * newcnt;
+
+    void *newmechs = realloc(tobj->mechanisms.mech, newbytes);
+    if (!newmechs) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    tobj->mechanisms.count = newcnt;
+    tobj->mechanisms.mech = newmechs;
+
+    /* clear out the newly allocated memory */
+    memset(&tobj->mechanisms.mech[offset], 0, count * sizeof(*tobj->mechanisms.mech));
+
+    return utils_mech_deep_copy(mech, count, &tobj->mechanisms.mech[offset]);
 }

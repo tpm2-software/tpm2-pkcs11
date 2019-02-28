@@ -183,6 +183,10 @@ CK_RV token_logout(token *tok) {
     UNUSED(result);
     sobj->handle = 0;
 
+    // evict the secondary object raw auth value
+    twist_free(sobj->authraw);
+    sobj->authraw = NULL;
+
     // Kill primary object auth data
     pobject *pobj = &tok->pobject;
     twist_free(pobj->objauth);
@@ -316,6 +320,17 @@ CK_RV token_login(token *tok, twist pin, CK_USER_TYPE user) {
     }
 
     /*
+     * Decrypt the secondary object auth value with either
+     * the TPM wrapping key, or in the case of lack of TPM
+     * support use Software.
+     */
+    rv = utils_ctx_unwrap_objauth(tok, sobj->objauth, &sobj->authraw);
+    if (rv != CKR_OK) {
+        LOGE("Error unwrapping secondary object auth");
+        return rv;
+    }
+
+    /*
      * Indicate that the token has been logged in
      */
     tok->login_state = user == CKU_USER ? token_user_logged_in : token_so_logged_in;
@@ -374,9 +389,6 @@ void token_unlock(token *t) {
     mutex_unlock_fatal(t->mutex);
 }
 
-#define ITERS 10000
-#define SALT_SIZE 32
-
 static CK_RV setup_new_pobjwrapping_data(pobject *pobj, twist newpin, twist *newkeysalthex, twist *newpobjauthhex) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -426,52 +438,6 @@ out:
     twist_free(newpobjkeybin);
     twist_free(newkeysaltbin);
     twist_free(oldpobjauthhex);
-
-    return rv;
-}
-
-static CK_RV setup_new_object_auth(twist newpin, twist *newauthbin, twist *newauthhex, twist *newsalthex) {
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    twist newsaltbin = NULL;
-
-    newsaltbin = utils_get_rand(SALT_SIZE);
-    if (!newsaltbin) {
-        goto out;
-    }
-
-    *newsalthex = twist_hexlify(newsaltbin);
-    if (!*newsalthex) {
-        rv = CKR_HOST_MEMORY;
-        goto out;
-    }
-
-    *newauthbin = utils_pdkdf2_hmac_sha256_bin_raw(newpin, newsaltbin, ITERS);
-    if (!newauthbin) {
-        goto out;
-    }
-
-    *newauthhex = twist_hexlify(*newauthbin);
-    if (!*newauthhex) {
-        rv = CKR_HOST_MEMORY;
-        goto out;
-    }
-
-    rv = CKR_OK;
-
-out:
-
-    if (rv != CKR_OK) {
-        twist_free(*newauthhex);
-        twist_free(*newsalthex);
-        twist_free(*newauthbin);
-        *newsalthex = NULL;
-        *newauthhex = NULL;
-        *newauthbin = NULL;
-    }
-
-    twist_free(newsaltbin);
 
     return rv;
 }
@@ -580,7 +546,7 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
      *  - (so|user)authsalt  --> newsalt
      *  - (so|user)authiters --> ITERS
      */
-    rv = setup_new_object_auth(tnewpin, &newauthbin, &newauthhex, &newsalthex);
+    rv = utils_setup_new_object_auth(tnewpin, &newauthbin, &newauthhex, &newsalthex);
     if (rv != CKR_OK) {
         goto out;
     }
@@ -706,7 +672,7 @@ CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
     }
 
     /* generate a new auth */
-    rv = setup_new_object_auth(tnewpin, &newauthbin, &newauthhex, &newsalthex);
+    rv = utils_setup_new_object_auth(tnewpin, &newauthbin, &newauthhex, &newsalthex);
     if (rv != CKR_OK) {
         goto out;
     }

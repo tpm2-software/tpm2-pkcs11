@@ -199,7 +199,55 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
     a->type = type;
 
     switch(a->type) {
+    /* CK_BBOOLs */
+    case CKA_SENSITIVE:
+        /* falls-thru */
+    case CKA_ALWAYS_SENSITIVE:
+        /* falls-thru */
+    case CKA_EXTRACTABLE:
+        /* falls-thru */
+    case CKA_NEVER_EXTRACTABLE:
+        /* falls-thru */
+    case CKA_VERIFY:
+        /* falls-thru */
+    case CKA_SIGN:
+        /* falls-thru */
+    case CKA_ENCRYPT:
+        /* falls-thru */
+    case CKA_DECRYPT:
+        /* falls-thru */
+    case CKA_TOKEN:
+        /* falls-thru */
+    case CKA_PRIVATE: {
+        bool is_true = !strcasecmp(value, "true");
+        bool is_false = !strcasecmp(value, "false");
+        if (!is_true && !is_false) {
+            /* not true or fAlse, try and coerce an int value */
+            size_t type;
+            int rc = str_to_ul(value, &type);
+            if (rc || (type != CK_TRUE && type != CK_FALSE)) {
+                LOGE("Could not convert CK_BBOOL for key \"%s\" value: \"%s\"",
+                        key, value);
+                return false;
+            }
+
+            is_true = type == CK_TRUE;
+        }
+
+        a->pValue = calloc(1, sizeof(CK_BBOOL));
+        if (!a->pValue) {
+            LOGE("oom");
+            return false;
+        }
+
+        a->ulValueLen = sizeof(CK_BBOOL);
+        *((CK_BBOOL *)a->pValue) = is_true ? CK_TRUE : CK_FALSE;
+
+    } break;
+
     /* native endianess CK_ULONGs */
+    case CKA_MODULUS_BITS:
+        /* falls through */
     case CKA_KEY_TYPE:
         /* falls through */
     case CKA_VALUE_LEN:
@@ -252,25 +300,26 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
         return bn2bin(bn, a);
     } break;
 
-    /* strings */
-    case CKA_ID: {
-
-        a->ulValueLen = strlen(value);
-        a->pValue = strdup(value);
-        if (!a->pValue) {
-            LOGE("oom");
-            return false;
-        }
-    } break;
-
+    /* hex-strings */
+    case CKA_ID:
+        /* falls-thru */
     case CKA_LABEL: {
 
-        a->ulValueLen = strlen(value);
-        a->pValue = strdup(value);
-        if (!a->pValue) {
+        twist t = twistbin_unhexlify(value);
+        CK_ULONG len = twist_len(t);
+
+        CK_BYTE_PTR label = calloc(1, len);
+        if (!label) {
+            twist_free(t);
             LOGE("oom");
             return false;
         }
+
+        memcpy(label, t, len);
+        twist_free(t);
+
+        a->ulValueLen = len;
+        a->pValue = label;
     } break;
     default:
         LOGE("Unknown key, got: \"%s\"", key);
@@ -491,9 +540,9 @@ out:
     return rv;
 }
 
-tobject *tobject_new(sqlite3_stmt *stmt) {
+tobject *db_tobject_new(sqlite3_stmt *stmt) {
 
-    tobject *tobj = calloc(1, sizeof(tobject));
+    tobject *tobj = tobject_new();
     if (!tobj) {
         LOGE("oom");
         return NULL;
@@ -574,7 +623,7 @@ int init_tobjects(unsigned sid, tobject **head) {
     list *cur = NULL;
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 
-        tobject *t = tobject_new(stmt);
+        tobject *t = db_tobject_new(stmt);
         if (!t) {
             goto error;
         }
@@ -1178,6 +1227,366 @@ error:
 
     rollback();
     return CKR_GENERAL_ERROR;
+}
+
+CK_RV generic_mech_type_handler(CK_MECHANISM_PTR mech, CK_ULONG index, void *userdat) {
+    UNUSED(index);
+    assert(userdat);
+
+    twist *t = (twist *)(userdat);
+
+    char tmp[128];
+    snprintf(tmp, sizeof(tmp), "%lu=\n", mech->mechanism);
+
+    twist x = twist_append(*t, tmp);
+    if (!x) {
+        return CKR_HOST_MEMORY;
+    }
+
+    *t = x;
+
+    return CKR_OK;
+}
+
+CK_RV oaep_mech_type_handler(CK_MECHANISM_PTR mech, CK_ULONG index, void *userdat) {
+    UNUSED(index);
+    assert(userdat);
+    assert(mech->pParameter);
+    assert(mech->ulParameterLen);
+
+    twist *t = (twist *)(userdat);
+
+    CK_RSA_PKCS_OAEP_PARAMS_PTR p = mech->pParameter;
+
+    /* 9=hashalg=592,mgf=2 */
+    char tmp[256];
+    snprintf(tmp, sizeof(tmp), "%lu=hashalg=%lu,mgf=%lu\n",
+            mech->mechanism, p->hashAlg, p->mgf);
+
+    twist x = twist_append(*t, tmp);
+    if (!x) {
+        return CKR_HOST_MEMORY;
+    }
+
+    *t = x;
+
+    return CKR_OK;
+}
+
+twist mech_to_kvp(CK_MECHANISM_PTR mechs, CK_ULONG count) {
+
+    static const mech_handler mech_to_kvp_handlers[] = {
+            { CKM_RSA_X_509,     generic_mech_type_handler },
+            { CKM_RSA_PKCS_OAEP, oaep_mech_type_handler    }
+    };
+
+    twist mech_kvp = NULL;
+
+    CK_RV rv = utils_handle_mechs(mech_to_kvp_handlers, ARRAY_LEN(mech_to_kvp_handlers), mechs, count, &mech_kvp);
+    if (rv != CKR_OK) {
+        twist_free(mech_kvp);
+        return NULL;
+    }
+
+    return mech_kvp;
+}
+
+static CK_RV attr_generic_bool_handler(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *userdat) {
+    UNUSED(index);
+    assert(userdat);
+
+    twist *t = (twist *)(userdat);
+
+    CK_BBOOL value;
+    if (attr->ulValueLen != sizeof(value)) {
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    value = *((CK_BBOOL *)attr->pValue);
+    if (value != CK_TRUE && value != CK_FALSE) {
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    char tmp[128];
+    int bytes = snprintf(tmp, sizeof(tmp), "%lu=%u\n", attr->type, value);
+    if (bytes < 0 || (size_t)bytes >= sizeof(tmp)) {
+        LOGE("snprintf concat, needed: %d had %zu", bytes, sizeof(tmp));
+        return CKR_GENERAL_ERROR;
+    }
+
+    twist x = twist_append(*t, tmp);
+    if (!x) {
+        return CKR_HOST_MEMORY;
+    }
+
+    *t = x;
+
+    return CKR_OK;
+}
+
+static CK_RV attr_generic_unsigned_handler(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *userdat) {
+    UNUSED(index);
+    assert(userdat);
+
+    twist *t = (twist *)(userdat);
+
+    CK_ULONG value;
+    if (attr->ulValueLen != sizeof(value)) {
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    value = *((CK_ULONG_PTR)attr->pValue);
+
+    char tmp[128];
+    int bytes = snprintf(tmp, sizeof(tmp), "%lu=%lu\n", attr->type, value);
+    if (bytes < 0 || (size_t)bytes >= sizeof(tmp)) {
+        LOGE("snprintf concat, needed: %d had %zu", bytes, sizeof(tmp));
+        return CKR_GENERAL_ERROR;
+    }
+
+    twist x = twist_append(*t, tmp);
+    if (!x) {
+        return CKR_HOST_MEMORY;
+    }
+
+    *t = x;
+
+    return CKR_OK;
+}
+
+static CK_RV attr_bn10_handler(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *userdat) {
+    UNUSED(index);
+    assert(userdat);
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    char *dec_bn = NULL;
+    BIGNUM *bn = NULL;
+
+    twist *t = (twist *)(userdat);
+
+    bn = BN_bin2bn(attr->pValue, attr->ulValueLen, NULL);
+    if (!bn) {
+       LOGE("oom");
+       return CKR_HOST_MEMORY;
+    }
+
+    dec_bn = BN_bn2dec(bn);
+    if (!dec_bn) {
+        LOGE("Error converting BN to decimal string");
+        goto out;
+    }
+
+    char tmp[128];
+    int bytes = snprintf(tmp, sizeof(tmp), "%lu=%s\n", attr->type, dec_bn);
+    if (bytes < 0 || (size_t)bytes >= sizeof(tmp)) {
+        LOGE("snprintf concat, needed: %d had %zu", bytes, sizeof(tmp));
+        goto out;
+    }
+
+    twist x = twist_append(*t, tmp);
+    if (!x) {
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    *t = x;
+
+    rv = CKR_OK;
+
+out:
+    BN_free(bn);
+    OPENSSL_free(dec_bn);
+    return rv;
+}
+
+static CK_RV attr_generic_hex_handler(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *userdat) {
+    UNUSED(index);
+    assert(userdat);
+
+    twist hex = NULL;
+    char *formatted = NULL;
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    twist *t = (twist *)(userdat);
+
+    if (!attr->ulValueLen || !attr->pValue) {
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    hex = twist_hex_new(attr->pValue, attr->ulValueLen);
+    if (!hex) {
+        return CKR_HOST_MEMORY;
+    }
+
+    size_t len = twist_len(hex) + 32;
+    formatted = calloc(1, len);
+    if (!formatted) {
+        LOGE("oom");
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    int bytes = snprintf(formatted, len, "%lu=%s\n", attr->type, hex);
+    if (bytes < 0 || (size_t)bytes >= len) {
+        twist_free(hex);
+        LOGE("snprintf concat, needed: %d had %zu", bytes, len);
+        goto out;
+    }
+
+    twist x = twist_append(*t, formatted);
+    if (!x) {
+        LOGE("oom");
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    *t = x;
+
+    rv = CKR_OK;
+
+out:
+    twist_free(hex);
+    free(formatted);
+
+    return rv;
+}
+
+twist attr_to_kvp(CK_ATTRIBUTE_PTR attrs, CK_ULONG count) {
+
+    static const attr_handler attr_to_kvp_handlers[] = {
+        { CKA_CLASS,             attr_generic_unsigned_handler },
+        { CKA_TOKEN,             attr_generic_bool_handler     },
+        { CKA_PRIVATE,           attr_generic_bool_handler     },
+        { CKA_ID,                attr_generic_hex_handler      },
+        { CKA_KEY_TYPE,          attr_generic_unsigned_handler },
+        { CKA_LABEL,             attr_generic_hex_handler      },
+        { CKA_VERIFY,            attr_generic_bool_handler     },
+        { CKA_ENCRYPT,           attr_generic_bool_handler     },
+        { CKA_DECRYPT,           attr_generic_bool_handler     },
+        { CKA_SIGN,              attr_generic_bool_handler     },
+        { CKA_MODULUS,           attr_generic_hex_handler      },
+        { CKA_MODULUS_BITS,      attr_generic_unsigned_handler },
+        { CKA_PUBLIC_EXPONENT,   attr_bn10_handler             },
+        { CKA_SENSITIVE,         attr_generic_bool_handler     },
+        { CKA_EXTRACTABLE,       attr_generic_bool_handler     },
+        { CKA_ALWAYS_SENSITIVE,  attr_generic_bool_handler     },
+        { CKA_NEVER_EXTRACTABLE, attr_generic_bool_handler     },
+    };
+
+    twist attr_kvp = NULL;
+
+    CK_RV rv = utils_handle_attrs(attr_to_kvp_handlers, ARRAY_LEN(attr_to_kvp_handlers), attrs, count, &attr_kvp);
+    if (rv != CKR_OK) {
+        twist_free(attr_kvp);
+        return NULL;
+    }
+
+    return attr_kvp;
+}
+
+CK_RV db_add_new_object(token *tok, tobject *tobj) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    twist m = NULL;
+    twist a = NULL;
+    sqlite3_stmt *stmt = NULL;
+
+    m = mech_to_kvp(tobj->mechanisms.mech, tobj->mechanisms.count);
+    if (!m) {
+        goto error;
+    }
+
+    a = attr_to_kvp(tobj->atributes.attrs, tobj->atributes.count);
+    if (!a) {
+        goto error;
+    }
+
+    static const char *sql =
+      "INSERT INTO tobjects ("
+        "sid, "      // index: 1 type: INT
+        "pub, "      // index: 2 type: BLOB
+        "priv, "     // index: 3 type: BLOB
+        "objauth, "  // index: 4 type: TEXT
+        "attrs, "    // index: 5 type: TEXT
+        "mech"       // index: 6 type: TEXT
+      ") VALUES ("
+        "?,?,?,?,?,?"
+      ");";
+
+    int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("%s", sqlite3_errmsg(global.db));
+        goto error;
+    }
+
+    rc = start();
+    if (rc != SQLITE_OK) {
+        goto error;
+    }
+
+    rc = sqlite3_bind_int(stmt, 1, tok->sobject.id);
+    gotobinderror(rc, "sid");
+
+    rc = sqlite3_bind_blob(stmt, 2, tobj->pub, twist_len(tobj->pub), SQLITE_STATIC);
+    gotobinderror(rc, "pub");
+
+    rc = sqlite3_bind_blob(stmt, 3, tobj->priv, twist_len(tobj->priv), SQLITE_STATIC);
+    gotobinderror(rc, "priv");
+
+    rc = sqlite3_bind_text(stmt, 4, tobj->objauth, -1, SQLITE_STATIC);
+    gotobinderror(rc, "objauth");
+
+    rc = sqlite3_bind_text(stmt, 5, a, -1, SQLITE_STATIC);
+    gotobinderror(rc, "attrs");
+
+    rc = sqlite3_bind_text(stmt, 6, m, -1, SQLITE_STATIC);
+    gotobinderror(rc, "mech");
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        LOGE("step error: %s", sqlite3_errmsg(global.db));
+        goto error;
+    }
+
+    sqlite3_int64 id = sqlite3_last_insert_rowid(global.db);
+    if (id == 0) {
+        LOGE("Could not get id: %s", sqlite3_errmsg(global.db));
+        goto error;
+    }
+
+    if (id > UINT_MAX) {
+        LOGE("id is larger than unsigned int, got: %zu", id);
+        goto error;
+    }
+
+    tobject_set_id(tobj, (unsigned)id);
+
+    rc = sqlite3_finalize(stmt);
+    gotobinderror(rc, "finalize");
+
+    rc = commit();
+    gotobinderror(rc, "commit");
+
+    rv = CKR_OK;
+
+out:
+    twist_free(a);
+    twist_free(m);
+    return rv;
+
+error:
+    rc = sqlite3_finalize(stmt);
+    if (rc != SQLITE_OK) {
+        LOGW("Could not finalize stmt: %d", rc);
+    }
+
+    rollback();
+
+    rv = CKR_GENERAL_ERROR;
+    goto out;
 }
 
 

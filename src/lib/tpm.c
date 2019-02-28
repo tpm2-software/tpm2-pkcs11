@@ -3,6 +3,8 @@
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
  */
+/* config can control how other headers behave, include first */
+#include "config.h"
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -19,7 +21,6 @@
 #include <tss2/tss2_esys.h>
 #include <openssl/sha.h>
 
-#include "config.h"
 #include "pkcs11.h"
 #include "log.h"
 #include "mutex.h"
@@ -1840,6 +1841,449 @@ CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handl
 out:
     free(newpriv);
     free(newpub);
+
+    return rv;
+}
+
+typedef struct tpm_key_data tpm_key_data;
+struct tpm_key_data {
+    TPM2B_PUBLIC pub;
+    TPM2B_SENSITIVE_CREATE priv;
+};
+
+UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_BBOOL)
+UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_ULONG)
+
+static CK_RV generic_bbool_true(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+    UNUSED(udata);
+    UNUSED(index);
+
+    CK_BBOOL value;
+    CK_RV rv = generic_CK_BBOOL(attr, &value);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    if (value != CK_TRUE) {
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    return CKR_OK;
+}
+
+static CK_RV generic_bbool_any(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+    UNUSED(udata);
+    UNUSED(index);
+
+    CK_BBOOL value;
+    CK_RV rv = generic_CK_BBOOL(attr, &value);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    if (value != CK_TRUE && value != CK_FALSE) {
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    return CKR_OK;
+}
+
+static CK_RV handle_modulus(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+    UNUSED(index);
+
+    tpm_key_data *keydat = (tpm_key_data *)udata;
+
+    CK_ULONG value;
+    CK_RV rv = generic_CK_ULONG(attr, &value);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    // TODO get known bit sizes from TPM on init and check
+    if (value != 1024 && value != 2048) {
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    keydat->pub.publicArea.parameters.rsaDetail.keyBits = value;
+
+    return CKR_OK;
+}
+
+static CK_RV handle_encrypt(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+    UNUSED(index);
+
+    tpm_key_data *keydat = (tpm_key_data *)udata;
+
+    CK_BBOOL value;
+    CK_RV rv = generic_CK_BBOOL(attr, &value);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    if (value == CK_TRUE) {
+        keydat->pub.publicArea.objectAttributes |= TPMA_OBJECT_SIGN_ENCRYPT;
+    } else {
+        keydat->pub.publicArea.objectAttributes &= ~TPMA_OBJECT_SIGN_ENCRYPT;
+    }
+
+    return CKR_OK;
+}
+
+static CK_RV handle_decrypt(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+    UNUSED(index);
+
+    tpm_key_data *keydat = (tpm_key_data *)udata;
+
+    CK_BBOOL value;
+    CK_RV rv = generic_CK_BBOOL(attr, &value);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    if (value == CK_TRUE) {
+        keydat->pub.publicArea.objectAttributes |= TPMA_OBJECT_DECRYPT;
+    } else {
+        keydat->pub.publicArea.objectAttributes &= ~TPMA_OBJECT_DECRYPT;
+    }
+
+    return CKR_OK;
+}
+
+static CK_RV handle_exp(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+    UNUSED(index);
+
+    tpm_key_data *keydat = (tpm_key_data *)udata;
+
+    UINT32 *e = &keydat->pub.publicArea.parameters.rsaDetail.exponent;
+    if (attr->ulValueLen > sizeof(*e)) {
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    BIGNUM *bn = NULL;
+    bn = BN_bin2bn(attr->pValue, attr->ulValueLen, NULL);
+    if (!bn) {
+        return CKR_HOST_MEMORY;
+    }
+
+    BN_ULONG value = BN_get_word(bn);
+
+    *e = value;
+
+    BN_free(bn);
+
+    return CKR_OK;
+}
+
+static CK_RV handle_ckobject_class(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+    UNUSED(index);
+    UNUSED(udata);
+
+    CK_OBJECT_CLASS class = CKA_PRIVATE;
+
+    if (attr->ulValueLen != sizeof(class)) {
+        LOGE("Expected CK_OBJECT_CLASS length to be %zu got %lu", sizeof(class), attr->ulValueLen);
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    CK_OBJECT_CLASS_PTR class_ptr = (CK_OBJECT_CLASS_PTR)attr->pValue;
+
+    if (class != *class_ptr) {
+        LOGE("Expected CK_OBJECT_CLASS to be %lu got %lu", class, *class_ptr);
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    return CKR_OK;
+}
+
+static CK_RV handle_extractable_common(CK_ATTRIBUTE_PTR attr, bool is_extractable, void *udata) {
+
+    tpm_key_data *keydat = (tpm_key_data *)udata;
+
+    CK_BBOOL value;
+    CK_RV rv = generic_CK_BBOOL(attr, &value);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    if (value == is_extractable ? CK_TRUE : CK_FALSE) {
+        keydat->pub.publicArea.objectAttributes &= ~(TPMA_OBJECT_FIXEDTPM | TPMA_OBJECT_FIXEDPARENT);
+    } else {
+        keydat->pub.publicArea.objectAttributes |= (TPMA_OBJECT_FIXEDTPM | TPMA_OBJECT_FIXEDPARENT);
+    }
+
+    return CKR_OK;
+}
+
+static CK_RV handle_extractable(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+    UNUSED(index);
+
+    return handle_extractable_common(attr, true, udata);
+}
+
+static CK_RV handle_sensitive(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+    UNUSED(index);
+
+    return handle_extractable_common(attr, false, udata);
+}
+
+static const attr_handler tpm_handlers[] = {
+    { CKA_TOKEN,           generic_bbool_true    },
+    { CKA_PRIVATE,         generic_bbool_any     },
+    { CKA_ID,              ATTR_HANDLER_IGNORE   }, // ignore db metadata
+    { CKA_LABEL,           ATTR_HANDLER_IGNORE   }, // ignore db metadata
+    { CKA_VERIFY,          generic_bbool_true    },
+    { CKA_ENCRYPT,         handle_encrypt        },
+    { CKA_DECRYPT,         handle_decrypt        },
+    { CKA_SIGN,            handle_encrypt        }, // SIGN_ENCRYPT are same in TPM, depends on SCHEME
+    { CKA_MODULUS_BITS,    handle_modulus        },
+    { CKA_PUBLIC_EXPONENT, handle_exp            },
+    { CKA_SENSITIVE,       handle_sensitive     },
+    { CKA_CLASS,           handle_ckobject_class },
+    { CKA_EXTRACTABLE,     handle_extractable    },
+};
+
+static const TPM2B_PUBLIC rsa_template = {
+    .size = 0,
+    .publicArea = {
+        .type = TPM2_ALG_RSA,
+        .nameAlg = TPM2_ALG_SHA256,
+        .objectAttributes =
+                TPMA_OBJECT_FIXEDTPM
+              | TPMA_OBJECT_FIXEDPARENT
+              | TPMA_OBJECT_SENSITIVEDATAORIGIN
+              | TPMA_OBJECT_USERWITHAUTH
+              | TPMA_OBJECT_DECRYPT
+              | TPMA_OBJECT_SIGN_ENCRYPT,
+        .authPolicy = {
+             .size = 0,
+         },
+        .parameters.rsaDetail = {
+             .symmetric = {
+                 .algorithm = TPM2_ALG_NULL,
+             },
+             .scheme = {
+                  .scheme = TPM2_ALG_NULL
+              },
+             .keyBits = 2048,
+             .exponent = 0,
+         },
+        .unique.rsa = {
+             .size = 0,
+         },
+    },
+};
+
+static TSS2_RC create_loaded(
+        ESYS_CONTEXT *ectx,
+        ESYS_TR parent,
+        ESYS_TR session,
+        TPM2B_SENSITIVE_CREATE *in_sens,
+        TPM2B_PUBLIC *in_pub,
+
+        ESYS_TR *out_handle,
+        TPM2B_PUBLIC **out_pub,
+        TPM2B_PRIVATE **out_priv
+    ) {
+
+    size_t offset = 0;
+    TPM2B_TEMPLATE template = { .size = 0 };
+    TSS2_RC rval = Tss2_MU_TPMT_PUBLIC_Marshal(&in_pub->publicArea, &template.buffer[0],
+                                    sizeof(TPMT_PUBLIC), &offset);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Tss2_MU_TPMT_PUBLIC_Marshal: 0x%x", rval);
+        return false;
+    }
+
+    template.size = offset;
+
+    rval = Esys_CreateLoaded(
+            ectx,
+            parent,
+            session, ESYS_TR_NONE, ESYS_TR_NONE,
+            in_sens,
+            &template,
+            out_handle,
+            out_priv,
+            out_pub);
+    if(rval != TPM2_RC_SUCCESS) {
+        LOGE("Esys_CreateLoaded: 0x%x", rval);
+    }
+
+    return rval;
+}
+
+CK_RV tpm2_generate_key(
+        tpm_ctx *tpm,
+
+        uint32_t parent,
+        twist parentauth,
+
+        twist newauthbin,
+
+        CK_MECHANISM_PTR mechanism,
+
+        CK_ULONG pubcnt,
+        CK_ATTRIBUTE_PTR pubattrs,
+
+        CK_ULONG privcnt,
+        CK_ATTRIBUTE_PTR privattrs,
+
+        tpm_object_data *objdata) {
+
+    twist tmppub = NULL;
+    twist tmppriv = NULL;
+
+    TPM2B_PUBLIC *out_pub = NULL;
+    TPM2B_PRIVATE *out_priv = NULL;
+
+    ESYS_TR out_handle = 0;
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    assert(objdata);
+
+    if (mechanism->mechanism != CKM_RSA_PKCS_KEY_PAIR_GEN) {
+        LOGE("Only supports mechanism \"CKM_RSA_PKCS_KEY_PAIR_GEN\"");
+        rv = CKR_MECHANISM_INVALID;
+        goto out;
+    }
+
+    if (mechanism->ulParameterLen) {
+        LOGE("Only supports mechanism \"CKM_RSA_PKCS_KEY_PAIR_GEN\""
+                "with an empty parameter, got length: %lu",
+                mechanism->ulParameterLen);
+        rv = CKR_MECHANISM_PARAM_INVALID;
+        goto out;
+    }
+
+    if (mechanism->pParameter) {
+        LOGE("Only supports mechanism \"CKM_RSA_PKCS_KEY_PAIR_GEN\""
+                "with an empty parameter, got a parameter pointer");
+        rv = CKR_MECHANISM_PARAM_INVALID;
+        goto out;
+    }
+
+    CK_ATTRIBUTE_PTR attrs[2]      = {pubattrs, privattrs};
+    CK_ULONG cnt[ARRAY_LEN(attrs)] = {pubcnt,   privcnt};
+
+    tpm_key_data tpmdat = {
+        .priv = { 0 },
+        .pub  = rsa_template
+    };
+
+    /* populate tpmdat */
+    CK_ULONG i;
+    for (i=0; i < ARRAY_LEN(attrs); i++) {
+
+        CK_ULONG max = cnt[i];
+        CK_ATTRIBUTE_PTR cur = attrs[i];
+
+        rv = utils_handle_attrs(tpm_handlers, ARRAY_LEN(tpm_handlers), cur, max, &tpmdat);
+        if (rv != CKR_OK) {
+            LOGE("Could not process attributes");
+            goto out;
+        }
+    }
+
+
+    bool res = set_esys_auth(tpm->esys_ctx, parent, parentauth);
+    if (!res) {
+        rv = CKR_GENERAL_ERROR;
+        goto out;
+    }
+
+    /*
+     * Guaranteed to fit but throw an assert in just in case
+     * utils_setup_new_object_auth() changes.
+     */
+    TPM2B_AUTH *auth = &tpmdat.priv.sensitive.userAuth;
+    size_t len = twist_len(newauthbin);
+    assert(len < sizeof(auth->buffer));
+    auth->size = len;
+    memcpy(auth->buffer, newauthbin, auth->size);
+
+    TSS2_RC rc = create_loaded(
+            tpm->esys_ctx,
+            parent,
+            tpm->hmac_session,
+            &tpmdat.priv,
+            &tpmdat.pub,
+
+            &out_handle,
+            &out_pub,
+            &out_priv
+        );
+    if (rc != TSS2_RC_SUCCESS) {
+        rv = CKR_GENERAL_ERROR;
+        goto out;
+    }
+
+    assert(out_pub);
+    assert(out_priv);
+
+    BYTE pubb[sizeof(*out_pub)];
+    size_t pubb_size = 0;
+
+    BYTE privb[sizeof(*out_priv)];
+    size_t privb_size = 0;
+
+    size_t offset = 0;
+    rc = Tss2_MU_TPM2B_PUBLIC_Marshal(out_pub, pubb, sizeof(pubb), &offset);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Tss2_MU_TPM2B_PUBLIC_Marshal: 0x%x", rc);
+        rv = CKR_GENERAL_ERROR;
+        goto out;
+    }
+
+    pubb_size = offset;
+
+    offset = 0;
+    rc = Tss2_MU_TPM2B_PRIVATE_Marshal(out_priv, privb, sizeof(privb), &offset);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Tss2_MU_TPM2B_PRIVATE_Marshal: 0x%x", rc);
+        rv = CKR_GENERAL_ERROR;
+        goto out;
+    }
+
+    privb_size = offset;
+
+    tmppub = twistbin_new(pubb, pubb_size);
+    if (!tmppub) {
+        LOGE("oom");
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    tmppriv = twistbin_new(privb, privb_size);
+    if (!tmppriv) {
+        twist_free(tmppub);
+        LOGE("oom");
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    assert(mechanism->mechanism == CKM_RSA_PKCS_KEY_PAIR_GEN);
+
+    objdata->rsa.modulus = twistbin_new(
+            out_pub->publicArea.unique.rsa.buffer,
+            out_pub->publicArea.unique.rsa.size);
+    if (!objdata->rsa.modulus) {
+        LOGE("oom");
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    objdata->rsa.exponent = out_pub->publicArea.parameters.rsaDetail.exponent;
+
+    objdata->privblob = tmppriv;
+    objdata->pubblob = tmppub;
+    objdata->handle = out_handle;
+
+    rv = CKR_OK;
+out:
+
+    Esys_Free(out_pub);
+    Esys_Free(out_priv);
 
     return rv;
 }
