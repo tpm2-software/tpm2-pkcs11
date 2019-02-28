@@ -115,9 +115,7 @@ CK_RV session_closeall(CK_SLOT_ID slot_id) {
     token *t;
     check_slot_id(slot_id, t, CKR_SLOT_ID_INVALID);
 
-    session_table_free_ctx_all(t);
-
-    return CKR_OK;
+    return session_table_free_ctx_all(t);
 }
 
 CK_RV session_lookup(CK_SESSION_HANDLE session, token **tok, session_ctx **ctx) {
