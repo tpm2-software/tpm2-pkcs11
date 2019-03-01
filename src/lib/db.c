@@ -306,6 +306,10 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
     case CKA_LABEL: {
 
         twist t = twistbin_unhexlify(value);
+        if (!t) {
+            LOGE("Could not unhexlify: %s", value);
+            return false;
+        }
         CK_ULONG len = twist_len(t);
 
         CK_BYTE_PTR label = calloc(1, len);
