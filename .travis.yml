@@ -9,8 +9,6 @@ env:
   matrix:
     - PYTHON_INTERPRETER=python2
     - PYTHON_INTERPRETER=python3
-  global:
-    - CODECOV_TOKEN=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 script:
   - ./.ci/travis.run
 after_failure:
