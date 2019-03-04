@@ -30,6 +30,23 @@ struct sign_opdata {
     encrypt_op_data *encrypt_opdata;
 };
 
+static sign_opdata *sign_opdata_new(void) {
+    return calloc(1, sizeof(sign_opdata));
+}
+
+static void sign_opdata_free(sign_opdata **opdata) {
+    digest_op_data_free(&(*opdata)->digest_opdata);
+
+    if (*opdata && !(*opdata)->do_hash) {
+        twist_free((*opdata)->buffer);
+    }
+
+    free(*opdata);
+
+    *opdata = NULL;
+}
+
+
 static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
 
     switch(mech) {
@@ -74,7 +91,7 @@ static bool is_mech_supported(CK_MECHANISM_TYPE mech) {
     return false;
 }
 
-static CK_RV common_init(operation op, token *tok, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
+static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
 
     check_pointer(mechanism);
 
@@ -85,6 +102,9 @@ static CK_RV common_init(operation op, token *tok, CK_MECHANISM_PTR mechanism, C
         return CKR_MECHANISM_INVALID;
     }
 
+    token *tok = session_ctx_get_token(ctx);
+    assert(tok);
+
     digest_op_data *digest_opdata = NULL;
     bool do_hash = is_hashing_needed(mechanism->mechanism);
     if (do_hash) {
@@ -94,20 +114,20 @@ static CK_RV common_init(operation op, token *tok, CK_MECHANISM_PTR mechanism, C
             return CKR_HOST_MEMORY;
         }
 
-        rv = digest_init_op(tok, digest_opdata, mechanism->mechanism);
+        rv = digest_init_op(ctx, digest_opdata, mechanism->mechanism);
         if (rv != CKR_OK) {
             digest_op_data_free(&digest_opdata);
             return rv;
         }
     }
 
-    bool is_active = token_opdata_is_active(tok);
+    bool is_active = session_ctx_opdata_is_active(ctx);
     if (is_active) {
         digest_op_data_free(&digest_opdata);
         return CKR_OPERATION_ACTIVE;
     }
 
-    sign_opdata *opdata = calloc(1, sizeof(*opdata));
+    sign_opdata *opdata = sign_opdata_new();
     if (!opdata) {
         digest_op_data_free(&digest_opdata);
         return CKR_HOST_MEMORY;
@@ -117,7 +137,7 @@ static CK_RV common_init(operation op, token *tok, CK_MECHANISM_PTR mechanism, C
     rv = token_load_object(tok, key, &opdata->tobj);
     if (rv != CKR_OK) {
         digest_op_data_free(&digest_opdata);
-        free(opdata);
+        sign_opdata_free(&opdata);
         return rv;
     }
 
@@ -128,25 +148,25 @@ static CK_RV common_init(operation op, token *tok, CK_MECHANISM_PTR mechanism, C
     /*
      * Store everything for later
      */
-    token_opdata_set(tok, op, opdata);
+    session_ctx_opdata_set(ctx, op, opdata, (opdata_free_fn)sign_opdata_free);
 
     return CKR_OK;
 }
 
-static CK_RV common_update(operation op, token *tok, CK_BYTE_PTR part, CK_ULONG part_len) {
+static CK_RV common_update(operation op, session_ctx *ctx, CK_BYTE_PTR part, CK_ULONG part_len) {
 
     check_pointer(part);
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
     sign_opdata *opdata = NULL;
-    rv = token_opdata_get(tok, op, &opdata);
+    rv = session_ctx_opdata_get(ctx, op, &opdata);
     if (rv != CKR_OK) {
         return rv;
     }
 
     if (opdata->do_hash) {
-        rv = digest_update_op(tok, opdata->digest_opdata, part, part_len);
+        rv = digest_update_op(ctx, opdata->digest_opdata, part, part_len);
         if (rv != CKR_OK) {
             return rv;
         }
@@ -161,14 +181,14 @@ static CK_RV common_update(operation op, token *tok, CK_BYTE_PTR part, CK_ULONG 
     return CKR_OK;
 }
 
-CK_RV sign_init(token *tok, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV sign_init(session_ctx *ctx, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
-    return common_init(operation_sign, tok, mechanism, key);
+    return common_init(operation_sign, ctx, mechanism, key);
 }
 
-CK_RV sign_update(token *tok, CK_BYTE_PTR part, CK_ULONG part_len) {
+CK_RV sign_update(session_ctx *ctx, CK_BYTE_PTR part, CK_ULONG part_len) {
 
-    return common_update(operation_sign, tok, part, part_len);
+    return common_update(operation_sign, ctx, part, part_len);
 }
 
 static CK_RV pkcs1_5_build_struct(CK_MECHANISM_TYPE mech,
@@ -269,7 +289,7 @@ static CK_RV apply_pkcs_1_5_pad(tobject *tobj, char *built, size_t built_len, ch
     return CKR_OK;
 }
 
-CK_RV sign_final_ex(token *tok, CK_BYTE_PTR signature, CK_ULONG_PTR signature_len, bool is_oneshot) {
+CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signature_len, bool is_oneshot) {
 
     check_pointer(signature_len);
 
@@ -281,12 +301,15 @@ CK_RV sign_final_ex(token *tok, CK_BYTE_PTR signature, CK_ULONG_PTR signature_le
     CK_ULONG hash_len = 0;
 
     sign_opdata *opdata = NULL;
-    rv = token_opdata_get(tok, operation_sign, &opdata);
+    rv = session_ctx_opdata_get(ctx, operation_sign, &opdata);
     if (rv != CKR_OK) {
         return rv;
     }
 
     assert(opdata);
+
+    token *tok = session_ctx_get_token(ctx);
+    assert(tok);
 
     tpm_ctx *tpm = tok->tctx;
 
@@ -301,7 +324,7 @@ CK_RV sign_final_ex(token *tok, CK_BYTE_PTR signature, CK_ULONG_PTR signature_le
             goto session_out;
         }
 
-        rv = digest_final_op(tok, opdata->digest_opdata, hash, &hash_len);
+        rv = digest_final_op(ctx, opdata->digest_opdata, hash, &hash_len);
         if (rv != CKR_OK) {
             goto session_out;
         }
@@ -388,14 +411,14 @@ CK_RV sign_final_ex(token *tok, CK_BYTE_PTR signature, CK_ULONG_PTR signature_le
         };
 
         /* RSA Decrypt is the RSA operation with the private key, which is what we want */
-        rv = decrypt_init_op(tok, encrypt_opdata, &mechanism, opdata->tobj->id);
+        rv = decrypt_init_op(ctx, encrypt_opdata, &mechanism, opdata->tobj->id);
         if (rv != CKR_OK) {
             free(padded);
             encrypt_op_data_free(&encrypt_opdata);
             goto session_out;
         }
 
-        rv = decrypt_oneshot_op(tok, encrypt_opdata, (CK_BYTE_PTR)padded, padded_len, signature, signature_len);
+        rv = decrypt_oneshot_op(ctx, encrypt_opdata, (CK_BYTE_PTR)padded, padded_len, signature, signature_len);
         free(padded);
         encrypt_op_data_free(&encrypt_opdata);
         if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
@@ -429,7 +452,7 @@ CK_RV sign_final_ex(token *tok, CK_BYTE_PTR signature, CK_ULONG_PTR signature_le
 
             assert(opdata->digest_opdata);
 
-            CK_RV tmp = digest_init_op(tok, new_digest_state, opdata->digest_opdata->mechanism);
+            CK_RV tmp = digest_init_op(ctx, new_digest_state, opdata->digest_opdata->mechanism);
             if (tmp != CKR_OK) {
                 digest_op_data_free(&new_digest_state);
                 reset_ctx = false;
@@ -449,12 +472,7 @@ CK_RV sign_final_ex(token *tok, CK_BYTE_PTR signature, CK_ULONG_PTR signature_le
 
 session_out:
     if (!reset_ctx) {
-        digest_op_data_free(&opdata->digest_opdata);
-        token_opdata_clear(tok);
-        if (opdata && !opdata->do_hash) {
-            twist_free(opdata->buffer);
-        }
-        free(opdata);
+        session_ctx_opdata_clear(ctx);
     }
 
     free(hash);
@@ -462,27 +480,27 @@ session_out:
     return rv;
 }
 
-CK_RV sign(token *tok, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG *signature_len) {
+CK_RV sign(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG *signature_len) {
 
-    CK_RV rv = sign_update(tok, data, data_len);
+    CK_RV rv = sign_update(ctx, data, data_len);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    return sign_final_ex(tok, signature, signature_len, true);
+    return sign_final_ex(ctx, signature, signature_len, true);
 }
 
-CK_RV verify_init (token *tok, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV verify_init (session_ctx *ctx, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
-    return common_init(operation_verify, tok, mechanism, key);
+    return common_init(operation_verify, ctx, mechanism, key);
 }
 
-CK_RV verify_update (token *tok, CK_BYTE_PTR part, CK_ULONG part_len) {
+CK_RV verify_update (session_ctx *ctx, CK_BYTE_PTR part, CK_ULONG part_len) {
 
-    return common_update(operation_verify, tok, part, part_len);
+    return common_update(operation_verify, ctx, part, part_len);
 }
 
-CK_RV verify_final (token *tok, CK_BYTE_PTR signature, CK_ULONG signature_len) {
+CK_RV verify_final (session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG signature_len) {
 
     check_pointer(signature);
     check_pointer(signature_len);
@@ -490,10 +508,13 @@ CK_RV verify_final (token *tok, CK_BYTE_PTR signature, CK_ULONG signature_len) {
     CK_RV rv = CKR_GENERAL_ERROR;
 
     sign_opdata *opdata = NULL;
-    rv = token_opdata_get(tok, operation_verify, &opdata);
+    rv = session_ctx_opdata_get(ctx, operation_verify, &opdata);
     if (rv != CKR_OK) {
         return rv;
     }
+
+    token *tok = session_ctx_get_token(ctx);
+    assert(tok);
 
     tpm_ctx *tpm = tok->tctx;
 
@@ -501,7 +522,7 @@ CK_RV verify_final (token *tok, CK_BYTE_PTR signature, CK_ULONG signature_len) {
     CK_BYTE hash[1024];
     CK_ULONG hash_len = sizeof(hash);
 
-    rv = digest_final_op(tok, opdata->digest_opdata, hash, &hash_len);
+    rv = digest_final_op(ctx, opdata->digest_opdata, hash, &hash_len);
     if (rv != CKR_OK) {
         goto out;
     }
@@ -509,19 +530,17 @@ CK_RV verify_final (token *tok, CK_BYTE_PTR signature, CK_ULONG signature_len) {
     rv = tpm_verify(tpm, opdata->tobj, opdata->mtype, hash, hash_len, signature, signature_len);
 
 out:
-    digest_op_data_free(&opdata->digest_opdata);
-    token_opdata_clear(tok);
-    free(opdata);
+    session_ctx_opdata_clear(ctx);
 
     return rv;
 }
 
-CK_RV verify(token *tok, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG signature_len) {
+CK_RV verify(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG signature_len) {
 
-    CK_RV rv = verify_update(tok, data, data_len);
+    CK_RV rv = verify_update(ctx, data, data_len);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    return verify_final(tok, signature, signature_len);
+    return verify_final(ctx, signature, signature_len);
 }

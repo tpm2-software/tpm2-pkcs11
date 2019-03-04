@@ -297,7 +297,7 @@ CK_RV check_common_attrs(
 }
 
 CK_RV key_gen (
-        token *tok,
+        session_ctx *ctx,
 
         CK_MECHANISM_PTR mechanism,
 
@@ -319,6 +319,9 @@ CK_RV key_gen (
     tobject *new_tobj = NULL;
 
     tpm_object_data objdata = { 0 };
+
+    token *tok = session_ctx_get_token(ctx);
+    assert(tok);
 
     rv = check_common_attrs(
             private_key_template,

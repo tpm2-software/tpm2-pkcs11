@@ -23,6 +23,12 @@ struct session_ctx {
 
     CK_FLAGS flags;
     CK_STATE state;
+
+    token *tok;
+
+    generic_opdata opdata;
+
+    opdata_free_fn free;
 };
 
 void session_ctx_free(session_ctx *ctx) {
@@ -30,6 +36,8 @@ void session_ctx_free(session_ctx *ctx) {
     if (!ctx) {
         return;
     }
+
+    session_ctx_opdata_clear(ctx);
 
     free(ctx);
 }
@@ -63,16 +71,17 @@ static void session_set_initial_state(session_ctx *ctx, token_login_state state,
     }
 }
 
-CK_RV session_ctx_new(session_ctx **ctx, token_login_state state, CK_FLAGS flags) {
+CK_RV session_ctx_new(session_ctx **ctx, token *tok, CK_FLAGS flags) {
 
     session_ctx *s = calloc(1, sizeof(session_ctx));
     if (!s) {
         return CKR_HOST_MEMORY;
     }
 
-    session_set_initial_state(s, state, flags);
+    session_set_initial_state(s, tok->login_state, flags);
 
     s->flags = flags;
+    s->tok = tok;
 
     *ctx = s;
 
@@ -85,6 +94,10 @@ CK_STATE session_ctx_state_get(session_ctx *ctx) {
 
 CK_FLAGS session_ctx_flags_get(session_ctx *ctx) {
     return ctx->flags;
+}
+
+token *session_ctx_get_token(session_ctx *ctx) {
+    return ctx->tok;
 }
 
 void session_ctx_login_event(session_ctx *ctx, CK_USER_TYPE usertype) {
@@ -175,4 +188,36 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
 
     // Found no match on key id
     return CKR_KEY_HANDLE_INVALID;
+}
+
+CK_RV _session_ctx_opdata_get(session_ctx *ctx, operation op, void **data) {
+
+    if (op != ctx->opdata.op) {
+        return CKR_OPERATION_NOT_INITIALIZED;
+    }
+
+    *data = ctx->opdata.data;
+
+    return CKR_OK;
+}
+
+bool session_ctx_opdata_is_active(session_ctx *ctx) {
+
+    return ctx->opdata.op != operation_none;
+}
+
+void session_ctx_opdata_set(session_ctx *ctx, operation op, void *data, opdata_free_fn fn) {
+
+    ctx->opdata.op = op;
+    ctx->opdata.data = data;
+    ctx->free = fn;
+}
+
+void session_ctx_opdata_clear(session_ctx *ctx) {
+
+    if (ctx->free && ctx->opdata.data) {
+        ctx->free(&ctx->opdata.data);
+    }
+
+    session_ctx_opdata_set(ctx, operation_none, NULL, NULL);
 }

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+ /* SPDX-License-Identifier: BSD-2 */
 /*
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
@@ -17,29 +17,11 @@
 typedef struct session_table session_table;
 typedef struct session_ctx session_ctx;
 
-typedef enum operation operation;
-enum operation {
-    operation_none = 0,
-    operation_find,
-    operation_sign,
-    operation_verify,
-    operation_encrypt,
-    operation_decrypt,
-    operation_digest,
-    operation_count
-};
-
 typedef enum token_login_state token_login_state;
 enum token_login_state {
     token_no_one_logged_in = 0,
     token_user_logged_in   = 1 << 0,
     token_so_logged_in     = 1 << 1,
-};
-
-typedef struct generic_opdata generic_opdata;
-struct generic_opdata {
-    operation op;
-    void *data;
 };
 
 typedef struct token token;
@@ -76,8 +58,6 @@ struct token {
     token_login_state login_state;
 
     tpm_ctx *tctx;
-
-    generic_opdata opdata;
 
     void *mutex;
 };
@@ -129,51 +109,6 @@ CK_RV token_login(token *tok, twist pin, CK_USER_TYPE user);
  *  CKR_OK on success, anything else is a failure.
  */
 CK_RV token_logout(token *tok);
-
-/**
- * Determines if the opdata is in use
- * @param ctx
- *  The token
- * @return
- */
-bool token_opdata_is_active(token *tok);
-
-/**
- * Sets operational specific data. Callers should take care to ensure
- * no other users are using it by calling token_opdata_is_active()
- * before setting the data.
- *
- * @param tok
- *  The token to set operational data on
- * @param op
- *  The operation setting the data
- * @param data
- *  The data to set
- */
-void token_opdata_set(token *tok, operation op, void *data);
-
-/**
- * Clears the token opdata state. NOTE that callers
- * are required to perfrom memory managment on what
- * is stored in the void pointer.
- * @param tok
- *  The token to clear operational data from.
- */
-void token_opdata_clear(token *tok);
-
-/**
- * Sets the operation specific state data
- * @param tok
- *  The token to set the operation state data
- * @param op
- *  The operation setting it
- * @param data
- *  The data to set
- * @return
- *  CKR_OK on success.
- */
-#define token_opdata_get(ctx, op, data) _token_opdata_get(ctx, op, (void **)data)
-CK_RV _token_opdata_get(token *tok, operation op, void **data);
 
 /**
  * TODO

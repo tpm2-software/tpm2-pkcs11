@@ -137,8 +137,11 @@ CK_RV session_lookup(CK_SESSION_HANDLE session, token **tok, session_ctx **ctx) 
 }
 
 
-CK_RV session_login(token *tok, CK_USER_TYPE user_type,
+CK_RV session_login(session_ctx *ctx, CK_USER_TYPE user_type,
         CK_BYTE_PTR pin, CK_ULONG pin_len) {
+
+    token *tok = session_ctx_get_token(ctx);
+    assert(tok);
 
     twist tpin = NULL;
     CK_RV rv = CKR_GENERAL_ERROR;
