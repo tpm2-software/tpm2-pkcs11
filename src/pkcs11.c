@@ -189,6 +189,32 @@ do { \
     if (rv != CKR_OK) { \
         goto unlock; \
     } \
+    rv = userfunc(ctx, ##__VA_ARGS__); \
+  unlock: \
+    token_unlock(t); \
+  out: \
+    _TRACE_RET(rv); \
+    return rv; \
+} while (0)
+
+#define __TOKEN_WITH_LOCK_BY_SESSION_TOKEN(authfn, userfunc, session, ...) \
+do { \
+    _TRACE_CALL; \
+    CK_RV rv = CKR_GENERAL_ERROR; \
+    \
+    _CHECK_INIT(out); \
+    \
+    token *t = NULL; \
+    session_ctx *ctx = NULL; \
+    rv = session_lookup(session, &t, &ctx); \
+    if (rv != CKR_OK) { \
+        goto out; \
+    } \
+    \
+    rv = authfn(ctx); \
+    if (rv != CKR_OK) { \
+        goto unlock; \
+    } \
     rv = userfunc(t, ##__VA_ARGS__); \
   unlock: \
     token_unlock(t); \
@@ -364,11 +390,11 @@ static inline CK_RV auth_init_pin_state(session_ctx *ctx) {
 /*
  * Does what __TOKEN_WITH_LOCK_BY_SESSION does, and checks that the session is at least RO User. Ie user or so logged in and R/O or R/W session.
  */
-#define TOKEN_WITH_LOCK_BY_SESSION_LOGGED_IN(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION(auth_any_logged_in, userfunc, session, ##__VA_ARGS__)
+#define TOKEN_WITH_LOCK_BY_SESSION_LOGGED_IN(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION_TOKEN(auth_any_logged_in, userfunc, session, ##__VA_ARGS__)
 
-#define TOKEN_WITH_LOCK_BY_SESSION_SET_PIN_STATE(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION(auth_set_pin_state, userfunc, session, ##__VA_ARGS__)
+#define TOKEN_WITH_LOCK_BY_SESSION_SET_PIN_STATE(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION_TOKEN(auth_set_pin_state, userfunc, session, ##__VA_ARGS__)
 
-#define TOKEN_WITH_LOCK_BY_SESSION_INIT_PIN_STATE(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION(auth_init_pin_state, userfunc, session, ##__VA_ARGS__)
+#define TOKEN_WITH_LOCK_BY_SESSION_INIT_PIN_STATE(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION_TOKEN(auth_init_pin_state, userfunc, session, ##__VA_ARGS__)
 
 
 CK_RV C_Initialize (void *init_args) {

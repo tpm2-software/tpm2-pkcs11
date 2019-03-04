@@ -107,12 +107,12 @@ out:
     return rv;
 }
 
-CK_RV digest_init_op(token *tok, digest_op_data *supplied_opdata, CK_MECHANISM_TYPE mechanism) {
+CK_RV digest_init_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_MECHANISM_TYPE mechanism) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
     if (!supplied_opdata) {
-        bool is_active = token_opdata_is_active(tok);
+        bool is_active = session_ctx_opdata_is_active(ctx);
         if (is_active) {
             return CKR_OPERATION_ACTIVE;
         }
@@ -121,6 +121,8 @@ CK_RV digest_init_op(token *tok, digest_op_data *supplied_opdata, CK_MECHANISM_T
     /*
      * Start a hashing sequence with the TPM
      */
+    token *tok = session_ctx_get_token(ctx);
+    assert(tok);
     tpm_ctx *tpm = tok->tctx;
 
     bool use_sw_hash = false;
@@ -162,13 +164,13 @@ CK_RV digest_init_op(token *tok, digest_op_data *supplied_opdata, CK_MECHANISM_T
 
     if (!supplied_opdata) {
         /* Store everything for later */
-        token_opdata_set(tok, operation_digest, opdata);
+        session_ctx_opdata_set(ctx, operation_digest, opdata, (opdata_free_fn)digest_op_data_free);
     }
 
     return CKR_OK;
 }
 
-CK_RV digest_update_op(token *tok, digest_op_data *supplied_opdata, CK_BYTE_PTR part, CK_ULONG part_len) {
+CK_RV digest_update_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_BYTE_PTR part, CK_ULONG part_len) {
 
     check_pointer(part);
 
@@ -176,7 +178,7 @@ CK_RV digest_update_op(token *tok, digest_op_data *supplied_opdata, CK_BYTE_PTR 
 
     digest_op_data *opdata = NULL;
     if (!supplied_opdata) {
-        rv = token_opdata_get(tok, operation_digest, &opdata);
+        rv = session_ctx_opdata_get(ctx, operation_digest, &opdata);
         if (rv != CKR_OK) {
             return rv;
         }
@@ -187,6 +189,8 @@ CK_RV digest_update_op(token *tok, digest_op_data *supplied_opdata, CK_BYTE_PTR 
     if (opdata->use_sw_hash) {
         rv = digest_sw_update(opdata, part, part_len);
     } else {
+        token *tok = session_ctx_get_token(ctx);
+        assert(tok);
         tpm_ctx *tpm = tok->tctx;
         rv = tpm_hash_update(tpm, opdata->sequence_handle, part, part_len);
     }
@@ -194,7 +198,7 @@ CK_RV digest_update_op(token *tok, digest_op_data *supplied_opdata, CK_BYTE_PTR 
     return rv;
 }
 
-CK_RV digest_final_op(token *tok, digest_op_data *supplied_opdata, CK_BYTE_PTR digest, CK_ULONG_PTR digest_len) {
+CK_RV digest_final_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_BYTE_PTR digest, CK_ULONG_PTR digest_len) {
 
     check_pointer(digest);
     check_pointer(digest_len);
@@ -203,7 +207,7 @@ CK_RV digest_final_op(token *tok, digest_op_data *supplied_opdata, CK_BYTE_PTR d
 
     digest_op_data *opdata = NULL;
     if (!supplied_opdata) {
-        rv = token_opdata_get(tok, operation_digest, &opdata);
+        rv = session_ctx_opdata_get(ctx, operation_digest, &opdata);
         if (rv != CKR_OK) {
             return rv;
         }
@@ -214,24 +218,25 @@ CK_RV digest_final_op(token *tok, digest_op_data *supplied_opdata, CK_BYTE_PTR d
     if (opdata->use_sw_hash) {
         rv = digest_sw_final(opdata, digest, digest_len);
     } else {
+        token *tok = session_ctx_get_token(ctx);
+        assert(tok);
         tpm_ctx *tpm = tok->tctx;
         rv = tpm_hash_final(tpm, opdata->sequence_handle, digest, digest_len);
     }
 
     if (!supplied_opdata) {
-        token_opdata_clear(tok);
-        digest_op_data_free(&opdata);
+        session_ctx_opdata_clear(ctx);
     }
 
     return rv;
 }
 
-CK_RV digest_oneshot(token *tok, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR digest, CK_ULONG_PTR digest_len) {
+CK_RV digest_oneshot(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR digest, CK_ULONG_PTR digest_len) {
 
-    CK_RV rv = digest_update(tok, data, data_len);
+    CK_RV rv = digest_update(ctx, data, data_len);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    return digest_final(tok, digest, digest_len);
+    return digest_final(ctx, digest, digest_len);
 }

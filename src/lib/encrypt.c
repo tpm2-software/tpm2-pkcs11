@@ -26,12 +26,15 @@ void encrypt_op_data_free(encrypt_op_data **opdata) {
     }
 }
 
-static CK_RV common_init_op (token *tok, encrypt_op_data *supplied_opdata, operation op, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, operation op, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
     check_pointer(mechanism);
 
+    token *tok = session_ctx_get_token(ctx);
+    assert(tok);
+
     if (!supplied_opdata) {
-        bool is_active = token_opdata_is_active(tok);
+        bool is_active = session_ctx_opdata_is_active(ctx);
         if (is_active) {
             return CKR_OPERATION_ACTIVE;
         }
@@ -65,13 +68,13 @@ static CK_RV common_init_op (token *tok, encrypt_op_data *supplied_opdata, opera
     }
 
     if (!supplied_opdata) {
-        token_opdata_set(tok, op, opdata);
+        session_ctx_opdata_set(ctx, op, opdata, (opdata_free_fn)encrypt_op_data_free);
     }
 
     return CKR_OK;
 }
 
-static CK_RV common_update_op (token *tok, encrypt_op_data *supplied_opdata, operation op,
+static CK_RV common_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, operation op,
         CK_BYTE_PTR part, CK_ULONG part_len,
         CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
 
@@ -89,7 +92,7 @@ static CK_RV common_update_op (token *tok, encrypt_op_data *supplied_opdata, ope
 
     encrypt_op_data *opdata = NULL;
     if (!supplied_opdata) {
-        rv = token_opdata_get(tok, op, &opdata);
+        rv = session_ctx_opdata_get(ctx, op, &opdata);
         if (rv != CKR_OK) {
             goto out;
         }
@@ -124,7 +127,7 @@ out:
     return rv;
 }
 
-static CK_RV common_final_op(token *tok, encrypt_op_data *supplied_opdata, operation op,
+static CK_RV common_final_op(session_ctx *ctx, encrypt_op_data *supplied_opdata, operation op,
         CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
 
     /*
@@ -141,65 +144,63 @@ static CK_RV common_final_op(token *tok, encrypt_op_data *supplied_opdata, opera
     }
 
     encrypt_op_data *opdata = NULL;
-    rv = token_opdata_get(tok, op, &opdata);
+    rv = session_ctx_opdata_get(ctx, op, &opdata);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    encrypt_op_data_free(&opdata);
-
-    token_opdata_clear(tok);
+    session_ctx_opdata_clear(ctx);
 
     return CKR_OK;
 }
 
-CK_RV encrypt_init_op (token *tok, encrypt_op_data *supplied_opdata, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV encrypt_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
-    return common_init_op(tok, supplied_opdata, operation_encrypt, mechanism, key);
+    return common_init_op(ctx, supplied_opdata, operation_encrypt, mechanism, key);
 }
 
-CK_RV decrypt_init_op (token *tok, encrypt_op_data *supplied_opdata, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV decrypt_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
-    return common_init_op(tok, supplied_opdata, operation_decrypt, mechanism, key);
+    return common_init_op(ctx, supplied_opdata, operation_decrypt, mechanism, key);
 }
 
-CK_RV encrypt_update_op (token *tok, encrypt_op_data *supplied_opdata, CK_BYTE_PTR part, CK_ULONG part_len, CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
+CK_RV encrypt_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR part, CK_ULONG part_len, CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
 
-    return common_update_op(tok, supplied_opdata, operation_encrypt, part, part_len, encrypted_part, encrypted_part_len);
+    return common_update_op(ctx, supplied_opdata, operation_encrypt, part, part_len, encrypted_part, encrypted_part_len);
 }
 
-CK_RV decrypt_update_op (token *tok, encrypt_op_data *supplied_opdata, CK_BYTE_PTR part, CK_ULONG part_len, CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
+CK_RV decrypt_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR part, CK_ULONG part_len, CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
 
-    return common_update_op(tok, supplied_opdata, operation_decrypt, part, part_len, encrypted_part, encrypted_part_len);
+    return common_update_op(ctx, supplied_opdata, operation_decrypt, part, part_len, encrypted_part, encrypted_part_len);
 }
 
-CK_RV encrypt_final_op (token *tok, encrypt_op_data *supplied_opdata, CK_BYTE_PTR last_encrypted_part, CK_ULONG_PTR last_encrypted_part_len) {
+CK_RV encrypt_final_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR last_encrypted_part, CK_ULONG_PTR last_encrypted_part_len) {
 
-    return common_final_op(tok, supplied_opdata, operation_encrypt, last_encrypted_part, last_encrypted_part_len);
+    return common_final_op(ctx, supplied_opdata, operation_encrypt, last_encrypted_part, last_encrypted_part_len);
 }
 
-CK_RV decrypt_final_op (token *tok, encrypt_op_data *supplied_opdata, CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
+CK_RV decrypt_final_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
 
-    return common_final_op(tok, supplied_opdata, operation_decrypt, last_part, last_part_len);
+    return common_final_op(ctx, supplied_opdata, operation_decrypt, last_part, last_part_len);
 }
 
-CK_RV decrypt_oneshot_op (token *tok, encrypt_op_data *supplied_opdata, CK_BYTE_PTR encrypted_data, CK_ULONG encrypted_data_len, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
+CK_RV decrypt_oneshot_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR encrypted_data, CK_ULONG encrypted_data_len, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
 
-    CK_RV rv = decrypt_update_op(tok, supplied_opdata, encrypted_data, encrypted_data_len,
+    CK_RV rv = decrypt_update_op(ctx, supplied_opdata, encrypted_data, encrypted_data_len,
             data, data_len);
     if (rv != CKR_OK || !data) {
         return rv;
     }
 
-    return decrypt_final_op(tok, supplied_opdata, NULL, NULL);
+    return decrypt_final_op(ctx, supplied_opdata, NULL, NULL);
 }
 
-CK_RV encrypt_oneshot_op (token *tok, encrypt_op_data *supplied_opdata, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR encrypted_data, CK_ULONG_PTR encrypted_data_len) {
+CK_RV encrypt_oneshot_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR encrypted_data, CK_ULONG_PTR encrypted_data_len) {
 
-    CK_RV rv = encrypt_update_op (tok, supplied_opdata, data, data_len, encrypted_data, encrypted_data_len);
+    CK_RV rv = encrypt_update_op (ctx, supplied_opdata, data, data_len, encrypted_data, encrypted_data_len);
     if (rv != CKR_OK || !encrypted_data) {
         return rv;
     }
 
-    return encrypt_final_op(tok, supplied_opdata, NULL, NULL);
+    return encrypt_final_op(ctx, supplied_opdata, NULL, NULL);
 }

@@ -70,7 +70,7 @@ CK_RV session_table_new_entry(session_table *t, CK_SESSION_HANDLE *handle,
     session_ctx **open_slot = &t->table[t->free_handle];
     assert(!*open_slot);
 
-    CK_RV rv = session_ctx_new(open_slot, tok->login_state, flags);
+    CK_RV rv = session_ctx_new(open_slot, tok, flags);
     if (rv != CKR_OK) {
         return rv;
     }

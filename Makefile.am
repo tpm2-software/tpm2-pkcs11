@@ -123,7 +123,8 @@ check_PROGRAMS += \
     test/integration/pkcs-initialize-finalize.int \
     test/integration/pkcs-misc.int \
     test/integration/pkcs-crypt.int \
-    test/integration/pkcs-keygen.int
+    test/integration/pkcs-keygen.int \
+    test/integration/pkcs-session-state.int
 
 XFAIL_TESTS=test/unit/test_pkcs11
 
@@ -160,6 +161,10 @@ test_integration_pkcs_crypt_int_SOURCES = test/integration/pkcs-crypt.int.c
 test_integration_pkcs_keygen_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_keygen_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
 test_integration_pkcs_keygen_int_SOURCES = test/integration/pkcs-keygen.int.c
+
+test_integration_pkcs_session_state_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_session_state_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_session_state_int_SOURCES = test/integration/pkcs-session-state.c
 
 endif
 # END INTEGRATION

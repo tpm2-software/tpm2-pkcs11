@@ -38,6 +38,8 @@ void token_free(token *t) {
 
     session_table_free(t->s_table);
 
+    twist_free(t->pobject.objauth);
+
     twist_free(t->sopobjauth);
     twist_free(t->sopobjauthkeysalt);
 
@@ -58,6 +60,11 @@ void token_free(token *t) {
     }
 
     tpm_ctx_free(t->tctx);
+
+    /*
+     * for each session remove them
+     */
+    session_table_free_ctx_all(t);
 
     mutex_destroy(t->mutex);
 }
@@ -352,33 +359,6 @@ error:
     twist_free(sealobjauth);
 
     return rv;
-}
-
-bool token_opdata_is_active(token *tok) {
-
-    return tok->opdata.op != operation_none;
-}
-
-void token_opdata_set(token *tok, operation op, void *data) {
-
-    tok->opdata.op = op;
-    tok->opdata.data = data;
-}
-
-void token_opdata_clear(token *tok) {
-
-    token_opdata_set(tok, operation_none, NULL);
-}
-
-CK_RV _token_opdata_get(token *tok, operation op, void **data) {
-
-    if (op != tok->opdata.op) {
-        return CKR_OPERATION_NOT_INITIALIZED;
-    }
-
-    *data = tok->opdata.data;
-
-    return CKR_OK;
 }
 
 void token_lock(token *t) {

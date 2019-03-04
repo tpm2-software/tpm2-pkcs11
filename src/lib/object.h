@@ -15,6 +15,7 @@
 #include "utils.h"
 
 typedef struct token token;
+typedef struct session_ctx session_ctx;
 
 typedef struct pobject pobject;
 struct pobject {
@@ -104,13 +105,13 @@ void sobject_free(sobject *sobj);
 void wrappingobject_free(wrappingobject *wobj);
 void sealobject_free(sealobject *sealobj);
 
-CK_RV object_find_init(token *tok, CK_ATTRIBUTE_PTR templ, unsigned long count);
+CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, unsigned long count);
 
-CK_RV object_find(token *tok, CK_OBJECT_HANDLE *object, unsigned long max_object_count, unsigned long *object_count);
+CK_RV object_find(session_ctx *ctx, CK_OBJECT_HANDLE *object, unsigned long max_object_count, unsigned long *object_count);
 
-CK_RV object_find_final(token *tok);
+CK_RV object_find_final(session_ctx *ctx);
 
-CK_RV object_get_attributes(token *tok, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count);
+CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count);
 
 /**
  * Given an attribute type, retrieves the attribute data if present.

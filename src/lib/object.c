@@ -189,23 +189,28 @@ tobject *object_attr_filter(tobject *tobj, CK_ATTRIBUTE_PTR templ, CK_ULONG coun
     return tobj;
 }
 
-void free_object_find_data(object_find_data *fd) {
+void object_find_data_free(object_find_data **fd) {
 
-    if (!fd) {
+    if (!*fd) {
         return;
     }
 
-    tobject_match_list *cur = fd->head;
+    tobject_match_list *cur = (*fd)->head;
     while (cur) {
         tobject_match_list *tmp = cur;
         cur = cur->next;
         free(tmp);
     }
 
-    free(fd);
+    free(*fd);
+    *fd = NULL;
 }
 
-CK_RV object_find_init(token *tok, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
+static object_find_data *object_find_data_new(void) {
+    return calloc(1, sizeof(object_find_data));
+}
+
+CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
 
     // if count is 0 template is not used and all objects are requested so templ can be NULL.
     if (count > 0) {
@@ -216,17 +221,20 @@ CK_RV object_find_init(token *tok, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
 
     object_find_data *fd = NULL;
 
-    bool is_active = token_opdata_is_active(tok);
+    bool is_active = session_ctx_opdata_is_active(ctx);
     if (is_active) {
         rv = CKR_OPERATION_ACTIVE;
         goto out;
     }
 
-    fd = calloc(1, sizeof(*fd));
+    fd = object_find_data_new();
     if (!fd) {
         rv = CKR_HOST_MEMORY;
         goto out;
     }
+
+    token *tok = session_ctx_get_token(ctx);
+    assert(tok);
 
     if (!tok->tobjects) {
         goto empty;
@@ -274,19 +282,19 @@ CK_RV object_find_init(token *tok, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
 
 empty:
 
-    token_opdata_set(tok, operation_find, fd);
+    session_ctx_opdata_set(ctx, operation_find, fd, (opdata_free_fn)object_find_data_free);
 
     rv = CKR_OK;
 
 out:
     if (rv != CKR_OK) {
-        free_object_find_data(fd);
+        object_find_data_free(&fd);
     }
 
     return rv;
 }
 
-CK_RV object_find(token *tok, CK_OBJECT_HANDLE *object, CK_ULONG max_object_count, CK_ULONG_PTR object_count) {
+CK_RV object_find(session_ctx *ctx, CK_OBJECT_HANDLE *object, CK_ULONG max_object_count, CK_ULONG_PTR object_count) {
 
     check_pointer(object);
     check_pointer(object_count);
@@ -296,7 +304,7 @@ CK_RV object_find(token *tok, CK_OBJECT_HANDLE *object, CK_ULONG max_object_coun
     CK_RV rv = CKR_OK;
 
     object_find_data *opdata = NULL;
-    rv = token_opdata_get(tok, operation_find, &opdata);
+    rv = session_ctx_opdata_get(ctx, operation_find, &opdata);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -319,20 +327,17 @@ CK_RV object_find(token *tok, CK_OBJECT_HANDLE *object, CK_ULONG max_object_coun
     return CKR_OK;
 }
 
-CK_RV object_find_final(token *tok) {
-
+CK_RV object_find_final(session_ctx *ctx) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
     object_find_data *opdata = NULL;
-    rv = token_opdata_get(tok, operation_find, &opdata);
+    rv = session_ctx_opdata_get(ctx, operation_find, &opdata);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    free_object_find_data(opdata);
-
-    token_opdata_clear(tok);
+    session_ctx_opdata_clear(ctx);
 
     return CKR_OK;
 }
@@ -390,7 +395,10 @@ CK_ATTRIBUTE_PTR object_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR attr)
     return NULL;
 }
 
-CK_RV object_get_attributes(token *tok, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
+CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
+
+    token *tok = session_ctx_get_token(ctx);
+    assert(tok);
 
     tobject *tobj = find_object_by_id(object, tok);
     /* no match */
