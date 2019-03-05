@@ -1,7 +1,9 @@
 # tpm2-pkcs11
 
 [![Build Status](https://travis-ci.org/tpm2-software/tpm2-pkcs11.svg?branch=master)](https://travis-ci.org/tpm2-software/tpm2-pkcs11)
-[![Code Coverage](https://codecov.io/gh/tpm2-software/tpm2-pkcs11/branch/dev/graph/badge.svg)](https://codecov.io/gh/tpm2-software/tpm2-pkcs11)
+[![Coverage Status](https://codecov.io/gh/tpm2-software/tpm2-pkcs11/branch/master/graph/badge.svg)](https://codecov.io/gh/tpm2-software/tpm2-pkcs11)
+
+
 **This is currently being developed and is not production ready, patches welcome**
 
 PKCS #11 is a Public-Key Cryptography Standard that defines a standard method to
