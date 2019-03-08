@@ -36,8 +36,6 @@ void token_free_list(token *t, size_t len) {
 
 void token_free(token *t) {
 
-    session_table_free(t->s_table);
-
     twist_free(t->pobject.objauth);
 
     twist_free(t->sopobjauth);
@@ -65,6 +63,7 @@ void token_free(token *t) {
      * for each session remove them
      */
     session_table_free_ctx_all(t);
+    session_table_free(t->s_table);
 
     mutex_destroy(t->mutex);
 }
