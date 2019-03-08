@@ -236,8 +236,8 @@ AM_CONDITIONAL([HAVE_P11KIT], [test "x$have_p11kit" = "xyes"])
 # END P11 CONFIG
 
 AC_ARG_ENABLE([hardening],
-  [AS_HELP_STRING([--enable-hardening],
-    [Enable compiler and linker options to frustrate memory corruption exploits @<:@yes@:>@])],
+  [AS_HELP_STRING([--disable-hardening],
+    [Disable compiler and linker options to frustrate memory corruption exploits])],
   [hardening="$enableval"],
   [hardening="yes"])
 
