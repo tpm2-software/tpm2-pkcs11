@@ -92,7 +92,7 @@ AS_IF([test "x$esapi_sf" = "xyes"],
 AC_ARG_ENABLE(
   [unit],
   [AS_HELP_STRING([--enable-unit],
-    [build cmocka unit tests (default is no)])],
+    [build cmocka unit tests])],
   [enable_unit=$enableval],
   [enable_unit=no])
 
@@ -118,7 +118,7 @@ AM_CONDITIONAL([UNIT], [test "x$enable_unit" = "xyes"])
 AC_ARG_ENABLE(
   [integration],
   [AS_HELP_STRING([--enable-integration],
-    [build and execute integration tests (default is no)])],
+    [build and execute integration tests])],
   [enable_integration=$enableval],
   [enable_integration=no])
 
