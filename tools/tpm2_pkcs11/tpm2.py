@@ -133,7 +133,7 @@ class Tpm2(object):
             cmd.extend(['-A', objattrs])
 
         if seal != None:
-            cmd.extend(['-I', '-'])
+            cmd.extend(['-i', '-'])
 
         if alg != None:
             cmd.extend(['-G', alg])
@@ -196,7 +196,7 @@ class Tpm2(object):
             cmd.extend(['-A', objattrs])
 
         if seal != None:
-            cmd.extend(['-I', '-'])
+            cmd.extend(['-i', '-'])
 
         if alg != None:
             cmd.extend(['-G', alg])
