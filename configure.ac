@@ -153,7 +153,6 @@ AC_ARG_ENABLE(
   [AS_HELP_STRING([--disable-dlclose],
                             [Some versions of libc cause a sigsegv on exit with dlclose(),
                             this disables the dlclose() and works around that bug])],
-  []
   [AC_DEFINE([DISABLE_DLCLOSE], [1],
   [Some versions of libc cause a sigsegv on exit with dlcolse(), this disables the dlclose()
   and works around that bug])]
