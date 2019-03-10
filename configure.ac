@@ -286,7 +286,7 @@ AS_IF([test x"$hardening" != x"no"], [
 
 ], [
   AC_MSG_WARN([Compiling with --disable-hardening is dangerous!
-you should consider fixing the configure script compiler flags
+You should consider fixing the configure script compiler flags
 and submitting patches upstream!])
 ])
 
