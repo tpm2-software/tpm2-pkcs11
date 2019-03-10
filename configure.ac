@@ -92,8 +92,7 @@ AS_IF([test "x$esapi_sf" = "xyes"],
 AC_ARG_ENABLE(
   [unit],
   [AS_HELP_STRING([--enable-unit],
-    [build cmocka unit tests])],
-  [enable_unit=$enableval],
+    [build cmocka unit tests])],,
   [enable_unit=no])
 
 AC_DEFUN([unit_test_checks],[
@@ -118,8 +117,7 @@ AM_CONDITIONAL([UNIT], [test "x$enable_unit" = "xyes"])
 AC_ARG_ENABLE(
   [integration],
   [AS_HELP_STRING([--enable-integration],
-    [build and execute integration tests])],
-  [enable_integration=$enableval],
+    [build and execute integration tests])],,
   [enable_integration=no])
 
 AC_DEFUN([integration_test_checks], [
@@ -173,8 +171,7 @@ AC_DEFUN([handle_store_dir],[
 AC_ARG_WITH(
   [storedir],
   [AS_HELP_STRING([--with-storedir=DIR],[Store directory for searching, defaults to /etc/tpm2_pkcs11])],
-    [handle_store_dir],
-  []
+    [handle_store_dir]
 )
 
 # END WITH STOREDIR
@@ -186,8 +183,7 @@ AC_ARG_WITH(
 AC_ARG_ENABLE(
   [pack],
   [AS_HELP_STRING([--enable-pack=]@<:@yes/no@:>@,
-    [Pack the structures. (default is no, except on Windows, where it defaults to packing)])],
-  [enable_pack=$enableval],
+    [Pack the structures. (default is no, except on Windows, where it defaults to packing)])],,
   [enable_pack=no])
 
 AS_IF([test "x$enable_pack" = "xyes"],
