@@ -1,0 +1,4 @@
+#!/bin/bash
+
+cd "${BASH_SOURCE%/*}" || exit 1
+exec "${PYTHON_INTERPRETER:-python}" setup.py test

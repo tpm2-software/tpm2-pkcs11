@@ -191,7 +191,8 @@ noinst_LTLIBRARIES = $(libtpm2_test_pkcs11) $(libtpm2_test_internal)
 
 ## End of test libraries, start tests ##
 
-TESTS = $(check_PROGRAMS)
+TESTS = $(check_PROGRAMS) \
+    tools/run-python-tests
 check_PROGRAMS += \
     test/unit/test_twist
 
