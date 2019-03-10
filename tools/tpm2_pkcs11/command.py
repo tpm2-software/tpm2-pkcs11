@@ -58,9 +58,10 @@ class commandlet(object):
         args = opt_parser.parse_args()
 
         d = vars(args)
-        which = d['which']
-
-        commandlet.get()[which](d)
+        if 'which' in d:
+            commandlet.get()[d['which']](d)
+        else:
+            opt_parser.print_usage()
 
 
 class Command(object):
