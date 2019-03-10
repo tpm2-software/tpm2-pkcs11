@@ -20,7 +20,10 @@ setup(
     packages=['tpm2_pkcs11'],
 
     # Dependencies got here aka install_requires=['tensorflow']
-    install_requires=[],
+    install_requires=[
+        'cryptography',
+        'pyyaml',
+    ],
     tests_require=[],
     entry_points={
         'console_scripts': ['tpm2_ptool = tpm2_pkcs11.tpm2_ptool:main',],
