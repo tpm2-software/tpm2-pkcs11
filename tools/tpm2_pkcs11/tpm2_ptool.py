@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 from .command import commandlet
 
 # These imports are required to add the commandlet even though they appear unused
