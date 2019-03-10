@@ -232,14 +232,13 @@ AM_CONDITIONAL([HAVE_P11KIT], [test "x$have_p11kit" = "xyes"])
 
 AC_ARG_ENABLE([hardening],
   [AS_HELP_STRING([--disable-hardening],
-    [Disable compiler and linker options to frustrate memory corruption exploits])],
-  [hardening="$enableval"],
-  [hardening="yes"])
+    [Disable compiler and linker options to frustrate memory corruption exploits])],,
+  [enable_hardening="yes"])
 
 # Good information on adding flags, and dealing with compilers can be found here:
 #   https://github.com/zcash/zcash/issues/1832
 #   https://github.com/kmcallister/autoharden/
-AS_IF([test x"$hardening" != x"no"], [
+AS_IF([test x"$enable_hardening" != xno], [
 
   AC_DEFUN([add_hardened_c_flag], [
     AX_CHECK_COMPILE_FLAG([$1],
