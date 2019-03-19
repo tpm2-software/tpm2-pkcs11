@@ -111,6 +111,9 @@ class NewKeyCommandBase(Command):
                     "hashalg": CKM_SHA256,
                     "mgf": CKG_MGF1_SHA256
                 }
+               }, {
+                    CKM_RSA_PKCS: {
+                }
             }]
         elif alg.startswith('ecc'):
             attrs = [
