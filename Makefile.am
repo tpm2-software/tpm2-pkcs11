@@ -197,7 +197,6 @@ check_PROGRAMS += \
 
 test_unit_test_twist_CFLAGS    = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
 test_unit_test_twist_LDADD     = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
-test_unit_test_twist_SOURCES   = test/unit/test_twist.c
 
 endif
 # END UNIT
