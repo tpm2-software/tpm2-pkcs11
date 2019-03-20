@@ -106,7 +106,7 @@ INT_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
 
 TESTS_LDADD = $(noinst_LTLIBRARIES) $(lib_LTLIBRARIES) $(AM_LDFLAGS) $(CMOCKA_LIBS) $(CRYPTO_LIBS)
 
-TETS_CFLAGS = $(CMOCKA_CFLAGS)
+TESTS_CFLAGS = $(CMOCKA_CFLAGS)
 
 # Intentionally empty so INTEGRATION and UNIT tests can append to it.
 check_PROGRAMS =
