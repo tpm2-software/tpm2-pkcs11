@@ -61,8 +61,8 @@ CLEANFILES = AUTHORS
 
 # pkg-config setup. pc-file declarations happen in the corresponding modules
 pkgconfigdir          = $(libdir)/pkgconfig
-nodist_pkgconfig_DATA =
-CLEANFILES += $(nodist_pkgconfig_DATA)
+pkgconfig_DATA =
+CLEANFILES += $(pkgconfig_DATA)
 
 %.pc : %.pc.in
 	$(AM_V_GEN)$(call make_parent_dir,$@) && \
@@ -72,7 +72,7 @@ CLEANFILES += $(nodist_pkgconfig_DATA)
 
 ### PKCS#11 Library Definition ###
 libtpm2_pkcs11 = src/libtpm2_pkcs11.la
-nodist_pkgconfig_DATA += lib/tpm2-pkcs11.pc
+pkgconfig_DATA += lib/tpm2-pkcs11.pc
 EXTRA_DIST += lib/tpm2-pkcs11.map lib/tpm2-pkcs11.pc.in
 
 if HAVE_LD_VERSION_SCRIPT
