@@ -22,26 +22,18 @@ enum log_level {
     log_level_error,
     log_level_warn,
     log_level_verbose,
+    log_level_unknown,
+};
+static const char *log_strings[] = {
+    "ERROR",
+    "WARNING",
+    "INFO",
+    "UNKNOWN",
 };
 
 #define LOGV(fmt, ...) _log(log_level_verbose, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 #define LOGW(fmt, ...) _log(log_level_warn, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 #define LOGE(fmt, ...) _log(log_level_error, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-
-static inline const char *get_level_msg(log_level level) {
-    const char *value = "UNK";
-    switch (level) {
-    case log_level_error:
-        value = "ERROR";
-        break;
-    case log_level_warn:
-        value = "WARN";
-        break;
-    case log_level_verbose:
-        value = "INFO";
-    }
-    return value;
-}
 
 static inline void _log(log_level level, const char *file, unsigned lineno,
         const char *fmt,...) {
@@ -53,7 +45,7 @@ static inline void _log(log_level level, const char *file, unsigned lineno,
         errno = 0;
         unsigned long value = strtoul(env_level, &endptr, 0);
         if (errno || *endptr != '\0') {
-            LOGE("Could not change log level, got: \"%s\"", env_level);
+            fprintf(stderr, "Could not change log level, got: \"%s\"\n", env_level);
             return;
         }
 
@@ -69,7 +61,7 @@ static inline void _log(log_level level, const char *file, unsigned lineno,
                 current_log_level = value;
                 break;
             default:
-                LOGE("Could not change log level, got: \"%s\"", env_level);
+                fprintf(stderr, "Could not change log level, got: \"%s\"\n", env_level);
                 return;
         }
     }
@@ -85,10 +77,10 @@ static inline void _log(log_level level, const char *file, unsigned lineno,
     /* Verbose output prints file and line on error */
     if (current_log_level >= log_level_verbose) {
         fprintf(stderr, "%s on line: \"%u\" in file: \"%s\": ",
-                get_level_msg(level), lineno, file);
+                log_strings[level], lineno, file);
     }
     else {
-        fprintf(stderr, "%s: ", get_level_msg(level));
+        fprintf(stderr, "%s: ", log_strings[level]);
     }
 
     /* Print the user supplied message */
