@@ -464,11 +464,11 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
        } else {
            /* If it's not found it defaults to empty. */
            t->pValue = NULL;
-           t->ulValueLen = 0;
+           t->ulValueLen = CK_UNAVAILABLE_INFORMATION;
+           rv = CKR_ATTRIBUTE_TYPE_INVALID;
        }
     }
 
-    rv = CKR_OK;
 
 out:
     tobject_user_decrement(tobj);
