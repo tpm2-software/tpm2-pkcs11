@@ -18,6 +18,7 @@
 
 #include <sqlite3.h>
 
+#include "config.h"
 #include "db.h"
 #include "log.h"
 #include "mutex.h"
