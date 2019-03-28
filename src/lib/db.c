@@ -286,6 +286,30 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
         return bn2bin(bn, a);
     } break;
     /* base16 encoded big integers */
+    case CKA_EC_PARAMS: {
+
+        BIGNUM *bn = NULL;
+        rc = BN_hex2bn(&bn, value);
+        if (!rc) {
+            LOGE("Could not convert key \"%s\" value \"%s\" to big integer",
+                    key, value);
+            return false;
+        }
+
+        return bn2bin(bn, a);
+    } break;
+    case CKA_EC_POINT: {
+
+        BIGNUM *bn = NULL;
+        rc = BN_hex2bn(&bn, value);
+        if (!rc) {
+            LOGE("Could not convert key \"%s\" value \"%s\" to big integer",
+                    key, value);
+            return false;
+        }
+
+        return bn2bin(bn, a);
+    } break;
     case CKA_MODULUS: {
 
         BIGNUM *bn = NULL;
@@ -1312,6 +1336,7 @@ twist mech_to_kvp(CK_MECHANISM_PTR mechs, CK_ULONG count) {
 
     static const mech_handler mech_to_kvp_handlers[] = {
             { CKM_RSA_X_509,     generic_mech_type_handler },
+            { CKM_ECDSA,         generic_mech_type_handler },
             { CKM_RSA_PKCS_OAEP, oaep_mech_type_handler    }
     };
 
@@ -1508,6 +1533,8 @@ twist attr_to_kvp(CK_ATTRIBUTE_PTR attrs, CK_ULONG count) {
         { CKA_EXTRACTABLE,       attr_generic_bool_handler     },
         { CKA_ALWAYS_SENSITIVE,  attr_generic_bool_handler     },
         { CKA_NEVER_EXTRACTABLE, attr_generic_bool_handler     },
+        { CKA_EC_PARAMS,         attr_generic_hex_handler      },
+        { CKA_EC_POINT,          attr_generic_hex_handler      },
     };
 
     twist attr_kvp = NULL;
@@ -1534,18 +1561,21 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
 
     m = mech_to_kvp(tobj->mechanisms.mech, tobj->mechanisms.count);
     if (!m) {
+        LOGE("Could not convert mechanism");
         goto error;
     }
 
     if (has_pub_attrs) {
         pubattrs = attr_to_kvp(tobj->atributes.pub.attrs, tobj->atributes.pub.count);
         if (!pubattrs) {
+            LOGE("Could not retrive public attrs");
             goto error;
         }
     }
 
     privattrs = attr_to_kvp(tobj->atributes.priv.attrs, tobj->atributes.priv.count);
     if (!privattrs) {
+        LOGE("Could not retrive private attrs");
         goto error;
     }
 

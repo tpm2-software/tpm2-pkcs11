@@ -12,15 +12,17 @@
 #include <stddef.h>
 
 #include <openssl/asn1.h>
-#include <openssl/rsa.h>
-#include <openssl/pem.h>
 #include <openssl/bn.h>
+#include <openssl/ec.h>
 #include <openssl/err.h>
-
-#include <tss2/tss2_mu.h>
-#include <tss2/tss2_esys.h>
+#include <openssl/pem.h>
+#include <openssl/rsa.h>
 #include <openssl/sha.h>
 
+#include <tss2/tss2_esys.h>
+#include <tss2/tss2_mu.h>
+
+#include "openssl_compat.h"
 #include "pkcs11.h"
 #include "log.h"
 #include "mutex.h"
@@ -639,11 +641,31 @@ bool tpm_flushcontext(tpm_ctx *ctx, uint32_t handle) {
     return true;
 }
 
-TPMI_ALG_HASH mech_to_hash_alg(CK_MECHANISM_TYPE mode) {
+TPMI_ALG_HASH hashlen_to_alg_guess(CK_ULONG datalen) {
+    switch (datalen) {
+        case SHA_DIGEST_LENGTH:
+            return TPM2_ALG_SHA1;
+        case SHA256_DIGEST_LENGTH:
+            return TPM2_ALG_SHA256;
+        case SHA384_DIGEST_LENGTH:
+            return TPM2_ALG_SHA384;
+        case SHA512_DIGEST_LENGTH:
+            return TPM2_ALG_SHA512;
+        default:
+            LOGE("unkown digest length");
+            return TPM2_ALG_ERROR;
+    }
+}
+
+TPMI_ALG_HASH mech_to_hash_alg_ex(CK_MECHANISM_TYPE mode, CK_ULONG datalen) {
 
     switch (mode) {
     case CKM_RSA_PKCS:
         return TPM2_ALG_NULL;
+
+    case CKM_SHA1_RSA_PKCS:
+    case CKM_SHA_1:
+        return TPM2_ALG_SHA1;
 
     case CKM_SHA256_RSA_PKCS:
     case CKM_SHA256:
@@ -659,11 +681,22 @@ TPMI_ALG_HASH mech_to_hash_alg(CK_MECHANISM_TYPE mode) {
 
     case CKM_ECDSA_SHA1:
         return TPM2_ALG_SHA1;
+    case CKM_ECDSA: 
+	// ECDSA is NOT using a hash.
+	// It needs a length (determined by the name of an hash alg) anyway.
+	// The length/hash_alg with correct length will be specified later.
+	return datalen ? hashlen_to_alg_guess(datalen) : TPM2_ALG_ERROR;
 
     default:
         return TPM2_ALG_ERROR;
     }
 }
+
+TPMI_ALG_HASH mech_to_hash_alg(CK_MECHANISM_TYPE mode) {
+
+    return mech_to_hash_alg_ex(mode, 0);
+}
+
 
 TPM2_ALG_ID mech_to_sig_scheme(CK_MECHANISM_TYPE mode) {
 
@@ -673,6 +706,7 @@ TPM2_ALG_ID mech_to_sig_scheme(CK_MECHANISM_TYPE mode) {
     case CKM_SHA384_RSA_PKCS:
     case CKM_SHA512_RSA_PKCS:
         return TPM2_ALG_RSASSA;
+    case CKM_ECDSA:
     case CKM_ECDSA_SHA1:
         return TPM2_ALG_ECDSA;
     default:
@@ -680,20 +714,22 @@ TPM2_ALG_ID mech_to_sig_scheme(CK_MECHANISM_TYPE mode) {
     }
 }
 
-bool get_signature_scheme(CK_MECHANISM_TYPE mech, TPMT_SIG_SCHEME *scheme) {
+bool get_signature_scheme(CK_MECHANISM_TYPE mech, CK_ULONG datalen, TPMT_SIG_SCHEME *scheme) {
 
     TPM2_ALG_ID sig_scheme = mech_to_sig_scheme(mech);
     if (sig_scheme == TPM2_ALG_ERROR) {
+        LOGE("Connot convert mechanism to signature scheme, got: 0x%lx", mech);
         return false;
     }
 
-    TPMI_ALG_HASH halg = mech_to_hash_alg(mech);
+    TPMI_ALG_HASH halg = mech_to_hash_alg_ex(mech, datalen);
     if (halg == TPM2_ALG_ERROR) {
+        LOGE("Connot convert mechanism to hash algorithm, got: 0x%lx", mech);
         return false;
     }
 
     scheme->scheme = sig_scheme;
-    scheme->details.rsassa.hashAlg = halg;
+    scheme->details.any.hashAlg = halg;
 
     return true;
 }
@@ -890,7 +926,7 @@ CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR 
     }
 
     TPMT_SIG_SCHEME in_scheme;
-    result = get_signature_scheme(mech, &in_scheme);
+    result = get_signature_scheme(mech, datalen, &in_scheme);
     assert(result);
     if (!result) {
         /*
@@ -992,7 +1028,7 @@ static CK_RV init_ecdsa_sig(CK_BYTE_PTR sig, CK_ULONG siglen, TPMS_SIGNATURE_ECD
     return CKR_OK;
 }
 
-static CK_RV init_sig_from_mech(CK_MECHANISM_TYPE mech, CK_BYTE_PTR sig, CK_ULONG siglen, TPMT_SIGNATURE *tpmsig) {
+static CK_RV init_sig_from_mech(CK_MECHANISM_TYPE mech, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen, TPMT_SIGNATURE *tpmsig) {
 
     /*
      * VerifyInit should be verifying that the mech and sig is supported, so
@@ -1004,7 +1040,7 @@ static CK_RV init_sig_from_mech(CK_MECHANISM_TYPE mech, CK_BYTE_PTR sig, CK_ULON
         return CKR_GENERAL_ERROR;
     }
 
-    tpmsig->signature.any.hashAlg = mech_to_hash_alg(mech);
+    tpmsig->signature.any.hashAlg = mech_to_hash_alg_ex(mech, datalen);
     if (tpmsig->signature.any.hashAlg == TPM2_ALG_ERROR) {
         return CKR_GENERAL_ERROR;
     }
@@ -1033,7 +1069,7 @@ CK_RV tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PT
     msgdigest.size = datalen;
 
     TPMT_SIGNATURE tpmsig;
-    CK_RV rv = init_sig_from_mech(mech, sig, siglen, &tpmsig);
+    CK_RV rv = init_sig_from_mech(mech, datalen, sig, siglen, &tpmsig);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -1309,10 +1345,11 @@ static CK_RV mech_to_rsa_oaep(tpm_ctx *tpm, CK_MECHANISM_PTR mech, tpm_encrypt_d
     if (rv != CKR_OK) {
         return rv;
     }
-
+    /*  TODO revisit - why does it return not supported here. It works though
     if (params->mgf != supported_mgf) {
         return CKR_MECHANISM_PARAM_INVALID;
     }
+    */
 
     encdata->rsa.scheme.details.oaep.hashAlg = mech_to_hash_alg(params->hashAlg);
     if (encdata->rsa.scheme.details.oaep.hashAlg == TPM2_ALG_ERROR) {
@@ -1909,6 +1946,46 @@ static CK_RV handle_modulus(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) 
     return CKR_OK;
 }
 
+static CK_RV handle_ecparams(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+    UNUSED(index);
+
+    tpm_key_data *keydat = (tpm_key_data *)udata;
+    const unsigned char *p = attr->pValue;
+
+    ASN1_OBJECT *a = d2i_ASN1_OBJECT(NULL, &p, attr->ulValueLen);
+    if (!a) {
+        LOGE("Unknown CKA_EC_PARAMS value");
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    TPMS_ECC_PARMS *ec = &keydat->pub.publicArea.parameters.eccDetail;
+
+    int nid = OBJ_obj2nid(a);
+    ASN1_OBJECT_free(a);
+    switch (nid) {
+    case NID_X9_62_prime192v1:
+        ec->curveID = TPM2_ECC_NIST_P192;
+    break;
+    case NID_secp224r1:
+        ec->curveID = TPM2_ECC_NIST_P224;
+    break;
+    case NID_X9_62_prime256v1:
+        ec->curveID = TPM2_ECC_NIST_P256;
+    break;
+    case NID_secp384r1:
+        ec->curveID = TPM2_ECC_NIST_P384;
+    break;
+    case NID_secp521r1:
+        ec->curveID = TPM2_ECC_NIST_P521;
+    break;
+    default:
+        LOGE("Unsupported nid to tpm EC algorithm mapping, got nid: %d", nid);
+        return CKR_CURVE_NOT_SUPPORTED;
+    }
+
+    return CKR_OK;
+}
+
 static CK_RV handle_encrypt(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
     UNUSED(index);
 
@@ -2037,40 +2114,11 @@ static const attr_handler tpm_handlers[] = {
     { CKA_SIGN,            handle_encrypt        }, // SIGN_ENCRYPT are same in TPM, depends on SCHEME
     { CKA_MODULUS_BITS,    handle_modulus        },
     { CKA_PUBLIC_EXPONENT, handle_exp            },
-    { CKA_SENSITIVE,       handle_sensitive     },
+    { CKA_SENSITIVE,       handle_sensitive      },
     { CKA_CLASS,           handle_ckobject_class },
     { CKA_EXTRACTABLE,     handle_extractable    },
-};
-
-static const TPM2B_PUBLIC rsa_template = {
-    .size = 0,
-    .publicArea = {
-        .type = TPM2_ALG_RSA,
-        .nameAlg = TPM2_ALG_SHA256,
-        .objectAttributes =
-                TPMA_OBJECT_FIXEDTPM
-              | TPMA_OBJECT_FIXEDPARENT
-              | TPMA_OBJECT_SENSITIVEDATAORIGIN
-              | TPMA_OBJECT_USERWITHAUTH
-              | TPMA_OBJECT_DECRYPT
-              | TPMA_OBJECT_SIGN_ENCRYPT,
-        .authPolicy = {
-             .size = 0,
-         },
-        .parameters.rsaDetail = {
-             .symmetric = {
-                 .algorithm = TPM2_ALG_NULL,
-             },
-             .scheme = {
-                  .scheme = TPM2_ALG_NULL
-              },
-             .keyBits = 2048,
-             .exponent = 0,
-         },
-        .unique.rsa = {
-             .size = 0,
-         },
-    },
+    { CKA_EC_PARAMS,       handle_ecparams       },
+    { CKA_EC_POINT,        ATTR_HANDLER_IGNORE   }, // TODO PH
 };
 
 static TSS2_RC create_loaded(
@@ -2112,6 +2160,310 @@ static TSS2_RC create_loaded(
     return rval;
 }
 
+static CK_RV sanity_check_mech(CK_MECHANISM_PTR mechanism) {
+    switch (mechanism->mechanism) {
+        case CKM_RSA_PKCS_KEY_PAIR_GEN:
+            /* falls-thru */
+        case CKM_EC_KEY_PAIR_GEN:
+            break;
+        default:
+            LOGE("Only supports mechanism \"CKM_RSA_PKCS_KEY_PAIR_GEN\" or"
+                 "\"CKM_EC_KEY_PAIR_GEN\", got: 0x%x", mechanism->mechanism);
+            return CKR_MECHANISM_INVALID;
+    }
+
+    if (mechanism->ulParameterLen) {
+        LOGE("Expected mechanism  with an empty parameter, got length: %lu",
+                mechanism->ulParameterLen);
+        return CKR_MECHANISM_PARAM_INVALID;
+    }
+
+    if (mechanism->pParameter) {
+        LOGE("Expected mechanism with an empty parameter, got a parameter pointer");
+        return CKR_MECHANISM_PARAM_INVALID;
+    }
+
+    return CKR_OK;
+}
+
+static CK_RV tpm_data_init(CK_MECHANISM_PTR mechanism,
+        CK_ATTRIBUTE_PTR pubattrs, CK_ULONG pubcnt,
+        CK_ATTRIBUTE_PTR privattrs, CK_ULONG privcnt,
+        tpm_key_data *tpmdat) {
+
+    static const TPM2B_PUBLIC rsa_template = {
+        .size = 0,
+        .publicArea = {
+            .type = TPM2_ALG_RSA,
+            .nameAlg = TPM2_ALG_SHA256,
+            .objectAttributes =
+                    TPMA_OBJECT_FIXEDTPM
+                  | TPMA_OBJECT_FIXEDPARENT
+                  | TPMA_OBJECT_SENSITIVEDATAORIGIN
+                  | TPMA_OBJECT_USERWITHAUTH
+                  | TPMA_OBJECT_DECRYPT
+                  | TPMA_OBJECT_SIGN_ENCRYPT,
+            .authPolicy = {
+                 .size = 0,
+             },
+            .parameters.rsaDetail = {
+                 .symmetric = {
+                     .algorithm = TPM2_ALG_NULL,
+                 },
+                 .scheme = {
+                      .scheme = TPM2_ALG_NULL
+                  },
+                 .keyBits = 2048,
+                 .exponent = 0,
+             },
+            .unique.rsa = {
+                 .size = 0,
+             },
+        },
+    };
+
+    static const TPM2B_PUBLIC ecc_template = {
+        .size = 0,
+        .publicArea = {
+            .type = TPM2_ALG_ECC,
+            .nameAlg = TPM2_ALG_SHA256,
+            .objectAttributes =
+                TPMA_OBJECT_FIXEDTPM
+                | TPMA_OBJECT_FIXEDPARENT
+                | TPMA_OBJECT_SENSITIVEDATAORIGIN
+                | TPMA_OBJECT_USERWITHAUTH
+                | TPMA_OBJECT_SIGN_ENCRYPT,
+            .authPolicy = {
+                .size = 0,
+            },
+            .parameters.eccDetail = {
+                .symmetric = {
+                    .algorithm = TPM2_ALG_NULL,
+                    .keyBits.aes = 0,
+                    .mode.aes = 0,
+                },
+                .scheme = {
+                    .scheme = TPM2_ALG_NULL,
+                    .details = {
+                       // {.hashAlg = TPM2_ALG_SHA1}
+                    }
+                },
+                .curveID = TPM2_ECC_NIST_P256,
+                .kdf = {.scheme =
+                    TPM2_ALG_NULL,.details = {}
+                }
+            },
+            .unique.ecc = {
+                .x = {.size = 0,.buffer = {}},
+                .y = {.size = 0,.buffer = {}}
+            },
+        },
+    };
+
+    memset(&tpmdat->priv, 0, sizeof(tpmdat->priv));
+    memset(&tpmdat->pub,  0, sizeof(tpmdat->pub));
+
+    switch(mechanism->mechanism) {
+        case CKM_RSA_PKCS_KEY_PAIR_GEN:
+            tpmdat->pub = rsa_template;
+            break;
+        case CKM_EC_KEY_PAIR_GEN:
+            tpmdat->pub = ecc_template;
+            break;
+        default:
+            /* should never happen checked at entry */
+            LOGE("Unsupported keypair mechanism: 0x%x",
+                    mechanism->mechanism);
+            assert(0);
+            return CKR_MECHANISM_INVALID;
+    }
+
+    CK_ATTRIBUTE_PTR attrs[2]      = {pubattrs, privattrs};
+    CK_ULONG cnt[ARRAY_LEN(attrs)] = {pubcnt,   privcnt};
+
+    /* populate tpmdat */
+    CK_ULONG i;
+    for (i=0; i < ARRAY_LEN(attrs); i++) {
+
+        CK_ULONG max = cnt[i];
+        CK_ATTRIBUTE_PTR cur = attrs[i];
+
+        CK_RV rv = utils_handle_attrs(tpm_handlers, ARRAY_LEN(tpm_handlers), cur, max, tpmdat);
+        if (rv != CKR_OK) {
+            LOGE("Could not process attributes");
+            return rv;
+        }
+    }
+
+    return CKR_OK;
+}
+
+static CK_RV tpm_object_data_populate_rsa(TPM2B_PUBLIC *out_pub, tpm_object_data *objdata) {
+
+    objdata->rsa.modulus = twistbin_new(
+            out_pub->publicArea.unique.rsa.buffer,
+            out_pub->publicArea.unique.rsa.size);
+    if (!objdata->rsa.modulus) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    objdata->rsa.exponent = out_pub->publicArea.parameters.rsaDetail.exponent;
+
+    return CKR_OK;
+}
+
+static EC_POINT *tpm_pub_to_ossl_pub(EC_GROUP *group, TPM2B_PUBLIC *key) {
+
+    BIGNUM *bn_x = NULL;
+    BIGNUM *bn_y = NULL;
+
+    EC_POINT *pub_key_point_tmp = NULL;
+    EC_POINT *r = NULL;
+
+    /* Create the big numbers for the coordinates of the point */
+    bn_x = BN_bin2bn(&key->publicArea.unique.ecc.x.buffer[0],
+                               key->publicArea.unique.ecc.x.size,
+                               NULL);
+    if (!bn_x) {
+        LOGE("Create big num from byte buffer.");
+        goto out;
+    }
+
+    bn_y = BN_bin2bn(&key->publicArea.unique.ecc.y.buffer[0],
+                               key->publicArea.unique.ecc.y.size,
+                               NULL);
+    if (!bn_y) {
+        LOGE("Create big num from byte buffer.");
+        goto out;
+    }
+
+    /* Create the ec point with the affine coordinates of the TPM point */
+    pub_key_point_tmp = EC_POINT_new(group);
+    if (!pub_key_point_tmp) {
+        LOGE("Could not create new affine point from X and Y coordinates");
+        goto out;
+    }
+
+    int rc = EC_POINT_set_affine_coordinates_GFp(group,
+            pub_key_point_tmp,
+            bn_x,
+            bn_y,
+            NULL);
+    if (!rc) {
+        EC_POINT_free(pub_key_point_tmp);
+        LOGE("Could not set affine coordinate points");
+        goto out;
+    }
+
+    /* sanity check that the point created in the group is on the curve */
+    rc = EC_POINT_is_on_curve(group, pub_key_point_tmp, NULL);
+    if (!rc) {
+        EC_POINT_free(pub_key_point_tmp);
+        LOGE("The TPM point is not on the curve");
+        goto out;
+    }
+
+    r = pub_key_point_tmp;
+
+out:
+    BN_free(bn_x);
+    BN_free(bn_y);
+
+    return r;
+}
+
+static CK_RV tpm_object_data_populate_ecc(TPM2B_PUBLIC *out_pub, tpm_object_data *objdata) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    EC_GROUP *group = NULL;               /* Group defines the used curve */
+    EC_POINT *tpm_pub_key = NULL;         /* Public part of TPM key */
+    int curveId;
+    unsigned char *mydata = NULL;
+
+    /* Set ossl constant for curve type and create group for curve */
+    switch (out_pub->publicArea.parameters.eccDetail.curveID) {
+        case TPM2_ECC_NIST_P192:
+            curveId = NID_X9_62_prime192v1;
+            break;
+        case TPM2_ECC_NIST_P224:
+            curveId = NID_secp224r1;
+            break;
+        case TPM2_ECC_NIST_P256:
+            curveId = NID_X9_62_prime256v1;
+            break;
+        case TPM2_ECC_NIST_P384:
+            curveId = NID_secp384r1;
+            break;
+        case TPM2_ECC_NIST_P521:
+            curveId = NID_secp521r1;
+            break;
+        default:
+            LOGE("ECC Curve not implemented");
+            return CKR_GENERAL_ERROR;
+    }
+
+    group = EC_GROUP_new_by_curve_name(curveId);
+    if (!group) {
+        LOGE("EC_GROUP_new failed");
+        goto out;
+    }
+
+    tpm_pub_key = tpm_pub_to_ossl_pub(group, out_pub);
+    if (!tpm_pub_key){
+        goto out;
+    }
+
+    ssize_t len = EC_POINT_point2buf(group, tpm_pub_key, POINT_CONVERSION_UNCOMPRESSED,
+            &mydata, NULL);
+    if (len <= 0) {
+        LOGE("EC_POINT_point2buf failed: %z", len);
+        goto out;
+    }
+
+    if (len > 255) {
+        LOGE("Length must fit within a byte, got %z", len);
+        goto out;
+    }
+
+    /*
+     * Build a DER encoded uncompressed representation of the points
+     * per X9.62.
+     *
+     * TODO get better link to documentation around this or build
+     * with OSSL.
+     */
+    char *padded_data = malloc(len + 2);
+    if (!padded_data) {
+        LOGE("oom");
+        goto out;
+    }
+
+    padded_data[0] = 4;
+    padded_data[1] = len;
+    memcpy(&padded_data[2], mydata, len);
+
+    objdata->ecc.ecpoint = twistbin_new(
+            padded_data,
+            len + 2);
+    free(padded_data);
+    if (!objdata->ecc.ecpoint) {
+        LOGE("oom");
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    rv = CKR_OK;
+
+out:
+    EC_POINT_free(tpm_pub_key);
+    EC_GROUP_free(group);
+    OPENSSL_free(mydata);
+
+    return rv;
+}
+
 CK_RV tpm2_generate_key(
         tpm_ctx *tpm,
 
@@ -2142,49 +2494,19 @@ CK_RV tpm2_generate_key(
 
     assert(objdata);
 
-    if (mechanism->mechanism != CKM_RSA_PKCS_KEY_PAIR_GEN) {
-        LOGE("Only supports mechanism \"CKM_RSA_PKCS_KEY_PAIR_GEN\"");
-        rv = CKR_MECHANISM_INVALID;
+    rv = sanity_check_mech(mechanism);
+    if (rv != CKR_OK) {
         goto out;
     }
 
-    if (mechanism->ulParameterLen) {
-        LOGE("Only supports mechanism \"CKM_RSA_PKCS_KEY_PAIR_GEN\""
-                "with an empty parameter, got length: %lu",
-                mechanism->ulParameterLen);
-        rv = CKR_MECHANISM_PARAM_INVALID;
+    tpm_key_data tpmdat;
+    rv = tpm_data_init(mechanism,
+        pubattrs, pubcnt,
+        privattrs, privcnt,
+        &tpmdat);
+    if (rv != CKR_OK) {
         goto out;
     }
-
-    if (mechanism->pParameter) {
-        LOGE("Only supports mechanism \"CKM_RSA_PKCS_KEY_PAIR_GEN\""
-                "with an empty parameter, got a parameter pointer");
-        rv = CKR_MECHANISM_PARAM_INVALID;
-        goto out;
-    }
-
-    CK_ATTRIBUTE_PTR attrs[2]      = {pubattrs, privattrs};
-    CK_ULONG cnt[ARRAY_LEN(attrs)] = {pubcnt,   privcnt};
-
-    tpm_key_data tpmdat = {
-        .priv = { 0 },
-        .pub  = rsa_template
-    };
-
-    /* populate tpmdat */
-    CK_ULONG i;
-    for (i=0; i < ARRAY_LEN(attrs); i++) {
-
-        CK_ULONG max = cnt[i];
-        CK_ATTRIBUTE_PTR cur = attrs[i];
-
-        rv = utils_handle_attrs(tpm_handlers, ARRAY_LEN(tpm_handlers), cur, max, &tpmdat);
-        if (rv != CKR_OK) {
-            LOGE("Could not process attributes");
-            goto out;
-        }
-    }
-
 
     bool res = set_esys_auth(tpm->esys_ctx, parent, parentauth);
     if (!res) {
@@ -2215,6 +2537,7 @@ CK_RV tpm2_generate_key(
         );
     if (rc != TSS2_RC_SUCCESS) {
         rv = CKR_GENERAL_ERROR;
+        LOGE("create_loaded 0x%x", rc);
         goto out;
     }
 
@@ -2262,18 +2585,23 @@ CK_RV tpm2_generate_key(
         goto out;
     }
 
-    assert(mechanism->mechanism == CKM_RSA_PKCS_KEY_PAIR_GEN);
+    objdata->mechanism = mechanism->mechanism;
 
-    objdata->rsa.modulus = twistbin_new(
-            out_pub->publicArea.unique.rsa.buffer,
-            out_pub->publicArea.unique.rsa.size);
-    if (!objdata->rsa.modulus) {
-        LOGE("oom");
-        rv = CKR_HOST_MEMORY;
-        goto out;
+    switch(mechanism->mechanism) {
+    case CKM_RSA_PKCS_KEY_PAIR_GEN:
+        rv = tpm_object_data_populate_rsa(out_pub, objdata);
+        break;
+    case CKM_EC_KEY_PAIR_GEN:
+        rv = tpm_object_data_populate_ecc(out_pub, objdata);
+        break;
+    default:
+        LOGE("Impossible keygen type, got: 0x%x");
+        assert(0);
     }
 
-    objdata->rsa.exponent = out_pub->publicArea.parameters.rsaDetail.exponent;
+    if (rv != CKR_OK) {
+        goto out;
+    }
 
     objdata->privblob = tmppriv;
     objdata->pubblob = tmppub;
@@ -2286,4 +2614,24 @@ out:
     Esys_Free(out_priv);
 
     return rv;
+}
+
+void tpm_objdata_free(tpm_object_data *objdata) {
+
+    if (!objdata) {
+        return;
+    }
+
+    switch (objdata->mechanism) {
+    case CKM_RSA_PKCS_KEY_PAIR_GEN:
+        twist_free(objdata->rsa.modulus);
+        break;
+    case CKM_EC_KEY_PAIR_GEN:
+        twist_free(objdata->ecc.ecpoint);
+        break;
+    default:
+        LOGE("Unsupported keygen mechanism type: 0x%x", objdata->mechanism);
+        assert(0);
+    }
+
 }

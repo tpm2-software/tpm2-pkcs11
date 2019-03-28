@@ -127,16 +127,22 @@ struct tpm_object_data {
 
     uint32_t handle;
 
+    CK_MECHANISM_TYPE mechanism;
     union {
         struct {
             twist modulus;
             uint32_t exponent;
         } rsa;
+        struct {
+            twist ecpoint;
+        } ecc;
     };
 
     twist pubblob;
     twist privblob;
 };
+
+void tpm_objdata_free(tpm_object_data *objdata);
 
 CK_RV tpm2_generate_key(
         tpm_ctx *tpm,

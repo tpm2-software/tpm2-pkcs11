@@ -96,6 +96,15 @@ bool utils_mech_is_raw_sign(CK_MECHANISM_TYPE mech);
 bool utils_mech_is_rsa_pkcs(CK_MECHANISM_TYPE mech);
 
 /**
+ * True if the mechanism is an EC ECDSA signing scheme.
+ * @param mech
+ *  The mechanism to check.
+ * @return
+ *  True if it is, false otherwise.
+ */
+bool utils_mech_is_ecdsa(CK_MECHANISM_TYPE mech);
+
+/**
  *
  * @param size
  * @return

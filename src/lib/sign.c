@@ -56,6 +56,7 @@ static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
     case CKM_SHA512_RSA_PKCS:
     case CKM_ECDSA_SHA1:
         return true;
+    case CKM_ECDSA:
     case CKM_RSA_PKCS:
         return false;
     default:
@@ -82,6 +83,8 @@ static bool is_mech_supported(CK_MECHANISM_TYPE mech) {
     case CKM_SHA512_RSA_PKCS:
         /* falls-thru */
     case CKM_AES_CBC:
+        /* falls-thru */
+    case CKM_ECDSA:
         /* falls-thru */
     case CKM_ECDSA_SHA1:
         return true;
@@ -313,7 +316,6 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
     if (rv != CKR_OK) {
         return rv;
     }
-
     assert(opdata);
 
     token *tok = session_ctx_get_token(ctx);
@@ -433,6 +435,28 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
             goto session_out;
         }
     } else {
+
+        /*
+         * CKM_ECDSA is never considered a "raw sign" since the TPM natively supports it
+         * by setting the hashalg to TPM2_ALG_NULL. So just make sure that we propagate
+         * the raw data provided (hash) into the hash variable and perform a sign.
+         */
+        if (opdata->mtype == CKM_ECDSA){
+            assert(!hash);
+            assert(!hash_len);
+            assert(opdata->buffer);
+            hash_len = twist_len(opdata->buffer);
+            assert(hash_len >= 20); /* Minimum for SHA1 */
+            hash = malloc(hash_len);
+            if (!hash) {
+                LOGE("oom");
+                rv = CKR_HOST_MEMORY;
+                goto session_out;
+            }
+
+            memcpy(hash, opdata->buffer, hash_len);
+        }
+
         rv = tpm_sign(tpm, opdata->tobj, opdata->mtype, hash, hash_len, signature, signature_len);
         if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
             goto session_out;
@@ -494,7 +518,6 @@ CK_RV sign(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR si
     if (rv != CKR_OK) {
         return rv;
     }
-
     return sign_final_ex(ctx, signature, signature_len, true);
 }
 
@@ -530,9 +553,20 @@ CK_RV verify_final (session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG signature_
     CK_BYTE hash[1024];
     CK_ULONG hash_len = sizeof(hash);
 
-    rv = digest_final_op(ctx, opdata->digest_opdata, hash, &hash_len);
-    if (rv != CKR_OK) {
-        goto out;
+    if (opdata->do_hash) {
+        rv = digest_final_op(ctx, opdata->digest_opdata, hash, &hash_len);
+        if (rv != CKR_OK) {
+            goto out;
+        }
+    } else {
+        size_t datalen = twist_len(opdata->buffer);
+        if (datalen > hash_len) {
+            LOGE("Internal buffer too small, got: %zu expected less than %zu",
+                    datalen, hash_len);
+            return CKR_GENERAL_ERROR;
+        }
+        hash_len = datalen;
+        memcpy(hash, opdata->buffer, datalen);
     }
 
     rv = tpm_verify(tpm, opdata->tobj, opdata->mtype, hash, hash_len, signature, signature_len);
