@@ -383,6 +383,56 @@ static void test_sign_verify_CKM_RSA_PKCS_sha512(void **state) {
             ckm_sha512_rsa_pkcs_siglen);
 }
 
+static void test_sign_verify_CKM_ECDSA(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_OBJECT_HANDLE pubkey;
+    CK_OBJECT_HANDLE privkey;
+
+    get_keypair(session, CKK_EC, &pubkey, &privkey);
+
+    user_login(session);
+
+    /* verify that we can use it via a sign operation */
+    CK_MECHANISM mech = { .mechanism = CKM_ECDSA };
+    CK_RV rv = C_SignInit(session, &mech, privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE sig[1024];
+
+    /*
+     * echo -n 'my foo msg' | openssl sha256 | cut -d' ' -f 2-2 | xxd -r -p | xxd -i
+     */
+    CK_BYTE sha256_msg_hash[] = {
+        0xcd, 0xd8, 0x92, 0x1d, 0xf0, 0xcd, 0x29, 0xba, 0x4b, 0x8b, 0x87, 0x12,
+        0x15, 0x07, 0x46, 0xdf, 0xb1, 0x91, 0x50, 0x81, 0xf7, 0xd4, 0x9b, 0xd5,
+        0x67, 0x58, 0xae, 0x5a, 0xa3, 0x2e, 0x47, 0x0d
+    };
+
+    CK_ULONG siglen = sizeof(sig);
+
+    rv = C_Sign(session, sha256_msg_hash, sizeof(sha256_msg_hash), sig,
+            &siglen);
+    assert_int_equal(rv, CKR_OK);
+    /*
+     * Skip checking the siglen. This comes back as a DER encoded R + S portions of the signature.
+     * R + S is 2 times the curve size in bytes (so 64 for P256) but we're not returning that, were
+     * returning the DER encoded format that tools expect, in DER format which may cause leading
+     * bytes to be dropped from, R + S, so the output size isn't stable. But it's definitely not 0.
+     */
+    assert_int_not_equal(siglen, 0);
+
+    /* try the public key verification */
+    rv = C_VerifyInit(session, &mech, pubkey);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Verify(session, sha256_msg_hash, sizeof(sha256_msg_hash),
+            sig, siglen);
+    assert_int_equal(rv, CKR_OK);
+}
+
 static void test_sign_verify_CKM_ECDSA_SHA1(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -728,68 +778,6 @@ static void verify(RSA *pub, CK_BYTE_PTR msg, CK_ULONG msg_len, CK_BYTE_PTR sig,
     EVP_MD_CTX_destroy(ctx);
 }
 
-static void get_rsa_keypair(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE_PTR pub_handle, CK_OBJECT_HANDLE_PTR priv_handle) {
-
-    assert_non_null(pub_handle);
-    assert_non_null(priv_handle);
-
-    CK_OBJECT_CLASS key_class = CKO_PRIVATE_KEY;
-    CK_KEY_TYPE key_type = CKK_RSA;
-    CK_ATTRIBUTE priv_tmpl[] = {
-        { CKA_CLASS, &key_class, sizeof(key_class)  },
-        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
-    };
-
-    CK_RV rv = C_FindObjectsInit(session, priv_tmpl, ARRAY_LEN(priv_tmpl));
-    assert_int_equal(rv, CKR_OK);
-
-    /* Find an RSA key priv at index 0 pub at index 1 */
-    CK_ULONG count;
-    rv = C_FindObjects(session, priv_handle, 1, &count);
-    assert_int_equal(rv, CKR_OK);
-    assert_int_equal(count, 1);
-
-    rv = C_FindObjectsFinal(session);
-    assert_int_equal(rv, CKR_OK);
-
-    /* got private now fnd public based on CKA_ID */
-    key_class = CKO_PUBLIC_KEY;
-    CK_BYTE _tmp_buf[1024];
-    CK_ATTRIBUTE pub_tmpl[] = {
-        { .type = CKA_ID, .ulValueLen = sizeof(_tmp_buf), .pValue = _tmp_buf },
-        { CKA_CLASS, &key_class, sizeof(key_class)  },
-        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
-    };
-
-    /* populate the CKA_ID field for the public object template */
-    rv = C_GetAttributeValue(session, *priv_handle, pub_tmpl, 1);
-    assert_int_equal(rv, CKR_OK);
-
-    /* use public template + CKA_ID to find proper public object */
-    rv = C_FindObjectsInit(session, pub_tmpl, ARRAY_LEN(pub_tmpl));
-    assert_int_equal(rv, CKR_OK);
-
-    rv = C_FindObjects(session, pub_handle, 1, &count);
-    assert_int_equal(rv, CKR_OK);
-    assert_int_equal(count, 1);
-
-    rv = C_FindObjectsFinal(session);
-    assert_int_equal(rv, CKR_OK);
-
-    /*
-     * whitebox test handle identifier link sanity
-     * Turning down the high bit in the public handle should
-     * result in the same handle id as the private portion of
-     * the object.
-     */
-    CK_OBJECT_HANDLE x = *pub_handle;
-    /* clear high bit, no sign extension as unsigned type */
-    x = x << 1;
-    x = x >> 1;
-
-    assert_int_equal(x, *priv_handle);
-}
-
 static void test_sign_verify_public(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -797,7 +785,7 @@ static void test_sign_verify_public(void **state) {
 
     CK_OBJECT_HANDLE priv_handle;
     CK_OBJECT_HANDLE pub_handle;
-    get_rsa_keypair(session, &pub_handle, &priv_handle);
+    get_keypair(session, CKK_RSA, &pub_handle, &priv_handle);
 
     user_login(session);
 
@@ -856,6 +844,9 @@ int main() {
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_ECDSA_SHA1,
             test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_verify_CKM_ECDSA,
+            test_setup, test_teardown),
+
     };
 
     return cmocka_run_group_tests(tests, group_setup, group_teardown);

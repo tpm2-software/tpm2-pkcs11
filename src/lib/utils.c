@@ -393,6 +393,7 @@ twist utils_pdkdf2_hmac_sha256(const twist pin, const twist salt, int iterations
 size_t utils_get_halg_size(CK_MECHANISM_TYPE mttype) {
 
     switch(mttype) {
+        case CKM_ECDSA:
         case CKM_ECDSA_SHA1:
             /* falls-thru */
         case CKM_SHA1_RSA_PKCS:
@@ -430,6 +431,18 @@ bool utils_mech_is_rsa_pkcs(CK_MECHANISM_TYPE mech) {
     case CKM_SHA384_RSA_PKCS:
         /* falls-thru*/
     case CKM_SHA512_RSA_PKCS:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool utils_mech_is_ecdsa(CK_MECHANISM_TYPE mech) {
+
+    switch(mech) {
+    case CKM_ECDSA:
+        /* falls-thru*/
+    case CKM_ECDSA_SHA1:
         return true;
     default:
         return false;
@@ -601,6 +614,28 @@ CK_RV generic_attr_copy(CK_ATTRIBUTE_PTR in, CK_ULONG count, void *udata) {
 
     return CKR_OK;
 }
+CK_RV fake_ec_param_copy(CK_ATTRIBUTE_PTR in, CK_ULONG count, void *udata) {
+    CK_ATTRIBUTE_PTR out = &((CK_ATTRIBUTE_PTR)udata)[count];
+
+
+    void *newval = NULL;
+    unsigned char fake_oid[] = { 0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07 };
+
+
+    if (in->pValue) {
+        newval = calloc(1, 10);
+        if (!newval) {
+            return CKR_HOST_MEMORY;
+        }
+        memcpy(newval, fake_oid, 10);
+    }
+
+    out->ulValueLen = 10;
+    out->type = in->type;
+    out->pValue = newval;
+
+    return CKR_OK;
+}
 
 CK_RV utils_attr_deep_copy(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_count, CK_ATTRIBUTE_PTR copy) {
 
@@ -622,6 +657,8 @@ CK_RV utils_attr_deep_copy(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_count, CK_ATTRI
         { CKA_ALWAYS_SENSITIVE,  generic_attr_copy },
         { CKA_EXTRACTABLE,       generic_attr_copy },
         { CKA_NEVER_EXTRACTABLE, generic_attr_copy },
+        { CKA_EC_PARAMS,         fake_ec_param_copy},
+        { CKA_EC_POINT,          generic_attr_copy },
     };
 
     return utils_handle_attrs(deep_copy_attr_handlers, ARRAY_LEN(deep_copy_attr_handlers), attrs, attr_count, copy);
@@ -709,6 +746,8 @@ CK_RV utils_attr_free(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_count) {
         { CKA_ALWAYS_SENSITIVE,  generic_attr_free },
         { CKA_NEVER_EXTRACTABLE, generic_attr_free },
         { CKA_VALUE_LEN,         generic_attr_free },
+        { CKA_EC_PARAMS,         generic_attr_free },
+        { CKA_EC_POINT,         generic_attr_free },
     };
 
     return utils_handle_attrs(free_attr_handlers, ARRAY_LEN(free_attr_handlers), attrs, attr_count, NULL);
@@ -747,6 +786,7 @@ CK_RV utils_handle_mechs(const mech_handler *handlers, size_t handler_count, CK_
 CK_RV utils_mech_deep_copy(CK_MECHANISM_PTR mechs, CK_ULONG mech_count, CK_MECHANISM_PTR copy) {
 
     static const mech_handler mech_deep_copy_handlers[] = {
+        { CKM_ECDSA,         generic_mech_copy },
         { CKM_RSA_X_509,     generic_mech_copy },
         { CKM_RSA_PKCS_OAEP, generic_mech_copy },
     };

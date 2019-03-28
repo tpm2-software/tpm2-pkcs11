@@ -139,4 +139,65 @@ static inline void so_login_bad_pin(CK_SESSION_HANDLE handle) {
         return CKR_OK; \
     }
 
+static void get_keypair(CK_SESSION_HANDLE session, CK_KEY_TYPE key_type, CK_OBJECT_HANDLE_PTR pub_handle, CK_OBJECT_HANDLE_PTR priv_handle) {
+
+    assert_non_null(pub_handle);
+    assert_non_null(priv_handle);
+
+    CK_OBJECT_CLASS key_class = CKO_PRIVATE_KEY;
+    CK_ATTRIBUTE priv_tmpl[] = {
+        { CKA_CLASS, &key_class, sizeof(key_class)  },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+    };
+
+    CK_RV rv = C_FindObjectsInit(session, priv_tmpl, ARRAY_LEN(priv_tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    /* Find an RSA key priv at index 0 pub at index 1 */
+    CK_ULONG count;
+    rv = C_FindObjects(session, priv_handle, 1, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    /* got private now fnd public based on CKA_ID */
+    key_class = CKO_PUBLIC_KEY;
+    CK_BYTE _tmp_buf[1024];
+    CK_ATTRIBUTE pub_tmpl[] = {
+        { .type = CKA_ID, .ulValueLen = sizeof(_tmp_buf), .pValue = _tmp_buf },
+        { CKA_CLASS, &key_class, sizeof(key_class)  },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+    };
+
+    /* populate the CKA_ID field for the public object template */
+    rv = C_GetAttributeValue(session, *priv_handle, pub_tmpl, 1);
+    assert_int_equal(rv, CKR_OK);
+
+    /* use public template + CKA_ID to find proper public object */
+    rv = C_FindObjectsInit(session, pub_tmpl, ARRAY_LEN(pub_tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjects(session, pub_handle, 1, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    /*
+     * whitebox test handle identifier link sanity
+     * Turning down the high bit in the public handle should
+     * result in the same handle id as the private portion of
+     * the object.
+     */
+    CK_OBJECT_HANDLE x = *pub_handle;
+    /* clear high bit, no sign extension as unsigned type */
+    x = x << 1;
+    x = x >> 1;
+
+    assert_int_equal(x, *priv_handle);
+}
+
 #endif /* TEST_INTEGRATION_TEST_H_ */
