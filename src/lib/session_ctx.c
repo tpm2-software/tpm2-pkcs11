@@ -158,6 +158,10 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
             continue;
         }
 
+        if (tobj->link) {
+            tobj = tobj->link;
+        }
+
         // Already loaded, ignored.
         if (tobj->handle) {
             *loaded_tobj = tobj;
