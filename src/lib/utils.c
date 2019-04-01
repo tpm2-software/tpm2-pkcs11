@@ -708,7 +708,6 @@ CK_RV utils_attr_free(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_count) {
         { CKA_EXTRACTABLE,       generic_attr_free },
         { CKA_ALWAYS_SENSITIVE,  generic_attr_free },
         { CKA_NEVER_EXTRACTABLE, generic_attr_free },
-        { CKA_VALUE_BITS,        generic_attr_free },
         { CKA_VALUE_LEN,         generic_attr_free },
     };
 

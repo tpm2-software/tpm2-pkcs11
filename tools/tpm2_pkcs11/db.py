@@ -203,15 +203,18 @@ class Db(object):
         c.execute(sql, list(wrapping.values()))
         return c.lastrowid
 
-    def addtertiary(self, sid, priv, pub, objauth, attrs, mech):
+    def addtertiary(self, sid, priv, pub, objauth, mech, privattrs, pubattrs=None):
         tobject = {
             'sid': sid,
             'pub': Db._blobify(pub),
             'priv': Db._blobify(priv),
             'objauth': objauth,
-            'attrs': list_dict_to_kvp(attrs),
             'mech': list_dict_to_kvp(mech),
+            'privattrs': list_dict_to_kvp(privattrs),
         }
+
+        if pubattrs:
+            tobject.update({ 'pubattrs' : list_dict_to_kvp(pubattrs) })
 
         columns = ', '.join(tobject.keys())
         placeholders = ', '.join('?' * len(tobject))
@@ -221,12 +224,20 @@ class Db(object):
         c.execute(sql, list(tobject.values()))
         return c.lastrowid
 
-    def updatetertiaryattrs(self, tid, attrs):
+    def updatetertiaryattrs(self, tid, privattrs, pubattrs=None):
 
-        x = list_dict_to_kvp(attrs)
-        sql = 'UPDATE tobjects SET attrs=? WHERE id=?'
         c = self._conn.cursor()
-        c.execute(sql, (x, tid))
+        priv = list_dict_to_kvp(privattrs)
+        values =  [priv, tid]
+        
+        if not pubattrs:
+            sql = 'UPDATE tobjects SET privattrs=? WHERE id=?'
+        else:
+            pub = list_dict_to_kvp(pubattrs)
+            values.append(pub)
+            sql = 'UPDATE tobjects SET privattrs=?, pubattrs=? WHERE id=?'
+        
+        c.execute(sql, values)
 
     def updatepin(self,
                   is_so,
@@ -359,8 +370,9 @@ class Db(object):
                 pub BLOB NOT NULL,
                 priv BLOB NOT NULL,
                 objauth TEXT NOT NULL,
-                attrs TEXT NOT NULL,
                 mech TEXT NOT NULL,
+                privattrs TEXT NOT NULL,
+                pubattrs TEXT,
                 FOREIGN KEY (sid) REFERENCES sobjects(id) ON DELETE CASCADE
             );
             '''),

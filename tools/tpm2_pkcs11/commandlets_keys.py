@@ -85,13 +85,13 @@ class NewKeyCommandBase(Command):
         #
         y = yaml.load(tertiarypubdata)
 
+        pubattrs = None
+        privattrs = None
+        
         if alg.startswith('rsa'):
-            attrs = [
+            pubattrs = [
                 {
                     CKA_KEY_TYPE: CKK_RSA
-                },
-                {
-                    CKA_CLASS: CKO_PRIVATE_KEY
                 },
                 {
                     CKA_CLASS: CKO_PUBLIC_KEY
@@ -100,7 +100,22 @@ class NewKeyCommandBase(Command):
                     CKA_MODULUS: y['rsa']
                 },
                 {
+                    CKA_MODULUS_BITS : y['bits']
+                },
+                {
                     CKA_PUBLIC_EXPONENT: 65537
+                },
+            ]
+            
+            privattrs = [
+                {
+                    CKA_KEY_TYPE: CKK_RSA
+                },
+                {
+                    CKA_CLASS: CKO_PRIVATE_KEY
+                },
+                {
+                    CKA_MODULUS_BITS : y['bits']
                 },
             ]
 
@@ -116,27 +131,33 @@ class NewKeyCommandBase(Command):
                 }
             }]
         elif alg.startswith('ecc'):
-            attrs = [
+            pubattrs = [
                 {
                     CKA_KEY_TYPE: CKK_EC
-                },
-                {
-                    CKA_CLASS: CKO_PRIVATE_KEY
                 },
                 {
                     CKA_CLASS: CKO_PUBLIC_KEY
                 },
             ]
 
+            privattrs = [
+                {
+                    CKA_KEY_TYPE: CKK_EC
+                },
+
+                {
+                    CKA_CLASS: CKO_PRIVATE_KEY
+                },
+            ]
+
             mech = [{CKM_ECDSA: ""},]
         elif alg.startswith('aes'):
-            attrs = [{
+            privattrs = [{
                 CKA_CLASS: CKO_SECRET_KEY
             }, {
                 CKA_KEY_TYPE: CKK_AES
-            }, {
-                CKA_VALUE_BITS: y['sym-keybits']
-            }, {
+            },
+            {
                 CKA_VALUE_LEN: y['sym-keybits'] / 8
             }]
 
@@ -145,24 +166,28 @@ class NewKeyCommandBase(Command):
             sys.exit('Cannot handle algorithm: "{}"'.format(alg))
 
         # add the id
-        attrs.append({CKA_ID: binascii.hexlify(tid.encode()).decode()})
+        privattrs.append({CKA_ID: binascii.hexlify(tid.encode()).decode()})
+        if pubattrs:
+            pubattrs.append({CKA_ID: binascii.hexlify(tid.encode()).decode()})
 
-        attrs.append({CKA_TOKEN: True })
-        attrs.append({CKA_SENSITIVE: True })
-        attrs.append({CKA_ALWAYS_SENSITIVE: True })
-        attrs.append({CKA_EXTRACTABLE: False })
-        attrs.append({CKA_NEVER_EXTRACTABLE: True })
+        privattrs.append({CKA_TOKEN: True })
+        privattrs.append({CKA_SENSITIVE: True })
+        privattrs.append({CKA_ALWAYS_SENSITIVE: True })
+        privattrs.append({CKA_EXTRACTABLE: False })
+        privattrs.append({CKA_NEVER_EXTRACTABLE: True })
 
         # Add keylabel for ALL objects if set
         if keylabel is not None:
-            attrs.append({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
+            privattrs.append({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
+            if pubattrs:
+                pubattrs.append({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
 
         # Now get the secondary object from db
         sobj = db.getsecondary(token['id'])
 
         # Store to database
         rowid = db.addtertiary(sobj['id'], tertiarypriv, tertiarypub,
-                               encobjauth, attrs, mech)
+                               encobjauth, mech, privattrs, pubattrs)
 
         # if the keylabel is not set, use the tertiary object tid as the keylabel
         # Normally we would use a transaction to make this atomic, but Pythons
@@ -174,8 +199,10 @@ class NewKeyCommandBase(Command):
         #   - https://stackoverflow.com/questions/107005/predict-next-auto-inserted-row-tid-sqlite
         if keylabel is None:
             keylabel = str(rowid)
-            attrs.append({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
-            db.updatetertiaryattrs(rowid, attrs)
+            privattrs.append({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
+            if pubattrs:
+                pubattrs.append({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
+            db.updatetertiaryattrs(rowid, privattrs, pubattrs)
 
         db.commit()
 

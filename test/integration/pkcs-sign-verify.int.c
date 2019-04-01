@@ -728,33 +728,76 @@ static void verify(RSA *pub, CK_BYTE_PTR msg, CK_ULONG msg_len, CK_BYTE_PTR sig,
     EVP_MD_CTX_destroy(ctx);
 }
 
+static void get_rsa_keypair(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE_PTR pub_handle, CK_OBJECT_HANDLE_PTR priv_handle) {
+
+    assert_non_null(pub_handle);
+    assert_non_null(priv_handle);
+
+    CK_OBJECT_CLASS key_class = CKO_PRIVATE_KEY;
+    CK_KEY_TYPE key_type = CKK_RSA;
+    CK_ATTRIBUTE priv_tmpl[] = {
+        { CKA_CLASS, &key_class, sizeof(key_class)  },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+    };
+
+    CK_RV rv = C_FindObjectsInit(session, priv_tmpl, ARRAY_LEN(priv_tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    /* Find an RSA key priv at index 0 pub at index 1 */
+    CK_ULONG count;
+    rv = C_FindObjects(session, priv_handle, 1, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    /* got private now fnd public based on CKA_ID */
+    key_class = CKO_PUBLIC_KEY;
+    CK_BYTE _tmp_buf[1024];
+    CK_ATTRIBUTE pub_tmpl[] = {
+        { .type = CKA_ID, .ulValueLen = sizeof(_tmp_buf), .pValue = _tmp_buf },
+        { CKA_CLASS, &key_class, sizeof(key_class)  },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+    };
+
+    /* populate the CKA_ID field for the public object template */
+    rv = C_GetAttributeValue(session, *priv_handle, pub_tmpl, 1);
+    assert_int_equal(rv, CKR_OK);
+
+    /* use public template + CKA_ID to find proper public object */
+    rv = C_FindObjectsInit(session, pub_tmpl, ARRAY_LEN(pub_tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjects(session, pub_handle, 1, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    /*
+     * whitebox test handle identifier link sanity
+     * Turning down the high bit in the public handle should
+     * result in the same handle id as the private portion of
+     * the object.
+     */
+    CK_OBJECT_HANDLE x = *pub_handle;
+    /* clear high bit, no sign extension as unsigned type */
+    x = x << 1;
+    x = x >> 1;
+
+    assert_int_equal(x, *priv_handle);
+}
+
 static void test_sign_verify_public(void **state) {
 
     test_info *ti = test_info_from_state(state);
     CK_SESSION_HANDLE session = ti->handle;
 
-    CK_OBJECT_CLASS key_class = CKO_PRIVATE_KEY;
-    CK_KEY_TYPE key_type = CKK_RSA;
-    CK_ATTRIBUTE tmpl[] = {
-        { CKA_CLASS, &key_class, sizeof(key_class)  },
-        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
-    };
-
-    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
-    assert_int_equal(rv, CKR_OK);
-
-    /* Find an RSA key */
-    CK_ULONG count;
-    CK_OBJECT_HANDLE objhandles[1];
-    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
-    assert_int_equal(rv, CKR_OK);
-    assert_int_equal(count, 1);
-
-    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
-    assert_int_equal(rv, CKR_OK);
-
-    rv = C_FindObjectsFinal(session);
-    assert_int_equal(rv, CKR_OK);
+    CK_OBJECT_HANDLE priv_handle;
+    CK_OBJECT_HANDLE pub_handle;
+    get_rsa_keypair(session, &pub_handle, &priv_handle);
 
     user_login(session);
 
@@ -763,7 +806,7 @@ static void test_sign_verify_public(void **state) {
      * which is the ASN1 digest info for CKM_RSA_PKCS
      */
     CK_MECHANISM mech = { .mechanism =  CKM_SHA256_RSA_PKCS };
-    rv = C_SignInit(session, &mech, objhandles[0]);
+    CK_RV rv = C_SignInit(session, &mech, priv_handle);
     assert_int_equal(rv, CKR_OK);
 
     CK_BYTE msg[] = "my foo msg";
@@ -782,7 +825,7 @@ static void test_sign_verify_public(void **state) {
         { .type = CKA_MODULUS,         .ulValueLen = sizeof(_tmp_bufs[1]), .pValue = &_tmp_bufs[1] },
     };
 
-    rv = C_GetAttributeValue(session, objhandles[0], attrs, ARRAY_LEN(attrs));
+    rv = C_GetAttributeValue(session, pub_handle, attrs, ARRAY_LEN(attrs));
     assert_int_equal(rv, CKR_OK);
 
     RSA *r = template_to_rsa_pub_key(attrs, ARRAY_LEN(attrs));

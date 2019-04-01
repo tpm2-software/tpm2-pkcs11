@@ -25,15 +25,22 @@ struct object_find_data {
 
 void tobject_free(tobject *tobj) {
 
+    if (!tobj) {
+        return;
+    }
+
     twist_free(tobj->priv);
     twist_free(tobj->pub);
     twist_free(tobj->objauth);
     twist_free(tobj->unsealed_auth);
 
     CK_ULONG i = 0;
-    CK_RV rv = utils_attr_free(tobj->atributes.attrs, tobj->atributes.count);
-    assert(rv == CKR_OK);
-    free(tobj->atributes.attrs);
+    for (i=0 ; i < 2; i++) {
+        objattrs *a = i == 0 ? &tobj->atributes.pub : &tobj->atributes.priv;
+        CK_RV rv = utils_attr_free(a->attrs, a->count);
+        assert(rv == CKR_OK);
+        free(a->attrs);
+    }
 
     for (i=0; i < tobj->mechanisms.count; i++) {
         CK_MECHANISM_PTR m = &tobj->mechanisms.mech[i];
@@ -136,12 +143,13 @@ CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech) {
     return got_to_params ? CKR_MECHANISM_PARAM_INVALID : CKR_MECHANISM_INVALID;
 }
 
-tobject *object_attr_filter(tobject *tobj, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
+static bool attr_filter(objattrs *attrs, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
+
 
     CK_ULONG i;
     // If ulCount is set to 0 all items match automatically.
     if (count == 0) {
-	    return tobj;
+	    return true;
     }
 
     for (i=0; i < count; i++) {
@@ -150,8 +158,8 @@ tobject *object_attr_filter(tobject *tobj, CK_ATTRIBUTE_PTR templ, CK_ULONG coun
         CK_ATTRIBUTE_PTR compare = NULL;
         bool is_attr_match = false;
         CK_ULONG j;
-        for(j=0; j < tobj->atributes.count; j++) {
-            compare = &tobj->atributes.attrs[j];
+        for(j=0; j < attrs->count; j++) {
+            compare = &attrs->attrs[j];
 
             if (search->type != compare->type) {
                 continue;
@@ -175,7 +183,7 @@ tobject *object_attr_filter(tobject *tobj, CK_ATTRIBUTE_PTR templ, CK_ULONG coun
          */
 
         if (!is_attr_match) {
-            return NULL;
+            return false;
         }
 
     }
@@ -186,8 +194,16 @@ tobject *object_attr_filter(tobject *tobj, CK_ATTRIBUTE_PTR templ, CK_ULONG coun
      */
 
     /* all the specified template attributes matched */
-    return tobj;
+    return true;
 }
+
+tobject *object_attr_filter(tobject *tobj, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
+
+    objattrs *attrs = tobject_get_attrs(tobj);
+    bool res = attr_filter(attrs, templ, count);
+    return res ? tobj : NULL;
+}
+
 
 void object_find_data_free(object_find_data **fd) {
 
@@ -361,9 +377,12 @@ static tobject *find_object_by_id(CK_OBJECT_HANDLE handle, token *tok) {
 CK_ATTRIBUTE_PTR object_get_attribute_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE atype) {
 
     CK_ULONG i;
-    for (i=0; i < tobj->atributes.count; i++) {
 
-        CK_ATTRIBUTE_PTR a = &tobj->atributes.attrs[i];
+    objattrs *attrs = tobject_get_attrs(tobj);
+
+    for (i=0; i < attrs->count; i++) {
+
+        CK_ATTRIBUTE_PTR a = &attrs->attrs[i];
 
         if (a->type == atype) {
             return a;
@@ -373,12 +392,42 @@ CK_ATTRIBUTE_PTR object_get_attribute_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE a
     return NULL;
 }
 
-CK_ATTRIBUTE_PTR object_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR attr) {
+static CK_ATTRIBUTE_PTR _object_get_attr_by_type(objattrs *attrs, CK_ATTRIBUTE_TYPE atype) {
 
     CK_ULONG i;
-    for (i=0; i < tobj->atributes.count; i++) {
 
-        CK_ATTRIBUTE_PTR a = &tobj->atributes.attrs[i];
+    for (i=0; i < attrs->count; i++) {
+
+        CK_ATTRIBUTE_PTR a = &attrs->attrs[i];
+
+        if (a->type == atype) {
+            return a;
+        }
+    }
+
+    return NULL;
+
+}
+
+CK_ATTRIBUTE_PTR object_get_pub_attr_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE atype) {
+
+    objattrs *attrs = &tobj->atributes.pub;
+    return _object_get_attr_by_type(attrs, atype);
+}
+
+CK_ATTRIBUTE_PTR object_get_priv_attr_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE atype) {
+
+    objattrs *attrs = &tobj->atributes.priv;
+    return _object_get_attr_by_type(attrs, atype);
+}
+
+CK_ATTRIBUTE_PTR _object_get_attribute_full(objattrs *attrs, CK_ATTRIBUTE_PTR attr) {
+
+    CK_ULONG i;
+
+    for (i=0; i < attrs->count; i++) {
+
+        CK_ATTRIBUTE_PTR a = &attrs->attrs[i];
 
         if (a->type == attr->type
          && a->ulValueLen == attr->ulValueLen) {
@@ -393,6 +442,24 @@ CK_ATTRIBUTE_PTR object_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR attr)
     }
 
     return NULL;
+}
+
+CK_ATTRIBUTE_PTR object_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR attr) {
+
+    objattrs *attrs = tobject_get_attrs(tobj);
+    return _object_get_attribute_full(attrs, attr);
+}
+
+CK_ATTRIBUTE_PTR object_get_pub_attr_full(tobject *tobj, CK_ATTRIBUTE_PTR attr) {
+
+    objattrs *attrs = &tobj->atributes.pub;
+    return _object_get_attribute_full(attrs, attr);
+}
+
+CK_ATTRIBUTE_PTR object_get_priv_attr_full(tobject *tobj, CK_ATTRIBUTE_PTR attr) {
+
+    objattrs *attrs = &tobj->atributes.pub;
+    return _object_get_attribute_full(attrs, attr);
 }
 
 CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
@@ -475,7 +542,7 @@ void tobject_set_handle(tobject *tobj, uint32_t handle) {
     tobj->handle = handle;
 }
 
-CK_RV tobject_append_attrs(tobject *tobj, CK_ATTRIBUTE_PTR attrs, CK_ULONG count) {
+CK_RV tobject_append_attrs(tobject *tobj, bool is_public, CK_ATTRIBUTE_PTR attrs, CK_ULONG count) {
     assert(tobj);
     assert(attrs);
 
@@ -483,21 +550,23 @@ CK_RV tobject_append_attrs(tobject *tobj, CK_ATTRIBUTE_PTR attrs, CK_ULONG count
         return CKR_OK;
     }
 
-    size_t offset = tobj->atributes.count;
-    size_t newlen = (tobj->atributes.count + count);
-    size_t newbytes = sizeof(*tobj->atributes.attrs) * newlen;
-    void *newattrs = realloc(tobj->atributes.attrs, newbytes);
+    objattrs *objattrs = is_public ? &tobj->atributes.pub : &tobj->atributes.priv;
+
+    size_t offset = objattrs->count;
+    size_t newlen = objattrs->count + count;
+    size_t newbytes = sizeof(*objattrs->attrs) * newlen;
+    void *newattrs = realloc(objattrs->attrs, newbytes);
     if (!newattrs) {
         return CKR_HOST_MEMORY;
     }
 
-    tobj->atributes.count = newlen;
-    tobj->atributes.attrs = newattrs;
+    objattrs->count = newlen;
+    objattrs->attrs = newattrs;
 
     /* clear out the newly allocated memory */
-    memset(&tobj->atributes.attrs[offset], 0, count * sizeof(*tobj->atributes.attrs));
+    memset(&objattrs->attrs[offset], 0, count * sizeof(*objattrs->attrs));
 
-    return utils_attr_deep_copy(attrs, count, &tobj->atributes.attrs[offset]);
+    return utils_attr_deep_copy(attrs, count, &objattrs->attrs[offset]);
 }
 
 void tobject_set_id(tobject *tobj, unsigned id) {
@@ -525,4 +594,37 @@ CK_RV tobject_append_mechs(tobject *tobj, CK_MECHANISM_PTR mech, CK_ULONG count)
     memset(&tobj->mechanisms.mech[offset], 0, count * sizeof(*tobj->mechanisms.mech));
 
     return utils_mech_deep_copy(mech, count, &tobj->mechanisms.mech[offset]);
+}
+
+static inline CK_OBJECT_HANDLE _tobject_link_mask(void) {
+    const size_t shift = (sizeof(CK_OBJECT_HANDLE) * 8) - 1;
+    const CK_OBJECT_HANDLE mask = 1UL << shift;
+    return mask;
+}
+
+bool tobject_id_range_ok(CK_OBJECT_HANDLE handle) {
+
+    CK_OBJECT_HANDLE mask =_tobject_link_mask();
+    return (handle & mask) == 0;
+}
+
+static inline CK_OBJECT_HANDLE tobject_format_link_id(tobject *linked) {
+
+    CK_OBJECT_HANDLE mask =_tobject_link_mask();
+    return linked->id | mask;
+}
+
+tobject *tobject_link(tobject *linked) {
+
+    tobject *t = tobject_new();
+    if (t) {
+        t->id = tobject_format_link_id(linked);
+        t->link = linked;
+    }
+
+    return t;
+}
+
+objattrs *tobject_get_attrs(tobject *tobj) {
+    return tobj->link ? &tobj->link->atributes.pub : &tobj->atributes.priv;
 }

@@ -262,13 +262,21 @@ static CK_RV pkcs1_5_build_struct(CK_MECHANISM_TYPE mech,
 
 static CK_RV apply_pkcs_1_5_pad(tobject *tobj, char *built, size_t built_len, char **padded, size_t *padded_len) {
 
-    CK_ATTRIBUTE_PTR a = object_get_attribute_by_type(tobj, CKA_MODULUS);
+    CK_ATTRIBUTE_PTR a = object_get_attribute_by_type(tobj, CKA_MODULUS_BITS);
     if (!a) {
         LOGE("Signing key has no modulus");
         return CKR_GENERAL_ERROR;
     }
 
-    size_t out_len = a->ulValueLen;
+    if (a->ulValueLen != sizeof(CK_ULONG)) {
+        LOGE("Modulus bit pointer data not size of CK_ULONG, got %lu, expected %zu",
+                a->ulValueLen, sizeof(CK_ULONG));
+        return CKR_GENERAL_ERROR;
+    }
+
+    CK_ULONG_PTR keybits = (CK_ULONG_PTR)a->pValue;
+
+    size_t out_len = *keybits / 8;
 
     char *out = malloc(out_len);
     if (!out) {

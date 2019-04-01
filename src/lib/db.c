@@ -149,15 +149,15 @@ bool generic_parse_kvp(char *line, size_t index, void *data, pfn_onkvp cb) {
 
 static bool alloc_attrs(CK_ULONG count, void *userdata) {
 
-    tobject *tobj = (tobject *)userdata;
+    objattrs *attrs = (objattrs *)userdata;
 
-    tobj->atributes.count = count;
-
-    tobj->atributes.attrs = calloc(count, sizeof(*tobj->atributes.attrs));
-    if (!tobj->atributes.attrs) {
+    attrs->attrs = calloc(count, sizeof(*attrs->attrs));
+    if (!attrs->attrs) {
         LOGE("oom");
         return false;
     }
+
+    attrs->count = count;
 
     return true;
 }
@@ -186,8 +186,8 @@ out:
 
 static bool parse_attrs(const char *key, const char *value, size_t index, void *userdata) {
 
-    tobject *tobj = (tobject *)userdata;
-    CK_ATTRIBUTE_PTR a = &tobj->atributes.attrs[index];
+    objattrs *tobj_attrs = (objattrs *)userdata;
+    CK_ATTRIBUTE_PTR a = &tobj_attrs->attrs[index];
 
     size_t type;
     int rc = str_to_ul(key, &type);
@@ -252,8 +252,6 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
     case CKA_KEY_TYPE:
         /* falls through */
     case CKA_VALUE_LEN:
-        /* falls through */
-    case CKA_VALUE_BITS:
         /* falls through */
     case CKA_CLASS: {
 
@@ -560,6 +558,11 @@ tobject *db_tobject_new(sqlite3_stmt *stmt) {
 
         if (!strcmp(name, "id")) {
             tobj->id = sqlite3_column_int(stmt, i);
+            bool range_ok = tobject_id_range_ok(tobj->id);
+            if (!range_ok) {
+                LOGE("tobj->id out of range");
+                goto error;
+            }
 
         } else if (!strcmp(name, "sid")) {
             // Ignore sid we don't need it as sobject has that data.
@@ -572,9 +575,25 @@ tobject *db_tobject_new(sqlite3_stmt *stmt) {
         } else if (!strcmp(name, "objauth")) {
             tobj->objauth = twist_new((char *)sqlite3_column_text(stmt, i));
             goto_oom(tobj->objauth, error);
-        } else if (!strcmp(name, "attrs")) {
+        } else if (!strcmp(name, "pubattrs")
+                || !strcmp(name, "privattrs")) {
+            bool is_pub = !strcmp(name, "pubattrs");
+            objattrs *tobj_attrs = is_pub ? &tobj->atributes.pub : &tobj->atributes.priv;
             const char *attrs = (const char *)sqlite3_column_text(stmt, i);
-            CK_RV rv = parse_generic_kvp_line(attrs, tobj, alloc_attrs, parse_attrs);
+            /* These can be null for keys without public portions, like AES keys */
+            if (!attrs) {
+                /* skip public tobject attrs when NULL, for things like AES */
+                if (is_pub) {
+                    continue;
+                }
+
+                LOGE("No private attributes for object in DB");
+                goto error;
+            }
+
+            assert(attrs);
+
+            CK_RV rv = parse_generic_kvp_line(attrs, tobj_attrs, alloc_attrs, parse_attrs);
             if (rv != CKR_OK) {
                 if (rv == CKR_HOST_MEMORY) {
                     goto_oom(NULL, error);
@@ -628,31 +647,42 @@ int init_tobjects(unsigned sid, tobject **head) {
     list *cur = NULL;
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 
-        tobject *t = db_tobject_new(stmt);
-        if (!t) {
+        tobject *base = db_tobject_new(stmt);
+        if (!base) {
             goto error;
-        }
-
-        if (!*head) {
-            *head = t;
-            cur = &t->l;
-            continue;
         }
 
         /*
-         * This check as been added to silence a false positive from scan-build:
-         * ../src/lib/db.c:454:23: warning: Access to field 'next' results in a dereference of a null pointer (loaded from variable 'cur')
-         *   cur->next = &t->l;
-         *   ~~~       ^
+         * If an attribute has a public portion (ie is not symmetric) we link it
+         * back to it's tobject that contains both and set it's public bit in the
+         * id, which is the keyhandle to go back.
          */
-        if (!cur) {
-            free(t);
-            LOGE("Linked list not initialized properly");
-            goto error;
+        tobject *link = NULL;
+        bool has_pub = base->atributes.pub.count > 0;
+        if (has_pub) {
+            link = tobject_link(base);
+            if (!link) {
+                tobject_free(base);
+                goto error;
+            }
         }
 
-        cur->next = &t->l;
-        cur = cur->next;
+        unsigned i;
+        unsigned stop = has_pub ? 2 : 1;
+        for (i=0; i < stop; i++) {
+            tobject *insert = i == 0 ? base : link;
+            assert(insert);
+
+            if (!*head) {
+                *head = insert;
+                cur = &insert->l;
+                continue;
+            }
+
+            assert(cur);
+            cur->next = &insert->l;
+            cur = cur->next;
+        }
     }
 
     rc = SQLITE_OK;
@@ -1496,30 +1526,58 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
     CK_RV rv = CKR_GENERAL_ERROR;
 
     twist m = NULL;
-    twist a = NULL;
+    twist pubattrs = NULL;
+    twist privattrs = NULL;
     sqlite3_stmt *stmt = NULL;
+
+    bool has_pub_attrs = tobj->atributes.pub.count > 0;
 
     m = mech_to_kvp(tobj->mechanisms.mech, tobj->mechanisms.count);
     if (!m) {
         goto error;
     }
 
-    a = attr_to_kvp(tobj->atributes.attrs, tobj->atributes.count);
-    if (!a) {
+    if (has_pub_attrs) {
+        pubattrs = attr_to_kvp(tobj->atributes.pub.attrs, tobj->atributes.pub.count);
+        if (!pubattrs) {
+            goto error;
+        }
+    }
+
+    privattrs = attr_to_kvp(tobj->atributes.priv.attrs, tobj->atributes.priv.count);
+    if (!privattrs) {
         goto error;
     }
 
-    static const char *sql =
-      "INSERT INTO tobjects ("
-        "sid, "      // index: 1 type: INT
-        "pub, "      // index: 2 type: BLOB
-        "priv, "     // index: 3 type: BLOB
-        "objauth, "  // index: 4 type: TEXT
-        "attrs, "    // index: 5 type: TEXT
-        "mech"       // index: 6 type: TEXT
-      ") VALUES ("
-        "?,?,?,?,?,?"
-      ");";
+    const char *sql;
+    if (has_pub_attrs) {
+        static const char *_s =
+          "INSERT INTO tobjects ("
+            "sid, "       // index: 1 type: INT
+            "pub, "       // index: 2 type: BLOB
+            "priv, "      // index: 3 type: BLOB
+            "objauth, "   // index: 4 type: TEXT
+            "mech,"       // index: 5 type: TEXT
+            "privattrs, " // index: 6 type: TEXT
+            "pubattrs "   // index: 7 type: TEXT
+          ") VALUES ("
+            "?,?,?,?,?,?,?"
+          ");";
+        sql = _s;
+    } else {
+        static const char *_s =
+          "INSERT INTO tobjects ("
+            "sid, "       // index: 1 type: INT
+            "pub, "       // index: 2 type: BLOB
+            "priv, "      // index: 3 type: BLOB
+            "objauth, "   // index: 4 type: TEXT
+            "mech,"       // index: 5 type: TEXT
+            "privattrs, " // index: 6 type: TEXT
+          ") VALUES ("
+            "?,?,?,?,?,?"
+          ");";
+        sql = _s;
+    }
 
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
@@ -1544,11 +1602,16 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
     rc = sqlite3_bind_text(stmt, 4, tobj->objauth, -1, SQLITE_STATIC);
     gotobinderror(rc, "objauth");
 
-    rc = sqlite3_bind_text(stmt, 5, a, -1, SQLITE_STATIC);
-    gotobinderror(rc, "attrs");
-
-    rc = sqlite3_bind_text(stmt, 6, m, -1, SQLITE_STATIC);
+    rc = sqlite3_bind_text(stmt, 5, m, -1, SQLITE_STATIC);
     gotobinderror(rc, "mech");
+
+    rc = sqlite3_bind_text(stmt, 6, privattrs, -1, SQLITE_STATIC);
+    gotobinderror(rc, "privattrs");
+
+    if (has_pub_attrs) {
+        rc = sqlite3_bind_text(stmt, 6, pubattrs, -1, SQLITE_STATIC);
+        gotobinderror(rc, "pubattrs");
+    }
 
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
@@ -1578,7 +1641,8 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
     rv = CKR_OK;
 
 out:
-    twist_free(a);
+    twist_free(privattrs);
+    twist_free(pubattrs);
     twist_free(m);
     return rv;
 

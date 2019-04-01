@@ -164,7 +164,8 @@ static void test_find_objects_by_label(void **state) {
 
 static void test_find_imprted_objects_by_label(void **state) {
 
-    do_test_find_objects_by_label(state, "imported_key", 1);
+    /* imported key has a label duplicated on public and private portions */
+    do_test_find_objects_by_label(state, "imported_key", 2);
 }
 
 static void test_find_objects_via_empty_template(void **state) {

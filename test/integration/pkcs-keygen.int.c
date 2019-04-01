@@ -63,8 +63,60 @@ static int test_teardown(void **state) {
 #define ADD_ATTR_STR(t, x)   { .type = t,   .ulValueLen = sizeof(x) - 1, .pValue = x }
 
 GENERIC_ATTR_TYPE_CONVERT(CK_BBOOL);
+GENERIC_ATTR_TYPE_CONVERT(CK_ULONG);
 
-static void verify_missing_rsa_attrs(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE h) {
+static void verify_missing_rsa_pub_attrs(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE h) {
+
+    CK_BYTE tmp[4][256] = { 0 };
+
+    /*
+     * Skip checking shared values until bug:
+     *   -https://github.com/tpm2-software/tpm2-pkcs11/issues/148
+     * is resolved.
+     */
+    CK_ATTRIBUTE attrs[] = {
+            ADD_ATTR_ARRAY(CKA_KEY_TYPE, tmp[0]),
+            ADD_ATTR_ARRAY(CKA_CLASS,    tmp[1]),
+            ADD_ATTR_ARRAY(CKA_MODULUS,  tmp[2]),
+            ADD_ATTR_ARRAY(CKA_MODULUS_BITS,  tmp[3]),
+    };
+
+    CK_RV rv = C_GetAttributeValue(session, h, attrs, ARRAY_LEN(attrs));
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG i;
+    for (i=0; i < ARRAY_LEN(attrs); i++) {
+        CK_ATTRIBUTE_PTR a = &attrs[i];
+        switch(a->type) {
+        case CKA_KEY_TYPE: {
+            CK_ULONG v = 0;
+            rv = generic_CK_ULONG(a, &v);
+            assert_int_equal(rv, CKR_OK);
+            assert_int_equal(v, CKK_RSA);
+        } break;
+        case CKA_CLASS: {
+            CK_ULONG v = 0;
+            rv = generic_CK_ULONG(a, &v);
+            assert_int_equal(rv, CKR_OK);
+            assert_int_equal(v, CKO_PUBLIC_KEY);
+        } break;
+        case CKA_MODULUS: {
+            assert_int_not_equal(0, a->ulValueLen);
+            assert_non_null(a->pValue);
+        } break;
+        case CKA_MODULUS_BITS: {
+            CK_ULONG v = 0;
+            rv = generic_CK_ULONG(a, &v);
+            assert_int_equal(rv, CKR_OK);
+            assert_int_equal(v, 2048);
+        } break;
+        default:
+            assert_true(0);
+        }
+    }
+}
+
+static void verify_missing_rsa_priv_attrs(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE h) {
 
     CK_BYTE tmp[5][256] = { 0 };
 
@@ -75,7 +127,7 @@ static void verify_missing_rsa_attrs(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE
      */
     CK_ATTRIBUTE attrs[] = {
             ADD_ATTR_ARRAY(CKA_KEY_TYPE, tmp[0]),
-            ADD_ATTR_ARRAY(CKA_MODULUS,  tmp[1]),
+            ADD_ATTR_ARRAY(CKA_CLASS, tmp[1]),
             ADD_ATTR_ARRAY(CKA_ALWAYS_SENSITIVE,  tmp[2]),
             ADD_ATTR_ARRAY(CKA_EXTRACTABLE,  tmp[3]),
             ADD_ATTR_ARRAY(CKA_NEVER_EXTRACTABLE,  tmp[4]),
@@ -89,12 +141,16 @@ static void verify_missing_rsa_attrs(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE
         CK_ATTRIBUTE_PTR a = &attrs[i];
         switch(a->type) {
         case CKA_KEY_TYPE: {
-            CK_KEY_TYPE p = *((CK_KEY_TYPE *)a->pValue);
-            assert_int_equal(p, CKK_RSA);
+            CK_ULONG v = 0;
+            rv = generic_CK_ULONG(a, &v);
+            assert_int_equal(rv, CKR_OK);
+            assert_int_equal(v, CKK_RSA);
         } break;
-        case CKA_MODULUS: {
-            assert_int_not_equal(0, a->ulValueLen);
-            assert_non_null(a->pValue);
+        case CKA_CLASS: {
+            CK_ULONG v = 0;
+            rv = generic_CK_ULONG(a, &v);
+            assert_int_equal(rv, CKR_OK);
+            assert_int_equal(v, CKO_PRIVATE_KEY);
         } break;
         case CKA_ALWAYS_SENSITIVE: {
             CK_BBOOL v = CK_FALSE;
@@ -197,9 +253,9 @@ static void test_rsa_keygen_p11tool_templ(void **state) {
     rv = C_FindObjectsInit(session, pub, ARRAY_LEN(pub));
     assert_int_equal(rv, CKR_OK);
 
-    CK_OBJECT_HANDLE h;
+    CK_OBJECT_HANDLE pub_handle_dup;
     CK_ULONG count = 0;
-    rv = C_FindObjects(session, &h, 1, &count);
+    rv = C_FindObjects(session, &pub_handle_dup, 1, &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(count, 1);
 
@@ -211,7 +267,8 @@ static void test_rsa_keygen_p11tool_templ(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     count = 0;
-    rv = C_FindObjects(session, &h, 1, &count);
+    CK_OBJECT_HANDLE priv_handle_dup;
+    rv = C_FindObjects(session, &priv_handle_dup, 1, &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(count, 1);
 
@@ -219,7 +276,9 @@ static void test_rsa_keygen_p11tool_templ(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     /* verify missing attrs */
-    verify_missing_rsa_attrs(session, h);
+    verify_missing_rsa_pub_attrs(session, pub_handle_dup);
+    verify_missing_rsa_priv_attrs(session, priv_handle_dup);
+
 }
 
 int main() {
