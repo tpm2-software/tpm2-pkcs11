@@ -169,9 +169,6 @@ class Tpm2(object):
                   seal=None,
                   alg=None):
 
-        _, priv = tempfile.mkstemp(prefix='', suffix='.priv', dir=self._tmp)
-        _, pub = tempfile.mkstemp(prefix='', suffix='.pub', dir=self._tmp)
-
         if privkey and len(privkey) > 0:
             exists = os.path.isfile(privkey)
             if not exists:
@@ -179,6 +176,9 @@ class Tpm2(object):
                                    privkey)
         else:
             sys.exit("Invalid file path")
+
+        _, priv = tempfile.mkstemp(prefix='', suffix='.priv', dir=self._tmp)
+        _, pub = tempfile.mkstemp(prefix='', suffix='.pub', dir=self._tmp)
 
         parent_path = "file:" + str(phandle)
         cmd = [
