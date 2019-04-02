@@ -229,14 +229,14 @@ class Db(object):
         c = self._conn.cursor()
         priv = list_dict_to_kvp(privattrs)
         values =  [priv, tid]
-        
+
         if not pubattrs:
             sql = 'UPDATE tobjects SET privattrs=? WHERE id=?'
         else:
             pub = list_dict_to_kvp(pubattrs)
             values.append(pub)
             sql = 'UPDATE tobjects SET privattrs=?, pubattrs=? WHERE id=?'
-        
+
         c.execute(sql, values)
 
     def updatepin(self,
