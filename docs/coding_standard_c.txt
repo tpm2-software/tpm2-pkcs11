@@ -111,21 +111,21 @@ Variables should be declared and scoped to the smallest scope of use.
 ```c
 /* This should be avoided */
 void foo() {
-	unsigned i;
-	do_something();
-	for(i=0; i < 100; i++) {
-		do_more(i);
-	}
+    unsigned i;
+    do_something();
+    for(i=0; i < 100; i++) {
+        do_more(i);
+    }
 }
 
 /* Proper variable scope */
 void foo() {
 
-	do_something();
-	unsigned i;
-	for(i=0; i < 100; i++) {
-		do_more(i);
-	}
+    do_something();
+    unsigned i;
+    for(i=0; i < 100; i++) {
+        do_more(i);
+    }
 }
 ```
 
