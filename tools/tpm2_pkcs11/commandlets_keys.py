@@ -87,7 +87,7 @@ class NewKeyCommandBase(Command):
 
         pubattrs = None
         privattrs = None
-        
+
         if alg.startswith('rsa'):
             pubattrs = [
                 {
@@ -106,7 +106,7 @@ class NewKeyCommandBase(Command):
                     CKA_PUBLIC_EXPONENT: 65537
                 },
             ]
-            
+
             privattrs = [
                 {
                     CKA_KEY_TYPE: CKK_RSA
