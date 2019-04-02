@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 
 
 class commandlet(object):
@@ -62,6 +63,7 @@ class commandlet(object):
             commandlet.get()[d['which']](d)
         else:
             opt_parser.print_usage()
+            sys.exit(2)
 
 
 class Command(object):
