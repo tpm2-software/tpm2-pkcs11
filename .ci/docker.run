@@ -8,7 +8,7 @@
 set -e
 
 source $TRAVIS_BUILD_DIR/.ci/docker-prelude.sh
-
+apt-get install -y curl
 if [ -d build ]; then
   rm -rf build
 fi
@@ -83,6 +83,10 @@ fi
 ../configure --enable-unit --enable-integration --enable-esapi-session-manage-flags $config_flags
 make -j$(nproc)
 make -j$(nproc) check
+
+if [ "$CC" == "gcc" ] && [ "$PYTHON_INTERPRETER" == "python3" ]; then
+    bash <(curl -s https://codecov.io/bash)
+fi
 
 popd
 
