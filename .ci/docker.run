@@ -8,10 +8,6 @@
 set -e
 
 source $TRAVIS_BUILD_DIR/.ci/docker-prelude.sh
-apt-get install -y curl
-if [ -d build ]; then
-  rm -rf build
-fi
 
 # export ptool location
 export PATH=$PATH:"$TRAVIS_BUILD_DIR"/tools
