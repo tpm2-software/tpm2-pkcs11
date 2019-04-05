@@ -923,7 +923,7 @@ CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR 
     flags_restore(ctx);
     if (rval != TPM2_RC_SUCCESS) {
         LOGE("Esys_Sign: 0x%0x", rval);
-        return false;
+        return CKR_GENERAL_ERROR;
     }
 
     CK_RV rv = sig_flatten(signature, &in_scheme, sig, siglen);
