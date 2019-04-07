@@ -292,19 +292,6 @@ static inline CK_RV auth_min_rw_user(session_ctx *ctx) {
     return CKR_USER_NOT_LOGGED_IN;
 }
 
-
-static inline CK_RV auth_min_rw_so(session_ctx *ctx) {
-
-    CK_STATE state = session_ctx_state_get(ctx);
-    switch(state) {
-    case CKS_RW_SO_FUNCTIONS:
-        return CKR_OK;
-        /* no default */
-    }
-
-    return CKR_USER_NOT_LOGGED_IN;
-}
-
 static inline CK_RV auth_any_logged_in(session_ctx *ctx) {
     CK_STATE state = session_ctx_state_get(ctx);
     switch(state) {
@@ -381,11 +368,6 @@ static inline CK_RV auth_init_pin_state(session_ctx *ctx) {
  * Does what __TOKEN_WITH_LOCK_BY_SESSION does, and checks that the session is at least RO User. Ie user logged in and R/W session.
  */
 #define TOKEN_WITH_LOCK_BY_SESSION_USER_RW(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION(auth_min_rw_user, userfunc, session, ##__VA_ARGS__)
-
-/*
- * Does what __TOKEN_WITH_LOCK_BY_SESSION does, and checks that the session is at least RW So. Ie so logged in and R/W session.
- */
-#define TOKEN_WITH_LOCK_BY_SESSION_SO_RW(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION(auth_min_rw_so, userfunc, session, ##__VA_ARGS__)
 
 /*
  * Does what __TOKEN_WITH_LOCK_BY_SESSION does, and checks that the session is at least RO User. Ie user or so logged in and R/O or R/W session.
