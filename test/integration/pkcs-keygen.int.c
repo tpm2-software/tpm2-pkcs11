@@ -528,6 +528,120 @@ static void test_destroy(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
+static void test_keygen_keytype(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_BBOOL ck_true = CK_TRUE;
+    CK_BBOOL ck_false = CK_FALSE;
+    CK_BYTE id[] = "keytype_template_id";
+    CK_ULONG bits = 2048;
+    CK_BYTE exp[] = { 0x00, 0x01, 0x00, 0x01 }; //65537 in BN
+    CK_UTF8CHAR label[] = "keytype_template_label";
+    CK_KEY_TYPE keytype = CKK_EC;
+
+    CK_ATTRIBUTE pub_rsa[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_ARRAY(CKA_ID, id),
+        ADD_ATTR_BASE(CKA_ENCRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_VERIFY, ck_true),
+        ADD_ATTR_BASE(CKA_MODULUS_BITS, bits),
+        ADD_ATTR_ARRAY(CKA_PUBLIC_EXPONENT, exp),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        /* deliberately wrong to CKK_EC */
+        ADD_ATTR_BASE(CKA_KEY_TYPE, keytype),
+
+    };
+
+    CK_ATTRIBUTE priv_rsa[] = {
+        ADD_ATTR_ARRAY(CKA_ID, id),
+        ADD_ATTR_BASE(CKA_DECRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_SIGN, ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_SENSITIVE, ck_false)
+    };
+
+    CK_MECHANISM mech_rsa = {
+        .mechanism = CKM_RSA_PKCS_KEY_PAIR_GEN,
+        .pParameter = NULL,
+        .ulParameterLen = 0
+    };
+
+    CK_OBJECT_HANDLE pubkey;
+    CK_OBJECT_HANDLE privkey;
+
+    user_login(session);
+
+    CK_RV rv = C_GenerateKeyPair (session,
+            &mech_rsa,
+            pub_rsa, ARRAY_LEN(pub_rsa),
+            priv_rsa, ARRAY_LEN(priv_rsa),
+            &pubkey, &privkey);
+    assert_int_equal(rv, CKR_ATTRIBUTE_VALUE_INVALID);
+
+    /* Test ECC Template */
+
+    /*
+     * DER-encoding of an ANSI X9.62 Parameters value
+     *
+     * Windows, surprisingly, had great documentation on how this works:
+     * https://docs.microsoft.com/en-us/windows/desktop/seccertenroll/about-object-identifier
+     */
+    CK_BYTE ec_params[] = {
+        0x06, 0x08, 0x2a, 0x86, 0x48,
+        0xce, 0x3d, 0x03, 0x01, 0x07
+    };
+
+    keytype = CKK_RSA;
+
+    CK_ATTRIBUTE pub_ecc[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_ARRAY(CKA_ID, id),
+        ADD_ATTR_BASE(CKA_VERIFY, ck_true),
+        ADD_ATTR_ARRAY(CKA_EC_PARAMS, ec_params),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        /* deliberately wrong to CKK_RSA */
+        ADD_ATTR_BASE(CKA_KEY_TYPE, keytype),
+    };
+
+    CK_ATTRIBUTE priv_ecc[] = {
+        ADD_ATTR_ARRAY(CKA_ID, id),
+        ADD_ATTR_BASE(CKA_SIGN, ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_SENSITIVE, ck_false)
+    };
+
+    CK_MECHANISM mech_ecc = {
+        .mechanism = CKM_EC_KEY_PAIR_GEN,
+        .pParameter = NULL,
+        .ulParameterLen = 0
+    };
+
+
+    rv = C_GenerateKeyPair (session,
+            &mech_ecc,
+            pub_ecc, ARRAY_LEN(pub_ecc),
+            priv_ecc, ARRAY_LEN(priv_ecc),
+            &pubkey, &privkey);
+    assert_int_equal(rv, CKR_ATTRIBUTE_VALUE_INVALID);
+
+    /* Fixup Keytype to correct value CKK_EC */
+    keytype = CKK_EC;
+    rv = C_GenerateKeyPair (session,
+            &mech_ecc,
+            pub_ecc, ARRAY_LEN(pub_ecc),
+            priv_ecc, ARRAY_LEN(priv_ecc),
+            &pubkey, &privkey);
+    assert_int_equal(rv, CKR_OK);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
@@ -538,6 +652,8 @@ int main() {
         cmocka_unit_test_setup_teardown(test_rsa_keygen_p11tool_templ,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_rsa_keygen_missing_attributes,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_keygen_keytype,
             test_setup, test_teardown),
     };
 

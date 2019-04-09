@@ -550,6 +550,7 @@ CK_RV check_common_attrs(
     static const attr_handler common_attr_check_handlers[] = {
         { CKA_PRIVATE,         handle_sensitive      },
         { CKA_EXTRACTABLE,     handle_extractable    },
+        { CKA_KEY_TYPE,        ATTR_HANDLER_IGNORE   },
         { CKA_TOKEN,           ATTR_HANDLER_IGNORE   },
         { CKA_ID,              ATTR_HANDLER_IGNORE   },
         { CKA_LABEL,           ATTR_HANDLER_IGNORE   },

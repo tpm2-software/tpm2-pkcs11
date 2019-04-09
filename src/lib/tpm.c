@@ -2096,6 +2096,24 @@ static CK_RV handle_sensitive(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata
     return handle_extractable_common(attr, false, udata);
 }
 
+static CK_RV handle_key_type(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+    UNUSED(index);
+    tpm_key_data *keydat = (tpm_key_data *)udata;
+
+    CK_ULONG value;
+    CK_RV rv = generic_CK_ULONG(attr, &value);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    if ((value == CKK_RSA && keydat->pub.publicArea.type == TPM2_ALG_RSA) ||
+        (value == CKK_EC && keydat->pub.publicArea.type == TPM2_ALG_ECC)) {
+        return CKR_OK;
+    }
+
+    return CKR_ATTRIBUTE_VALUE_INVALID;
+}
+
 static const attr_handler tpm_handlers[] = {
     { CKA_TOKEN,           generic_bbool_true    },
     { CKA_PRIVATE,         generic_bbool_any     },
@@ -2112,6 +2130,7 @@ static const attr_handler tpm_handlers[] = {
     { CKA_EXTRACTABLE,     handle_extractable    },
     { CKA_EC_PARAMS,       handle_ecparams       },
     { CKA_EC_POINT,        ATTR_HANDLER_IGNORE   }, // TODO PH
+    { CKA_KEY_TYPE,        handle_key_type       },
 };
 
 static TSS2_RC create_loaded(
