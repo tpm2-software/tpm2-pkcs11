@@ -54,4 +54,12 @@ CK_RV db_add_new_object(token *tok, tobject *tobj);
  */
 CK_RV db_update_attrs(tobject *tobj);
 
+/**
+ * Delete a tobject from the DB.
+ * @param tobj
+ *  The tobject to remove.
+ * @return
+ */
+CK_RV db_delete_object(tobject *tobj);
+
 #endif /* SRC_PKCS11_LIB_DB_H_ */

@@ -448,14 +448,152 @@ static void test_ecc_keygen_p11tool_templ(void **state) {
     verify_missing_pub_attrs_common(session, CKK_EC, pub_handle_dup);
     verify_missing_priv_attrs_common(session, CKK_EC, priv_handle_dup);
     verify_missing_pub_attrs_ecc(session, pub_handle_dup);
+}
 
+static void test_destroy(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_BBOOL ck_true = CK_TRUE;
+    CK_BBOOL ck_false = CK_TRUE;
+    CK_BYTE id[] = "p11-templ-key-id-ecc-destroy";
+    CK_UTF8CHAR label[] = "p11-templ-key-label-ecc-destroy";
+
+    /*
+     * DER-encoding of an ANSI X9.62 Parameters value
+     *
+     * Windows, surprisingly, had great documentation on how this works:
+     * https://docs.microsoft.com/en-us/windows/desktop/seccertenroll/about-object-identifier
+     */
+    CK_BYTE ec_params[] = {
+        0x06, 0x08, 0x2a, 0x86, 0x48,
+        0xce, 0x3d, 0x03, 0x01, 0x07
+    };
+
+    CK_ATTRIBUTE pub[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_ARRAY(CKA_ID, id),
+        ADD_ATTR_BASE(CKA_VERIFY, ck_true),
+        ADD_ATTR_ARRAY(CKA_EC_PARAMS, ec_params),
+        ADD_ATTR_STR(CKA_LABEL, label)
+    };
+
+    CK_ATTRIBUTE priv[] = {
+        ADD_ATTR_ARRAY(CKA_ID, id),
+        ADD_ATTR_BASE(CKA_SIGN, ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_SENSITIVE, ck_false)
+    };
+
+    CK_MECHANISM mech = {
+        .mechanism = CKM_EC_KEY_PAIR_GEN,
+        .pParameter = NULL,
+        .ulParameterLen = 0
+    };
+
+    CK_OBJECT_HANDLE pubkey;
+    CK_OBJECT_HANDLE privkey;
+
+    user_login(session);
+
+    CK_RV rv = C_GenerateKeyPair (session,
+            &mech,
+            pub, ARRAY_LEN(pub),
+            priv, ARRAY_LEN(priv),
+            &pubkey, &privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    /* verify that if it's held by sign operation, it can't be deleted */
+    mech.mechanism =  CKM_ECDSA;
+    rv = C_SignInit(session, &mech, privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    /* attempt failed destroy */
+    rv = C_DestroyObject(session, privkey);
+    assert_int_equal(rv, CKR_FUNCTION_FAILED);
+
+    CK_BYTE sig[1024];
+
+    /*
+     * echo -n 'my foo msg' | openssl sha256 | cut -d' ' -f 2-2 | xxd -r -p | xxd -i
+     */
+    CK_BYTE sha256_msg_hash[] = {
+        0xcd, 0xd8, 0x92, 0x1d, 0xf0, 0xcd, 0x29, 0xba, 0x4b, 0x8b, 0x87, 0x12,
+        0x15, 0x07, 0x46, 0xdf, 0xb1, 0x91, 0x50, 0x81, 0xf7, 0xd4, 0x9b, 0xd5,
+        0x67, 0x58, 0xae, 0x5a, 0xa3, 0x2e, 0x47, 0x0d
+    };
+
+    CK_ULONG siglen = sizeof(sig);
+
+    /* finish sign to release the private key */
+    rv = C_Sign(session, sha256_msg_hash, sizeof(sha256_msg_hash), sig,
+            &siglen);
+    assert_int_equal(rv, CKR_OK);
+
+    /* attempt good destroy */
+    rv = C_DestroyObject(session, privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    /* verify gone */
+    rv = C_FindObjectsInit(session, priv, ARRAY_LEN(priv));
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG count = 0;
+    CK_OBJECT_HANDLE tmp;
+    rv = C_FindObjects(session, &tmp, 1, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 0);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    /*
+     * PUBLIC BLOCK DESTROY AND CHECKS
+     */
+
+    /*
+     * try the public key verification to lock the public portion of the object.
+     * active count == 1
+     */
+    rv = C_VerifyInit(session, &mech, pubkey);
+    assert_int_equal(rv, CKR_OK);
+
+    /* attempt failed destroy */
+    rv = C_DestroyObject(session, pubkey);
+    assert_int_equal(rv, CKR_FUNCTION_FAILED);
+
+    /* release verify active count == 1*/
+    rv = C_Verify(session, sha256_msg_hash, sizeof(sha256_msg_hash),
+            sig, siglen);
+    assert_int_equal(rv, CKR_OK);
+
+    /* attempt good destroy */
+    rv = C_DestroyObject(session, pubkey);
+    assert_int_equal(rv, CKR_OK);
+
+    /* verify gone */
+    rv = C_FindObjectsInit(session, pub, ARRAY_LEN(pub));
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjects(session, &tmp, 1, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 0);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
 }
 
 int main() {
 
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup_teardown(test_ecc_keygen_p11tool_templ,
+        cmocka_unit_test_setup_teardown(test_destroy,
                 test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_ecc_keygen_p11tool_templ,
+            test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_rsa_keygen_p11tool_templ,
             test_setup, test_teardown),
     };
