@@ -580,10 +580,9 @@ bool tpm_register_handle(tpm_ctx *ctx, uint32_t *handle) {
     return true;
 }
 
-bool tpm_loadobj(
-        tpm_ctx *ctx,
-        uint32_t phandle, twist auth,
-        twist pub_data, twist priv_data,
+static bool tpm_load(tpm_ctx *ctx,
+        uint32_t phandle,
+        TPM2B_PUBLIC *pub, twist priv_data,
         uint32_t *handle) {
 
     TPM2B_PRIVATE priv = { .size = 0 };
@@ -596,11 +595,55 @@ bool tpm_loadobj(
         return false;
     }
 
-    TPM2B_PUBLIC pub = { .size = 0 };
-    len = twist_len(pub_data);
+    rval = Esys_Load(
+           ctx->esys_ctx,
+           phandle,
+           ctx->hmac_session,
+           ESYS_TR_NONE,
+           ESYS_TR_NONE,
+           &priv,
+           pub,
+           handle);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_Load: 0x%x:", rval);
+        return false;
+    }
 
-    offset = 0;
-    rval = Tss2_MU_TPM2B_PUBLIC_Unmarshal((uint8_t *)pub_data, len, &offset, &pub);
+    return true;
+}
+
+static bool tpm_loadexternal(tpm_ctx *ctx,
+        TPM2B_PUBLIC *pub,
+        uint32_t *handle) {
+
+    TSS2_RC rval = Esys_LoadExternal(
+           ctx->esys_ctx,
+           ESYS_TR_NONE,
+           ESYS_TR_NONE,
+           ESYS_TR_NONE,
+           NULL,
+           pub,
+           TPM2_RH_NULL,
+           handle);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_LoadExternal: 0x%x:", rval);
+        return false;
+    }
+
+    return true;
+}
+
+bool tpm_loadobj(
+        tpm_ctx *ctx,
+        uint32_t phandle, twist auth,
+        twist pub_data, twist priv_data,
+        uint32_t *handle) {
+
+    TPM2B_PUBLIC pub = { .size = 0 };
+    size_t len = twist_len(pub_data);
+
+    size_t offset = 0;
+    TSS2_RC rval = Tss2_MU_TPM2B_PUBLIC_Unmarshal((uint8_t *)pub_data, len, &offset, &pub);
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Tss2_MU_TPM2B_PRIVATE_Unmarshal: 0x%x:", rval);
         return false;
@@ -611,21 +654,11 @@ bool tpm_loadobj(
         return false;
     }
 
-    rval = Esys_Load(
-           ctx->esys_ctx,
-           phandle,
-           ctx->hmac_session,
-           ESYS_TR_NONE,
-           ESYS_TR_NONE,
-           &priv,
-           &pub,
-           handle);
-    if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_Load: 0x%x:", rval);
-        return false;
+    if (priv_data) {
+        return tpm_load(ctx, phandle, &pub, priv_data, handle);
     }
 
-    return true;
+    return tpm_loadexternal(ctx, &pub, handle);
 }
 
 bool tpm_flushcontext(tpm_ctx *ctx, uint32_t handle) {
@@ -2544,6 +2577,14 @@ CK_RV tpm2_generate_key(
     assert(out_pub);
     assert(out_priv);
 
+    /* load the public only object portion */
+    res = tpm_loadexternal(tpm, out_pub, &objdata->pubhandle);
+    if (!res) {
+        rv = CKR_GENERAL_ERROR;
+        goto out;
+    }
+
+    /* serialize the tpm public private object portions */
     BYTE pubb[sizeof(*out_pub)];
     size_t pubb_size = 0;
 
@@ -2605,7 +2646,7 @@ CK_RV tpm2_generate_key(
 
     objdata->privblob = tmppriv;
     objdata->pubblob = tmppub;
-    objdata->handle = out_handle;
+    objdata->privhandle = out_handle;
 
     rv = CKR_OK;
 out:
@@ -2621,6 +2662,9 @@ void tpm_objdata_free(tpm_object_data *objdata) {
     if (!objdata) {
         return;
     }
+
+    twist_free(objdata->privblob);
+    twist_free(objdata->pubblob);
 
     switch (objdata->mechanism) {
     case CKM_RSA_PKCS_KEY_PAIR_GEN:

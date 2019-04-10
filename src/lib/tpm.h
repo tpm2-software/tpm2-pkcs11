@@ -125,7 +125,8 @@ CK_RV tpm_session_stop(tpm_ctx *ctx);
 typedef struct tpm_object_data tpm_object_data;
 struct tpm_object_data {
 
-    uint32_t handle;
+    uint32_t privhandle;
+    uint32_t pubhandle;
 
     CK_MECHANISM_TYPE mechanism;
     union {

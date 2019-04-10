@@ -185,19 +185,6 @@ static void get_keypair(CK_SESSION_HANDLE session, CK_KEY_TYPE key_type, CK_OBJE
 
     rv = C_FindObjectsFinal(session);
     assert_int_equal(rv, CKR_OK);
-
-    /*
-     * whitebox test handle identifier link sanity
-     * Turning down the high bit in the public handle should
-     * result in the same handle id as the private portion of
-     * the object.
-     */
-    CK_OBJECT_HANDLE x = *pub_handle;
-    /* clear high bit, no sign extension as unsigned type */
-    x = x << 1;
-    x = x >> 1;
-
-    assert_int_equal(x, *priv_handle);
 }
 
 #endif /* TEST_INTEGRATION_TEST_H_ */

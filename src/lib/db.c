@@ -93,11 +93,15 @@ static int get_token_count(size_t *cnt) {
     return sqlite3_exec(global.db, sql, token_count_cb, cnt, NULL);
 }
 
-static int get_blob(sqlite3_stmt *stmt, int i, twist *blob) {
+static int _get_blob(sqlite3_stmt *stmt, int i, bool can_be_null, twist *blob) {
 
     int size = sqlite3_column_bytes(stmt, i);
-    if (size <= 0) {
+    if (size < 0) {
         return 1;
+    }
+
+    if (size == 0) {
+        return can_be_null ? 0 : 1;
     }
 
     const void *data = sqlite3_column_blob(stmt, i);
@@ -108,6 +112,16 @@ static int get_blob(sqlite3_stmt *stmt, int i, twist *blob) {
     }
 
     return 0;
+}
+
+static int get_blob_null(sqlite3_stmt *stmt, int i, twist *blob) {
+
+    return _get_blob(stmt, i, true, blob);
+}
+
+static int get_blob(sqlite3_stmt *stmt, int i, twist *blob) {
+
+    return _get_blob(stmt, i, false, blob);
 }
 
 typedef struct token_get_cb_ud token_get_cb_ud;
@@ -582,16 +596,11 @@ tobject *db_tobject_new(sqlite3_stmt *stmt) {
 
         if (!strcmp(name, "id")) {
             tobj->id = sqlite3_column_int(stmt, i);
-            bool range_ok = tobject_id_range_ok(tobj->id);
-            if (!range_ok) {
-                LOGE("tobj->id out of range");
-                goto error;
-            }
 
         } else if (!strcmp(name, "sid")) {
             // Ignore sid we don't need it as sobject has that data.
         } else if (!strcmp(name, "priv")) {
-            goto_error(get_blob(stmt, i, &tobj->priv), error);
+            goto_error(get_blob_null(stmt, i, &tobj->priv), error);
 
         } else if (!strcmp(name, "pub")) {
             goto_error(get_blob(stmt, i, &tobj->pub), error);
@@ -599,25 +608,15 @@ tobject *db_tobject_new(sqlite3_stmt *stmt) {
         } else if (!strcmp(name, "objauth")) {
             tobj->objauth = twist_new((char *)sqlite3_column_text(stmt, i));
             goto_oom(tobj->objauth, error);
-        } else if (!strcmp(name, "pubattrs")
-                || !strcmp(name, "privattrs")) {
-            bool is_pub = !strcmp(name, "pubattrs");
-            objattrs *tobj_attrs = is_pub ? &tobj->atributes.pub : &tobj->atributes.priv;
-            const char *attrs = (const char *)sqlite3_column_text(stmt, i);
-            /* These can be null for keys without public portions, like AES keys */
-            if (!attrs) {
-                /* skip public tobject attrs when NULL, for things like AES */
-                if (is_pub) {
-                    continue;
-                }
+        } else if (!strcmp(name, "attrs")) {
 
-                LOGE("No private attributes for object in DB");
+            const char *attrs = (const char *)sqlite3_column_text(stmt, i);
+            if (!attrs) {
+                LOGE("tobject does not have attributes");
                 goto error;
             }
 
-            assert(attrs);
-
-            CK_RV rv = parse_generic_kvp_line(attrs, tobj_attrs, alloc_attrs, parse_attrs);
+            CK_RV rv = parse_generic_kvp_line(attrs, &tobj->attrs, alloc_attrs, parse_attrs);
             if (rv != CKR_OK) {
                 if (rv == CKR_HOST_MEMORY) {
                     goto_oom(NULL, error);
@@ -671,42 +670,21 @@ int init_tobjects(unsigned sid, tobject **head) {
     list *cur = NULL;
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 
-        tobject *base = db_tobject_new(stmt);
-        if (!base) {
+        tobject *insert = db_tobject_new(stmt);
+        if (!insert) {
+            LOGE("Failed to initialize tobject from db");
             goto error;
         }
 
-        /*
-         * If an attribute has a public portion (ie is not symmetric) we link it
-         * back to it's tobject that contains both and set it's public bit in the
-         * id, which is the keyhandle to go back.
-         */
-        tobject *link = NULL;
-        bool has_pub = base->atributes.pub.count > 0;
-        if (has_pub) {
-            link = tobject_link(base);
-            if (!link) {
-                tobject_free(base);
-                goto error;
-            }
+        if (!*head) {
+            *head = insert;
+            cur = &insert->l;
+            continue;
         }
 
-        unsigned i;
-        unsigned stop = has_pub ? 2 : 1;
-        for (i=0; i < stop; i++) {
-            tobject *insert = i == 0 ? base : link;
-            assert(insert);
-
-            if (!*head) {
-                *head = insert;
-                cur = &insert->l;
-                continue;
-            }
-
-            assert(cur);
-            cur->next = &insert->l;
-            cur = cur->next;
-        }
+        assert(cur);
+        cur->next = &insert->l;
+        cur = cur->next;
     }
 
     rc = SQLITE_OK;
@@ -1553,11 +1531,8 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
     CK_RV rv = CKR_GENERAL_ERROR;
 
     twist m = NULL;
-    twist pubattrs = NULL;
-    twist privattrs = NULL;
+    twist attrs = NULL;
     sqlite3_stmt *stmt = NULL;
-
-    bool has_pub_attrs = tobj->atributes.pub.count > 0;
 
     m = mech_to_kvp(tobj->mechanisms.mech, tobj->mechanisms.count);
     if (!m) {
@@ -1565,49 +1540,23 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
         goto error;
     }
 
-    if (has_pub_attrs) {
-        pubattrs = attr_to_kvp(tobj->atributes.pub.attrs, tobj->atributes.pub.count);
-        if (!pubattrs) {
-            LOGE("Could not retrive public attrs");
-            goto error;
-        }
-    }
-
-    privattrs = attr_to_kvp(tobj->atributes.priv.attrs, tobj->atributes.priv.count);
-    if (!privattrs) {
+    attrs = attr_to_kvp(tobj->attrs.attrs, tobj->attrs.count);
+    if (!attrs) {
         LOGE("Could not retrive private attrs");
         goto error;
     }
 
-    const char *sql;
-    if (has_pub_attrs) {
-        static const char *_s =
+    const char *sql =
           "INSERT INTO tobjects ("
             "sid, "       // index: 1 type: INT
             "pub, "       // index: 2 type: BLOB
             "priv, "      // index: 3 type: BLOB
             "objauth, "   // index: 4 type: TEXT
             "mech,"       // index: 5 type: TEXT
-            "privattrs, " // index: 6 type: TEXT
-            "pubattrs "   // index: 7 type: TEXT
-          ") VALUES ("
-            "?,?,?,?,?,?,?"
-          ");";
-        sql = _s;
-    } else {
-        static const char *_s =
-          "INSERT INTO tobjects ("
-            "sid, "       // index: 1 type: INT
-            "pub, "       // index: 2 type: BLOB
-            "priv, "      // index: 3 type: BLOB
-            "objauth, "   // index: 4 type: TEXT
-            "mech,"       // index: 5 type: TEXT
-            "privattrs, " // index: 6 type: TEXT
+            "attrs"       // index: 6 type: TEXT
           ") VALUES ("
             "?,?,?,?,?,?"
           ");";
-        sql = _s;
-    }
 
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
@@ -1623,10 +1572,12 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
     rc = sqlite3_bind_int(stmt, 1, tok->sobject.id);
     gotobinderror(rc, "sid");
 
-    rc = sqlite3_bind_blob(stmt, 2, tobj->pub, twist_len(tobj->pub), SQLITE_STATIC);
+    rc = sqlite3_bind_blob(stmt, 2, tobj->pub,
+            tobj->pub ? twist_len(tobj->pub) : 0, SQLITE_STATIC);
     gotobinderror(rc, "pub");
 
-    rc = sqlite3_bind_blob(stmt, 3, tobj->priv, twist_len(tobj->priv), SQLITE_STATIC);
+    rc = sqlite3_bind_blob(stmt, 3, tobj->priv,
+            tobj->priv ? twist_len(tobj->priv) : 0, SQLITE_STATIC);
     gotobinderror(rc, "priv");
 
     rc = sqlite3_bind_text(stmt, 4, tobj->objauth, -1, SQLITE_STATIC);
@@ -1635,13 +1586,8 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
     rc = sqlite3_bind_text(stmt, 5, m, -1, SQLITE_STATIC);
     gotobinderror(rc, "mech");
 
-    rc = sqlite3_bind_text(stmt, 6, privattrs, -1, SQLITE_STATIC);
-    gotobinderror(rc, "privattrs");
-
-    if (has_pub_attrs) {
-        rc = sqlite3_bind_text(stmt, 6, pubattrs, -1, SQLITE_STATIC);
-        gotobinderror(rc, "pubattrs");
-    }
+    rc = sqlite3_bind_text(stmt, 6, attrs, -1, SQLITE_STATIC);
+    gotobinderror(rc, "attrs");
 
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
@@ -1671,8 +1617,7 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
     rv = CKR_OK;
 
 out:
-    twist_free(privattrs);
-    twist_free(pubattrs);
+    twist_free(attrs);
     twist_free(m);
     return rv;
 

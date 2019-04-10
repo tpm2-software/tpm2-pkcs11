@@ -119,49 +119,48 @@ class NewKeyCommandBase(Command):
                 },
             ]
 
-            mech = [{
-                CKM_RSA_X_509: ""
-            }, {
-                CKM_RSA_PKCS_OAEP: {
+            pubmech = [
+                { CKM_RSA_X_509: "" },
+                { CKM_RSA_PKCS_OAEP: {
                     "hashalg": CKM_SHA256,
                     "mgf": CKG_MGF1_SHA256
-                }
-               }, {
-                    CKM_RSA_PKCS: {
-                }
-            }]
+                  }
+                },
+                { CKM_RSA_PKCS: "" }
+            ]
+
+            privmech = [
+                { CKM_RSA_X_509: "" },
+                { CKM_RSA_PKCS_OAEP: {
+                    "hashalg": CKM_SHA256,
+                    "mgf": CKG_MGF1_SHA256
+                  }
+                },
+                { CKM_RSA_PKCS: "" }
+            ]
         elif alg.startswith('ecc'):
             pubattrs = [
-                {
-                    CKA_KEY_TYPE: CKK_EC
-                },
-                {
-                    CKA_CLASS: CKO_PUBLIC_KEY
-                },
+                { CKA_KEY_TYPE: CKK_EC },
+                { CKA_CLASS: CKO_PUBLIC_KEY },
             ]
 
             privattrs = [
-                {
-                    CKA_KEY_TYPE: CKK_EC
-                },
-
-                {
-                    CKA_CLASS: CKO_PRIVATE_KEY
-                },
+                { CKA_KEY_TYPE: CKK_EC },
+                { CKA_CLASS: CKO_PRIVATE_KEY},
             ]
 
-            mech = [{CKM_ECDSA: ""},]
+            pubmech = [
+                {CKM_ECDSA: ""}
+            ]
+            privmech = pubmech
         elif alg.startswith('aes'):
-            privattrs = [{
-                CKA_CLASS: CKO_SECRET_KEY
-            }, {
-                CKA_KEY_TYPE: CKK_AES
-            },
-            {
-                CKA_VALUE_LEN: y['sym-keybits'] / 8
-            }]
+            privattrs = [
+                { CKA_CLASS: CKO_SECRET_KEY},
+                { CKA_KEY_TYPE: CKK_AES },
+                { CKA_VALUE_LEN: y['sym-keybits'] / 8}
+            ]
 
-            mech = [{CKM_AES_CBC: ""},]
+            privmech = [{CKM_AES_CBC: ""},]
         else:
             sys.exit('Cannot handle algorithm: "{}"'.format(alg))
 
@@ -185,9 +184,15 @@ class NewKeyCommandBase(Command):
         # Now get the secondary object from db
         sobj = db.getsecondary(token['id'])
 
-        # Store to database
-        rowid = db.addtertiary(sobj['id'], tertiarypriv, tertiarypub,
-                               encobjauth, mech, privattrs, pubattrs)
+        # Store private to database
+        privrowid = db.addtertiary(sobj['id'], tertiarypriv, tertiarypub,
+                               encobjauth, privmech, privattrs)
+
+        # if it's asymmetric, add a public object too
+        if pubattrs:
+            pubrowid = db.addtertiary(sobj['id'], None, tertiarypub,
+                               encobjauth, pubmech, pubattrs)
+
 
         # if the keylabel is not set, use the tertiary object tid as the keylabel
         # Normally we would use a transaction to make this atomic, but Pythons
@@ -198,11 +203,12 @@ class NewKeyCommandBase(Command):
         # See:
         #   - https://stackoverflow.com/questions/107005/predict-next-auto-inserted-row-tid-sqlite
         if keylabel is None:
-            keylabel = str(rowid)
+            keylabel = str(privrowid)
             privattrs.append({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
+            db.updatetertiaryattrs(privrowid, privattrs)
             if pubattrs:
                 pubattrs.append({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
-            db.updatetertiaryattrs(rowid, privattrs, pubattrs)
+                db.updatetertiaryattrs(pubrowid, pubattrs)
 
         db.commit()
 
