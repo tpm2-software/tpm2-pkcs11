@@ -137,3 +137,22 @@ Public Key Object; EC  EC_POINT 256 bits
   ID:         3437
   Usage:      verify
 ```
+
+## Destroying Objects
+
+Let's destroy the key we created in the *Generating ECC Keypair* segment, IDs 3436 and 3437 for both the private and public portions
+respectively.
+
+### Private Key
+```
+pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --login --pin=myuserpin --delete-object --type=privkey --id 3436
+Using slot 0 with a present token (0x1)
+```
+### Public Key
+```
+pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --login --pin=myuserpin --delete-object --type=pubkey --id 3437
+Using slot 0 with a present token (0x1)
+```
+
+**Note**: The tool doesn't have any output about successful delete, only when it fails. However, you can run the command
+in *Listing Objects* to verify that it is indeed deleted.

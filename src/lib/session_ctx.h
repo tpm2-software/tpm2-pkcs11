@@ -80,9 +80,6 @@ CK_FLAGS session_ctx_flags_get(session_ctx *ctx);
 
 token *session_ctx_get_token(session_ctx *ctx);
 
-// XXX moveme
-CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj);
-
 /**
  * Given a user, performs a login event, causing a transition to it's correct end state based
  * on current session state and user triggering the event.

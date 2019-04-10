@@ -48,6 +48,7 @@ static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata,
 
     rv = object_mech_is_supported(tobj, mechanism);
     if (rv != CKR_OK) {
+        tobject_user_decrement(tobj);
         return rv;
     }
 
@@ -55,14 +56,18 @@ static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata,
     if (!supplied_opdata) {
         opdata = encrypt_op_data_new();
         if (!opdata) {
+            tobject_user_decrement(tobj);
             return CKR_HOST_MEMORY;
         }
     } else {
         opdata = supplied_opdata;
     }
 
+    opdata->tobj = tobj;
+
     rv = tpm_encrypt_data_init(tok->tctx, tobj->handle, tobj->unsealed_auth, mechanism, &opdata->tpm_enc_data);
     if (rv != CKR_OK) {
+        tobject_user_decrement(tobj);
         encrypt_op_data_free(&opdata);
         return rv;
     }
@@ -140,11 +145,18 @@ static CK_RV common_final_op(session_ctx *ctx, encrypt_op_data *supplied_opdata,
 
     /* nothing to do if opdata is supplied externally */
     if (supplied_opdata) {
+        /* do not goto out, no opdata to clear */
         return CKR_OK;
     }
 
     encrypt_op_data *opdata = NULL;
     rv = session_ctx_opdata_get(ctx, op, &opdata);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    assert(opdata->tobj);
+    rv = tobject_user_decrement(opdata->tobj);
     if (rv != CKR_OK) {
         return rv;
     }

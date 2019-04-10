@@ -44,6 +44,8 @@ struct objattrs {
 typedef struct tobject tobject;
 struct tobject {
 
+    unsigned active;     /** number of active users */
+
     CK_OBJECT_HANDLE id; /** external handle */
 
     twist pub;           /** public tpm data */
@@ -167,5 +169,27 @@ CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech);
  *  The attribute array.
  */
 objattrs *tobject_get_attrs(tobject *tobj);
+
+/**
+ * Marks a tobject no longer being used by an operation.
+ *
+ * @param tobj
+ *  The tobject to retire.
+ * @return
+ *  CKR_OK on success, CKR_GENERAL_ERROR if not active.
+ */
+CK_RV tobject_user_decrement(tobject *tobj);
+
+/**
+ * Marks a tobject as in use by an operation.
+ *
+ * @param tobj
+ *  The tobject to mark as in use.
+ * @return
+ *  CKR_OK on success, CKR_GENERAL_ERROR if not active.
+ */
+CK_RV tobject_user_increment(tobject *tobj);
+
+CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object);
 
 #endif /* SRC_PKCS11_OBJECT_H_ */

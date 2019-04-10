@@ -136,7 +136,6 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
         return CKR_HOST_MEMORY;
     }
 
-
     rv = token_load_object(tok, key, &opdata->tobj);
     if (rv != CKR_OK) {
         digest_op_data_free(&digest_opdata);
@@ -503,6 +502,15 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
     }
 
 session_out:
+
+    assert(opdata->tobj);
+    if (!reset_ctx) {
+        CK_RV tmp_rv = tobject_user_decrement(opdata->tobj);
+        if (tmp_rv != CKR_OK && rv == CKR_OK) {
+            rv = tmp_rv;
+        }
+    }
+
     if (!reset_ctx) {
         session_ctx_opdata_clear(ctx);
     }
@@ -572,6 +580,12 @@ CK_RV verify_final (session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG signature_
     rv = tpm_verify(tpm, opdata->tobj, opdata->mtype, hash, hash_len, signature, signature_len);
 
 out:
+    assert(opdata->tobj);
+    CK_RV tmp_rv = tobject_user_decrement(opdata->tobj);
+    if (tmp_rv != CKR_OK && rv == CKR_OK) {
+        rv = tmp_rv;
+    }
+
     session_ctx_opdata_clear(ctx);
 
     return rv;

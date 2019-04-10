@@ -3,6 +3,10 @@
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
  */
+#include <limits.h>
+#include <stdlib.h>
+
+#include "db.h"
 #include "checks.h"
 #include "log.h"
 #include "object.h"
@@ -13,7 +17,7 @@
 
 typedef struct tobject_match_list tobject_match_list;
 struct tobject_match_list {
-    tobject *obj;
+    CK_OBJECT_HANDLE tobj_handle;
     tobject_match_list *next;
 };
 
@@ -218,6 +222,8 @@ void object_find_data_free(object_find_data **fd) {
 
     free(*fd);
     *fd = NULL;
+
+    return;
 }
 
 static object_find_data *object_find_data_new(void) {
@@ -277,8 +283,7 @@ CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, CK_ULONG count)
             }
 
             match_cur = fd->head;
-            match_cur->obj = tobj;
-
+            match_cur->tobj_handle = tobj->id;
         } else {
             assert(match_cur);
             match_cur->next = calloc(1, sizeof(*match_cur));
@@ -287,7 +292,7 @@ CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, CK_ULONG count)
                 goto out;
             }
 
-            match_cur->next->obj = tobj;
+            match_cur->next->tobj_handle = tobj->id;
             match_cur = match_cur->next;
         }
     }
@@ -327,8 +332,8 @@ CK_RV object_find(session_ctx *ctx, CK_OBJECT_HANDLE *object, CK_ULONG max_objec
     while(opdata->cur && count < max_object_count) {
 
         // Get the current object, and grab it's id for the object handle
-        tobject *tobj = opdata->cur->obj;
-        object[count] = tobj->id;
+        CK_OBJECT_HANDLE handle = opdata->cur->tobj_handle;
+        object[count] = handle;
 
         // Update our iterator
         opdata->cur = opdata->cur->next;
@@ -356,7 +361,7 @@ CK_RV object_find_final(session_ctx *ctx) {
     return CKR_OK;
 }
 
-static tobject *find_object_by_id(CK_OBJECT_HANDLE handle, token *tok) {
+static CK_RV find_object_by_id(token *tok, CK_OBJECT_HANDLE handle, bool inc, tobject **tobj) {
 
     list *cur = &tok->tobjects->l;
     while(cur) {
@@ -364,12 +369,16 @@ static tobject *find_object_by_id(CK_OBJECT_HANDLE handle, token *tok) {
         tobject *cur_tobj = list_entry(cur, tobject, l);
 
         if (handle == cur_tobj->id) {
-            return cur_tobj;
+            CK_RV rv = inc ? tobject_user_increment(cur_tobj) : CKR_OK;
+            if (rv == CKR_OK) {
+                *tobj = cur_tobj;
+            }
+            return rv;
         }
         cur = cur->next;
     }
 
-    return NULL;
+    return CK_INVALID_HANDLE;
 }
 
 CK_ATTRIBUTE_PTR object_get_attribute_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE atype) {
@@ -419,10 +428,11 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
     token *tok = session_ctx_get_token(ctx);
     assert(tok);
 
-    tobject *tobj = find_object_by_id(object, tok);
-    /* no match */
-    if (!tobj) {
-        return CKR_OBJECT_HANDLE_INVALID;
+    tobject *tobj = NULL;
+    CK_RV rv = find_object_by_id(tok, object, true, &tobj);
+    /* no match or error */
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     /*
@@ -445,7 +455,8 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
 
             /* The found attribute should fit inside the one to copy to */
             if (found->ulValueLen > t->ulValueLen) {
-                return CKR_BUFFER_TOO_SMALL;
+                rv = CKR_BUFFER_TOO_SMALL;
+                goto out;
             }
 
             t->ulValueLen = found->ulValueLen;
@@ -457,7 +468,11 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
        }
     }
 
-    return CKR_OK;
+    rv = CKR_OK;
+
+out:
+    tobject_user_decrement(tobj);
+    return rv;
 }
 
 tobject *tobject_new(void) {
@@ -573,4 +588,91 @@ CK_RV tobject_append_mechs(tobject *tobj, CK_MECHANISM_PTR mech, CK_ULONG count)
 
 objattrs *tobject_get_attrs(tobject *tobj) {
     return &tobj->attrs;
+}
+
+CK_RV tobject_user_increment(tobject *tobj) {
+
+    if (tobj->active == UINT_MAX) {
+       LOGE("tobject active at max count, cannot issue. id: %lu", tobj->id);
+       return CKR_GENERAL_ERROR;
+    }
+
+    tobj->active++;
+
+    return CKR_OK;
+}
+
+CK_RV tobject_user_decrement(tobject *tobj) {
+
+    if (!tobj->active) {
+        LOGE("Returning a non-active tobject id: %lu", tobj->id);
+        return CKR_GENERAL_ERROR;
+    }
+
+    tobj->active--;
+
+    return CKR_OK;
+}
+
+static bool tobject_is_busy(tobject *tobj) {
+    assert(tobj);
+
+    return tobj->active > 0;
+}
+
+CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object) {
+
+    token *tok = session_ctx_get_token(ctx);
+    assert(tok);
+
+    tobject *tobj = NULL;
+    CK_RV rv = find_object_by_id(tok, object, false, &tobj);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    bool is_busy = tobject_is_busy(tobj);
+    if (is_busy) {
+        return CKR_FUNCTION_FAILED;
+    }
+
+    rv = db_delete_object(tobj);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    /*
+     * Remove from list by tying previous to next. We know that tobjects
+     * list is not NULL because we looked up a tobject in that list.
+     *
+     * TODO: Consider bi-directional circular linked list, it would
+     * make this a lot easier.
+     *
+     * Since we already found tobject, it's impossible for tobject
+     * to not exist in the list, thus we will always find a match.
+     */
+
+    /* if its head, just make head next */
+    if (tok->tobjects->id == tobj->id) {
+        list *next = tok->tobjects->l.next;
+        tobject *n = next ? list_entry(next, tobject, l) : NULL;
+        tok->tobjects = n;
+    /* go fish - not head so skip head, keep track of previous */
+    } else {
+        tobject *prev = tok->tobjects;
+        list *cur;
+        list_for_each(tok->tobjects->l.next, cur) {
+            tobject *c = list_entry(cur, tobject, l);
+            if (c->id == tobj->id) {
+                /* set previous to point to current "c's" next object */
+                prev->l.next = c->l.next;
+                break;
+            }
+        }
+    }
+
+    tobject_free(tobj);
+    rv = CKR_OK;
+
+    return rv;
 }

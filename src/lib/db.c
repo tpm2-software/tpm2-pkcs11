@@ -1681,6 +1681,58 @@ out:
     return rv;
 }
 
+CK_RV db_delete_object(tobject *tobj) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    sqlite3_stmt *stmt = NULL;
+
+    static const char *sql =
+      "DELETE FROM tobjects WHERE id=?;";
+
+    int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("%s", sqlite3_errmsg(global.db));
+        goto error;
+    }
+
+    rc = start();
+    if (rc != SQLITE_OK) {
+        goto error;
+    }
+
+    rc = sqlite3_bind_int(stmt, 1, tobj->id);
+    gotobinderror(rc, "id");
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        LOGE("step error: %s", sqlite3_errmsg(global.db));
+        goto error;
+    }
+
+    rc = sqlite3_finalize(stmt);
+    gotobinderror(rc, "finalize");
+
+    rc = commit();
+    gotobinderror(rc, "commit");
+
+    rv = CKR_OK;
+
+out:
+    return rv;
+
+error:
+    rc = sqlite3_finalize(stmt);
+    if (rc != SQLITE_OK) {
+        LOGW("Could not finalize stmt: %d", rc);
+    }
+
+    rollback();
+
+    rv = CKR_GENERAL_ERROR;
+    goto out;
+}
+
 CK_RV db_init(void) {
 
     return db_new(&global.db);

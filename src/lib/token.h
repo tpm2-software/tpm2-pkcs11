@@ -126,4 +126,20 @@ CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR new_pin, CK_ULONG new_len);
 void token_lock(token *t);
 void token_unlock(token *t);
 
+/**
+ * Look up and possibly load an unloaded tobject.
+ * @param tok
+ *  The token to look up the object on.
+ * @param key
+ *  The object handle to look for.
+ * @param loaded_tobj
+ *  The pointer to the backing tobject
+ * @return
+ *   CKR_OK - everything is good.
+ *   CKR_INVALID_KEY_HANDLE - not found
+ *   CKR_KEY_HANDLE_INVALID - invalid key handle
+ *   Others like: CKR_GENERAL_ERROR and CKR_HOST_MEMORY
+ */
+CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj);
+
 #endif /* SRC_TOKEN_H_ */

@@ -472,7 +472,7 @@ CK_RV C_CopyObject (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRI
 }
 
 CK_RV C_DestroyObject (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object) {
-    TOKEN_UNSUPPORTED;
+    TOKEN_WITH_LOCK_BY_SESSION_USER_RW(object_destroy, session, object);
 }
 
 CK_RV C_GetObjectSize (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ULONG_PTR size) {

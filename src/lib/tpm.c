@@ -2354,7 +2354,9 @@ static CK_RV tpm_object_data_populate_rsa(TPM2B_PUBLIC *out_pub, tpm_object_data
     }
 
     objdata->rsa.exponent = out_pub->publicArea.parameters.rsaDetail.exponent;
-
+    if (objdata->rsa.exponent == 0) {
+        objdata->rsa.exponent = 65537;
+    }
     return CKR_OK;
 }
 

@@ -142,54 +142,6 @@ void session_ctx_logout_event(session_ctx *ctx) {
     }
 }
 
-CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj) {
-
-    tpm_ctx *tpm = tok->tctx;
-
-    if (!tok->tobjects) {
-        return CKR_KEY_HANDLE_INVALID;
-    }
-
-    list *cur = &tok->tobjects->l;
-    while(cur) {
-        tobject *tobj = list_entry(cur, tobject, l);
-        cur = cur->next;
-        if (tobj->id != key) {
-            continue;
-        }
-
-        // Already loaded, ignored.
-        if (tobj->handle) {
-            *loaded_tobj = tobj;
-            return CKR_OK;
-        }
-
-        sobject *sobj = &tok->sobject;
-
-        bool result = tpm_loadobj(
-                tpm,
-                tok->sobject.handle, sobj->authraw,
-                tobj->pub, tobj->priv,
-                &tobj->handle);
-        if (!result) {
-            return CKR_GENERAL_ERROR;
-        }
-
-        CK_RV rv = utils_ctx_unwrap_objauth(tok, tobj->objauth,
-                &tobj->unsealed_auth);
-        if (rv != CKR_OK) {
-            LOGE("Error unwrapping tertiary object auth");
-            return rv;
-        }
-
-        *loaded_tobj = tobj;
-        return CKR_OK;
-    }
-
-    // Found no match on key id
-    return CKR_KEY_HANDLE_INVALID;
-}
-
 CK_RV _session_ctx_opdata_get(session_ctx *ctx, operation op, void **data) {
 
     if (op != ctx->opdata.op) {
