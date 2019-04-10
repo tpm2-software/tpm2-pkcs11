@@ -34,14 +34,12 @@ void tobject_free(tobject *tobj) {
     twist_free(tobj->objauth);
     twist_free(tobj->unsealed_auth);
 
-    CK_ULONG i = 0;
-    for (i=0 ; i < 2; i++) {
-        objattrs *a = i == 0 ? &tobj->atributes.pub : &tobj->atributes.priv;
-        CK_RV rv = utils_attr_free(a->attrs, a->count);
-        assert(rv == CKR_OK);
-        free(a->attrs);
-    }
+    objattrs *a = tobject_get_attrs(tobj);
+    CK_RV rv = utils_attr_free(a->attrs, a->count);
+    assert(rv == CKR_OK);
+    free(a->attrs);
 
+    CK_ULONG i = 0;
     for (i=0; i < tobj->mechanisms.count; i++) {
         CK_MECHANISM_PTR m = &tobj->mechanisms.mech[i];
         if (m->pParameter) {
@@ -392,39 +390,11 @@ CK_ATTRIBUTE_PTR object_get_attribute_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE a
     return NULL;
 }
 
-static CK_ATTRIBUTE_PTR _object_get_attr_by_type(objattrs *attrs, CK_ATTRIBUTE_TYPE atype) {
+CK_ATTRIBUTE_PTR object_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR attr) {
+
+    objattrs *attrs = tobject_get_attrs(tobj);
 
     CK_ULONG i;
-
-    for (i=0; i < attrs->count; i++) {
-
-        CK_ATTRIBUTE_PTR a = &attrs->attrs[i];
-
-        if (a->type == atype) {
-            return a;
-        }
-    }
-
-    return NULL;
-
-}
-
-CK_ATTRIBUTE_PTR object_get_pub_attr_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE atype) {
-
-    objattrs *attrs = &tobj->atributes.pub;
-    return _object_get_attr_by_type(attrs, atype);
-}
-
-CK_ATTRIBUTE_PTR object_get_priv_attr_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE atype) {
-
-    objattrs *attrs = &tobj->atributes.priv;
-    return _object_get_attr_by_type(attrs, atype);
-}
-
-CK_ATTRIBUTE_PTR _object_get_attribute_full(objattrs *attrs, CK_ATTRIBUTE_PTR attr) {
-
-    CK_ULONG i;
-
     for (i=0; i < attrs->count; i++) {
 
         CK_ATTRIBUTE_PTR a = &attrs->attrs[i];
@@ -442,24 +412,6 @@ CK_ATTRIBUTE_PTR _object_get_attribute_full(objattrs *attrs, CK_ATTRIBUTE_PTR at
     }
 
     return NULL;
-}
-
-CK_ATTRIBUTE_PTR object_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR attr) {
-
-    objattrs *attrs = tobject_get_attrs(tobj);
-    return _object_get_attribute_full(attrs, attr);
-}
-
-CK_ATTRIBUTE_PTR object_get_pub_attr_full(tobject *tobj, CK_ATTRIBUTE_PTR attr) {
-
-    objattrs *attrs = &tobj->atributes.pub;
-    return _object_get_attribute_full(attrs, attr);
-}
-
-CK_ATTRIBUTE_PTR object_get_priv_attr_full(tobject *tobj, CK_ATTRIBUTE_PTR attr) {
-
-    objattrs *attrs = &tobj->atributes.pub;
-    return _object_get_attribute_full(attrs, attr);
 }
 
 CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
@@ -519,21 +471,44 @@ tobject *tobject_new(void) {
     return tobj;
 }
 
-void tobject_set_blob_data(tobject *tobj, twist pub, twist priv) {
-    assert(priv);
+CK_RV tobject_set_blob_data(tobject *tobj, twist pub, twist priv) {
     assert(pub);
 
-    tobj->priv = priv;
-    tobj->pub = pub;
+    tobj->priv = twist_dup(priv);
+    if (priv && !tobj->priv) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    tobj->pub = twist_dup(pub);
+    if (!tobj->pub) {
+        twist_free(tobj->priv);
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    return CKR_OK;
 }
 
-void tobject_set_auth(tobject *tobj, twist authbin, twist wrappedauthhex) {
+CK_RV tobject_set_auth(tobject *tobj, twist authbin, twist wrappedauthhex) {
     assert(tobj);
     assert(authbin);
     assert(wrappedauthhex);
 
-    tobj->unsealed_auth = authbin;
-    tobj->objauth = wrappedauthhex;
+    tobj->unsealed_auth = twist_dup(authbin);
+    if (!tobj->unsealed_auth) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    tobj->objauth = twist_dup(wrappedauthhex);
+    if (!tobj->objauth) {
+        LOGE("oom");
+        twist_free(tobj->unsealed_auth);
+        return CKR_HOST_MEMORY;
+    }
+
+    return CKR_OK;
 }
 
 void tobject_set_handle(tobject *tobj, uint32_t handle) {
@@ -542,7 +517,7 @@ void tobject_set_handle(tobject *tobj, uint32_t handle) {
     tobj->handle = handle;
 }
 
-CK_RV tobject_append_attrs(tobject *tobj, bool is_public, CK_ATTRIBUTE_PTR attrs, CK_ULONG count) {
+CK_RV tobject_append_attrs(tobject *tobj, CK_ATTRIBUTE_PTR attrs, CK_ULONG count) {
     assert(tobj);
     assert(attrs);
 
@@ -550,7 +525,7 @@ CK_RV tobject_append_attrs(tobject *tobj, bool is_public, CK_ATTRIBUTE_PTR attrs
         return CKR_OK;
     }
 
-    objattrs *objattrs = is_public ? &tobj->atributes.pub : &tobj->atributes.priv;
+    objattrs *objattrs = tobject_get_attrs(tobj);
 
     size_t offset = objattrs->count;
     size_t newlen = objattrs->count + count;
@@ -596,35 +571,6 @@ CK_RV tobject_append_mechs(tobject *tobj, CK_MECHANISM_PTR mech, CK_ULONG count)
     return utils_mech_deep_copy(mech, count, &tobj->mechanisms.mech[offset]);
 }
 
-static inline CK_OBJECT_HANDLE _tobject_link_mask(void) {
-    const size_t shift = (sizeof(CK_OBJECT_HANDLE) * 8) - 1;
-    const CK_OBJECT_HANDLE mask = 1UL << shift;
-    return mask;
-}
-
-bool tobject_id_range_ok(CK_OBJECT_HANDLE handle) {
-
-    CK_OBJECT_HANDLE mask =_tobject_link_mask();
-    return (handle & mask) == 0;
-}
-
-static inline CK_OBJECT_HANDLE tobject_format_link_id(tobject *linked) {
-
-    CK_OBJECT_HANDLE mask =_tobject_link_mask();
-    return linked->id | mask;
-}
-
-tobject *tobject_link(tobject *linked) {
-
-    tobject *t = tobject_new();
-    if (t) {
-        t->id = tobject_format_link_id(linked);
-        t->link = linked;
-    }
-
-    return t;
-}
-
 objattrs *tobject_get_attrs(tobject *tobj) {
-    return tobj->link ? &tobj->link->atributes.pub : &tobj->atributes.priv;
+    return &tobj->attrs;
 }

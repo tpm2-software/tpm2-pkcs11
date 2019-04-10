@@ -52,7 +52,7 @@ class Tpm2(object):
 
     def load(self, pctx, pauth, priv, pub):
 
-        if not isinstance(priv, str):
+        if priv != None and not isinstance(priv, str):
             sealprivf = NamedTemporaryFile()
             sealprivf.write(priv)
             sealprivf.flush()
@@ -67,10 +67,16 @@ class Tpm2(object):
         ctx = os.path.join(self._tmp, uuid.uuid4().hex + '.out')
 
         #tpm2_load -C $file_primary_key_ctx  -u $file_load_key_pub  -r $file_load_key_priv -n $file_load_key_name -o $file_load_key_ctx
-        cmd = [
-            'tpm2_load', '-C', str(pctx), '-P', 'hex:' + pauth.decode(), '-u',
-            pub, '-r', priv, '-n', '/dev/null', '-o', ctx
-        ]
+        if priv != None:
+            cmd = [
+                'tpm2_load', '-C', str(pctx), '-P', 'hex:' + pauth.decode(), '-u',
+                pub, '-r', priv, '-n', '/dev/null', '-o', ctx
+            ]
+        else:
+            cmd = [
+                'tpm2_loadexternal', '-u', pub
+            ]
+
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         _, stderr = p.communicate()
         rc = p.wait()

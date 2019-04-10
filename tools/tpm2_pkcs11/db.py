@@ -203,18 +203,17 @@ class Db(object):
         c.execute(sql, list(wrapping.values()))
         return c.lastrowid
 
-    def addtertiary(self, sid, priv, pub, objauth, mech, privattrs, pubattrs=None):
+    def addtertiary(self, sid, priv, pub, objauth, mech, attrs):
         tobject = {
             'sid': sid,
             'pub': Db._blobify(pub),
-            'priv': Db._blobify(priv),
             'objauth': objauth,
             'mech': list_dict_to_kvp(mech),
-            'privattrs': list_dict_to_kvp(privattrs),
+            'attrs': list_dict_to_kvp(attrs),
         }
 
-        if pubattrs:
-            tobject.update({ 'pubattrs' : list_dict_to_kvp(pubattrs) })
+        if priv != None:
+            tobject['priv'] = Db._blobify(priv)
 
         columns = ', '.join(tobject.keys())
         placeholders = ', '.join('?' * len(tobject))
@@ -224,18 +223,13 @@ class Db(object):
         c.execute(sql, list(tobject.values()))
         return c.lastrowid
 
-    def updatetertiaryattrs(self, tid, privattrs, pubattrs=None):
+    def updatetertiaryattrs(self, tid, attrs):
 
         c = self._conn.cursor()
-        priv = list_dict_to_kvp(privattrs)
-        values =  [priv, tid]
+        attrs = list_dict_to_kvp(attrs)
+        values =  [attrs, tid]
 
-        if not pubattrs:
-            sql = 'UPDATE tobjects SET privattrs=? WHERE id=?'
-        else:
-            pub = list_dict_to_kvp(pubattrs)
-            values.append(pub)
-            sql = 'UPDATE tobjects SET privattrs=?, pubattrs=? WHERE id=?'
+        sql = 'UPDATE tobjects SET attrs=? WHERE id=?'
 
         c.execute(sql, values)
 
@@ -368,11 +362,10 @@ class Db(object):
                 id INTEGER PRIMARY KEY,
                 sid INTEGER NOT NULL,
                 pub BLOB NOT NULL,
-                priv BLOB NOT NULL,
+                priv BLOB,
                 objauth TEXT NOT NULL,
                 mech TEXT NOT NULL,
-                privattrs TEXT NOT NULL,
-                pubattrs TEXT,
+                attrs TEXT NOT NULL,
                 FOREIGN KEY (sid) REFERENCES sobjects(id) ON DELETE CASCADE
             );
             '''),
