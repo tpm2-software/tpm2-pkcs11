@@ -139,7 +139,7 @@ static inline void so_login_bad_pin(CK_SESSION_HANDLE handle) {
         return CKR_OK; \
     }
 
-static void get_keypair(CK_SESSION_HANDLE session, CK_KEY_TYPE key_type, CK_OBJECT_HANDLE_PTR pub_handle, CK_OBJECT_HANDLE_PTR priv_handle) {
+static inline void get_keypair(CK_SESSION_HANDLE session, CK_KEY_TYPE key_type, CK_OBJECT_HANDLE_PTR pub_handle, CK_OBJECT_HANDLE_PTR priv_handle) {
 
     assert_non_null(pub_handle);
     assert_non_null(priv_handle);
