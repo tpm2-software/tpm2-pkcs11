@@ -119,7 +119,7 @@ void test_get_mechanism_info_good(void **state) {
 
     assert_int_equal(mech_info.ulMaxKeySize, 512);
     assert_int_equal(mech_info.ulMinKeySize, 128);
-    assert_int_equal(mech_info.flags, 0);
+    assert_int_equal(mech_info.flags, CKF_GENERATE);
 }
 
 void test_get_mechanism_info_bad(void **state) {

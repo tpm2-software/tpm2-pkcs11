@@ -76,3 +76,64 @@ $ pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --label="label" --pin mynew
 Using slot 0 with a present token (0x1)
 00000000: 2e50 bc47                                .P.G
 ```
+
+## Listing Objects
+
+To list objects, we simply use the `--list-objects` option:
+```
+pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --list-objects
+Private Key Object; EC
+  label:      p11-templ-key-label-ecc
+  ID:         7031312d74656d706c2d6b65792d69642d65636300
+  Usage:      sign
+Public Key Object; EC  EC_POINT 256 bits
+  EC_POINT:   04410452526c163439c3c5e5a943466a606439fbc7284eafd12221c4473ecb2fba3c586816d54f9ff108489877c5cfa857ba05cfba33dfe3e9b739107f672f787838d6
+  EC_PARAMS:  06082a8648ce3d030107
+  label:      p11-templ-key-label-ecc
+  ID:         7031312d74656d706c2d6b65792d69642d65636300
+  Usage:      verify
+...
+```
+
+**Note**: Your output will likely differ, but the tool should output a list of objects and some attributes.
+
+## Creating Objects
+
+Outside of using [tpm2_ptool.py](PKCS11_TOOL.md) to add objects, p11tool supports creating objects
+through the PKCS#11 interface.
+
+### Generating RSA Keypair
+
+This will generate an RSA keypair using pkcs11-tool:
+```
+pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --label="label" --login --pin=myuserpin --keypairgen
+Using slot 0 with a present token (0x1)
+Key pair generated:
+Private Key Object; RSA
+  label:      label
+  ID:         3332
+  Usage:      none
+Public Key Object; RSA 2048 bits
+  label:      label
+  ID:         3333
+  Usage:      none
+```
+
+### Generating ECC Keypair
+
+This will generate an EC keypair using pkcs11-tool:
+```
+pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --label="my-ecc-keypair" --login --pin=myuserpin --keypairgen --usage-sign --key-type EC:prime256v1
+Using slot 0 with a present token (0x1)
+Key pair generated:
+Private Key Object; EC
+  label:      my-ecc-keypair
+  ID:         3436
+  Usage:      sign
+Public Key Object; EC  EC_POINT 256 bits
+  EC_POINT:   04410436e7d2c84725234ec8d4b14bc31a50d382eb578cbc7315ae95561875314eb5a22a390bbfabef6269a35a18b1d95b2abc553071c419c3e866db0c3f13c0288ac6
+  EC_PARAMS:  06082a8648ce3d030107
+  label:      my-ecc-keypair
+  ID:         3437
+  Usage:      verify
+```
