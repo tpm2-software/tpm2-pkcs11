@@ -351,49 +351,35 @@ error:
     return rv;
 }
 
-static CK_RV object_add_missing_ids(tobject *priv_tobj) {
+static CK_RV object_add_missing_ids(tobject *tobj) {
 
     CK_RV tmp_rv;
     CK_RV rv = CKR_HOST_MEMORY;
 
     CK_ULONG privindex = 0;
-    CK_ULONG pubindex = 0;
     CK_ATTRIBUTE newprivattrs[1] = { 0 };
-    CK_ATTRIBUTE newpubattrs[1] = { 0 };
 
-    CK_ATTRIBUTE_PTR a = object_get_attribute_by_type(priv_tobj, CKA_ID);
-    if (!a) {
-        char tmp[32];
-        snprintf(tmp, sizeof(tmp), "%lu", priv_tobj->id);
-        ADD_ATTR_STR(CKA_ID, tmp, newprivattrs, privindex);
+    CK_ATTRIBUTE_PTR a = object_get_attribute_by_type(tobj, CKA_ID);
+    if (a) {
+        /* nothing to do, already has an ID */
+        return CKR_OK;
     }
 
-    a = object_get_attribute_by_type(priv_tobj, CKA_ID);
-    if (!a) {
-        // XXX FIXME
-        //        tobject *pub_tobj = priv_tobj->link;
-//        assert(pub_tobj);
-//        char tmp[32];
-//        snprintf(tmp, sizeof(tmp), "%lu", pub_tobj->id);
-//        ADD_ATTR_STR(CKA_ID, tmp, newpubattrs, pubindex);
-    }
+    char tmp[32];
+    snprintf(tmp, sizeof(tmp), "%lu", tobj->id);
+    ADD_ATTR_STR(CKA_ID, tmp, newprivattrs, privindex);
 
     /* add the new attrs */
-    rv = tobject_append_attrs(priv_tobj, newprivattrs, privindex);
+    rv = tobject_append_attrs(tobj, newprivattrs, privindex);
     if (rv != CKR_OK) {
+        LOGE("Could not append CKA_ID to object: %lu", tobj->id);
         goto error;
     }
 
-    rv = tobject_append_attrs(priv_tobj, newpubattrs, pubindex);
+    rv = db_update_attrs(tobj);
 
 error:
     tmp_rv = utils_attr_free(newprivattrs, privindex);
-    if (tmp_rv != CKR_OK) {
-        LOGW("Could not free attributes");
-        assert(0);
-    }
-
-    tmp_rv = utils_attr_free(newpubattrs, pubindex);
     if (tmp_rv != CKR_OK) {
         LOGW("Could not free attributes");
         assert(0);
@@ -444,6 +430,24 @@ static CK_RV handle_extractable(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *uda
     return handle_extractable_common(attr, true, udata);
 }
 
+static CK_RV handle_derive(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+    UNUSED(index);
+    UNUSED(udata);
+
+    CK_BBOOL value;
+    CK_RV rv = generic_CK_BBOOL(attr, &value);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    if (value) {
+        LOGE("CKA_DERIVE=true not supported");
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    return CKR_OK;
+}
+
 CK_RV check_common_attrs(
         CK_ATTRIBUTE_PTR private_key_template,
         CK_ULONG private_key_attribute_count) {
@@ -458,6 +462,7 @@ CK_RV check_common_attrs(
         { CKA_ENCRYPT,         ATTR_HANDLER_IGNORE   },
         { CKA_DECRYPT,         ATTR_HANDLER_IGNORE   },
         { CKA_SIGN,            ATTR_HANDLER_IGNORE   },
+        { CKA_DERIVE,          handle_derive         },
         { CKA_MODULUS_BITS,    ATTR_HANDLER_IGNORE   },
         { CKA_PUBLIC_EXPONENT, ATTR_HANDLER_IGNORE   },
         { CKA_SENSITIVE,       ATTR_HANDLER_IGNORE   },

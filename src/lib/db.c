@@ -1542,7 +1542,7 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
 
     attrs = attr_to_kvp(tobj->attrs.attrs, tobj->attrs.count);
     if (!attrs) {
-        LOGE("Could not retrive private attrs");
+        LOGE("Could not retrieve attrs");
         goto error;
     }
 
@@ -1633,6 +1633,53 @@ error:
     goto out;
 }
 
+CK_RV db_update_attrs(tobject *tobj) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    twist attrs = NULL;
+    sqlite3_stmt *stmt = NULL;
+
+    attrs = attr_to_kvp(tobj->attrs.attrs, tobj->attrs.count);
+    if (!attrs) {
+        LOGE("Could not retrieve attrs");
+        goto error;
+    }
+
+    const char *sql =
+          "UPDATE tobjects SET attrs=? WHERE id=?;";
+
+    int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("%s", sqlite3_errmsg(global.db));
+        goto out;
+    }
+
+    rc = sqlite3_bind_text(stmt, 1, attrs, -1, SQLITE_STATIC);
+    gotobinderror(rc, "attrs");
+
+    rc = sqlite3_bind_int(stmt, 2, tobj->id);
+    gotobinderror(rc, "id");
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        LOGE("step error: %s", sqlite3_errmsg(global.db));
+        goto error;
+    }
+
+error:
+    rc = sqlite3_finalize(stmt);
+    if (rc != SQLITE_OK) {
+        LOGE("Could not finalize stmt: %d", rc);
+        goto out;
+    }
+
+    rv = CKR_OK;
+
+out:
+    twist_free(attrs);
+    return rv;
+}
 
 CK_RV db_init(void) {
 

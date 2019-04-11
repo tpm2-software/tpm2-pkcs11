@@ -44,4 +44,14 @@ CK_RV db_update_for_pinchange(
 
 CK_RV db_add_new_object(token *tok, tobject *tobj);
 
+/**
+ * Updates an existing tobjects attributes to the new set
+ * contained in the tobject.
+ * @param tobj
+ *  The tobject to update.
+ * @return
+ *  CKR_OK on success.
+ */
+CK_RV db_update_attrs(tobject *tobj);
+
 #endif /* SRC_PKCS11_LIB_DB_H_ */

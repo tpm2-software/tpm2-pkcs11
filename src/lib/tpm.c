@@ -2088,17 +2088,29 @@ static CK_RV handle_ckobject_class(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *
     UNUSED(index);
     UNUSED(udata);
 
-    CK_OBJECT_CLASS class = CKA_PRIVATE;
+    CK_OBJECT_CLASS class[2] = {
+        CKA_PRIVATE,    /* p11tool */
+        CKO_PRIVATE_KEY /* pkcs11-tool */
+    };
 
-    if (attr->ulValueLen != sizeof(class)) {
+    if (attr->ulValueLen != sizeof(class[0])) {
         LOGE("Expected CK_OBJECT_CLASS length to be %zu got %lu", sizeof(class), attr->ulValueLen);
         return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 
     CK_OBJECT_CLASS_PTR class_ptr = (CK_OBJECT_CLASS_PTR)attr->pValue;
 
-    if (class != *class_ptr) {
-        LOGE("Expected CK_OBJECT_CLASS to be %lu got %lu", class, *class_ptr);
+    size_t i;
+    bool found = false;
+    for (i=0; i < ARRAY_LEN(class); i++) {
+        if (*class_ptr == class[i]) {
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        LOGE("Unexpected CK_OBJECT_CLASS got %lu", *class_ptr);
         return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 
