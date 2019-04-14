@@ -189,6 +189,11 @@ static CK_RV rsa_add_missing_attrs(tobject *public_tobj, tobject *private_tobj, 
     }
 
     rv = tobject_append_attrs(public_tobj, newpubattrs, pubindex);
+    if (rv != CKR_OK) {
+        goto error;
+    }
+
+    rv = tobject_append_attrs(private_tobj, newprivattrs, privindex);
 
 error:
     tmp_rv = utils_attr_free(newprivattrs, privindex);
