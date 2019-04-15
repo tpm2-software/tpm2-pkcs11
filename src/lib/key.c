@@ -54,6 +54,15 @@
     offset++;                                                        \
   } while(0)
 
+#define ADD_ATTR_BUF(A, V, L, newattrs, offset)                      \
+  do {                                                               \
+    assert(offset < ARRAY_LEN(newattrs));                            \
+    newattrs[offset].type = A;                                       \
+    newattrs[offset].ulValueLen = L;                                 \
+    newattrs[offset].pValue = V;                                     \
+    offset++;                                                        \
+  } while(0)
+
 UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_BBOOL);
 
 CK_RV ecc_add_missing_mechs(tobject *tobj) {
@@ -122,59 +131,102 @@ error:
     return rv;
 }
 
+static CK_RV uint32_to_BN(uint32_t value, void **bytes, CK_ULONG_PTR len) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    BIGNUM *b = BN_new();
+    if (!b) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    int rc = BN_set_word(b, value);
+    if (!rc) {
+        LOGE("BN_set_word failed: %d", rc);
+        goto out;
+    }
+
+    int l = BN_num_bytes(b);
+
+    void *x = malloc(l);
+    if (!x) {
+        LOGE("oom");
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    rc = BN_bn2bin(b, x);
+    if (!rc) {
+        free(x);
+        LOGE("BN_bn2bin failed: %d", rc);
+        goto out;
+    }
+
+    *bytes = x;
+    *len = l;
+
+    rv = CKR_OK;
+
+out:
+    BN_free(b);
+    return rv;
+}
+
+/*
+ * Add required attributes to the RSA objects based on:
+ *   - http://docs.oasis-open.org/pkcs11/pkcs11-curr/v2.40/errata01/os/pkcs11-curr-v2.40-errata01-os-complete.html#_Toc441850406
+ *     - 2.1.2 and 2.1.3
+ */
 static CK_RV rsa_add_missing_attrs(tobject *public_tobj, tobject *private_tobj, tpm_object_data *objdata) {
 
     CK_RV tmp_rv;
     CK_RV rv = CKR_HOST_MEMORY;
 
     CK_ULONG privindex = 0;
-    CK_ATTRIBUTE newprivattrs[1] = { 0 };
+    CK_ATTRIBUTE newprivattrs[3] = { 0 };
 
     CK_ULONG pubindex = 0;
     CK_ATTRIBUTE newpubattrs[3] = { 0 };
 
+    /* pub/priv: CKA_MODULUS */
     CK_ATTRIBUTE_PTR a = object_get_attribute_by_type(public_tobj, CKA_MODULUS);
     if (!a) {
         ADD_ATTR_TWIST(CKA_MODULUS, objdata->rsa.modulus, newpubattrs, pubindex);
     }
 
+    a = object_get_attribute_by_type(private_tobj, CKA_MODULUS);
+    if (!a) {
+        ADD_ATTR_TWIST(CKA_MODULUS, objdata->rsa.modulus, newprivattrs, privindex);
+    }
+
+    /* pub/priv: CKA_PUBLIC_EXPONENT */
     a = object_get_attribute_by_type(public_tobj, CKA_PUBLIC_EXPONENT);
     if (!a) {
-        BIGNUM *b = BN_new();
-        if (!b) {
-            LOGE("oom");
+
+        void *bnexp;
+        CK_ULONG len;
+        rv = uint32_to_BN(objdata->rsa.exponent, &bnexp, &len);
+        if (rv != CKR_OK) {
             goto error;
         }
 
-        int rc = BN_set_word(b, objdata->rsa.exponent);
-        if (!rc) {
-            LOGE("BN_set_word failed: %d", rc);
-            BN_free(b);
-            goto error;
-        }
-
-        int bytes = BN_num_bytes(b);
-
-        void *x = malloc(bytes);
-        if (!x) {
-            LOGE("oom");
-            BN_free(b);
-            goto error;
-        }
-
-        rc = BN_bn2bin(b, x);
-        BN_free(b);
-        if (!rc) {
-            free(x);
-            LOGE("BN_bn2bin failed: %d", rc);
-            goto error;
-        }
-
-        assert(pubindex < ARRAY_LEN(newpubattrs));
-        newpubattrs[pubindex].type = CKA_PUBLIC_EXPONENT;
-        newpubattrs[pubindex].pValue = x;
-        newpubattrs[pubindex++].ulValueLen = bytes;
+        ADD_ATTR_BUF(CKA_PUBLIC_EXPONENT, bnexp, len, newpubattrs, pubindex);
     }
+
+    a = object_get_attribute_by_type(private_tobj, CKA_PUBLIC_EXPONENT);
+    if (!a) {
+
+        void *bnexp;
+        CK_ULONG len;
+        rv = uint32_to_BN(objdata->rsa.exponent, &bnexp, &len);
+        if (rv != CKR_OK) {
+            goto error;
+        }
+
+        ADD_ATTR_BUF(CKA_PUBLIC_EXPONENT, bnexp, len, newprivattrs, privindex);
+    }
+
 
     /* make sure both have keybits specified via CKA_MODULUS_BITS */
     CK_ULONG keybits = twist_len(objdata->rsa.modulus) * 8;
