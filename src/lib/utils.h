@@ -161,4 +161,15 @@ CK_RV utils_attr_free(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_count);
         return CKR_OK; \
     }
 
+/**
+ * Given an attribute of CKA_EC_PARAMS returns the nid value.
+ * @param ecparams
+ *  The DER X9.62 parameters value
+ * @param nid
+ *  The nid to set
+ * @return
+ *  CKR_OK on success.
+ */
+CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid);
+
 #endif /* SRC_PKCS11_UTILS_H_ */

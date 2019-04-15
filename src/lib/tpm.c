@@ -1983,18 +1983,15 @@ static CK_RV handle_ecparams(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata)
     UNUSED(index);
 
     tpm_key_data *keydat = (tpm_key_data *)udata;
-    const unsigned char *p = attr->pValue;
 
-    ASN1_OBJECT *a = d2i_ASN1_OBJECT(NULL, &p, attr->ulValueLen);
-    if (!a) {
-        LOGE("Unknown CKA_EC_PARAMS value");
-        return CKR_ATTRIBUTE_VALUE_INVALID;
+    int nid = 0;
+    CK_RV rv = ec_params_to_nid(attr, &nid);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     TPMS_ECC_PARMS *ec = &keydat->pub.publicArea.parameters.eccDetail;
 
-    int nid = OBJ_obj2nid(a);
-    ASN1_OBJECT_free(a);
     switch (nid) {
     case NID_X9_62_prime192v1:
         ec->curveID = TPM2_ECC_NIST_P192;
