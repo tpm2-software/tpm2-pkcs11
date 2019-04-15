@@ -104,7 +104,6 @@ CK_RV object_add_missing_mechs(tobject *tobj, CK_MECHANISM_TYPE mech) {
 }
 
 static CK_RV ecc_add_missing_attrs(tobject *public_tobj, tobject *private_tobj, tpm_object_data *objdata) {
-    UNUSED(private_tobj);
 
     CK_RV tmp_rv;
     CK_RV rv = CKR_HOST_MEMORY;
@@ -112,19 +111,58 @@ static CK_RV ecc_add_missing_attrs(tobject *public_tobj, tobject *private_tobj, 
     CK_ULONG pubindex = 0;
     CK_ATTRIBUTE newpubattrs[1] = { 0 };
 
-    CK_ATTRIBUTE_PTR a = object_get_attribute_by_type(public_tobj, CKA_EC_POINT);
+    CK_ULONG privindex = 0;
+    CK_ATTRIBUTE newprivattrs[1] = { 0 };
+
+
+    CK_ATTRIBUTE_PTR a = tobject_get_attribute_by_type(public_tobj, CKA_EC_POINT);
     if (!a) {
         ADD_ATTR_TWIST(CKA_EC_POINT, objdata->ecc.ecpoint, newpubattrs, pubindex);
     }
 
+    /*
+     * Private ECC objects require the CKA_EC_PARAMS
+     */
+    a = tobject_get_attribute_by_type(public_tobj, CKA_EC_PARAMS);
+    if (!a) {
+        LOGE("CKA_EC_PARAMS missing");
+        rv = CKR_GENERAL_ERROR;
+        goto error;
+    }
+
+    void *x = buf_dup(a->pValue, a->ulValueLen);
+    if (!x) {
+        rv = CKR_HOST_MEMORY;
+        goto error;
+    }
+
+    ADD_ATTR_BUF(CKA_EC_PARAMS, x, a->ulValueLen, newprivattrs, privindex);
+
     /* add the new attrs */
     rv = tobject_append_attrs(public_tobj, newpubattrs, pubindex);
+    if (rv != CKR_OK) {
+        LOGW("Could not append pub attributes");
+        goto error;
+    }
+
+    /* add the new attrs */
+    rv = tobject_append_attrs(private_tobj, newprivattrs, privindex);
+    if (rv != CKR_OK) {
+        LOGW("Could not append priv attributes");
+        goto error;
+    }
 
 error:
 
     tmp_rv = utils_attr_free(newpubattrs, pubindex);
     if (tmp_rv != CKR_OK) {
-        LOGW("Could not free attributes");
+        LOGW("Could not free pub attributes");
+        assert(0);
+    }
+
+    tmp_rv = utils_attr_free(newprivattrs, privindex);
+    if (tmp_rv != CKR_OK) {
+        LOGW("Could not free priv attributes");
         assert(0);
     }
 
@@ -190,18 +228,18 @@ static CK_RV rsa_add_missing_attrs(tobject *public_tobj, tobject *private_tobj, 
     CK_ATTRIBUTE newpubattrs[3] = { 0 };
 
     /* pub/priv: CKA_MODULUS */
-    CK_ATTRIBUTE_PTR a = object_get_attribute_by_type(public_tobj, CKA_MODULUS);
+    CK_ATTRIBUTE_PTR a = tobject_get_attribute_by_type(public_tobj, CKA_MODULUS);
     if (!a) {
         ADD_ATTR_TWIST(CKA_MODULUS, objdata->rsa.modulus, newpubattrs, pubindex);
     }
 
-    a = object_get_attribute_by_type(private_tobj, CKA_MODULUS);
+    a = tobject_get_attribute_by_type(private_tobj, CKA_MODULUS);
     if (!a) {
         ADD_ATTR_TWIST(CKA_MODULUS, objdata->rsa.modulus, newprivattrs, privindex);
     }
 
     /* pub/priv: CKA_PUBLIC_EXPONENT */
-    a = object_get_attribute_by_type(public_tobj, CKA_PUBLIC_EXPONENT);
+    a = tobject_get_attribute_by_type(public_tobj, CKA_PUBLIC_EXPONENT);
     if (!a) {
 
         void *bnexp;
@@ -214,7 +252,7 @@ static CK_RV rsa_add_missing_attrs(tobject *public_tobj, tobject *private_tobj, 
         ADD_ATTR_BUF(CKA_PUBLIC_EXPONENT, bnexp, len, newpubattrs, pubindex);
     }
 
-    a = object_get_attribute_by_type(private_tobj, CKA_PUBLIC_EXPONENT);
+    a = tobject_get_attribute_by_type(private_tobj, CKA_PUBLIC_EXPONENT);
     if (!a) {
 
         void *bnexp;
@@ -230,12 +268,12 @@ static CK_RV rsa_add_missing_attrs(tobject *public_tobj, tobject *private_tobj, 
 
     /* make sure both have keybits specified via CKA_MODULUS_BITS */
     CK_ULONG keybits = twist_len(objdata->rsa.modulus) * 8;
-    a = object_get_attribute_by_type(private_tobj, CKA_MODULUS_BITS);
+    a = tobject_get_attribute_by_type(private_tobj, CKA_MODULUS_BITS);
     if (!a) {
         ADD_ATTR(CK_ULONG, CKA_MODULUS_BITS, keybits, newprivattrs, privindex);
     }
 
-    a = object_get_attribute_by_type(public_tobj, CKA_MODULUS_BITS);
+    a = tobject_get_attribute_by_type(public_tobj, CKA_MODULUS_BITS);
     if (!a) {
         ADD_ATTR(CK_ULONG, CKA_MODULUS_BITS, keybits, newpubattrs, pubindex);
     }
@@ -289,12 +327,12 @@ static CK_RV object_add_missing_attrs(tobject *public_tobj, tobject *private_tob
     /*
      * Ensure that keytype is set for both public and private
      */
-    CK_ATTRIBUTE_PTR a = object_get_attribute_by_type(public_tobj, CKA_KEY_TYPE);
+    CK_ATTRIBUTE_PTR a = tobject_get_attribute_by_type(public_tobj, CKA_KEY_TYPE);
     if (!a) {
         ADD_ATTR(CK_KEY_TYPE, CKA_KEY_TYPE, keytype, newpubattrs, pubindex);
     }
 
-    a = object_get_attribute_by_type(private_tobj, CKA_KEY_TYPE);
+    a = tobject_get_attribute_by_type(private_tobj, CKA_KEY_TYPE);
     if (!a) {
         ADD_ATTR(CK_KEY_TYPE, CKA_KEY_TYPE, keytype, newprivattrs, privindex);
     }
@@ -306,13 +344,13 @@ static CK_RV object_add_missing_attrs(tobject *public_tobj, tobject *private_tob
        .pValue = &class
     };
 
-    a = object_get_attribute_full(private_tobj, &match);
+    a = tobject_get_attribute_full(private_tobj, &match);
     if (!a) {
         ADD_ATTR(CK_OBJECT_CLASS, CKA_CLASS, CKO_PRIVATE_KEY, newprivattrs, privindex);
     }
 
     class = CKO_PUBLIC_KEY;
-    a = object_get_attribute_full(public_tobj, &match);
+    a = tobject_get_attribute_full(public_tobj, &match);
     if (!a) {
         ADD_ATTR(CK_OBJECT_CLASS, CKA_CLASS, CKO_PUBLIC_KEY, newpubattrs, pubindex);
     }
@@ -330,7 +368,7 @@ static CK_RV object_add_missing_attrs(tobject *public_tobj, tobject *private_tob
      */
 
     CK_BBOOL sensitive = CK_TRUE;
-    a = object_get_attribute_by_type(private_tobj, CKA_SENSITIVE);
+    a = tobject_get_attribute_by_type(private_tobj, CKA_SENSITIVE);
     if (!a) {
         ADD_ATTR(CK_BBOOL, CKA_SENSITIVE, CK_TRUE, newprivattrs, privindex);
     } else {
@@ -341,14 +379,14 @@ static CK_RV object_add_missing_attrs(tobject *public_tobj, tobject *private_tob
     }
 
     /* mark always sensitive if not specified by user */
-    a = object_get_attribute_by_type(private_tobj, CKA_ALWAYS_SENSITIVE);
+    a = tobject_get_attribute_by_type(private_tobj, CKA_ALWAYS_SENSITIVE);
     if (!a) {
         ADD_ATTR(CK_BBOOL, CKA_ALWAYS_SENSITIVE, sensitive ? CK_TRUE : CK_FALSE, newprivattrs, privindex);
     }
 
     /* if the object is missing CKA_EXTRACTABLE use the value of CKA_SENSITIVE to determine */
     CK_BBOOL extractable = CK_FALSE;
-    a = object_get_attribute_by_type(private_tobj, CKA_EXTRACTABLE);
+    a = tobject_get_attribute_by_type(private_tobj, CKA_EXTRACTABLE);
     if (!a) {
         ADD_ATTR(CK_BBOOL, CKA_EXTRACTABLE, !sensitive, newprivattrs, privindex);
     } else {
@@ -359,7 +397,7 @@ static CK_RV object_add_missing_attrs(tobject *public_tobj, tobject *private_tob
     }
 
     /* mark never extractable if not specified by user */
-    a = object_get_attribute_by_type(private_tobj, CKA_NEVER_EXTRACTABLE);
+    a = tobject_get_attribute_by_type(private_tobj, CKA_NEVER_EXTRACTABLE);
     if (!a) {
         ADD_ATTR(CK_BBOOL, CKA_NEVER_EXTRACTABLE, extractable ? CK_FALSE : CK_TRUE, newprivattrs, privindex);
     }
@@ -416,7 +454,7 @@ static CK_RV object_add_missing_ids(tobject *tobj) {
     CK_ULONG privindex = 0;
     CK_ATTRIBUTE newprivattrs[1] = { 0 };
 
-    CK_ATTRIBUTE_PTR a = object_get_attribute_by_type(tobj, CKA_ID);
+    CK_ATTRIBUTE_PTR a = tobject_get_attribute_by_type(tobj, CKA_ID);
     if (a) {
         /* nothing to do, already has an ID */
         return CKR_OK;
@@ -546,6 +584,41 @@ CK_RV check_common_attrs(
     return CKR_OK;
 }
 
+static CK_RV ecc_check_attrs(
+        CK_ATTRIBUTE_PTR public_key_template, CK_ULONG public_key_attribute_count,
+        CK_ATTRIBUTE_PTR private_key_template, CK_ULONG private_key_attribute_count) {
+
+    CK_ATTRIBUTE_PTR a = util_get_attribute_by_type(CKA_EC_PARAMS, public_key_template, public_key_attribute_count);
+    if (!a) {
+        LOGE("EC keygen requires CKA_EC_PARAMS in public template");
+        return CKR_TEMPLATE_INCONSISTENT;
+    }
+
+    CK_ATTRIBUTE_PTR b = util_get_attribute_by_type(CKA_EC_PARAMS, private_key_template, private_key_attribute_count);
+    if (b) {
+        LOGW("EC keygen CKA_EC_PARAMS should not be in private template");
+        return CKR_TEMPLATE_INCONSISTENT;
+    }
+
+    return CKR_OK;
+}
+
+static CK_RV check_specific_attrs(CK_MECHANISM_TYPE mech,
+        CK_ATTRIBUTE_PTR public_key_template, CK_ULONG public_key_attribute_count,
+        CK_ATTRIBUTE_PTR private_key_template, CK_ULONG private_key_attribute_count) {
+
+    switch (mech) {
+    case CKM_RSA_PKCS_KEY_PAIR_GEN:
+        return CKR_OK;
+    case CKM_EC_KEY_PAIR_GEN:
+        return ecc_check_attrs(public_key_template, public_key_attribute_count,
+                    private_key_template, private_key_attribute_count);
+    default:
+        LOGE("Unsupported keygen mechanism: 0x%x", mech);
+        return CKR_MECHANISM_INVALID;
+    }
+}
+
 CK_RV key_gen (
         session_ctx *ctx,
 
@@ -589,6 +662,10 @@ CK_RV key_gen (
         LOGE("Failed checking public attrs");
         goto out;
     }
+
+    check_specific_attrs(mechanism->mechanism,
+            public_key_template, public_key_attribute_count,
+            private_key_template, private_key_attribute_count);
 
     new_private_tobj = tobject_new();
     if (!new_private_tobj) {

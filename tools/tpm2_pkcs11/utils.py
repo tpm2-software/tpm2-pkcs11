@@ -258,3 +258,28 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+
+def get_ec_params(alg):
+    """Return a string representation of a hex encoded ASN1 object X9.62 EC parameter
+
+    http://docs.oasis-open.org/pkcs11/pkcs11-curr/v2.40/cos01/pkcs11-curr-v2.40-cos01.html
+
+    Indicates that EC paramaters are byte arrays of a DER encoded ASN1 objects X9.62 parameter.
+    This function will return a hex string without the leading 0x representing this encoding.
+    """
+
+    if alg == "ecc256":
+        obj = "2A8648CE3D030107"
+    elif alg == "ecc224":
+        obj = "2B81040021"
+    elif alg == "ecc384":
+        obj = "2B81040022"
+    elif alg == "ecc521":
+        obj = "2B81040023"
+    else:
+        raise RuntimeError("alg %s has no EC params mapping" % alg)
+
+    # start building the DER object tag + len + obj in hex
+    der = "06{:02x}{}".format(len(obj)//2, obj)
+
+    return der

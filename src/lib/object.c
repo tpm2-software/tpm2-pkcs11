@@ -381,46 +381,16 @@ static CK_RV find_object_by_id(token *tok, CK_OBJECT_HANDLE handle, bool inc, to
     return CK_INVALID_HANDLE;
 }
 
-CK_ATTRIBUTE_PTR object_get_attribute_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE atype) {
-
-    CK_ULONG i;
+CK_ATTRIBUTE_PTR tobject_get_attribute_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE needle) {
 
     objattrs *attrs = tobject_get_attrs(tobj);
-
-    for (i=0; i < attrs->count; i++) {
-
-        CK_ATTRIBUTE_PTR a = &attrs->attrs[i];
-
-        if (a->type == atype) {
-            return a;
-        }
-    }
-
-    return NULL;
+    return util_get_attribute_by_type(needle, attrs->attrs, attrs->count);
 }
 
-CK_ATTRIBUTE_PTR object_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR attr) {
+CK_ATTRIBUTE_PTR tobject_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR needle) {
 
     objattrs *attrs = tobject_get_attrs(tobj);
-
-    CK_ULONG i;
-    for (i=0; i < attrs->count; i++) {
-
-        CK_ATTRIBUTE_PTR a = &attrs->attrs[i];
-
-        if (a->type == attr->type
-         && a->ulValueLen == attr->ulValueLen) {
-            if (a->ulValueLen > 0
-             && memcmp(a->pValue, attr->pValue, attr->ulValueLen)) {
-                /* length is greater then 0 and don't match, keep looking */
-                continue;
-            }
-            /* length is both 0 OR length > 0 and matched on memcmp */
-            return a;
-        }
-    }
-
-    return NULL;
+    return util_get_attribute_full(needle, attrs->attrs, attrs->count);
 }
 
 CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
@@ -445,7 +415,7 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
 
         CK_ATTRIBUTE_PTR t = &templ[i];
 
-        CK_ATTRIBUTE_PTR found = object_get_attribute_by_type(tobj, t->type);
+        CK_ATTRIBUTE_PTR found = tobject_get_attribute_by_type(tobj, t->type);
         if (found) {
             if (!t->pValue) {
                 /* only populate size if the buffer is null */

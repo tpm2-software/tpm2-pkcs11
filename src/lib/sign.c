@@ -102,7 +102,7 @@ static CK_RV ec_fixup_size(CK_MECHANISM_TYPE mech, tobject *tobj, CK_ULONG_PTR s
         return CKR_OK;
     }
 
-    CK_ATTRIBUTE_PTR a = object_get_attribute_by_type(tobj, CKA_EC_PARAMS);
+    CK_ATTRIBUTE_PTR a = tobject_get_attribute_by_type(tobj, CKA_EC_PARAMS);
 
     int nid = 0;
     CK_RV rv = ec_params_to_nid(a, &nid);
@@ -329,7 +329,7 @@ static CK_RV pkcs1_5_build_struct(CK_MECHANISM_TYPE mech,
 
 static CK_RV apply_pkcs_1_5_pad(tobject *tobj, char *built, size_t built_len, char **padded, size_t *padded_len) {
 
-    CK_ATTRIBUTE_PTR a = object_get_attribute_by_type(tobj, CKA_MODULUS_BITS);
+    CK_ATTRIBUTE_PTR a = tobject_get_attribute_by_type(tobj, CKA_MODULUS_BITS);
     if (!a) {
         LOGE("Signing key has no modulus");
         return CKR_GENERAL_ERROR;
