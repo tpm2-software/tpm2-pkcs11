@@ -140,6 +140,28 @@ static void test_ec_params(CK_ATTRIBUTE_PTR ecparams) {
     }
 }
 
+static void test_ec_point(CK_ATTRIBUTE_PTR ecpoint) {
+
+    assert_int_not_equal(0, ecpoint->ulValueLen);
+    assert_non_null(ecpoint->pValue);
+
+    const unsigned char *pp = ecpoint->pValue;
+    CK_ULONG len = ecpoint->ulValueLen;
+
+    ASN1_OCTET_STRING *a = NULL;
+    a = d2i_ASN1_OCTET_STRING(&a, &pp, len);
+    assert_non_null(a);
+
+    const unsigned char *d = ASN1_STRING_get0_data(a);
+
+    /* first byte should be 04 for "uncompressed format" */
+    assert_int_equal(d[0], 0x4);
+
+    /* TODO look at curve id and map to expected X and Y sizes */
+
+    ASN1_STRING_free(a);
+}
+
 static void verify_missing_pub_attrs_ecc(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE h) {
 
     CK_BYTE tmp[2][256] = { 0 };
@@ -166,8 +188,7 @@ static void verify_missing_pub_attrs_ecc(CK_SESSION_HANDLE session, CK_OBJECT_HA
             break;
         case CKA_EC_POINT:
             // DER-encoding of ANSI X9.62 ECPoint value Q
-            assert_int_not_equal(0, a->ulValueLen);
-            assert_non_null(a->pValue);
+            test_ec_point(a);
             count++;
         break;
         default:

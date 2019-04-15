@@ -21,6 +21,7 @@
 #include <cmocka.h>
 #include <tss2/tss2_sys.h>
 
+#include "openssl_compat.h"
 #include "pkcs11.h"
 #include "utils.h"
 

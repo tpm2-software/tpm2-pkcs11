@@ -57,5 +57,9 @@ const unsigned char *OBJ_get0_data(const ASN1_OBJECT *obj) {
     return obj->data;
 }
 
+const unsigned char *ASN1_STRING_get0_data(const ASN1_STRING *x) {
+    return ASN1_STRING_data((ASN1_STRING *)x);
+}
+
 #endif
 #endif /* SRC_LIB_OPENSSL_COMPAT_C_ */

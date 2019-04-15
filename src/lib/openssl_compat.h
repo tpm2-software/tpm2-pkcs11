@@ -13,6 +13,9 @@
 size_t EC_POINT_point2buf(const EC_GROUP *group, const EC_POINT *point,
                           point_conversion_form_t form,
                           unsigned char **pbuf, BN_CTX *ctx);
+
+const unsigned char *ASN1_STRING_get0_data(const ASN1_STRING *x);
+
 #endif
 
 #endif /* SRC_LIB_OPENSSL_COMPAT_H_ */

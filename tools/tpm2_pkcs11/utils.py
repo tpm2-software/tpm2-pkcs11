@@ -283,3 +283,34 @@ def get_ec_params(alg):
     der = "06{:02x}{}".format(len(obj)//2, obj)
 
     return der
+
+def asn1_format_ec_point_uncompressed(x, y):
+
+    len_y = len(y)
+    len_x = len(x)
+
+    # normalize hex input to ensure no odd count hex strings
+    if len_y % 2:
+        len_y = len_y + 1
+        y = "00" + y
+
+    if len_x % 2:
+        len_x = len_x + 1
+        x = "00" + x
+
+    # convert hex length to binary length
+    len_y = len_y // 2
+    len_x = len_x // 2
+
+    # ensure that the binary representation fits into a byte
+    total_len =  len_y + len_x + 1
+    if (total_len > 255):
+        raise RuntimeError("Length of X and Y plus uncompressed format byte greater than 255")
+
+    # The uncompressed point format is:
+    # <asn1 octet hdr> <len> <uncompressed point format byte> <X> <Y>
+    # 04 <len> <X> <Y>
+
+    s = "04{len:02x}04{X}{Y}".format(len=total_len, X=x, Y=y)
+
+    return s
