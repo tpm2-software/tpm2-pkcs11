@@ -198,10 +198,13 @@ noinst_LTLIBRARIES = $(libtpm2_test_pkcs11) $(libtpm2_test_internal)
 
 TESTS = $(check_PROGRAMS)
 check_PROGRAMS += \
-    test/unit/test_twist
+    test/unit/test_twist\
+    test/unit/test_log
 
 test_unit_test_twist_CFLAGS    = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
 test_unit_test_twist_LDADD     = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
+test_unit_test_log_CFLAGS      = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
+test_unit_test_log_LDADD       = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
 
 endif
 # END UNIT
