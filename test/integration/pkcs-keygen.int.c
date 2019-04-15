@@ -118,6 +118,28 @@ static void verify_missing_pub_attrs_rsa(CK_SESSION_HANDLE session, CK_OBJECT_HA
     verify_missing_common_attrs_rsa(session, h);
 }
 
+static void test_ec_params(CK_ATTRIBUTE_PTR ecparams) {
+
+    const unsigned char *p = ecparams->pValue;
+
+    ASN1_OBJECT *a = d2i_ASN1_OBJECT(NULL, &p, ecparams->ulValueLen);
+    assert_non_null(a);
+
+    int nid = OBJ_obj2nid(a);
+    ASN1_OBJECT_free(a);
+
+    switch (nid) {
+    case NID_X9_62_prime192v1:
+    case NID_secp224r1:
+    case NID_X9_62_prime256v1:
+    case NID_secp384r1:
+    case NID_secp521r1:
+        break;
+    default:
+        fail_msg("Unsupported nid to tpm EC algorithm mapping, got nid: %d", nid);
+    }
+}
+
 static void verify_missing_pub_attrs_ecc(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE h) {
 
     CK_BYTE tmp[2][256] = { 0 };
@@ -136,15 +158,17 @@ static void verify_missing_pub_attrs_ecc(CK_SESSION_HANDLE session, CK_OBJECT_HA
         CK_ATTRIBUTE_PTR a = &attrs[i];
         switch(a->type) {
         /* TODO more robust checking here:
-         *  - they are valid DER.
-         *  - The DER values are sane.
          *  - They match what was expected in generation.
          */
         case CKA_EC_PARAMS:
-        case CKA_EC_POINT:
+            test_ec_params(a);
             count++;
+            break;
+        case CKA_EC_POINT:
+            // DER-encoding of ANSI X9.62 ECPoint value Q
             assert_int_not_equal(0, a->ulValueLen);
             assert_non_null(a->pValue);
+            count++;
         break;
         default:
             assert_true(0);
