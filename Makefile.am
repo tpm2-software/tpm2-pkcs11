@@ -118,6 +118,7 @@ TESTS = $(check_PROGRAMS)
 check_PROGRAMS += \
     test/integration/pkcs-find-objects.int \
     test/integration/pkcs-get-mechanism.int \
+    test/integration/pkcs-get-attribute-value.int \
     test/integration/pkcs-login-logout.int \
     test/integration/pkcs-sign-verify.int \
     test/integration/pkcs-initialize-finalize.int \
@@ -137,6 +138,10 @@ test_integration_pkcs_find_objects_int_SOURCES = test/integration/pkcs-find-obje
 test_integration_pkcs_get_mechanism_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_get_mechanism_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
 test_integration_pkcs_get_mechanism_int_SOURCES = test/integration/pkcs-get-mechanism.int.c
+
+test_integration_pkcs_get_attribute_value_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_get_attribute_value_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_get_attribute_value_int_SOURCES = test/integration/pkcs-get-attribute-value.int.c
 
 test_integration_pkcs_login_logout_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_login_logout_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
