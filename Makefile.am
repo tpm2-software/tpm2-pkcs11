@@ -114,6 +114,15 @@ check_PROGRAMS =
 ### Integration Tests ###
 if ENABLE_INTEGRATION
 
+#
+# Common integration test static lib
+#
+LIB_TEST := test/integration/libtest.a
+noinst_LIBRARIES = $(LIB_TEST)
+test_integration_libtest_a_SOURCES = $(LIB_SRC)
+test_integration_libtest_a_CFLAGS = -fPIC $(AM_CFLAGS)
+TESTS_LDADD += $(LIB_TEST)
+
 TESTS = $(check_PROGRAMS)
 check_PROGRAMS += \
     test/integration/pkcs-find-objects.int \
@@ -133,43 +142,43 @@ INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integrati
 
 test_integration_pkcs_find_objects_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_find_objects_int_LDADD   = $(TESTS_LDADD)
-test_integration_pkcs_find_objects_int_SOURCES = test/integration/pkcs-find-objects.int.c
+test_integration_pkcs_find_objects_int_SOURCES = test/integration/pkcs-find-objects.int.c test/integration/test.c
 
 test_integration_pkcs_get_mechanism_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_get_mechanism_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_get_mechanism_int_SOURCES = test/integration/pkcs-get-mechanism.int.c
+test_integration_pkcs_get_mechanism_int_SOURCES = test/integration/pkcs-get-mechanism.int.c test/integration/test.c
 
 test_integration_pkcs_get_attribute_value_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_get_attribute_value_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_get_attribute_value_int_SOURCES = test/integration/pkcs-get-attribute-value.int.c
+test_integration_pkcs_get_attribute_value_int_SOURCES = test/integration/pkcs-get-attribute-value.int.c test/integration/test.c
 
 test_integration_pkcs_login_logout_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_login_logout_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_login_logout_int_SOURCES = test/integration/pkcs-login-logout.int.c
+test_integration_pkcs_login_logout_int_SOURCES = test/integration/pkcs-login-logout.int.c test/integration/test.c
 
 test_integration_pkcs_sign_verify_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_sign_verify_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_sign_verify_int_SOURCES = test/integration/pkcs-sign-verify.int.c
+test_integration_pkcs_sign_verify_int_SOURCES = test/integration/pkcs-sign-verify.int.c test/integration/test.c
 
 test_integration_pkcs_initialize_finalize_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_initialize_finalize_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_initialize_finalize_int_SOURCES = test/integration/pkcs-initialize-finalize.int.c
+test_integration_pkcs_initialize_finalize_int_SOURCES = test/integration/pkcs-initialize-finalize.int.c test/integration/test.c
 
 test_integration_pkcs_misc_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_misc_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_misc_int_SOURCES = test/integration/pkcs-misc.int.c
+test_integration_pkcs_misc_int_SOURCES = test/integration/pkcs-misc.int.c test/integration/test.c
 
 test_integration_pkcs_crypt_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_crypt_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_crypt_int_SOURCES = test/integration/pkcs-crypt.int.c
+test_integration_pkcs_crypt_int_SOURCES = test/integration/pkcs-crypt.int.c test/integration/test.c
 
 test_integration_pkcs_keygen_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_keygen_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_keygen_int_SOURCES = test/integration/pkcs-keygen.int.c
+test_integration_pkcs_keygen_int_SOURCES = test/integration/pkcs-keygen.int.c test/integration/test.c
 
 test_integration_pkcs_session_state_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_session_state_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_session_state_int_SOURCES = test/integration/pkcs-session-state.c
+test_integration_pkcs_session_state_int_SOURCES = test/integration/pkcs-session-state.c test/integration/test.c
 
 endif
 # END INTEGRATION

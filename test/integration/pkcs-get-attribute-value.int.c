@@ -218,9 +218,161 @@ static void test_get_attribute_value_multiple_fail(void **state) {
     free(pInvalid);
 }
 
+static void test_all_pub_ecc_obj_attrs(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->hSession;
+
+    CK_OBJECT_CLASS class = CKO_PUBLIC_KEY;
+    CK_KEY_TYPE keytype = CKK_EC;
+
+    CK_ATTRIBUTE attrs[] = {
+        ADD_ATTR_BASE(CKA_KEY_TYPE, keytype),
+        ADD_ATTR_BASE(CKA_CLASS, class),
+    };
+
+    /* verify we can find it via pub templ */
+    CK_RV rv = C_FindObjectsInit(session, attrs, ARRAY_LEN(attrs));
+    assert_int_equal(rv, CKR_OK);
+
+    CK_OBJECT_HANDLE handles[255];
+    CK_ULONG count = ARRAY_LEN(handles);
+    rv = C_FindObjects(session, handles, count, &count);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG i;
+    for (i=0; i < count; i++) {
+
+        CK_OBJECT_HANDLE h = handles[i];
+
+        /* verify missing attrs */
+        verify_missing_pub_attrs_common(session, keytype, h);
+        verify_missing_pub_attrs_ecc(session, h);
+    }
+}
+
+static void test_all_priv_ecc_obj_attrs(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->hSession;
+
+    CK_OBJECT_CLASS class = CKO_PRIVATE_KEY;
+    CK_KEY_TYPE keytype = CKK_EC;
+
+    CK_ATTRIBUTE attrs[] = {
+        ADD_ATTR_BASE(CKA_KEY_TYPE, keytype),
+        ADD_ATTR_BASE(CKA_CLASS, class),
+    };
+
+    /* verify we can find it via pub templ */
+    CK_RV rv = C_FindObjectsInit(session, attrs, ARRAY_LEN(attrs));
+    assert_int_equal(rv, CKR_OK);
+
+    CK_OBJECT_HANDLE handles[255];
+    CK_ULONG count = ARRAY_LEN(handles);
+    rv = C_FindObjects(session, handles, count, &count);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG i;
+    for (i=0; i < count; i++) {
+
+        CK_OBJECT_HANDLE h = handles[i];
+
+        /* verify missing attrs */
+        verify_missing_priv_attrs_common(session, keytype, h);
+        verify_missing_priv_attrs_ecc(session, h);
+    }
+}
+
+static void test_all_pub_rsa_obj_attrs(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->hSession;
+
+    CK_OBJECT_CLASS class = CKO_PUBLIC_KEY;
+    CK_KEY_TYPE keytype = CKK_RSA;
+
+    CK_ATTRIBUTE attrs[] = {
+        ADD_ATTR_BASE(CKA_KEY_TYPE, keytype),
+        ADD_ATTR_BASE(CKA_CLASS, class),
+    };
+
+    /* verify we can find it via pub templ */
+    CK_RV rv = C_FindObjectsInit(session, attrs, ARRAY_LEN(attrs));
+    assert_int_equal(rv, CKR_OK);
+
+    CK_OBJECT_HANDLE handles[255];
+    CK_ULONG count = ARRAY_LEN(handles);
+    rv = C_FindObjects(session, handles, count, &count);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG i;
+    for (i=0; i < count; i++) {
+
+        CK_OBJECT_HANDLE h = handles[i];
+
+        /* verify missing attrs */
+        verify_missing_pub_attrs_common(session, keytype, h);
+        verify_missing_pub_attrs_rsa(session, h);
+    }
+}
+
+static void test_all_priv_rsa_obj_attrs(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->hSession;
+
+    CK_OBJECT_CLASS class = CKO_PRIVATE_KEY;
+    CK_KEY_TYPE keytype = CKK_RSA;
+
+    CK_ATTRIBUTE attrs[] = {
+        ADD_ATTR_BASE(CKA_KEY_TYPE, keytype),
+        ADD_ATTR_BASE(CKA_CLASS, class),
+    };
+
+    /* verify we can find it via pub templ */
+    CK_RV rv = C_FindObjectsInit(session, attrs, ARRAY_LEN(attrs));
+    assert_int_equal(rv, CKR_OK);
+
+    CK_OBJECT_HANDLE handles[255];
+    CK_ULONG count = ARRAY_LEN(handles);
+    rv = C_FindObjects(session, handles, count, &count);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG i;
+    for (i=0; i < count; i++) {
+
+        CK_OBJECT_HANDLE h = handles[i];
+
+        /* verify missing attrs */
+        verify_missing_priv_attrs_common(session, keytype, h);
+        verify_missing_priv_attrs_rsa(session, h);
+    }
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_all_pub_ecc_obj_attrs,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_all_priv_ecc_obj_attrs,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_all_pub_rsa_obj_attrs,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_all_priv_rsa_obj_attrs,
+                test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_get_attribute_value_single_okay,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_get_attribute_value_multiple_okay,
