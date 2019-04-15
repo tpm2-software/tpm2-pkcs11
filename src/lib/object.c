@@ -455,8 +455,9 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
 
             /* The found attribute should fit inside the one to copy to */
             if (found->ulValueLen > t->ulValueLen) {
+                t->ulValueLen = CK_UNAVAILABLE_INFORMATION;
                 rv = CKR_BUFFER_TOO_SMALL;
-                goto out;
+                continue;
             }
 
             t->ulValueLen = found->ulValueLen;
@@ -469,9 +470,8 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
        }
     }
 
-
-out:
     tobject_user_decrement(tobj);
+    // if no error occurred rv is CKR_OK from previous call
     return rv;
 }
 
