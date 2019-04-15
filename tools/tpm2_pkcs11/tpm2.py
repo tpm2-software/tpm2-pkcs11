@@ -136,7 +136,7 @@ class Tpm2(object):
             cmd.extend(['-p', 'hex:%s' % objauth.decode()])
 
         if objattrs != None:
-            cmd.extend(['-A', objattrs])
+            cmd.extend(['-b', objattrs])
 
         if seal != None:
             cmd.extend(['-i', '-'])
@@ -188,7 +188,7 @@ class Tpm2(object):
 
         parent_path = "file:" + str(phandle)
         cmd = [
-            'tpm2_import', '-V', '-C', parent_path, '-k', privkey, '-u', pub,
+            'tpm2_import', '-V', '-C', parent_path, '-i', privkey, '-u', pub,
             '-r', priv
         ]
 
@@ -199,7 +199,7 @@ class Tpm2(object):
             cmd.extend(['-p', 'hex:%s' % objauth.decode()])
 
         if objattrs != None:
-            cmd.extend(['-A', objattrs])
+            cmd.extend(['-b', objattrs])
 
         if seal != None:
             cmd.extend(['-i', '-'])
@@ -224,7 +224,7 @@ class Tpm2(object):
 
         #tpm2_load -C $file_primary_key_ctx  -u $file_load_key_pub  -r $file_load_key_priv -n $file_load_key_name -o $file_load_key_ctx
         cmd = [
-            'tpm2_changeauth', '-a', str(pctx), '-c', str(objctx), '-P',
+            'tpm2_changeauth', '-C', str(pctx), '-c', str(objctx), '-P',
             'hex:' + oldobjauth.decode(), '-p', 'hex:' + newobjauth.decode(),
             '-r', newpriv
         ]
