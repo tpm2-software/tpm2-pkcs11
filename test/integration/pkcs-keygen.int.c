@@ -66,17 +66,20 @@ static int test_teardown(void **state) {
 GENERIC_ATTR_TYPE_CONVERT(CK_BBOOL);
 GENERIC_ATTR_TYPE_CONVERT(CK_ULONG);
 
-static void verify_missing_pub_attrs_rsa(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE h) {
+static void verify_missing_common_attrs_rsa(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE h) {
 
-    CK_BYTE tmp[2][256] = { 0 };
+    CK_BYTE tmp[3][256] = { 0 };
 
     CK_ATTRIBUTE attrs[] = {
             ADD_ATTR_ARRAY(CKA_MODULUS,  tmp[0]),
             ADD_ATTR_ARRAY(CKA_MODULUS_BITS,  tmp[1]),
+            ADD_ATTR_ARRAY(CKA_PUBLIC_EXPONENT, tmp[2]),
     };
 
     CK_RV rv = C_GetAttributeValue(session, h, attrs, ARRAY_LEN(attrs));
     assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG count = 0;
 
     CK_ULONG i;
     for (i=0; i < ARRAY_LEN(attrs); i++) {
@@ -85,17 +88,34 @@ static void verify_missing_pub_attrs_rsa(CK_SESSION_HANDLE session, CK_OBJECT_HA
         case CKA_MODULUS: {
             assert_int_not_equal(0, a->ulValueLen);
             assert_non_null(a->pValue);
+            count++;
         } break;
         case CKA_MODULUS_BITS: {
             CK_ULONG v = 0;
             rv = generic_CK_ULONG(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, 2048);
+            count++;
         } break;
+        case CKA_PUBLIC_EXPONENT:
+            assert_int_not_equal(0, a->ulValueLen);
+            assert_non_null(a->pValue);
+            count++;
+            break;
         default:
             assert_true(0);
         }
     }
+
+    assert_int_equal(count, ARRAY_LEN(attrs));
+}
+
+static void verify_missing_priv_attrs_rsa(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE h) {
+    verify_missing_common_attrs_rsa(session, h);
+}
+
+static void verify_missing_pub_attrs_rsa(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE h) {
+    verify_missing_common_attrs_rsa(session, h);
 }
 
 static void verify_missing_pub_attrs_ecc(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE h) {
@@ -110,6 +130,7 @@ static void verify_missing_pub_attrs_ecc(CK_SESSION_HANDLE session, CK_OBJECT_HA
     CK_RV rv = C_GetAttributeValue(session, h, attrs, ARRAY_LEN(attrs));
     assert_int_equal(rv, CKR_OK);
 
+    CK_ULONG count = 0;
     CK_ULONG i;
     for (i=0; i < ARRAY_LEN(attrs); i++) {
         CK_ATTRIBUTE_PTR a = &attrs[i];
@@ -121,6 +142,7 @@ static void verify_missing_pub_attrs_ecc(CK_SESSION_HANDLE session, CK_OBJECT_HA
          */
         case CKA_EC_PARAMS:
         case CKA_EC_POINT:
+            count++;
             assert_int_not_equal(0, a->ulValueLen);
             assert_non_null(a->pValue);
         break;
@@ -128,6 +150,8 @@ static void verify_missing_pub_attrs_ecc(CK_SESSION_HANDLE session, CK_OBJECT_HA
             assert_true(0);
         }
     }
+
+    assert_int_equal(count, ARRAY_LEN(attrs));
 }
 
 static void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE keytype, CK_OBJECT_HANDLE h) {
@@ -145,6 +169,8 @@ static void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_T
     CK_RV rv = C_GetAttributeValue(session, h, attrs, ARRAY_LEN(attrs));
     assert_int_equal(rv, CKR_OK);
 
+    CK_ULONG count = 0;
+
     CK_ULONG i;
     for (i=0; i < ARRAY_LEN(attrs); i++) {
         CK_ATTRIBUTE_PTR a = &attrs[i];
@@ -154,35 +180,42 @@ static void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_T
             rv = generic_CK_ULONG(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, keytype);
+            count++;
         } break;
         case CKA_CLASS: {
             CK_ULONG v = 0;
             rv = generic_CK_ULONG(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, CKO_PRIVATE_KEY);
+            count++;
         } break;
         case CKA_ALWAYS_SENSITIVE: {
             CK_BBOOL v = CK_FALSE;
             rv = generic_CK_BBOOL(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, CK_TRUE);
+            count++;
         } break;
         case CKA_EXTRACTABLE: {
             CK_BBOOL v = CK_TRUE;
             rv = generic_CK_BBOOL(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, CK_FALSE);
+            count++;
         } break;
         case CKA_NEVER_EXTRACTABLE: {
             CK_BBOOL v = CK_FALSE;
             rv = generic_CK_BBOOL(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, CK_TRUE);
+            count++;
         } break;
         default:
             assert_true(0);
         }
     }
+
+    assert_int_equal(count, ARRAY_LEN(attrs));
 }
 
 static void verify_missing_pub_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE keytype, CK_OBJECT_HANDLE h) {
@@ -197,6 +230,7 @@ static void verify_missing_pub_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TY
     CK_RV rv = C_GetAttributeValue(session, h, attrs, ARRAY_LEN(attrs));
     assert_int_equal(rv, CKR_OK);
 
+    CK_ULONG count = 0;
     CK_ULONG i;
     for (i=0; i < ARRAY_LEN(attrs); i++) {
         CK_ATTRIBUTE_PTR a = &attrs[i];
@@ -206,17 +240,21 @@ static void verify_missing_pub_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TY
             rv = generic_CK_ULONG(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, keytype);
+            count++;
         } break;
         case CKA_CLASS: {
             CK_ULONG v = 0;
             rv = generic_CK_ULONG(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, CKO_PUBLIC_KEY);
+            count++;
         } break;
         default:
             assert_true(0);
         }
     }
+
+    assert_int_equal(count, ARRAY_LEN(attrs));
 }
 
 static void test_rsa_keygen_p11tool_templ(void **state) {
@@ -320,8 +358,10 @@ static void test_rsa_keygen_p11tool_templ(void **state) {
 
     /* verify missing attrs */
     verify_missing_pub_attrs_common(session, CKK_RSA, pub_handle_dup);
-    verify_missing_priv_attrs_common(session, CKK_RSA, priv_handle_dup);
     verify_missing_pub_attrs_rsa(session, pub_handle_dup);
+
+    verify_missing_priv_attrs_common(session, CKK_RSA, priv_handle_dup);
+    verify_missing_priv_attrs_rsa(session, priv_handle_dup);
 }
 
 static void test_ecc_keygen_p11tool_templ(void **state) {

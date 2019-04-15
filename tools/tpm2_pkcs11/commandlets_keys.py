@@ -96,15 +96,6 @@ class NewKeyCommandBase(Command):
                 {
                     CKA_CLASS: CKO_PUBLIC_KEY
                 },
-                {
-                    CKA_MODULUS: y['rsa']
-                },
-                {
-                    CKA_MODULUS_BITS : y['bits']
-                },
-                {
-                    CKA_PUBLIC_EXPONENT: 65537
-                },
             ]
 
             privattrs = [
@@ -118,6 +109,21 @@ class NewKeyCommandBase(Command):
                     CKA_MODULUS_BITS : y['bits']
                 },
             ]
+
+            moddetails = [
+                {
+                    CKA_MODULUS: y['rsa']
+                },
+                {
+                    CKA_MODULUS_BITS : y['bits']
+                },
+                {
+                    CKA_PUBLIC_EXPONENT: 65537
+                }
+            ]
+
+            pubattrs.extend(moddetails)
+            privattrs.extend(moddetails)
 
             pubmech = [
                 { CKM_RSA_X_509: "" },
