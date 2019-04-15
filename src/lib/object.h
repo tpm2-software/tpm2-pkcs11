@@ -153,9 +153,9 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
  * @return
  *  A pointer to the attribute or NULL if nothing found.
  */
-CK_ATTRIBUTE_PTR object_get_attribute_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE atype);
+CK_ATTRIBUTE_PTR tobject_get_attribute_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE atype);
 
-CK_ATTRIBUTE_PTR object_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR attr);
+CK_ATTRIBUTE_PTR tobject_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR attr);
 
 CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech);
 

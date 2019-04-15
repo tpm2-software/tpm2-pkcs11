@@ -828,3 +828,50 @@ CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid) {
 
     return CKR_OK;
 }
+
+CK_ATTRIBUTE_PTR util_get_attribute_by_type(CK_ATTRIBUTE_TYPE needle, CK_ATTRIBUTE_PTR haystack, CK_ULONG count) {
+
+    CK_ULONG i;
+    for (i=0; i < count; i++) {
+
+        CK_ATTRIBUTE_PTR a = &haystack[i];
+
+        if (a->type == needle) {
+            return a;
+        }
+    }
+
+    return NULL;
+}
+
+CK_ATTRIBUTE_PTR util_get_attribute_full(CK_ATTRIBUTE_PTR needle, CK_ATTRIBUTE_PTR haystack, CK_ULONG count) {
+
+    CK_ULONG i;
+    for (i=0; i < count; i++) {
+
+        CK_ATTRIBUTE_PTR a = &haystack[i];
+
+        if (a->type == needle->type
+         && a->ulValueLen == needle->ulValueLen) {
+            if (a->ulValueLen > 0
+             && memcmp(a->pValue, needle->pValue, needle->ulValueLen)) {
+                /* length is greater then 0 and don't match, keep looking */
+                continue;
+            }
+            /* length is both 0 OR length > 0 and matched on memcmp */
+            return a;
+        }
+    }
+
+    return NULL;
+}
+
+void *buf_dup(void *buf, size_t len) {
+
+    void *x = malloc(len);
+    if (x) {
+        memcpy(x, buf, len);
+    }
+
+    return x;
+}

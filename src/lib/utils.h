@@ -172,4 +172,41 @@ CK_RV utils_attr_free(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_count);
  */
 CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid);
 
+/**
+ * Searching an array of attributes for a specific attribute type.
+ * @param needle
+ *  The type of the attribute to search for.
+ * @param haystack
+ *  The list of attributes to search.
+ * @param count
+ *  The number of attributes in the search list.
+ * @return
+ *  A pointer to the found CK_ATTRIBUTE or NULL if not found.
+ */
+CK_ATTRIBUTE_PTR util_get_attribute_by_type(CK_ATTRIBUTE_TYPE needle, CK_ATTRIBUTE_PTR haystack, CK_ULONG count);
+
+/**
+ * Searching an array of attributes for a specific attribute shallow-matching the full CK_ATTRIBUTE structure.
+ * @param needle
+ *  The CK_ATTRIBUTE to search for.
+ * @param haystack
+ *  The list of attributes to search.
+ * @param count
+ *  The number of attributes in the search list.
+ * @return
+ *  A pointer to the found CK_ATTRIBUTE or NULL if not found.
+ */
+CK_ATTRIBUTE_PTR util_get_attribute_full(CK_ATTRIBUTE_PTR needle, CK_ATTRIBUTE_PTR haystack, CK_ULONG count);
+
+/**
+ * Given a buffer, duplicates it.
+ * @param buf
+ *  The buffer to copy.
+ * @param len
+ *  The length of the data to copy.
+ * @return
+ *  NULL on oom, pointer to a copy on success.
+ */
+void *buf_dup(void *buf, size_t len);
+
 #endif /* SRC_PKCS11_UTILS_H_ */

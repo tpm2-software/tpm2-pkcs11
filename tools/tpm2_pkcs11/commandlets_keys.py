@@ -15,6 +15,7 @@ from .utils import rand_str
 from .utils import getwrapper
 from .utils import load_sobject
 from .utils import load_sealobject
+from .utils import get_ec_params
 
 from .tpm2 import Tpm2
 
@@ -145,14 +146,19 @@ class NewKeyCommandBase(Command):
                 { CKM_RSA_PKCS: "" }
             ]
         elif alg.startswith('ecc'):
+
+            ecparams = get_ec_params(alg)
+
             pubattrs = [
                 { CKA_KEY_TYPE: CKK_EC },
                 { CKA_CLASS: CKO_PUBLIC_KEY },
+                { CKA_EC_PARAMS: ecparams },
             ]
 
             privattrs = [
                 { CKA_KEY_TYPE: CKK_EC },
                 { CKA_CLASS: CKO_PRIVATE_KEY},
+                { CKA_EC_PARAMS: ecparams },
             ]
 
             pubmech = [
