@@ -94,6 +94,71 @@ static bool is_mech_supported(CK_MECHANISM_TYPE mech) {
     return false;
 }
 
+static CK_RV ec_fixup_size(CK_MECHANISM_TYPE mech, tobject *tobj, CK_ULONG_PTR signature_len) {
+
+    if (mech != CKM_ECDSA
+            || mech != CKM_ECDSA_SHA1) {
+        /* nothing to fix up */
+        return CKR_OK;
+    }
+
+    CK_ATTRIBUTE_PTR a = object_get_attribute_by_type(tobj, CKA_EC_PARAMS);
+
+    int nid = 0;
+    CK_RV rv = ec_params_to_nid(a, &nid);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    /*
+     * Math below is based off of ECDSA signature:
+     * SEQUENCE (2 elem)
+     *  INTEGER R
+     *  INTEGER S
+     *
+     *  Integers R and S are bounded by keysize in bytes, followed by their
+     *  respective headers(2bytes) followed by the SEQUENCE header(2 bytes)
+     */
+    unsigned keysize;
+
+    switch (nid) {
+    case NID_X9_62_prime192v1:
+        keysize = 24;
+    break;
+    case NID_secp224r1:
+        keysize = 28;
+    break;
+    case NID_X9_62_prime256v1:
+        keysize = 32;
+    break;
+    case NID_secp384r1:
+        keysize = 48;
+    break;
+    case NID_secp521r1:
+        keysize = 66; /* round up */
+    break;
+    default:
+        LOGE("Unsupported nid to tpm signature size maaping: %d", nid);
+        return CKR_CURVE_NOT_SUPPORTED;
+    }
+
+    /* R and S are INTEGER objects with a header and len byte */
+    static const unsigned INT_HDR = 2U;
+    /* R and S are combined in a SEQUENCE object with a header and len byte */
+    static const unsigned SEQ_HDR = 2U;
+    /* an R or S with a high bit set needs an extra nul byte so it's not negative (twos comp)*/
+    static const unsigned EXTRA = 1U;
+
+    unsigned tmp = ((keysize + INT_HDR + EXTRA) * 2); /* x2 1 for R and 1 for S */
+
+    tmp += SEQ_HDR;
+
+    *signature_len = tmp;
+
+    return CKR_OK;
+}
+
+
 static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
 
     check_pointer(mechanism);
@@ -492,6 +557,15 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
 
             digest_op_data_free(&opdata->digest_opdata);
             opdata->digest_opdata = new_digest_state;
+
+            /* ec signature size is not stable between calls, fix it up */
+            tmp = ec_fixup_size(opdata->mtype, opdata->tobj, signature_len);
+            if (tmp != CKR_OK) {
+                digest_op_data_free(&new_digest_state);
+                reset_ctx = false;
+                goto session_out;
+            }
+
         } else if (is_oneshot) {
             twist_free(opdata->buffer);
             opdata->buffer = NULL;

@@ -812,3 +812,19 @@ CK_RV utils_mech_free(CK_MECHANISM_PTR mechs, CK_ULONG mech_count, CK_MECHANISM_
 
     return utils_handle_mechs(mech_free_handlers, ARRAY_LEN(mech_free_handlers), mechs, mech_count, copy);
 }
+
+CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid) {
+
+    const unsigned char *p = ecparams->pValue;
+
+    ASN1_OBJECT *a = d2i_ASN1_OBJECT(NULL, &p, ecparams->ulValueLen);
+    if (!a) {
+        LOGE("Unknown CKA_EC_PARAMS value");
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    * nid = OBJ_obj2nid(a);
+    ASN1_OBJECT_free(a);
+
+    return CKR_OK;
+}
