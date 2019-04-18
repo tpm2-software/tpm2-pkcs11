@@ -64,16 +64,10 @@ pkgconfigdir          = $(libdir)/pkgconfig
 pkgconfig_DATA =
 CLEANFILES += $(pkgconfig_DATA)
 
-%.pc : %.pc.in
-	$(AM_V_GEN)$(call make_parent_dir,$@) && \
-	sed -e "s,[@]VERSION[@],$(PACKAGE_VERSION),g; \
-	        s,[@]libdir[@],$(libdir),g; \
-	        s,[@]includedir[@],$(includedir),g;" $^ > $@
-
 ### PKCS#11 Library Definition ###
 libtpm2_pkcs11 = src/libtpm2_pkcs11.la
 pkgconfig_DATA += lib/tpm2-pkcs11.pc
-EXTRA_DIST += lib/tpm2-pkcs11.map lib/tpm2-pkcs11.pc.in
+EXTRA_DIST += lib/tpm2-pkcs11.map
 
 if HAVE_LD_VERSION_SCRIPT
 src_libtpm2_pkcs11_la_LDFLAGS = -Wl,--version-script=$(srcdir)/lib/tpm2-pkcs11.map

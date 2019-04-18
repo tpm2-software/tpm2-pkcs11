@@ -49,7 +49,7 @@ m4_ifdef([_AX_CODE_COVERAGE_RULES],
          [AM_CONDITIONAL(AUTOCONF_CODE_COVERAGE_2019_01_06, [false])])
 AX_ADD_AM_MACRO_STATIC([])
 
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile lib/tpm2-pkcs11.pc])
 
 # enable autoheader config.h file
 AC_CONFIG_HEADERS([src/lib/config.h])
