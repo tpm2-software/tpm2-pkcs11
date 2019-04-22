@@ -40,6 +40,8 @@ AC_PROG_CC
 LT_INIT
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 
+PKG_INSTALLDIR()
+
 # enable "silent-rules" option by default
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
