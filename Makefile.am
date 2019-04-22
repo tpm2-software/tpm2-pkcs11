@@ -61,7 +61,7 @@ CLEANFILES = AUTHORS
 
 # pkg-config setup. pc-file declarations happen in the corresponding modules
 pkgconfig_DATA =
-CLEANFILES += $(pkgconfig_DATA)
+DISTCLEANFILES = $(pkgconfig_DATA)
 
 ### PKCS#11 Library Definition ###
 libtpm2_pkcs11 = src/libtpm2_pkcs11.la
