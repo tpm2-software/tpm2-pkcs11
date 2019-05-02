@@ -507,6 +507,8 @@ static void test_so_state_pin_init_good(void **state) {
 
     rv = C_InitPIN(handle, C(GOOD_USERPIN), sizeof(GOOD_USERPIN) - 1);
     assert_int_equal(rv, CKR_OK);
+
+    logout(handle);
 }
 
 int main() {
