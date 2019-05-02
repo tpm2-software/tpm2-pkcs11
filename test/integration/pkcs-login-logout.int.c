@@ -298,8 +298,6 @@ static void test_so_global_login_logout_good(void **state) {
 
     logout(slot0_session1);
     logout_expects(slot1_session0, CKR_USER_NOT_LOGGED_IN);
-
-    logout_expects(slot1_session0, CKR_USER_NOT_LOGGED_IN);
 }
 
 /**
