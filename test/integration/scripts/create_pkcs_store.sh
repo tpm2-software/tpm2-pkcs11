@@ -82,8 +82,8 @@ tpm2_ptool initpin --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM
 # add 2 aes and 2 rsa keys under tokens 1 and 2
 for t in "label" "wrap-sw"; do
 	echo "Adding 2 AES 256 keys under token \"$t\""
-	tpm2_ptool addkey --algorithm=aes256 --label="$t" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
-	tpm2_ptool addkey --algorithm=aes256 --label="$t" --key-label=mykeylabel --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+	tpm2_ptool addkey --algorithm=aes128 --label="$t" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+	tpm2_ptool addkey --algorithm=aes128 --label="$t" --key-label=mykeylabel --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 	echo "Added AES Keys"
 
 	echo "Adding 2 RSA 2048 keys under token \"$t\""
