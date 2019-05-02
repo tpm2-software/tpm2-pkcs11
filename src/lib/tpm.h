@@ -118,7 +118,7 @@ CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handl
 
 CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handle, twist objauth, twist oldpubblob, twist sealdata, twist *newpubblob, twist *newprivblob, uint32_t *handle);
 
-CK_RV tpm_sesion_start(tpm_ctx *ctx, twist auth, uint32_t handle);
+CK_RV tpm_session_start(tpm_ctx *ctx, twist auth, uint32_t handle);
 
 CK_RV tpm_session_stop(tpm_ctx *ctx);
 

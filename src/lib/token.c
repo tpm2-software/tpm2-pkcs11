@@ -254,7 +254,7 @@ CK_RV token_login(token *tok, twist pin, CK_USER_TYPE user) {
 
     tok->pobject.objauth = dpobjauth;
 
-    CK_RV tmp = tpm_sesion_start(tok->tctx, tok->pobject.objauth, tok->pobject.handle);
+    CK_RV tmp = tpm_session_start(tok->tctx, tok->pobject.objauth, tok->pobject.handle);
     if (tmp != CKR_OK) {
         return tmp;
     }
