@@ -437,7 +437,6 @@ static void swap_pin(CK_SESSION_HANDLE handle, CK_USER_TYPE user_type, CK_UTF8CH
     // swap the pin back
     rv = C_SetPIN(handle, newpin, newpinlen, oldpin, oldpinlen);
     assert_int_equal(rv, CKR_OK);
-    logout(handle);
 }
 
 static void test_user_state_pin_change_good(void **state) {
@@ -448,6 +447,8 @@ static void test_user_state_pin_change_good(void **state) {
     user_login(handle);
 
     swap_pin(handle, CKU_USER, C(GOOD_USERPIN), sizeof(GOOD_USERPIN) - 1);
+
+    logout(handle);
 }
 
 static void test_so_state_pin_change_good(void **state) {
@@ -458,6 +459,8 @@ static void test_so_state_pin_change_good(void **state) {
     so_login(handle);
 
     swap_pin(handle, CKU_SO, C(GOOD_SOPIN), sizeof(GOOD_SOPIN) - 1);
+
+    logout(handle);
 }
 
 static void test_ro_function_state_pin_change_bad(void **state) {
