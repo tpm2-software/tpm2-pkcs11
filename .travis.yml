@@ -5,6 +5,7 @@ services:
 compiler:
 - gcc
 - clang
+cache: ccache
 env:
   matrix:
     - PYTHON_INTERPRETER=python2
