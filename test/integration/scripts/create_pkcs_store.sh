@@ -19,6 +19,23 @@ Usage:
 END
 }
 
+function yaml_get_kv() {
+
+python << pyscript
+from __future__ import print_function
+
+import sys
+import yaml
+
+with open("$1") as f:
+    try:
+        y = yaml.safe_load(f.read())
+        print(y["$2"])
+    except yaml.YAMLError as exc:
+        sys.exit(exc)
+pyscript
+}
+
 TPM2_PKCS11_STORE=""
 while test $# -gt 0; do
     echo $1
@@ -47,6 +64,12 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
+onerror() {
+    rm -f evict.log
+}
+
+trap onerror err
+
 set -e
 
 # init
@@ -54,7 +77,9 @@ tpm2_ptool init --pobj-pin=mypobjpin --path=$TPM2_PKCS11_STORE
 
 # Test the existing primary object init functionality
 tpm2_createprimary -p foopass -o $TPM2_PKCS11_STORE/primary.ctx -g sha256 -G rsa
-handle=`tpm2_evictcontrol -a o -c $TPM2_PKCS11_STORE/primary.ctx | cut -d\: -f2-2 | sed 's/^ *//g'`
+tpm2_evictcontrol -a o -c $TPM2_PKCS11_STORE/primary.ctx > evict.log
+cat evict.log
+handle=`yaml_get_kv evict.log persistent-handle`
 
 tpm2_ptool init --pobj-pin=anotherpobjpin --primary-handle=$handle --primary-auth=foopass --path=$TPM2_PKCS11_STORE
 
