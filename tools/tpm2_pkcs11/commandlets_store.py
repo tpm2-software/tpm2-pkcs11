@@ -107,7 +107,7 @@ class InitCommand(Command):
 
                         # verify handle is persistent
                         output = tpm2.getcap('handles-persistent')
-                        y = yaml.load(output)
+                        y = yaml.safe_load(output)
                         if handle not in y:
                             sys.exit('Handle 0x%x is not persistent' % (handle))
 
