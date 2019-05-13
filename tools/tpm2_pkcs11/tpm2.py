@@ -44,7 +44,7 @@ class Tpm2(object):
         stdout, stderr = p.communicate()
         y = yaml.load(stdout)
         rc = p.wait()
-        handle = y['persistentHandle'] if rc == 0 else None
+        handle = y['persistent-handle'] if rc == 0 else None
         if (p.wait()):
             raise RuntimeError("Could not execute tpm2_evictcontrol: %s",
                                stderr)
