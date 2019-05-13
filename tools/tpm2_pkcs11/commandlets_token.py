@@ -328,7 +328,7 @@ class AddTokenCommand(Command):
             # value reported by the TPM.
             #
             fixed_properties = tpm2.getcap('properties-fixed')
-            y = yaml.load(fixed_properties)
+            y = yaml.safe_load(fixed_properties)
             sym_size = y['TPM2_PT_CONTEXT_SYM_SIZE']['value']
 
             if sym_support:

@@ -42,7 +42,7 @@ class Tpm2(object):
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         stdout, stderr = p.communicate()
-        y = yaml.load(stdout)
+        y = yaml.safe_load(stdout)
         rc = p.wait()
         handle = y['persistent-handle'] if rc == 0 else None
         if (p.wait()):

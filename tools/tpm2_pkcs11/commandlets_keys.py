@@ -85,7 +85,7 @@ class NewKeyCommandBase(Command):
         # and populate the db with the data. This allows use of the public data
         # without needed to load any objects which requires a pin to do.
         #
-        y = yaml.load(tertiarypubdata)
+        y = yaml.safe_load(tertiarypubdata)
 
         pubattrs = None
         privattrs = None
