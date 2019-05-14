@@ -21,10 +21,8 @@
   #define VERSION "UNKNOWN"
 #endif
 
-/* TODO These should probably emanate from the fixed properties
- * via get capability.
- */
 #define LIBRARY_DESCRIPTION "TPM2.0 Cryptoki"
+#define LIBRARY_MANUFACTURER "tpm2-software.github.io"
 
 #define CRYPTOKI_VERSION { \
            .major = CRYPTOKI_VERSION_MAJOR, \
@@ -36,7 +34,7 @@ CK_RV general_get_info(CK_INFO *info) {
 
     CK_INFO _info = {
         .cryptokiVersion = CRYPTOKI_VERSION,
-        .manufacturerID = TPM2_TOKEN_MANUFACTURER,
+        .manufacturerID = LIBRARY_MANUFACTURER,
         .flags = 0,
         .libraryDescription = LIBRARY_DESCRIPTION,
         .libraryVersion = {
