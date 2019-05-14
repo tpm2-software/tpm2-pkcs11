@@ -35,6 +35,21 @@ void tpm_ctx_free(tpm_ctx *ctx);
 CK_RV tpm_ctx_new(tpm_ctx **tctx);
 
 /**
+ * Retrieves Spec Version, FW Version, Manufacturer and Model from TPM
+ * and populates the provided CK_TOKEN_INFO structure.
+ *
+ * If the manufacturer id is specified in TPM2_MANUFACTURER_MAP it will be
+ * extended with a human readable form of the manufacturer
+ * @param ctx
+ *  The tpm api context.
+ * @param info
+ *  The CK_TOKEN_INFO structure where the data is written to
+ * @return
+ *  CKR_OK on success, CKR_ARGUMENTS_BAD, or CKR_GENERAL_ERROR otherwise
+ */
+CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info);
+
+/**
  * Generates random bytes from the TPM
  * @param ctx
  *  The tpm api context.

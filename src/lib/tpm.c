@@ -11,6 +11,8 @@
 #include <string.h>
 #include <stddef.h>
 
+#include <arpa/inet.h>
+
 #include <openssl/asn1.h>
 #include <openssl/bn.h>
 #include <openssl/ec.h>
@@ -22,12 +24,26 @@
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_mu.h>
 
+#include "checks.h"
 #include "openssl_compat.h"
 #include "pkcs11.h"
 #include "log.h"
 #include "mutex.h"
 #include "tcti_ldr.h"
 #include "tpm.h"
+
+/**
+ * Maps 4-byte manufacturer identifier to manufacturer name.
+ */
+static const char *TPM2_MANUFACTURER_MAP[][2] = {
+    {"ATML", "Atmel"},
+    {"INTC", "Intel"},
+    {"IFX ", "Infineon"},
+    {"IBM ", "IBM"},
+    {"NTC ", "Nuvoton"},
+    {"STM ", "STMicro"}
+};
+
 
 struct tpm_ctx {
     TSS2_TCTI_CONTEXT *tcti_ctx;
@@ -485,6 +501,80 @@ bool files_load_bytes_from_path(const char *path, UINT8 *buf, UINT16 *size) {
 
 LOAD_TYPE(TPM2B_PUBLIC, public)
 LOAD_TYPE(TPM2B_PRIVATE, private)
+
+CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
+
+    CK_RV rv = CKR_OK;
+    check_pointer(ctx);
+    check_pointer(info);
+
+    TPM2_CAP capability = TPM2_CAP_TPM_PROPERTIES;
+    UINT32 property = TPM2_PT_FIXED;
+    UINT32 propertyCount = TPM2_MAX_TPM_PROPERTIES;
+    TPMS_CAPABILITY_DATA *capabilityData;
+    TPMI_YES_NO moreData;
+
+    TSS2_RC rval = Esys_GetCapability(ctx->esys_ctx,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        capability,
+        property, propertyCount, &moreData, &capabilityData);
+
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_GetCapability: 0x%x:", rval);
+        return CKR_GENERAL_ERROR;
+    }
+
+    if (!capabilityData ||
+        capabilityData->data.tpmProperties.count < TPM2_PT_VENDOR_STRING_4 - TPM2_PT_FIXED + 1) {
+        LOGE("TPM did not reply with correct amount of capabilities");
+        rv = CKR_GENERAL_ERROR;
+        goto out;
+    }
+
+    TPMS_TAGGED_PROPERTY *tpmProperties = capabilityData->data.tpmProperties.tpmProperty;
+
+    // Use Spec revision as HW Version
+    UINT32 revision = tpmProperties[TPM2_PT_REVISION - TPM2_PT_FIXED].value;
+    info->hardwareVersion.major = revision / 100;
+    info->hardwareVersion.minor = revision % 100;
+
+    // Use Firmware Version as FW Version
+    UINT32 version = tpmProperties[TPM2_PT_FIRMWARE_VERSION_1 - TPM2_PT_FIXED].value;
+    // Most vendors seem to use 00MM.00mm as format for TPM2_PT_FIRMWARE_VERSION_1
+    // Unfortunately we only have 1 byte for major and minor each.
+    info->firmwareVersion.major = (version >> 16) & 0xFF;
+    info->firmwareVersion.minor = version  & 0xFF;
+
+    // Use Vendor ID as Manufacturer ID
+    unsigned char manufacturerID[sizeof(UINT32)+1] = {0}; // 4 bytes + '\0' as temp storage
+    UINT32 manufacturer = ntohl(tpmProperties[TPM2_PT_MANUFACTURER - TPM2_PT_FIXED].value);
+    memcpy(manufacturerID, (unsigned char*) &manufacturer, sizeof(uint32_t));
+    str_padded_copy(info->manufacturerID, manufacturerID, sizeof(info->manufacturerID));
+
+    // Map human readable Manufacturer String, if available,
+    // otherwise 4 byte ID was already padded and will be used.
+    for (unsigned int i=0; i < ARRAY_LEN(TPM2_MANUFACTURER_MAP); i++){
+        if (!strncasecmp((char *)info->manufacturerID, TPM2_MANUFACTURER_MAP[i][0], 4)) {
+            str_padded_copy(info->manufacturerID,
+                            (unsigned char *)TPM2_MANUFACTURER_MAP[i][1],
+                            sizeof(info->manufacturerID));
+        }
+    }
+
+    // Use Vendor String as Model description
+    UINT32 vendor[4];
+    vendor[0] = ntohl(tpmProperties[TPM2_PT_VENDOR_STRING_1 - TPM2_PT_FIXED].value);
+    vendor[1] = ntohl(tpmProperties[TPM2_PT_VENDOR_STRING_2 - TPM2_PT_FIXED].value);
+    vendor[2] = ntohl(tpmProperties[TPM2_PT_VENDOR_STRING_3 - TPM2_PT_FIXED].value);
+    vendor[3] = ntohl(tpmProperties[TPM2_PT_VENDOR_STRING_4 - TPM2_PT_FIXED].value);
+    str_padded_copy(info->model, (unsigned char*) &vendor, sizeof(info->model));
+
+out:
+    free (capabilityData);
+    return rv;
+}
 
 bool tpm_getrandom(tpm_ctx *ctx, BYTE *data, size_t size) {
 

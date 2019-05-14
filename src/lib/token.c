@@ -69,31 +69,18 @@ void token_free(token *t) {
 }
 
 CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
-
+    check_pointer(t);
     check_pointer(info);
-
-    const CK_BYTE token_sn[]   = TPM2_TOKEN_SERIAL_NUMBER;
-    const CK_BYTE token_manuf[]  = TPM2_TOKEN_MANUFACTURER;
-    const CK_BYTE token_model[]  = TPM2_TOKEN_MODEL;
-    const CK_BYTE token_hwver[2] = TPM2_SLOT_HW_VERSION;
-    const CK_BYTE token_fwver[2] = TPM2_SLOT_FW_VERSION;
+    int rval;
     time_t rawtime;
     struct tm * tminfo;
 
     memset(info, 0, sizeof(*info));
 
-    /*
-     * TODO Set these to better values
-     * and get valid VERSION info. Likely
-     * need to make version match what is in general.c
-     * for the CK_INFO structure, not sure.
-     *
-     * Below is ALL the fields grouped.
-     */
-
-    // Version info
-    memcpy(&info->firmwareVersion, &token_fwver, sizeof(token_fwver));
-    memcpy(&info->hardwareVersion, &token_hwver, sizeof(token_hwver));
+    rval = tpm_get_token_info(t->tctx, info);
+    if (rval != CKR_OK) {
+        return CKR_GENERAL_ERROR;
+    }
 
     // Support Flags
     info->flags = CKF_RNG
@@ -105,9 +92,8 @@ CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
 
     // Identification
     str_padded_copy(info->label, t->label, sizeof(info->label));
-    str_padded_copy(info->manufacturerID, token_manuf, sizeof(info->manufacturerID));
-    str_padded_copy(info->model, token_model, sizeof(info->model));
-    str_padded_copy(info->serialNumber, token_sn, sizeof(info->serialNumber));
+    str_padded_copy(info->serialNumber, (unsigned char*) TPM2_TOKEN_SERIAL_NUMBER, sizeof(info->serialNumber));
+
 
     // Memory: TODO not sure what memory values should go here, the platform?
     info->ulFreePrivateMemory = ~0;
