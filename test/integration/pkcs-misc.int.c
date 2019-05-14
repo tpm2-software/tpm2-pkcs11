@@ -102,6 +102,26 @@ static void test_get_slot_list(void **state) {
     assert_true(tinfo.flags & CKF_TOKEN_INITIALIZED);
 }
 
+static void test_get_info(void **state) {
+
+    UNUSED(state);
+    CK_INFO info;
+    CK_RV rv;
+
+    // check if null pointer is handled correctly
+    rv = C_GetInfo(NULL);
+    assert_int_equal(rv, CKR_ARGUMENTS_BAD);
+
+    // check for successful invocation
+    rv = C_GetInfo(&info);
+    assert_int_equal(rv, CKR_OK);
+
+    // check whether cryptoki version is correct
+    assert_int_equal(info.cryptokiVersion.major, 2);
+    assert_int_equal(info.cryptokiVersion.minor, 40);
+
+}
+
 static void test_random_good(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -313,6 +333,8 @@ int main() {
         cmocka_unit_test_setup_teardown(test_c_getfunctionlist_bad,
                 NULL, NULL),
         cmocka_unit_test_setup_teardown(test_get_slot_list,
+                NULL, NULL),
+        cmocka_unit_test_setup_teardown(test_get_info,
                 NULL, NULL),
 
         /*

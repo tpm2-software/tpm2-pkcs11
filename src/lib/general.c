@@ -32,18 +32,21 @@
          }
 
 CK_RV general_get_info(CK_INFO *info) {
+    check_pointer(info);
 
-    static CK_INFO _info = {
+    CK_INFO _info = {
         .cryptokiVersion = CRYPTOKI_VERSION,
-        .manufacturerID = " "TPM2_TOKEN_MANUFACTURER,
+        .manufacturerID = TPM2_TOKEN_MANUFACTURER,
         .flags = 0,
-        .libraryDescription = " "LIBRARY_DESCRIPTION,
+        .libraryDescription = LIBRARY_DESCRIPTION,
         .libraryVersion = {
             /* TODO get from build VERSION */
             .major = 42,
             .minor = 42
         },
     };
+    str_pad(_info.manufacturerID, sizeof(_info.manufacturerID));
+    str_pad(_info.libraryDescription, sizeof(_info.libraryDescription));
 
     *info = _info;
 
