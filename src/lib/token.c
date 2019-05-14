@@ -114,6 +114,9 @@ CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
     time (&rawtime);
     tminfo = gmtime(&rawtime);
     strftime ((char *)info->utcTime, sizeof(info->utcTime), "%Y%m%d%H%M%S", tminfo);
+    // The last two bytes must be '0', not NULL/'\0' terminated.
+    info->utcTime[14] = '0';
+    info->utcTime[15] = '0';
 
     return CKR_OK;
 }
