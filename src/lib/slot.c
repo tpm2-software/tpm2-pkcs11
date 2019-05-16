@@ -99,50 +99,15 @@ CK_RV slot_get_info (CK_SLOT_ID slot_id, CK_SLOT_INFO *info) {
     return CKR_OK;
 }
 
-static const CK_MECHANISM_TYPE mechs[] = {
-    CKM_AES_CBC,
-    CKM_AES_CFB1,
-    CKM_AES_ECB,
-    CKM_ECDSA,
-    CKM_ECDSA_SHA1,
-    CKM_EC_KEY_PAIR_GEN,
-    CKM_RSA_PKCS,
-    CKM_RSA_PKCS_KEY_PAIR_GEN,
-    CKM_RSA_PKCS_OAEP,
-    CKM_RSA_X_509,
-    CKM_SHA_1,
-    CKM_SHA1_RSA_PKCS,
-    CKM_SHA256,
-    CKM_SHA256_RSA_PKCS,
-    CKM_SHA384,
-    CKM_SHA384_RSA_PKCS,
-    CKM_SHA512,
-    CKM_SHA512_RSA_PKCS,
-};
 
 CK_RV slot_mechanism_list_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE *mechanism_list, CK_ULONG_PTR count) {
-
-    if (!slot_get_token(slot_id)) {
+    token *t = slot_get_token(slot_id);
+    if (!t) {
         return CKR_SLOT_ID_INVALID;
     }
 
-    if (!count){
-        return CKR_ARGUMENTS_BAD;
-    }
-
-    if (!mechanism_list) {
-        *count = ARRAY_LEN(mechs);
-        return CKR_OK;
-    }
-
-    if (*count < ARRAY_LEN(mechs)) {
-        return CKR_BUFFER_TOO_SMALL;
-    }
-
-    *count = ARRAY_LEN(mechs);
-    memcpy(mechanism_list, mechs, sizeof(mechs));
-
-    return CKR_OK;
+    CK_RV rv = tpm2_getmechanisms(t->tctx, mechanism_list, count);
+    return rv;
 }
 
 CK_RV slot_mechanism_info_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE type, CK_MECHANISM_INFO *info) {

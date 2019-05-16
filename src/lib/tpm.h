@@ -178,4 +178,6 @@ CK_RV tpm2_generate_key(
 
         tpm_object_data *objdata);
 
+CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULONG_PTR count);
+
 #endif /* SRC_PKCS11_TPM_H_ */
