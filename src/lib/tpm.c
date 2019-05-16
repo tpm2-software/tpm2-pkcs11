@@ -2780,3 +2780,120 @@ void tpm_objdata_free(tpm_object_data *objdata) {
     }
 
 }
+
+static CK_RV tpm_get_algorithms (tpm_ctx *ctx, TPMS_CAPABILITY_DATA **capabilityData) {
+
+    TPM2_CAP capability = TPM2_CAP_ALGS;
+    UINT32 property = TPM2_ALG_FIRST;
+    UINT32 propertyCount = TPM2_MAX_CAP_ALGS;
+    TPMI_YES_NO moreData;
+
+    check_pointer(ctx);
+    check_pointer(capabilityData);
+
+    TSS2_RC rval = Esys_GetCapability(ctx->esys_ctx,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            capability,
+            property, propertyCount, &moreData, capabilityData);
+
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_GetCapability: 0x%x:", rval);
+        return CKR_GENERAL_ERROR;
+    }
+
+    if (!capabilityData) {
+        LOGE("TPM did not reply with correct amount of capabilities");
+        return CKR_GENERAL_ERROR;
+    }
+
+    return CKR_OK;
+}
+
+static CK_BBOOL is_algorithm_supported(TPMU_CAPABILITIES *capabilities, TPM2_ALG_ID algorithm){
+    for (unsigned int i = 0 ; i < capabilities->algorithms.count ; i++){
+        if (capabilities->algorithms.algProperties[i].alg == algorithm){
+            return CK_TRUE;
+        }
+    }
+    return CK_FALSE;
+}
+
+#define add_mech(mech) \
+    if (mechanism_list) { /* Only update if not called for size*/ \
+        if (*count <= supported) { \
+            rv = CKR_BUFFER_TOO_SMALL; \
+            goto out; \
+        } \
+        mechanism_list[supported] = mech; \
+    } \
+    supported++;
+
+CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULONG_PTR count){
+    check_pointer(count);
+    check_pointer(ctx);
+    CK_ULONG supported = 0;
+    CK_RV rv;
+
+    TPMS_CAPABILITY_DATA *capabilityData = NULL;
+    rv = tpm_get_algorithms (ctx, &capabilityData);
+    if (rv != CKR_OK) {
+        LOGE("Retrieving supported algorithms from TPM failed");
+        return rv;
+    }
+    TPMU_CAPABILITIES *algs= &capabilityData->data;
+
+    if (is_algorithm_supported(algs, TPM2_ALG_RSA)) {
+        add_mech(CKM_RSA_PKCS);
+        add_mech(CKM_RSA_PKCS_KEY_PAIR_GEN);
+        add_mech(CKM_RSA_X_509);
+        if (is_algorithm_supported(algs, TPM2_ALG_SHA1)) {
+           add_mech(CKM_SHA1_RSA_PKCS);
+        }
+        if (is_algorithm_supported(algs, TPM2_ALG_SHA256)) {
+           add_mech(CKM_SHA256_RSA_PKCS);
+        }
+        if (is_algorithm_supported(algs, TPM2_ALG_SHA384)) {
+           add_mech(CKM_SHA384_RSA_PKCS);
+        }
+        if (is_algorithm_supported(algs, TPM2_ALG_SHA512)) {
+           add_mech(CKM_SHA512_RSA_PKCS);
+        }
+    }
+
+    if (is_algorithm_supported(algs, TPM2_ALG_OAEP)) {
+        add_mech(CKM_RSA_PKCS_OAEP);
+    }
+    if (is_algorithm_supported(algs, TPM2_ALG_CBC)) {
+        add_mech(CKM_AES_CBC);
+    }
+    if (is_algorithm_supported(algs, TPM2_ALG_CFB)) {
+        add_mech(CKM_AES_CFB1);
+    }
+    if (is_algorithm_supported(algs, TPM2_ALG_ECB)) {
+        add_mech(CKM_AES_CFB1);
+    }
+    if (is_algorithm_supported(algs, TPM2_ALG_ECDSA)) {
+        add_mech(CKM_ECDSA);
+        if (is_algorithm_supported(algs, TPM2_ALG_SHA1)) {
+            add_mech(CKM_ECDSA_SHA1);
+        }
+    }
+    if (is_algorithm_supported(algs, TPM2_ALG_ECC)) {
+        add_mech(CKM_EC_KEY_PAIR_GEN);
+    }
+    if (is_algorithm_supported(algs, TPM2_ALG_SHA1)) {
+        add_mech(CKM_SHA_1);
+    }
+    if (is_algorithm_supported(algs, TPM2_ALG_SHA256)) {
+        add_mech(CKM_SHA256);
+    }
+
+out:
+    *count = supported;
+    free(capabilityData);
+
+    return rv;
+
+}
