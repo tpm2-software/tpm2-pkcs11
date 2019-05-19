@@ -329,7 +329,7 @@ class AddTokenCommand(Command):
             #
             fixed_properties = tpm2.getcap('properties-fixed')
             y = yaml.safe_load(fixed_properties)
-            sym_size = y['TPM2_PT_CONTEXT_SYM_SIZE']['value']
+            sym_size = y['TPM2_PT_CONTEXT_SYM_SIZE']['raw']
 
             if sym_support:
                 # Now we create the wrappingbject, with algorithm aes256
