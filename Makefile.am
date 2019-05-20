@@ -113,8 +113,8 @@ if ENABLE_INTEGRATION
 LIB_TEST := test/integration/libtest.a
 noinst_LIBRARIES = $(LIB_TEST)
 test_integration_libtest_a_SOURCES = $(LIB_SRC)
-test_integration_libtest_a_CFLAGS = -fPIC $(AM_CFLAGS)
-TESTS_LDADD += $(LIB_TEST)
+test_integration_libtest_a_CFLAGS = -fPIC $(AM_CFLAGS) $(TSS2_MU_CFLAGS)
+TESTS_LDADD += $(LIB_TEST) $(TSS2_MU_LIBS)
 
 TESTS = $(check_PROGRAMS)
 check_PROGRAMS += \
