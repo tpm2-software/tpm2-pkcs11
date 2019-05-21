@@ -59,8 +59,6 @@ AC_CONFIG_HEADERS([src/lib/config.h])
 # test for TSS dependecies
 PKG_CHECK_MODULES([TSS2_ESYS],   [tss2-esys])
 PKG_CHECK_MODULES([TSS2_MU],     [tss2-mu])
-PKG_CHECK_MODULES([TCTI_DEVICE], [tss2-tcti-device])
-PKG_CHECK_MODULES([TCTI_MSSIM],  [tss2-tcti-mssim])
 
 AC_DEFUN([do_esapi_manage_flags], [
   AC_DEFINE([ESAPI_MANAGE_FLAGS], [1],
