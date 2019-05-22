@@ -1,11 +1,10 @@
-prefix=@prefix@
-exec_prefix=@exec_prefix@
-libdir=@libdir@
-includedir=@includedir@
+p11_module_path=@P11_MODULE_PATH@
 
 Name: tpm2-pkcs11
-Description: TPM2 PKCS#11 library.
+Description: TPM2 PKCS#11 library
 URL: https://github.com/tpm2-software/tpm2-pkcs11
 Version: @VERSION@
-Cflags: -I${includedir}
-Libs: -ltss2-esys -L${libdir}
+Requires.private: tss2-esys tss2-mu sqlite3 libcrypto
+Cflags: @PTHREAD_CFLAGS@
+Libs: -L${p11_module_path} -ltpm2_pkcs11
+Libs.private: @PTHREAD_LIBS@
