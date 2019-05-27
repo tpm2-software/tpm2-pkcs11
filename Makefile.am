@@ -28,11 +28,11 @@
 INCLUDE_DIRS    = -I$(srcdir)/src -I$(top_srcdir)/src/lib
 ACLOCAL_AMFLAGS = -I m4 --install
 AM_CFLAGS       = $(INCLUDE_DIRS) $(EXTRA_CFLAGS) $(CODE_COVERAGE_CFLAGS) \
-                  $(TSS2_ESYS_CFLAGS) $(SQLITE3_CFLAGS) $(PTHREAD_CFLAGS) \
-                  $(CRYPTO_CFLAGS)
+                  $(TSS2_ESYS_CFLAGS) $(TSS2_MU_CFLAGS) $(SQLITE3_CFLAGS) \
+                  $(PTHREAD_CFLAGS) $(CRYPTO_CFLAGS)
 
 AM_LDFLAGS      = $(EXTRA_LDFLAGS) $(CODE_COVERAGE_LIBS) $(TSS2_ESYS_LIBS) \
-                  $(SQLITE3_LIBS) $(PTHREAD_LIBS) $(CRYPTO_LIBS) \
+                  $(TSS2_MU_LIBS) $(SQLITE3_LIBS) $(PTHREAD_LIBS) $(CRYPTO_LIBS) \
                   $(TCTI_DEVICE_LIBS) $(TCTI_SOCKET_LIBS) $(TCTI_MSSIM_LIBS)
 
 # ax_code_coverage
@@ -113,8 +113,8 @@ if ENABLE_INTEGRATION
 LIB_TEST := test/integration/libtest.a
 noinst_LIBRARIES = $(LIB_TEST)
 test_integration_libtest_a_SOURCES = $(LIB_SRC)
-test_integration_libtest_a_CFLAGS = -fPIC $(AM_CFLAGS) $(TSS2_MU_CFLAGS)
-TESTS_LDADD += $(LIB_TEST) $(TSS2_MU_LIBS)
+test_integration_libtest_a_CFLAGS = -fPIC $(AM_CFLAGS)
+TESTS_LDADD += $(LIB_TEST)
 
 TESTS = $(check_PROGRAMS)
 check_PROGRAMS += \
