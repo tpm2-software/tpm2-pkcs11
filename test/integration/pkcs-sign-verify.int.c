@@ -411,18 +411,29 @@ static void test_sign_verify_CKM_ECDSA(void **state) {
         0x67, 0x58, 0xae, 0x5a, 0xa3, 0x2e, 0x47, 0x0d
     };
 
-    CK_ULONG siglen = sizeof(sig);
+    CK_ULONG siglen;
+
+    /* Call C_Sign for size */
+    rv = C_Sign(session, sha256_msg_hash, sizeof(sha256_msg_hash), NULL,
+            &siglen);
+    assert_int_equal(rv, CKR_OK);
+    /* The signature comes back as DER encoded R + S parts of the signature.
+     * R + S is 2 times the curve size in bytes (so 64 for P256) but we're not
+     * returning that, but the DER encoded format that tools expect.
+     * Since the length of DER encoding is dependend on the encoded value
+     * (e.g. leading zero if negative), the output size is not stable.
+     * Thus calling C_Sign for size must return the maximum length of the DER
+     * encoded value, which is (2+1+keylength) * 2 + 2. So for P256 = 72
+     * the actual signature size may be smaller.
+     */
+    assert_int_equal(siglen, 72);
+    CK_ULONG tmp_len = siglen;
 
     rv = C_Sign(session, sha256_msg_hash, sizeof(sha256_msg_hash), sig,
             &siglen);
     assert_int_equal(rv, CKR_OK);
-    /*
-     * Skip checking the siglen. This comes back as a DER encoded R + S portions of the signature.
-     * R + S is 2 times the curve size in bytes (so 64 for P256) but we're not returning that, were
-     * returning the DER encoded format that tools expect, in DER format which may cause leading
-     * bytes to be dropped from, R + S, so the output size isn't stable. But it's definitely not 0.
-     */
-    assert_int_not_equal(siglen, 0);
+    /* the actual siglength may be smaller than the previously reported siglen */
+    assert_in_range(siglen, 1, tmp_len);
 
     /* try the public key verification */
     rv = C_VerifyInit(session, &mech, pubkey);
@@ -466,11 +477,20 @@ static void test_sign_verify_CKM_ECDSA_SHA1(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     CK_BYTE ckm_ecdsa_sha1_sig[4096];
-    CK_ULONG ckm_ecdsa_sha1_siglen = sizeof(ckm_ecdsa_sha1_sig);
+    CK_ULONG ckm_ecdsa_sha1_siglen = 0;
 
+    /* Call C_Sign for Size */
+    rv = C_Sign(session, (CK_BYTE_PTR ) _data, sizeof(_data),
+            NULL, &ckm_ecdsa_sha1_siglen);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_not_equal(ckm_ecdsa_sha1_siglen, 0);
+
+    CK_ULONG tmp_len = ckm_ecdsa_sha1_siglen;
     rv = C_Sign(session, (CK_BYTE_PTR ) _data, sizeof(_data),
             ckm_ecdsa_sha1_sig, &ckm_ecdsa_sha1_siglen);
     assert_int_equal(rv, CKR_OK);
+    /* actual size must not be larger than previously indicated */
+    assert_in_range(ckm_ecdsa_sha1_siglen, 1, tmp_len);
 
     rv = C_VerifyInit(session, &mech, objhandles[0]);
     assert_int_equal(rv, CKR_OK);

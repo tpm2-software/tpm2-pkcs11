@@ -96,8 +96,8 @@ static bool is_mech_supported(CK_MECHANISM_TYPE mech) {
 
 static CK_RV ec_fixup_size(CK_MECHANISM_TYPE mech, tobject *tobj, CK_ULONG_PTR signature_len) {
 
-    if (mech != CKM_ECDSA
-            || mech != CKM_ECDSA_SHA1) {
+    if (mech != CKM_ECDSA &&
+        mech != CKM_ECDSA_SHA1) {
         /* nothing to fix up */
         return CKR_OK;
     }
@@ -537,6 +537,14 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
      */
     reset_ctx = (rv == CKR_BUFFER_TOO_SMALL || !signature);
     if (reset_ctx) {
+        /* ec signature size is not stable between calls, fix it up */
+        CK_RV tmp; /* we must not overwrite rv */
+        tmp = ec_fixup_size(opdata->mtype, opdata->tobj, signature_len);
+        if (tmp != CKR_OK) {
+            reset_ctx = false;
+            goto session_out;
+        }
+
         if (opdata->do_hash) {
             /* reset the hashing state */
             digest_op_data *new_digest_state = digest_op_data_new();
@@ -548,7 +556,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
 
             assert(opdata->digest_opdata);
 
-            CK_RV tmp = digest_init_op(ctx, new_digest_state, opdata->digest_opdata->mechanism);
+            tmp = digest_init_op(ctx, new_digest_state, opdata->digest_opdata->mechanism);
             if (tmp != CKR_OK) {
                 digest_op_data_free(&new_digest_state);
                 reset_ctx = false;
@@ -557,14 +565,6 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
 
             digest_op_data_free(&opdata->digest_opdata);
             opdata->digest_opdata = new_digest_state;
-
-            /* ec signature size is not stable between calls, fix it up */
-            tmp = ec_fixup_size(opdata->mtype, opdata->tobj, signature_len);
-            if (tmp != CKR_OK) {
-                digest_op_data_free(&new_digest_state);
-                reset_ctx = false;
-                goto session_out;
-            }
 
         } else if (is_oneshot) {
             twist_free(opdata->buffer);
