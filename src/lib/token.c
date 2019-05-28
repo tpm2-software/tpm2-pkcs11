@@ -88,6 +88,7 @@ CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
 
     if (t->config.is_initialized) {
         info->flags |= CKF_TOKEN_INITIALIZED;
+        info->flags |= CKF_USER_PIN_INITIALIZED;
     }
 
     // Identification
