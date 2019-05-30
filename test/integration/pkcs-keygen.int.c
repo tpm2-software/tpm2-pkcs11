@@ -57,6 +57,105 @@ static int test_teardown(void **state) {
     return 0;
 }
 
+static void test_rsa_keygen_missing_attributes(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_BBOOL ck_true = CK_TRUE;
+    CK_BBOOL ck_false = CK_FALSE;
+    CK_UTF8CHAR label[] = "minimum-rsa";
+
+    CK_ATTRIBUTE pub[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_ENCRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_VERIFY, ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+    };
+
+    CK_ATTRIBUTE priv[] = {
+        ADD_ATTR_BASE(CKA_DECRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_SIGN, ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_EXTRACTABLE, ck_false),
+    };
+
+    CK_MECHANISM mech = {
+        .mechanism = CKM_RSA_PKCS_KEY_PAIR_GEN,
+        .pParameter = NULL,
+        .ulParameterLen = 0
+    };
+
+    CK_OBJECT_HANDLE pubkey;
+    CK_OBJECT_HANDLE privkey;
+
+    user_login(session);
+
+    CK_RV rv = C_GenerateKeyPair (session,
+            &mech,
+            pub, ARRAY_LEN(pub),
+            priv, ARRAY_LEN(priv),
+            &pubkey, &privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    /* verify that we can use it via an operation */
+    mech.mechanism =  CKM_SHA256_RSA_PKCS;
+    rv = C_SignInit(session, &mech, privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE msg[] = "my foo msg";
+    CK_BYTE sig[1024];
+    CK_ULONG siglen = sizeof(sig);
+
+    rv = C_Sign(session, msg, sizeof(msg) - 1, sig,
+            &siglen);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(siglen, 256);
+
+    /* try the public key verification */
+    rv = C_VerifyInit(session, &mech, pubkey);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Verify(session, msg, sizeof(msg) - 1,
+            sig, siglen);
+    assert_int_equal(rv, CKR_OK);
+
+    /* verify we can find it via pub templ */
+    rv = C_FindObjectsInit(session, pub, ARRAY_LEN(pub));
+    assert_int_equal(rv, CKR_OK);
+
+    CK_OBJECT_HANDLE pub_handle_dup;
+    CK_ULONG count = 0;
+    rv = C_FindObjects(session, &pub_handle_dup, 1, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    /* verify we can find it via priv templ */
+    rv = C_FindObjectsInit(session, priv, ARRAY_LEN(priv));
+    assert_int_equal(rv, CKR_OK);
+
+    count = 0;
+    CK_OBJECT_HANDLE priv_handle_dup;
+    rv = C_FindObjects(session, &priv_handle_dup, 1, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    /* verify missing attrs */
+    verify_missing_pub_attrs_common(session, CKK_RSA, pub_handle_dup);
+    verify_missing_pub_attrs_rsa(session, pub_handle_dup);
+
+    verify_missing_priv_attrs_common(session, CKK_RSA, priv_handle_dup);
+    verify_missing_priv_attrs_rsa(session, priv_handle_dup);
+}
 static void test_rsa_keygen_p11tool_templ(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -437,6 +536,8 @@ int main() {
         cmocka_unit_test_setup_teardown(test_ecc_keygen_p11tool_templ,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_rsa_keygen_p11tool_templ,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_rsa_keygen_missing_attributes,
             test_setup, test_teardown),
     };
 
