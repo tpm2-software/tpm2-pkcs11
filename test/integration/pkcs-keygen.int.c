@@ -153,7 +153,7 @@ static void test_rsa_keygen_missing_attributes(void **state) {
     verify_missing_pub_attrs_common(session, CKK_RSA, pub_handle_dup);
     verify_missing_pub_attrs_rsa(session, pub_handle_dup);
 
-    verify_missing_priv_attrs_common(session, CKK_RSA, priv_handle_dup);
+    verify_missing_priv_attrs_common(session, CKK_RSA, priv_handle_dup, CK_FALSE);
     verify_missing_priv_attrs_rsa(session, priv_handle_dup);
 }
 static void test_rsa_keygen_p11tool_templ(void **state) {
@@ -162,7 +162,7 @@ static void test_rsa_keygen_p11tool_templ(void **state) {
     CK_SESSION_HANDLE session = ti->handle;
 
     CK_BBOOL ck_true = CK_TRUE;
-    CK_BBOOL ck_false = CK_TRUE;
+    CK_BBOOL ck_false = CK_FALSE;
     CK_BYTE id[] = "p11-templ-key-id-rsa";
     CK_ULONG bits = 2048;
     CK_BYTE exp[] = { 0x00, 0x01, 0x00, 0x01 }; //65537 in BN
@@ -259,7 +259,7 @@ static void test_rsa_keygen_p11tool_templ(void **state) {
     verify_missing_pub_attrs_common(session, CKK_RSA, pub_handle_dup);
     verify_missing_pub_attrs_rsa(session, pub_handle_dup);
 
-    verify_missing_priv_attrs_common(session, CKK_RSA, priv_handle_dup);
+    verify_missing_priv_attrs_common(session, CKK_RSA, priv_handle_dup, CK_TRUE);
     verify_missing_priv_attrs_rsa(session, priv_handle_dup);
 }
 
@@ -269,7 +269,7 @@ static void test_ecc_keygen_p11tool_templ(void **state) {
     CK_SESSION_HANDLE session = ti->handle;
 
     CK_BBOOL ck_true = CK_TRUE;
-    CK_BBOOL ck_false = CK_TRUE;
+    CK_BBOOL ck_false = CK_FALSE;
     CK_BYTE id[] = "p11-templ-key-id-ecc";
     CK_UTF8CHAR label[] = "p11-templ-key-label-ecc";
 
@@ -385,7 +385,7 @@ static void test_ecc_keygen_p11tool_templ(void **state) {
 
     /* verify missing attrs */
     verify_missing_pub_attrs_common(session, CKK_EC, pub_handle_dup);
-    verify_missing_priv_attrs_common(session, CKK_EC, priv_handle_dup);
+    verify_missing_priv_attrs_common(session, CKK_EC, priv_handle_dup, CK_TRUE);
 
     verify_missing_pub_attrs_ecc(session, pub_handle_dup);
     verify_missing_priv_attrs_ecc(session, priv_handle_dup);
@@ -397,7 +397,7 @@ static void test_destroy(void **state) {
     CK_SESSION_HANDLE session = ti->handle;
 
     CK_BBOOL ck_true = CK_TRUE;
-    CK_BBOOL ck_false = CK_TRUE;
+    CK_BBOOL ck_false = CK_FALSE;
     CK_BYTE id[] = "p11-templ-key-id-ecc-destroy";
     CK_UTF8CHAR label[] = "p11-templ-key-label-ecc-destroy";
 
