@@ -314,7 +314,7 @@ void verify_missing_priv_attrs_ecc(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE h
     assert_int_equal(count, ARRAY_LEN(attrs));
 }
 
-void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE keytype, CK_OBJECT_HANDLE h) {
+void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE keytype, CK_OBJECT_HANDLE h, CK_BBOOL extractable) {
 
     CK_BYTE tmp[5][256] = { 0 };
 
@@ -353,21 +353,21 @@ void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE key
             CK_BBOOL v = CK_FALSE;
             rv = generic_CK_BBOOL(a, &v);
             assert_int_equal(rv, CKR_OK);
-            assert_int_equal(v, CK_TRUE);
+            assert_int_equal(v, !extractable);
             count++;
         } break;
         case CKA_EXTRACTABLE: {
             CK_BBOOL v = CK_TRUE;
             rv = generic_CK_BBOOL(a, &v);
             assert_int_equal(rv, CKR_OK);
-            assert_int_equal(v, CK_FALSE);
+            assert_int_equal(v, extractable);
             count++;
         } break;
         case CKA_NEVER_EXTRACTABLE: {
             CK_BBOOL v = CK_FALSE;
             rv = generic_CK_BBOOL(a, &v);
             assert_int_equal(rv, CKR_OK);
-            assert_int_equal(v, CK_TRUE);
+            assert_int_equal(v, !extractable);
             count++;
         } break;
         default:
