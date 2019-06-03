@@ -117,9 +117,70 @@ void test_get_mechanism_info_good(void **state) {
     CK_RV rv = C_GetMechanismInfo(slot_id, CKM_AES_KEY_GEN, &mech_info);
     assert_int_equal(rv, CKR_OK);
 
-    assert_int_equal(mech_info.ulMaxKeySize, 512);
-    assert_int_equal(mech_info.ulMinKeySize, 128);
+    assert_int_equal(mech_info.ulMaxKeySize, 256/8);
+    assert_int_equal(mech_info.ulMinKeySize, 128/8);
     assert_int_equal(mech_info.flags, CKF_GENERATE);
+
+    /* Test all other mechanisms */
+    CK_ULONG aes_mechs[] = {
+        CKM_AES_CBC,
+        CKM_AES_CFB1,
+        CKM_AES_ECB,
+    };
+    for (size_t i = 0; i < ARRAY_LEN(aes_mechs); i++) {
+        rv = C_GetMechanismInfo(slot_id, aes_mechs[i], &mech_info);
+        assert_int_equal(rv, CKR_OK);
+
+        assert_int_equal(mech_info.ulMinKeySize, 128/8);
+        assert_int_equal(mech_info.ulMaxKeySize, 256/8);
+        assert_int_equal(mech_info.flags, 0);
+    }
+
+    CK_ULONG rsa_mechs[] = {
+        CKM_RSA_PKCS_KEY_PAIR_GEN,
+        CKM_RSA_PKCS,
+        CKM_RSA_X_509,
+        CKM_RSA_PKCS_OAEP,
+        CKM_SHA1_RSA_PKCS,
+        CKM_SHA256_RSA_PKCS,
+        CKM_SHA384_RSA_PKCS,
+        CKM_SHA512_RSA_PKCS,
+    };
+    for (size_t i = 0; i < ARRAY_LEN(rsa_mechs); i++) {
+        rv = C_GetMechanismInfo(slot_id, rsa_mechs[i], &mech_info);
+        assert_int_equal(rv, CKR_OK);
+
+        assert_int_equal(mech_info.ulMinKeySize, 1024);
+        assert_int_equal(mech_info.ulMaxKeySize, 2048);
+        assert_int_not_equal(mech_info.flags, 0);
+    }
+
+    CK_ULONG ecc_mechs[] = {
+        CKM_EC_KEY_PAIR_GEN,
+        CKM_ECDSA,
+        CKM_ECDSA_SHA1,
+    };
+    for (size_t i = 0; i < ARRAY_LEN(ecc_mechs); i++) {
+        rv = C_GetMechanismInfo(slot_id, ecc_mechs[i], &mech_info);
+        assert_int_equal(rv, CKR_OK);
+
+        assert_int_equal(mech_info.ulMinKeySize, 256);
+        assert_int_equal(mech_info.ulMaxKeySize, 384);
+        assert_int_not_equal(mech_info.flags, 0);
+    }
+
+    CK_ULONG hash_mechs[] = {
+        CKM_SHA_1,
+        CKM_SHA256,
+    };
+    for (size_t i = 0; i < ARRAY_LEN(hash_mechs); i++) {
+        rv = C_GetMechanismInfo(slot_id, hash_mechs[i], &mech_info);
+        assert_int_equal(rv, CKR_OK);
+
+        assert_int_equal(mech_info.ulMinKeySize, 0);
+        assert_int_equal(mech_info.ulMaxKeySize, 0);
+        assert_int_not_equal(mech_info.flags, 0);
+    }
 }
 
 void test_get_mechanism_info_bad(void **state) {
