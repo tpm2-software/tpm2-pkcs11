@@ -10,6 +10,10 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import (Cipher, algorithms, modes)
 from tempfile import NamedTemporaryFile
 
+import sys
+if sys.version_info.major < 3:
+    input = raw_input
+
 # The delimiter changes based on nesting level to make parsing easier. We assume one key-value entry per line
 # where a key can have N KVPs as a CSV.
 # For instance:
@@ -53,7 +57,7 @@ def hash_pass(password, iters=100000, salt=os.urandom(32)):
 
 
 def query_yes_no(question, default="no"):
-    """Ask a yes/no question via raw_input() and return their answer.
+    """Ask a yes/no question via input() and return their answer.
 
     "question" is a string that is presented to the user.
     "default" is the presumed answer if the user just hits <Enter>.
@@ -74,7 +78,7 @@ def query_yes_no(question, default="no"):
 
     while True:
         sys.stdout.write(question + prompt)
-        choice = raw_input().lower()
+        choice = input().lower()
         if default is not None and choice == '':
             return valid[default]
         elif choice in valid:
