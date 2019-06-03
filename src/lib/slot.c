@@ -118,23 +118,78 @@ CK_RV slot_mechanism_info_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE type, CK_ME
         return CKR_SLOT_ID_INVALID;
     }
 
-    // TODO support more of these and check with the TPM for sizes.
+    /* TODO pull these from TPM, currently they match the simulator */
+    CK_ULONG aes_min_keysize = 128/8; // in bytes
+    CK_ULONG aes_max_keysize = 256/8; // in bytes
+    CK_ULONG ecc_min_keysize = 256;
+    CK_ULONG ecc_max_keysize = 384;
+    CK_ULONG rsa_min_keysize = 1024;
+    CK_ULONG rsa_max_keysize = 2048;
+
     switch(type) {
+    /* AES based crypto */
+    /* Todo: Check if HW or Software and support */
     case CKM_AES_KEY_GEN:
-        info->ulMinKeySize = 128;
-        info->ulMaxKeySize = 512;
+        info->ulMinKeySize = aes_min_keysize;
+        info->ulMaxKeySize = aes_max_keysize;
         info->flags = CKF_GENERATE;
         break;
+    case CKM_AES_CBC:
+    case CKM_AES_CFB1:
+    case CKM_AES_ECB:
+        info->ulMinKeySize = aes_min_keysize;
+        info->ulMaxKeySize = aes_max_keysize;
+        info->flags = 0;
+        break;
+
+    /* RSA based crypto */
     case CKM_RSA_PKCS_KEY_PAIR_GEN:
-        info->ulMinKeySize = 1024;
-        info->ulMaxKeySize = 4096;
-        info->flags = CKF_GENERATE_KEY_PAIR;
+        info->ulMinKeySize = rsa_min_keysize;
+        info->ulMaxKeySize = rsa_max_keysize;
+        info->flags = CKF_HW | CKF_GENERATE_KEY_PAIR;
         break;
+    case CKM_RSA_PKCS:
+    case CKM_RSA_X_509:
+        info->ulMinKeySize = rsa_min_keysize;
+        info->ulMaxKeySize = rsa_max_keysize;
+        info->flags = CKF_HW | CKF_ENCRYPT | CKF_DECRYPT | CKF_SIGN | CKF_VERIFY;
+        break;
+    case CKM_RSA_PKCS_OAEP:
+        info->ulMinKeySize = rsa_min_keysize;
+        info->ulMaxKeySize = rsa_max_keysize;
+        info->flags = CKF_HW | CKF_ENCRYPT| CKF_DECRYPT;
+        break;
+    case CKM_SHA1_RSA_PKCS:
+    case CKM_SHA256_RSA_PKCS:
+    case CKM_SHA384_RSA_PKCS:
+    case CKM_SHA512_RSA_PKCS:
+        info->ulMinKeySize = rsa_min_keysize;
+        info->ulMaxKeySize = rsa_max_keysize;
+        info->flags = CKF_HW | CKF_SIGN | CKF_VERIFY;
+        break;
+
+    /* ECC based crypto */
+    /* TODO: Add ECC specific flags */
     case CKM_EC_KEY_PAIR_GEN:
-        info->ulMinKeySize = 192;
-        info->ulMaxKeySize = 256;
-        info->flags = CKF_GENERATE_KEY_PAIR;
+        info->ulMinKeySize = ecc_min_keysize;
+        info->ulMaxKeySize = ecc_max_keysize;
+        info->flags = CKF_HW | CKF_GENERATE_KEY_PAIR;
         break;
+    case CKM_ECDSA:
+    case CKM_ECDSA_SHA1:
+        info->ulMinKeySize = ecc_min_keysize;
+        info->ulMaxKeySize = ecc_max_keysize;
+        info->flags = CKF_HW | CKF_SIGN | CKF_VERIFY;
+        break;
+
+    /* Hashes */
+    case CKM_SHA_1:
+    case CKM_SHA256:
+        info->ulMinKeySize = 0;
+        info->ulMaxKeySize = 0;
+        info->flags = CKF_HW | CKF_DIGEST;
+        break;
+
     default:
         return CKR_MECHANISM_INVALID;
     }
