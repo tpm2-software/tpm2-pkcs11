@@ -388,7 +388,8 @@ static CK_RV object_add_missing_attrs(tobject *public_tobj, tobject *private_tob
     CK_BBOOL extractable = CK_FALSE;
     a = tobject_get_attribute_by_type(private_tobj, CKA_EXTRACTABLE);
     if (!a) {
-        ADD_ATTR(CK_BBOOL, CKA_EXTRACTABLE, !sensitive, newprivattrs, privindex);
+        extractable = !sensitive;
+        ADD_ATTR(CK_BBOOL, CKA_EXTRACTABLE, extractable, newprivattrs, privindex);
     } else {
         tmp_rv = generic_CK_BBOOL(a, &extractable);
         if (tmp_rv != CKR_OK) {
