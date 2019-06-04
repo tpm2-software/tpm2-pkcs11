@@ -486,6 +486,29 @@ static void test_rsa_oaep_encrypt_decrypt_oneshot_good(void **state) {
     assert_int_equal(plaintext2_len, sizeof(plaintext));
 
     assert_memory_equal(plaintext, plaintext2, sizeof(plaintext));
+
+    /* retry with SHA1 */
+    params.hashAlg = CKM_SHA_1;
+    params.mgf = CKG_MGF1_SHA1;
+    rv = C_EncryptInit(session, &mechanism, ti->objects.rsa);
+    assert_int_equal(rv, CKR_OK);
+
+    /* part 1 */
+    rv = C_Encrypt(session, plaintext, sizeof(plaintext),
+            ciphertext, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, sizeof(ciphertext));
+
+    rv = C_DecryptInit (session, &mechanism, ti->objects.rsa);
+    assert_int_equal(rv, CKR_OK);
+
+    plaintext2_len = sizeof(plaintext2);
+    rv = C_Decrypt (session, ciphertext, ciphertext_len,
+            plaintext2, &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(plaintext2_len, sizeof(plaintext));
+
+    assert_memory_equal(plaintext, plaintext2, sizeof(plaintext));
 }
 
 int main() {
