@@ -295,6 +295,7 @@ class Db(object):
     # secondary
     # tertiary
     #
+    # NOTE: Update the DB Schema Version at the bottom if the db format changes!
     def create(self):
         c = self._conn.cursor()
         sql = [
@@ -368,6 +369,17 @@ class Db(object):
                 attrs TEXT NOT NULL,
                 FOREIGN KEY (sid) REFERENCES sobjects(id) ON DELETE CASCADE
             );
+            '''),
+            textwrap.dedent('''
+            CREATE TABLE IF NOT EXISTS schema(
+                id INTEGER PRIMARY KEY,
+                schema_version INTEGER NOT NULL
+            );
+            '''),
+            # NOTE: Update the DB Schema Version if the format above changes!
+            # REPLACE updates the value if it exists, or inserts it if it doesn't
+            textwrap.dedent('''
+            REPLACE INTO schema (id, schema_version) VALUES (1, 1);
             '''),
         ]
 
