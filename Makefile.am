@@ -122,6 +122,7 @@ check_PROGRAMS += \
     test/integration/pkcs-get-attribute-value.int \
     test/integration/pkcs-login-logout.int \
     test/integration/pkcs-sign-verify.int \
+    test/integration/pkcs-tpm-ecc-support-check.int \
     test/integration/pkcs-initialize-finalize.int \
     test/integration/pkcs-misc.int \
     test/integration/pkcs-crypt.int \
@@ -151,6 +152,10 @@ test_integration_pkcs_login_logout_int_SOURCES = test/integration/pkcs-login-log
 test_integration_pkcs_sign_verify_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_sign_verify_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
 test_integration_pkcs_sign_verify_int_SOURCES = test/integration/pkcs-sign-verify.int.c test/integration/test.c
+
+test_integration_pkcs_tpm_ecc_support_check_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_tpm_ecc_support_check_int_LDADD   = $(TESTS_LDADD) $(SQLITE3_LIBS)
+test_integration_pkcs_tpm_ecc_support_check_int_SOURCES = test/integration/pkcs-tpm-ecc-support-check.int.c test/integration/test.c
 
 test_integration_pkcs_initialize_finalize_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_initialize_finalize_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)

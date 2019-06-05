@@ -2478,6 +2478,51 @@ out:
     return rv;
 }
 
+static CK_RV check_tpm_ecc(ESYS_CONTEXT *context, tpm_key_data tpmdat) {
+
+    /* get ecc-curve capability from TPM*/
+    TPM2_CAP capability = TPM2_CAP_ECC_CURVES;
+    UINT32 property = TPM2_ECC_NIST_P192;
+    UINT32 counter = TPM2_MAX_ECC_CURVES;
+    TPMI_YES_NO more_data;
+    TPMS_CAPABILITY_DATA *capabilityData;
+
+    TSS2_RC rval = Esys_GetCapability (context,
+            ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+            capability, property, counter,
+            &more_data, &capabilityData);
+
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_GetCapability: 0x%x:", rval);
+        return CKR_GENERAL_ERROR;
+    }
+
+    if (!capabilityData || capabilityData->capability != capability) {
+        LOGE("TPM returned different capability than requested: 0x%x != 0x%x",
+            capabilityData->capability, capability);
+        rval = CKR_GENERAL_ERROR;
+        goto out;
+    }
+
+    TPMU_CAPABILITIES *capabilities = &capabilityData->data;
+
+    /* Compare the requested ecc curve to the supported curves*/
+    TPMS_ECC_PARMS *ec = &tpmdat.pub.publicArea.parameters.eccDetail;
+    for (UINT32 i = 0; i < capabilities->eccCurves.count; i++) {
+        if (ec->curveID == capabilities->eccCurves.eccCurves[i]) {
+            LOGV("Chosen ecc curve supported: 0x%X\n", capabilities->eccCurves.eccCurves[i]);
+            rval = CKR_OK;
+            goto out;
+        }
+    }
+    LOGW("Chosen ecc curve not supported: 0x%X\n", ec->curveID);
+    rval = CKR_ARGUMENTS_BAD;
+
+out:
+    free (capabilityData);
+    return rval;
+}
+
 CK_RV tpm2_generate_key(
         tpm_ctx *tpm,
 
@@ -2537,6 +2582,16 @@ CK_RV tpm2_generate_key(
     assert(len < sizeof(auth->buffer));
     auth->size = len;
     memcpy(auth->buffer, newauthbin, auth->size);
+
+    /*
+     * Check the ecc support of the TPM
+     */
+    if (mechanism->mechanism == CKM_EC_KEY_PAIR_GEN) {
+        rv = check_tpm_ecc(tpm->esys_ctx, tpmdat);
+        if (rv != CKR_OK) {
+            goto out;
+        }
+    }
 
     TSS2_RC rc = create_loaded(
             tpm->esys_ctx,
