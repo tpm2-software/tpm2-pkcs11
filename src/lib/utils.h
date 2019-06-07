@@ -24,14 +24,6 @@
 
 #define UNUSED(x) (void)x
 
-static inline int max(size_t a, size_t b) {
-    return a > b ? a : b;
-}
-
-static inline int min(size_t a, size_t b) {
-    return a < b ? a : b;
-}
-
 /*
  * Pads the buffer 'buf' with blanks to the desired 'buf_len'.
  * The trailing '\0' byte is removed, so the buffer is NOT null terminared afterwards!
@@ -43,7 +35,7 @@ static inline void str_pad(unsigned char * buf, size_t buf_len) {
 
 static inline void str_padded_copy(unsigned char * dst, const unsigned char * src, size_t dst_len) {
     memset(dst, ' ', dst_len);
-    memcpy(dst, src, min(strlen((char *)(src)), dst_len));
+    memcpy(dst, src, strnlen((char *)(src), dst_len));
 }
 
 /**
