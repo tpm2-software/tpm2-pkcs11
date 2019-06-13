@@ -528,6 +528,95 @@ static void test_destroy(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
+
+static void test_destroy_rsa_pkcs(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_BBOOL ck_true = CK_TRUE;
+    CK_BBOOL ck_false = CK_FALSE;
+    CK_UTF8CHAR label[] = "minimum-rsa";
+
+    CK_ATTRIBUTE pub[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_ENCRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_VERIFY, ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+    };
+
+    CK_ATTRIBUTE priv[] = {
+        ADD_ATTR_BASE(CKA_DECRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_SIGN, ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_EXTRACTABLE, ck_false),
+    };
+
+    CK_MECHANISM mech = {
+        .mechanism = CKM_RSA_PKCS_KEY_PAIR_GEN,
+        .pParameter = NULL,
+        .ulParameterLen = 0
+    };
+
+    CK_OBJECT_HANDLE pubkey;
+    CK_OBJECT_HANDLE privkey;
+
+    user_login(session);
+
+    CK_RV rv = C_GenerateKeyPair (session,
+            &mech,
+            pub, ARRAY_LEN(pub),
+            priv, ARRAY_LEN(priv),
+            &pubkey, &privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    /* verify that if it's held by sign operation, it can't be deleted */
+    mech.mechanism =  CKM_RSA_PKCS;
+    rv = C_SignInit(session, &mech, privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    /* attempt failed destroy */
+    rv = C_DestroyObject(session, privkey);
+    assert_int_equal(rv, CKR_FUNCTION_FAILED);
+
+    CK_BYTE sha256_msg_hash[] = {
+        0x30, 0x31, /* SÈQUENCE */
+        0x30, 0x0D, /* SEQUENCE */
+        0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01, /* sha 256 */
+        0x05, 0x00, /* NULL */
+        0x04, 0x20, /* OCTET STRING, 32 bytes */
+        0x12, 0x34, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, /* hash */
+        0x12, 0x34, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
+        0x12, 0x34, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
+        0x12, 0x34, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF
+    };
+
+    CK_BYTE sig[1024];
+    CK_ULONG siglen = 0;
+    /* call for size*/
+    rv = C_Sign(session, sha256_msg_hash, sizeof(sha256_msg_hash), NULL,
+            &siglen);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_DestroyObject(session, privkey);
+    assert_int_equal(rv, CKR_FUNCTION_FAILED);
+
+    /* finish sign to release the private key */
+    siglen = sizeof(sig);
+    rv = C_Sign(session, sha256_msg_hash, sizeof(sha256_msg_hash), sig,
+            &siglen);
+    assert_int_equal(rv, CKR_OK);
+
+    /* attempt good destroy */
+    rv = C_DestroyObject(session, privkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_DestroyObject(session, pubkey);
+    assert_int_equal(rv, CKR_OK);
+
+}
+
 static void test_keygen_keytype(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -646,6 +735,8 @@ int main() {
 
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_destroy,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_destroy_rsa_pkcs,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_ecc_keygen_p11tool_templ,
             test_setup, test_teardown),
