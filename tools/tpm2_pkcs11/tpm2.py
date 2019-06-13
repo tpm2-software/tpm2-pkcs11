@@ -186,7 +186,7 @@ class Tpm2(object):
         _, priv = tempfile.mkstemp(prefix='', suffix='.priv', dir=self._tmp)
         _, pub = tempfile.mkstemp(prefix='', suffix='.pub', dir=self._tmp)
 
-        parent_path = "file:" + str(phandle)
+        parent_path = str(phandle)
         cmd = [
             'tpm2_import', '-V', '-C', parent_path, '-i', privkey, '-u', pub,
             '-r', priv
@@ -224,9 +224,9 @@ class Tpm2(object):
 
         #tpm2_load -C $file_primary_key_ctx  -u $file_load_key_pub  -r $file_load_key_priv -n $file_load_key_name -o $file_load_key_ctx
         cmd = [
-            'tpm2_changeauth', '-C', str(pctx), '-c', str(objctx), '-P',
-            'hex:' + oldobjauth.decode(), '-p', 'hex:' + newobjauth.decode(),
-            '-r', newpriv
+            'tpm2_changeauth', '-C', str(pctx), '-c', str(objctx), '-p',
+            'hex:' + oldobjauth.decode(), '-r', newpriv,
+            'hex:' + newobjauth.decode(),
         ]
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         _, stderr = p.communicate()
