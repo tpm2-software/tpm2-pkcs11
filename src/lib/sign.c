@@ -498,6 +498,20 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
         if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
             goto session_out;
         }
+
+        /* WORKAROUND / TODO:
+           decrypt_init_op above increments the usage counter by one, but never decremented.
+           if called for size, decrypt_finalize is never called, thus no decrement.
+           if not called for size, decrypt_finalize does not decrement as supplied data was set
+           Without reworking the whole logic and breaking other valid use cases it is the easiest
+           to decrement the usage counter here.
+        */
+        assert(opdata->tobj);
+        CK_RV rv_tmp = tobject_user_decrement(opdata->tobj);
+        if (rv_tmp != CKR_OK) {
+            rv = rv_tmp;
+            goto session_out;
+        }
     } else {
 
         /*
