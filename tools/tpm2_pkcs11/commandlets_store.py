@@ -8,7 +8,6 @@ import yaml
 # local imports
 from .command import Command
 from .command import commandlet
-from .commandlets_token import RmTokenCommand
 
 from .db import Db
 from .utils import AESCipher
@@ -165,9 +164,6 @@ class DestroyCommand(Command):
             if pobj == None:
                 sys.exit('Primary Object id "%s"not found' % pid)
             tokens = db.gettokens(pid)
-
-            for token in tokens:
-                RmTokenCommand.rmtokenfiles(db, token)
 
             db.rmprimary(pid)
             Tpm2.evictcontrol(ownerauth, pobj['handle'])
