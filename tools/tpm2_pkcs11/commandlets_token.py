@@ -29,15 +29,6 @@ class RmTokenCommand(Command):
     '''
     Removes a token from a tpm2-pkcs11 store
     '''
-
-    @staticmethod
-    def rmtokenfiles(db, token):
-        sobject = db.getsecondary(token['id'])
-        priv = sobject['priv']
-        pub = sobject['pub']
-        os.unlink(priv)
-        os.unlink(pub)
-
     # adhere to an interface
     # pylint: disable=no-self-use
     def generate_options(self, group_parser):
@@ -51,7 +42,6 @@ class RmTokenCommand(Command):
 
         with Db(path) as db:
             token = db.gettoken(label)
-            RmTokenCommand.rmtokenfiles(db, token)
             db.rmtoken(token['label'])
 
 
@@ -502,8 +492,7 @@ class ChangePinCommand(Command):
 
         #
         # Now we need to use the newpin to wrap the primaryobject auth value AND
-        # call tpm2_changeauth ON the seal key and update it's tpm private portion file
-        # and delete the old private file to prevent rollbacks
+        # call tpm2_changeauth ON the seal key and update it's tpm private portion blob
         #
 
         # Step 1 - Generate new wrapping key
@@ -567,7 +556,7 @@ class InitPinCommand(Command):
                                                   sopin, True)
         wrappingkeyauth = tpm2.unseal(sealctx, sealauth)
 
-        # get the public and private data files for the old/current user seal object, ie the one
+        # get the public and private data blobs for the old/current user seal object, ie the one
         # that is going to be replaced.
         oldsealobject = db.getsealobject(token['id'])
         oldsealpub = oldsealobject['userpub']
