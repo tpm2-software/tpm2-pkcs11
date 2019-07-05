@@ -136,7 +136,7 @@ class Tpm2(object):
             cmd.extend(['-p', 'hex:%s' % objauth.decode()])
 
         if objattrs != None:
-            cmd.extend(['-b', objattrs])
+            cmd.extend(['-a', objattrs])
 
         if seal != None:
             cmd.extend(['-i', '-'])
@@ -199,7 +199,7 @@ class Tpm2(object):
             cmd.extend(['-p', 'hex:%s' % objauth.decode()])
 
         if objattrs != None:
-            cmd.extend(['-b', objattrs])
+            cmd.extend(['-a', objattrs])
 
         if seal != None:
             cmd.extend(['-i', '-'])
