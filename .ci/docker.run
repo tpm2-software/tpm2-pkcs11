@@ -78,7 +78,7 @@ fi
 
 ../configure --enable-unit --enable-integration --enable-esapi-session-manage-flags $config_flags
 make -j$(nproc)
-make -j$(nproc) check
+make -j check
 
 if [ "$CC" == "gcc" ] && [ "$PYTHON_INTERPRETER" == "python3" ]; then
     bash <(curl -s https://codecov.io/bash)
