@@ -136,13 +136,13 @@ void sobject_free(sobject *sobj);
 void wrappingobject_free(wrappingobject *wobj);
 void sealobject_free(sealobject *sealobj);
 
-CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, unsigned long count);
+CK_RV object_find_init(CK_SESSION_HANDLE session, CK_ATTRIBUTE_PTR templ, unsigned long count);
 
-CK_RV object_find(session_ctx *ctx, CK_OBJECT_HANDLE *object, unsigned long max_object_count, unsigned long *object_count);
+CK_RV object_find(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE *object, unsigned long max_object_count, unsigned long *object_count);
 
-CK_RV object_find_final(session_ctx *ctx);
+CK_RV object_find_final(CK_SESSION_HANDLE session);
 
-CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count);
+CK_RV object_get_attributes(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count);
 
 /**
  * Given an attribute type, retrieves the attribute data if present.
@@ -190,6 +190,6 @@ CK_RV tobject_user_decrement(tobject *tobj);
  */
 CK_RV tobject_user_increment(tobject *tobj);
 
-CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object);
+CK_RV object_destroy(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object);
 
 #endif /* SRC_PKCS11_OBJECT_H_ */

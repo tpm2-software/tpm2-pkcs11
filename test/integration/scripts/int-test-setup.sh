@@ -198,12 +198,25 @@ fi
 export TPM2TOOLS_TCTI="tabrmd:${TABRMD_TEST_TCTI_CONF}"
 echo ${TPM2TOOLS_TCTI}
 
-export TPM2_PKCS11_TCTI="abrmd:${TABRMD_TEST_TCTI_CONF}"
+export TPM2_PKCS11_TCTI="tabrmd:${TABRMD_TEST_TCTI_CONF}"
 echo ${TPM2_PKCS11_TCTI}
+
+export TSS2FAPI_TCTI="tabrmd:${TABRMD_TEST_TCTI_CONF}"
+echo ${TSS2FAPI_TCTI}
+
+export XDG_PROFILE_HOME=${SIM_TMP_DIR}
+export XDG_DATA_HOME=${SIM_TMP_DIR}/data
+export XDG_KEYSTORE_HOME=${SIM_TMP_DIR}/data
+
+export TSS2_FAPICONF=${SIM_TMP_DIR}/fapi-config.json
 
 # if provided, run the test script
 if [ -z "${TSETUP_SCRIPT}" ]; then
     echo "No setup script provided"
+    # execute the test script and capture exit code
+    echo $@
+    env $@
+    ret_test=$?
 else
 	echo "Run setup script ${TSETUP_SCRIPT}"
     sh ${TSETUP_SCRIPT} --tmpdir=${SIM_TMP_DIR}

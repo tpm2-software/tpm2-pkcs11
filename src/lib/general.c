@@ -8,13 +8,82 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include <tss2/tss2_fapi.h>
+
 #include "checks.h"
-#include "db.h"
 #include "general.h"
 #include "log.h"
 #include "mutex.h"
 #include "pkcs11.h"
 #include "session.h"
+
+static bool _g_is_init = false;
+bool general_is_init(void) {
+    return _g_is_init;
+}
+
+CK_RV general_init(void *init_args) {
+    if (init_args) {
+        CK_C_INITIALIZE_ARGS *args = (CK_C_INITIALIZE_ARGS *)init_args;
+        if(args->pReserved) {
+            return CKR_ARGUMENTS_BAD;
+        }
+
+        /*
+         * If their is CKF_OS_LOCKING_OK flag:
+         * 1. No function pointers, Use native OS support (default in mutex.h).
+         * 2. Supplied function pointers, optional use them (we won't).
+         * 3. Partial supplied function pointers is CKR_ARGUMENTS_BAD
+         *
+         * If their is no CKF_OS_LOCKING_OK flag:
+         * A. No callbacks means no need for locks
+         * B. All callbacks means use theirs
+         * C. A mix is CKR_ARGUMENTS_BAD
+         */
+        if (!args->CreateMutex
+            && !args->DestroyMutex
+            && !args->LockMutex
+            && !args->UnlockMutex) {
+            /* no function pointers, options 1 and A */
+                if(args->flags & CKF_OS_LOCKING_OK) {
+                    /* pass as it's default */
+                } else {
+                    /* no need for locks */
+                    mutex_set_handlers(NULL, NULL, NULL, NULL);
+                }
+        } else if (args->CreateMutex
+            && args->DestroyMutex
+            && args->LockMutex
+            && args->UnlockMutex) {
+            /* all function pointers, options 2 and B */
+            if(args->flags & CKF_OS_LOCKING_OK) {
+                /* optional, we won't use theirs, use default */
+            } else {
+                mutex_set_handlers(args->CreateMutex,
+                        args->DestroyMutex,
+                        args->LockMutex,
+                        args->UnlockMutex);
+            }
+        } else {
+            /* mixed function pointers, bad */
+            return CKR_ARGUMENTS_BAD;
+        }
+    } else {
+        /* No init arguments means no multi-thread access */
+        mutex_set_handlers(NULL, NULL, NULL, NULL);
+    }
+
+    /*
+     * Initialize the various sub-systems.
+     *
+     * THESE MUST GO AFTER MUTEX INIT above!!
+     */
+    slot_init();
+
+    _g_is_init = true;
+    return CKR_OK;
+}
+
 
 #ifndef VERSION
   #warning "VERSION Not known at compile time, not embedding..."
@@ -58,7 +127,7 @@ CK_RV general_get_func_list(CK_FUNCTION_LIST **function_list) {
     }
 
     static CK_FUNCTION_LIST list = {
-         .version = CRYPTOKI_VERSION,
+        .version = CRYPTOKI_VERSION,
         .C_Initialize = C_Initialize,
         .C_Finalize = C_Finalize,
         .C_GetInfo = C_GetInfo,
@@ -134,97 +203,12 @@ CK_RV general_get_func_list(CK_FUNCTION_LIST **function_list) {
     return CKR_OK;
 }
 
-static bool _g_is_init;
-bool general_is_init(void) {
-    return _g_is_init;
-}
-
-CK_RV general_init(void *init_args) {
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    if (init_args) {
-        CK_C_INITIALIZE_ARGS *args = (CK_C_INITIALIZE_ARGS *)init_args;
-        if(args->pReserved) {
-            return CKR_ARGUMENTS_BAD;
-        }
-
-        /*
-         * If their is CKF_OS_LOCKING_OK flag:
-         * 1. No function pointers, Use native OS support (default in mutex.h).
-         * 2. Supplied function pointers, optional use them (we won't).
-         * 3. Partial supplied function pointers is CKR_ARGUMENTS_BAD
-         *
-         * If their is no CKF_OS_LOCKING_OK flag:
-         * A. No callbacks means no need for locks
-         * B. All callbacks means use theirs
-         * C. A mix is CKR_ARGUMENTS_BAD
-         */
-        if (!args->CreateMutex
-            && !args->DestroyMutex
-            && !args->LockMutex
-            && !args->UnlockMutex) {
-            /* no function pointers, options 1 and A */
-                if(args->flags & CKF_OS_LOCKING_OK) {
-                    /* pass as it's default */
-                } else {
-                    /* no need for locks */
-                    mutex_set_handlers(NULL, NULL, NULL, NULL);
-                }
-        } else if (args->CreateMutex
-            && args->DestroyMutex
-            && args->LockMutex
-            && args->UnlockMutex) {
-            /* all function pointers, options 2 and B */
-            if(args->flags & CKF_OS_LOCKING_OK) {
-                /* optional, we won't use theirs, use default */
-            } else {
-                mutex_set_handlers(args->CreateMutex,
-                        args->DestroyMutex,
-                        args->LockMutex,
-                        args->UnlockMutex);
-            }
-        } else {
-            /* mixed function pointers, bad */
-            return CKR_ARGUMENTS_BAD;
-        }
-    } else {
-        /* No init arguments means no multi-thread access */
-        mutex_set_handlers(NULL, NULL, NULL, NULL);
-    }
-
-    /*
-     * Initialize the various sub-systems.
-     *
-     * THESE MUST GO AFTER MUTEX INIT above!!
-     */
-    rv = db_init();
-    if (rv != CKR_OK) {
-        goto err;
-    }
-
-    rv = slot_init();
-    if (rv != CKR_OK) {
-        goto err;
-    }
-
-    _g_is_init = true;
-
-    return CKR_OK;
-err:
-    return rv;
-}
-
 CK_RV general_finalize(void *reserved) {
-
     if (reserved) {
         return CKR_ARGUMENTS_BAD;
     }
 
     _g_is_init = false;
-
-    db_destroy();
-    slot_destroy();
 
     return CKR_OK;
 }

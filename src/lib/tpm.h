@@ -9,9 +9,46 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <tss2/tss2_fapi.h>
+#include <tss2/tss2_esys.h>
+
 #include "object.h"
 #include "twist.h"
 #include "utils.h"
+
+
+//TODO: Move after header cleanup
+typedef struct oaepparams {
+   CK_MECHANISM_TYPE hashAlg;
+   CK_RSA_PKCS_MGF_TYPE mgf;
+   uint8_t pSourceData[256];
+   CK_ULONG ulSourceDataLen;
+} oaepparams;
+
+
+//TODO: Fix upstream that profile is not part of this anymore.
+#define PREFIX "/P_RSA256/HS/SRK/tpm2-pkcs11-token-"
+
+TSS2_RC tss_get_esys(FAPI_CONTEXT *fctx, ESYS_CONTEXT **esys);
+
+TSS2_RC auth_cb (FAPI_CONTEXT *context, char const *description,
+                       char **auth, void *userData);
+
+CK_RV tss_get_card_ids(CK_SLOT_ID *slot_list, CK_ULONG_PTR count);
+
+CK_RV tss_get_object_ids(CK_SLOT_ID slot_id, CK_OBJECT_HANDLE_PTR *phObject, CK_ULONG_PTR count);
+
+char * tss_path_from_id(CK_SLOT_ID);
+
+char * tss_userpath_from_id(CK_SLOT_ID slot_id);
+
+char * tss_keypath_from_id(CK_SLOT_ID slot_id, CK_OBJECT_HANDLE object);
+
+CK_RV tss_data_from_id(CK_SLOT_ID slot_id, CK_OBJECT_HANDLE object,
+                        TPM2B_PUBLIC *public, TPM2B_PRIVATE *private,
+                        uint8_t **appData, size_t *appDataSize);
+
+CK_RV tss_rsa_decrypt(CK_SLOT_ID slot_id, CK_OBJECT_HANDLE key, uint8_t *auth, CK_MECHANISM_TYPE mtype, oaepparams *params, CK_BYTE_PTR cipher, CK_ULONG cipherlen, CK_BYTE_PTR part, CK_ULONG_PTR partlen);
 
 typedef struct tpm_ctx tpm_ctx;
 
@@ -51,8 +88,6 @@ CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info);
 
 /**
  * Generates random bytes from the TPM
- * @param ctx
- *  The tpm api context.
  * @param data
  *  The date to write the random bytes into.
  * @param size
@@ -60,9 +95,7 @@ CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info);
  * @return
  *  true on success, false otherwise.
  */
-bool tpm_getrandom(tpm_ctx *ctx, uint8_t *data, size_t size);
-
-CK_RV tpm_stirrandom(tpm_ctx *ctx, unsigned char *seed, unsigned long seed_len);
+bool tpm_getrandom(uint8_t *data, size_t size);
 
 bool tpm_loadobj(tpm_ctx *ctx, uint32_t phandle, twist auth,
         twist pub_path, twist priv_path, uint32_t *handle);
@@ -90,7 +123,7 @@ twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth);
  * @return
  *  Any CK_RV that C_Sign() can return.
  */
-CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen);
+CK_RV tpm_sign(CK_SLOT_ID slot_id, CK_OBJECT_HANDLE key, uint8_t *auth, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen);
 
 /**
  * Perform a verification in the TPM.
@@ -111,7 +144,7 @@ CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR 
  * @return
  *  Any CK_RV that C_Verify() can return.
  */
-CK_RV tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen);
+CK_RV tpm_verify(CK_SLOT_ID slot_id, CK_OBJECT_HANDLE key, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen);
 
 CK_RV tpm_hash_init(tpm_ctx *ctx, CK_MECHANISM_TYPE mode, uint32_t *sequence_handle);
 CK_RV tpm_hash_update(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, CK_ULONG data_len);
@@ -178,6 +211,6 @@ CK_RV tpm2_generate_key(
 
         tpm_object_data *objdata);
 
-CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULONG_PTR count);
+CK_RV tpm2_getmechanisms(CK_MECHANISM_TYPE *mechanism_list, CK_ULONG_PTR count);
 
 #endif /* SRC_PKCS11_TPM_H_ */

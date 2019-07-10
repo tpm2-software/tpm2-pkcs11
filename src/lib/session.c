@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <tss2/tss2_fapi.h>
 
 #include "checks.h"
 #include "general.h"
@@ -13,20 +14,29 @@
 #include "mutex.h"
 #include "pkcs11.h"
 #include "session.h"
-#include "session_table.h"
 #include "token.h"
 #include "tpm.h"
 #include "utils.h"
 
-static CK_RV check_max_sessions(session_table *s_table) {
+struct SESSION session_tab[MAX_NUM_OF_SESSIONS];
 
-    CK_ULONG all;
+#define SESSION_FOR_EACH(session, X) \
+    for (size_t _i = 0; _i < MAX_NUM_OF_SESSIONS; _i++) { \
+        if (session_tab[_i].slot_id == 0) \
+            continue; \
+        session = &session_tab[_i]; \
+        X; \
+    }
 
-    session_table_get_cnt(s_table, &all, NULL, NULL);
-
-    return (all > MAX_NUM_OF_SESSIONS) ?
-        CKR_SESSION_COUNT : CKR_OK;
+#define SESSION_GET_EMPTY(session) { \
+    size_t _i = 0; \
+    for (; _i < sizeof(session_tab) / sizeof(session_tab[0]); _i++) { \
+        if (session_tab[_i].slot_id == 0) \
+            break; \
+    } \
+    session = _i; \
 }
+
 
 #define TOKID_SESSION_SHIFT ((sizeof(CK_SESSION_HANDLE) * 8) - 8)
 
@@ -60,9 +70,36 @@ static inline unsigned get_tokid_from_session_handle_and_cleanse(
     return tokid;
 }
 
+CK_RV session_getseal(CK_SESSION_HANDLE session, const uint8_t **seal) {
+    if (session_tab[session].slot_id == 0) {
+        LOGE("Session %lu is not open", session);
+        return CKR_SESSION_HANDLE_INVALID;
+    }
+    if (!session_tab[session].seal_avail) {
+        LOGE("Session %lu has no seal available", session);
+        return CKR_USER_NOT_LOGGED_IN;
+    }
+    *seal = &session_tab[session].seal[0];
+    return CKR_OK;
+}
+
+CK_RV session_getslot(CK_SESSION_HANDLE session, CK_SLOT_ID *slot_id) {
+    if (session_tab[session].slot_id == 0) {
+        LOGE("Session %lu is not open", session);
+        return CKR_SESSION_HANDLE_INVALID;
+    }
+    if (!session_tab[session].seal_avail) {
+        LOGE("Session %lu has no seal available", session);
+        return CKR_USER_NOT_LOGGED_IN;
+    }
+    *slot_id = session_tab[session].slot_id;
+    return CKR_OK;
+}
+
 CK_RV session_open(CK_SLOT_ID slot_id, CK_FLAGS flags, void *application,
 		CK_NOTIFY notify, CK_SESSION_HANDLE *session) {
-
+    struct SESSION *s;
+    char *path;
     (void) notify;
     (void) application; /* can be null */
 
@@ -70,121 +107,140 @@ CK_RV session_open(CK_SLOT_ID slot_id, CK_FLAGS flags, void *application,
         return CKR_SESSION_PARALLEL_NOT_SUPPORTED;
     }
 
-    CK_RV rv = CKR_GENERAL_ERROR;
-
 	check_pointer(session);
 
-	token *t = slot_get_token(slot_id);
-	if (!t) {
-	    return CKR_SLOT_ID_INVALID;
-	}
+    /* Cannot open an R/O session when the SO is logged in */
+    SESSION_FOR_EACH(s,
+        if ((s->slot_id == slot_id) && (s->login_state == token_so_logged_in) &&
+                (!(flags & CKF_RW_SESSION)))
+            return CKR_SESSION_READ_WRITE_SO_EXISTS;
+    );
 
-	rv = check_max_sessions(t->s_table);
-	if (rv != CKR_OK) {
-	    return rv;
-	}
-
-	/*
-	 * Cannot open an R/O session when the SO is logged in
-	 */
-	if ((!(flags & CKF_RW_SESSION)) && (t->login_state == token_so_logged_in)) {
-	    return CKR_SESSION_READ_WRITE_SO_EXISTS;
-	}
-
-	rv = session_table_new_entry(t->s_table, session, t, flags);
-    if (rv != CKR_OK) {
-        return rv;
+    SESSION_GET_EMPTY(*session);
+    if (*session >= MAX_NUM_OF_SESSIONS) {
+        return CKR_SESSION_COUNT;
     }
 
-	add_tokid_to_session_handle(t->id, session);
+    path = tss_path_from_id(slot_id);
+    if (!path)
+	    return CKR_SLOT_ID_INVALID;
+
+    memset(&session_tab[*session], 0, sizeof(session_tab[0]));
+
+    session_tab[*session].slot_id = slot_id;
+    session_tab[*session].flags = flags;
+
+    LOGV("Assigned session id %lu to slot 0x%08lx", *session, slot_id);
 
 	return CKR_OK;
 }
 
 CK_RV session_close(CK_SESSION_HANDLE session) {
-
-    token *t = NULL;
-    unsigned tokid = get_tokid_from_session_handle_and_cleanse(&session);
-    check_slot_id(tokid, t, CKR_SESSION_HANDLE_INVALID);
-
-    return session_table_free_ctx(t, session);
-}
-
-CK_RV session_closeall(CK_SLOT_ID slot_id) {
-
-    token *t;
-    check_slot_id(slot_id, t, CKR_SLOT_ID_INVALID);
-
-    return session_table_free_ctx_all(t);
-}
-
-CK_RV session_lookup(CK_SESSION_HANDLE session, token **tok, session_ctx **ctx) {
-
-    token *tmp = NULL;
-    unsigned tokid = get_tokid_from_session_handle_and_cleanse(&session);
-    check_slot_id(tokid, tmp, CKR_SESSION_HANDLE_INVALID);
-
-    *ctx = session_table_lookup(tmp->s_table, session);
-    if (!*ctx) {
+    if (session_tab[session].slot_id == 0) {
+        LOGE("Session %lu is not open", session);
         return CKR_SESSION_HANDLE_INVALID;
     }
 
-    token_lock(tmp);
+    LOGV("Closing session %lu for slot 0x%08lx", session, session_tab[session].slot_id);
 
-    *tok = tmp;
+    session_tab[session].slot_id = 0;
 
     return CKR_OK;
 }
 
+CK_RV session_closeall(CK_SLOT_ID slot_id) {
+    struct SESSION *s;
 
-CK_RV session_login(session_ctx *ctx, CK_USER_TYPE user_type,
+    LOGV("Closing all sessions for slot %lu", slot_id);
+
+    SESSION_FOR_EACH(s,
+        if (s->slot_id == slot_id) {
+            LOGV("Closing session %zu ", _i);
+            s->slot_id = 0;
+        }
+    );
+
+    return CKR_OK;
+}
+
+CK_RV session_login(CK_SESSION_HANDLE session, CK_USER_TYPE user_type,
         CK_BYTE_PTR pin, CK_ULONG pin_len) {
+    TSS2_RC rc;
+    FAPI_CONTEXT *fctx;
+    char *path, *pinstring;
+    uint8_t *seal;
 
-    token *tok = session_ctx_get_token(ctx);
-    assert(tok);
-
-    twist tpin = NULL;
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    tpin = twistbin_new(pin, pin_len);
-    if (!tpin) {
-        return CKR_HOST_MEMORY;
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
     }
 
     // TODO Handle CKU_CONTEXT_SPECIFIC
     // TODO Support CKA_ALWAYS_AUTHENTICATE
     switch(user_type) {
         case CKU_SO:
-            /* falls-through */
+            path = tss_path_from_id(session_tab[session].slot_id);
+            break;
         case CKU_USER:
-            rv = token_login(tok, tpin, user_type);
-        break;
+            path = tss_userpath_from_id(session_tab[session].slot_id);
+            break;
         case CKU_CONTEXT_SPECIFIC:
-            rv = CKR_USER_TYPE_INVALID;
+            path = tss_userpath_from_id(session_tab[session].slot_id);
+//            return CKR_USER_TYPE_INVALID;
             break;
         default:
-            rv = CKR_USER_TYPE_INVALID;
+            return CKR_USER_TYPE_INVALID;
     }
 
-    twist_free(tpin);
+    rc = Fapi_Initialize(&fctx, NULL);
+    check_tssrc(rc, return CKR_GENERAL_ERROR);
 
-    return rv;
+    pinstring = malloc(pin_len + 1);
+    memcpy(pinstring, pin, pin_len);
+    pinstring[pin_len] = '\0';
+
+    rc = Fapi_SetAuthCB(fctx, auth_cb, pinstring);
+    check_tssrc(rc, Fapi_Finalize(&fctx); free(pinstring); return CKR_GENERAL_ERROR);
+
+    rc = Fapi_Unseal(fctx, path, &seal, NULL);
+    Fapi_Finalize(&fctx);
+    free(pinstring);
+    check_tssrc(rc, return CKR_GENERAL_ERROR);
+
+    memcpy(&session_tab[session].seal[0], seal, 64);
+    Fapi_Free(seal);
+
+    session_tab[session].seal_avail = 1;
+    session_tab[session].user_type = user_type;
+    session_tab[session].state = (user_type == CKU_SO)?
+                CKS_RW_SO_FUNCTIONS : CKS_RW_USER_FUNCTIONS;
+
+    return CKR_OK;
 }
 
-CK_RV session_logout(token *tok) {
+CK_RV session_logout(CK_SESSION_HANDLE session) {
+    if (session > MAX_NUM_OF_SESSIONS)
+        return CKR_SESSION_HANDLE_INVALID;
 
-    return token_logout(tok);
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
+
+    CK_SLOT_ID slot_id = session_tab[session].slot_id;
+
+    memset(&session_tab[session], 0, sizeof(session_tab[0]));
+
+    session_tab[session].slot_id = slot_id;
+
+    return CKR_OK;
 }
 
-CK_RV session_get_info(token *tok, session_ctx *ctx, CK_SESSION_INFO *info) {
+CK_RV session_get_info(CK_SESSION_HANDLE session, CK_SESSION_INFO *info) {
 
     check_pointer(info);
 
-    info->flags = session_ctx_flags_get(ctx);
-
-    info->slotID = tok->id;
-
-    info->state = session_ctx_state_get(ctx);
+    info->slotID = session_tab[session].slot_id;
+    info->state = session_tab[session].state;
+    info->flags = session_tab[session].flags;
 
     // We'll need to set this state error at some point, perhaps TSS2_RC's
     info->ulDeviceError = 0;

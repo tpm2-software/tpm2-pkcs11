@@ -11,7 +11,7 @@
 #include "checks.h"
 #include "digest.h"
 #include "session.h"
-#include "session_ctx.h"
+#include "log.h"
 #include "token.h"
 #include "tpm.h"
 
@@ -45,7 +45,7 @@ const EVP_MD *ossl_halg_from_mech(CK_MECHANISM_TYPE mech) {
     /* no return, not possible */
 }
 
-static CK_RV digest_sw_init(digest_op_data *opdata) {
+CK_RV digest_sw_init(digest_op_data *opdata) {
 
     const EVP_MD *md = ossl_halg_from_mech(opdata->mechanism);
     if (!md) {
@@ -70,7 +70,7 @@ static CK_RV digest_sw_init(digest_op_data *opdata) {
     return CKR_OK;
 }
 
-static CK_RV digest_sw_update(digest_op_data *opdata, const void *d, size_t cnt) {
+CK_RV digest_sw_update(digest_op_data *opdata, const void *d, size_t cnt) {
 
     int rc = EVP_DigestUpdate(opdata->mdctx, d, cnt);
     if (!rc) {
@@ -81,7 +81,7 @@ static CK_RV digest_sw_update(digest_op_data *opdata, const void *d, size_t cnt)
     return CKR_OK;
 }
 
-static CK_RV digest_sw_final(digest_op_data *opdata, CK_BYTE_PTR md, CK_ULONG_PTR s) {
+CK_RV digest_sw_final(digest_op_data *opdata, CK_BYTE_PTR md, CK_ULONG_PTR s) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -105,138 +105,4 @@ out:
     EVP_MD_CTX_destroy(opdata->mdctx);
 
     return rv;
-}
-
-CK_RV digest_init_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_MECHANISM_TYPE mechanism) {
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    if (!supplied_opdata) {
-        bool is_active = session_ctx_opdata_is_active(ctx);
-        if (is_active) {
-            return CKR_OPERATION_ACTIVE;
-        }
-    }
-
-    /*
-     * Start a hashing sequence with the TPM
-     */
-    token *tok = session_ctx_get_token(ctx);
-    assert(tok);
-    tpm_ctx *tpm = tok->tctx;
-
-    bool use_sw_hash = false;
-
-    uint32_t sequence_handle;
-    rv = tpm_hash_init(tpm, mechanism, &sequence_handle);
-    if (rv != CKR_OK) {
-        if (rv == CKR_MECHANISM_INVALID) {
-            use_sw_hash = true;
-        } else {
-            return rv;
-        }
-    }
-
-    digest_op_data *opdata = NULL;
-    if (!supplied_opdata) {
-        opdata = digest_op_data_new();
-        if (!opdata) {
-            return CKR_HOST_MEMORY;
-        }
-    } else {
-        opdata = supplied_opdata;
-    }
-
-    opdata->use_sw_hash = use_sw_hash;
-    opdata->mechanism = mechanism;
-
-    if (use_sw_hash) {
-        rv = digest_sw_init(opdata);
-        if (rv != CKR_OK) {
-            if (!supplied_opdata) {
-                digest_op_data_free(&opdata);
-            }
-            return rv;
-        }
-    } else {
-        opdata->sequence_handle = sequence_handle;
-    }
-
-    if (!supplied_opdata) {
-        /* Store everything for later */
-        session_ctx_opdata_set(ctx, operation_digest, opdata, (opdata_free_fn)digest_op_data_free);
-    }
-
-    return CKR_OK;
-}
-
-CK_RV digest_update_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_BYTE_PTR part, CK_ULONG part_len) {
-
-    check_pointer(part);
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    digest_op_data *opdata = NULL;
-    if (!supplied_opdata) {
-        rv = session_ctx_opdata_get(ctx, operation_digest, &opdata);
-        if (rv != CKR_OK) {
-            return rv;
-        }
-    } else {
-        opdata = supplied_opdata;
-    }
-
-    if (opdata->use_sw_hash) {
-        rv = digest_sw_update(opdata, part, part_len);
-    } else {
-        token *tok = session_ctx_get_token(ctx);
-        assert(tok);
-        tpm_ctx *tpm = tok->tctx;
-        rv = tpm_hash_update(tpm, opdata->sequence_handle, part, part_len);
-    }
-
-    return rv;
-}
-
-CK_RV digest_final_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_BYTE_PTR digest, CK_ULONG_PTR digest_len) {
-
-    check_pointer(digest);
-    check_pointer(digest_len);
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    digest_op_data *opdata = NULL;
-    if (!supplied_opdata) {
-        rv = session_ctx_opdata_get(ctx, operation_digest, &opdata);
-        if (rv != CKR_OK) {
-            return rv;
-        }
-    } else {
-        opdata = supplied_opdata;
-    }
-
-    if (opdata->use_sw_hash) {
-        rv = digest_sw_final(opdata, digest, digest_len);
-    } else {
-        token *tok = session_ctx_get_token(ctx);
-        assert(tok);
-        tpm_ctx *tpm = tok->tctx;
-        rv = tpm_hash_final(tpm, opdata->sequence_handle, digest, digest_len);
-    }
-
-    if (!supplied_opdata) {
-        session_ctx_opdata_clear(ctx);
-    }
-
-    return rv;
-}
-
-CK_RV digest_oneshot(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR digest, CK_ULONG_PTR digest_len) {
-
-    CK_RV rv = digest_update(ctx, data, data_len);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    return digest_final(ctx, digest, digest_len);
 }

@@ -19,7 +19,6 @@
 #define LOGMODULE test
 #include "log.h"
 #include "pkcs11.h"
-#include "db.h"
 
 /**
  * This program contains integration test for C_Initialize and C_Finalize.

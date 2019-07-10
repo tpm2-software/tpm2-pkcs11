@@ -6,213 +6,279 @@
 #include "checks.h"
 #include "encrypt.h"
 #include "session.h"
-#include "session_ctx.h"
+#include "log.h"
 #include "token.h"
 #include "tpm.h"
 
-typedef CK_RV (*tpm_op)(tpm_encrypt_data *tpm_enc_data, CK_BYTE_PTR in, CK_ULONG inlen, CK_BYTE_PTR out, CK_ULONG_PTR outlen);
+static CK_RV common_init(CK_SESSION_HANDLE session, operation op, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
 
-encrypt_op_data *encrypt_op_data_new(void) {
-
-    return (encrypt_op_data *)calloc(1, sizeof(encrypt_op_data));
-}
-
-void encrypt_op_data_free(encrypt_op_data **opdata) {
-
-    if (opdata) {
-        tpm_encrypt_data_free((*opdata)->tpm_enc_data);
-        free(*opdata);
-        *opdata = NULL;
-    }
-}
-
-static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, operation op, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+    CK_RSA_PKCS_OAEP_PARAMS_PTR params;
 
     check_pointer(mechanism);
 
-    token *tok = session_ctx_get_token(ctx);
-    assert(tok);
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
 
-    if (!supplied_opdata) {
-        bool is_active = session_ctx_opdata_is_active(ctx);
-        if (is_active) {
-            return CKR_OPERATION_ACTIVE;
+    switch (mechanism->mechanism) {
+    case CKM_RSA_X_509:
+    case CKM_RSA_PKCS:
+        break;
+    case CKM_RSA_PKCS_OAEP:
+        LOGV("OAEP mode selected");
+        if (!mechanism->pParameter) {
+            LOGE("OAEP without parameters");
+            return CKR_MECHANISM_PARAM_INVALID;
         }
-    }
-
-    tobject *tobj;
-    CK_RV rv = token_load_object(tok, key, &tobj);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    rv = object_mech_is_supported(tobj, mechanism);
-    if (rv != CKR_OK) {
-        tobject_user_decrement(tobj);
-        return rv;
-    }
-
-    encrypt_op_data *opdata;
-    if (!supplied_opdata) {
-        opdata = encrypt_op_data_new();
-        if (!opdata) {
-            tobject_user_decrement(tobj);
-            return CKR_HOST_MEMORY;
+        if (mechanism->ulParameterLen != sizeof(CK_RSA_PKCS_OAEP_PARAMS)) {
+            LOGE("Parameter size invalid, got %li wanted %zi",
+                 mechanism->ulParameterLen, sizeof(CK_RSA_PKCS_OAEP_PARAMS));
+            return CKR_MECHANISM_PARAM_INVALID;
         }
-    } else {
-        opdata = supplied_opdata;
+        params = (CK_RSA_PKCS_OAEP_PARAMS_PTR) mechanism->pParameter;
+        if (params->source == CKZ_DATA_SPECIFIED) {
+            LOGV("OAEP label of length %li provided.", params->ulSourceDataLen);
+            if (!params->pSourceData) {
+                LOGE("OAEP label pointer not set.");
+                return CKR_MECHANISM_PARAM_INVALID;
+            }
+            if (params->ulSourceDataLen >
+                    sizeof(session_tab[session].opdata.encryptdecrypt.oaep.pSourceData)) {
+                LOGE("OAEP param pSourceData too large.");
+                return CKR_MECHANISM_PARAM_INVALID;
+            }
+            memcpy(&session_tab[session].opdata.encryptdecrypt.oaep.pSourceData[0],
+                   params->pSourceData, params->ulSourceDataLen);
+            session_tab[session].opdata.encryptdecrypt.oaep.ulSourceDataLen =
+                    params->ulSourceDataLen;
+        } else {
+            LOGV("OAEP no label provided.");
+            if (params->ulSourceDataLen || params->pSourceData)
+                return CKR_MECHANISM_PARAM_INVALID;
+            session_tab[session].opdata.encryptdecrypt.oaep.ulSourceDataLen = 0;
+        }
+        session_tab[session].opdata.encryptdecrypt.oaep.hashAlg = params->hashAlg;
+        session_tab[session].opdata.encryptdecrypt.oaep.mgf = params->mgf;
+        break;
+    default:
+        LOGE("Mechanism not supported. Got 0x%lx", mechanism->mechanism);
+        return CKR_MECHANISM_INVALID;
     }
 
-    opdata->tobj = tobj;
-
-    rv = tpm_encrypt_data_init(tok->tctx, tobj->handle, tobj->unsealed_auth, mechanism, &opdata->tpm_enc_data);
-    if (rv != CKR_OK) {
-        tobject_user_decrement(tobj);
-        encrypt_op_data_free(&opdata);
-        return rv;
-    }
-
-    if (!supplied_opdata) {
-        session_ctx_opdata_set(ctx, op, opdata, (opdata_free_fn)encrypt_op_data_free);
-    }
+    session_tab[session].op = op;
+    session_tab[session].opdata.encryptdecrypt.key = key;
+    session_tab[session].opdata.encryptdecrypt.mtype = mechanism->mechanism;
+    session_tab[session].opdata.encryptdecrypt.cipher_size = 0;
+    session_tab[session].opdata.encryptdecrypt.plain_size = 0;
 
     return CKR_OK;
 }
 
-static CK_RV common_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, operation op,
-        CK_BYTE_PTR part, CK_ULONG part_len,
-        CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
-
-    check_pointer(part);
-    check_pointer(encrypted_part_len);
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    twist input = twistbin_new(part, part_len);
-    if (!input) {
-        return CKR_HOST_MEMORY;
-    }
-
-    twist output = NULL;
-
-    encrypt_op_data *opdata = NULL;
-    if (!supplied_opdata) {
-        rv = session_ctx_opdata_get(ctx, op, &opdata);
-        if (rv != CKR_OK) {
-            goto out;
-        }
-    } else {
-        opdata = supplied_opdata;
-    }
-
-    tpm_op fop;
-    switch(op) {
-    case operation_encrypt:
-        fop = tpm_encrypt;
-        break;
-    case operation_decrypt:
-        fop = tpm_decrypt;
-        break;
-    default:
-        return CKR_GENERAL_ERROR;
-    }
-
-    rv = fop(opdata->tpm_enc_data, part, part_len,
-            encrypted_part, encrypted_part_len);
-    if (rv != CKR_OK) {
-        goto out;
-    }
-
-    rv = CKR_OK;
-
-out:
-    twist_free(input);
-    twist_free(output);
-
-    return rv;
+CK_RV decrypt_init(CK_SESSION_HANDLE session, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
+    return common_init(session, operation_decrypt, mechanism, key);
 }
 
-static CK_RV common_final_op(session_ctx *ctx, encrypt_op_data *supplied_opdata, operation op,
-        CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
+CK_RV encrypt_init(CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+    return common_init(session, operation_encrypt, mechanism, key);
+}
 
-    /*
-     * We have no use for these.
-     */
-    UNUSED(last_part);
-    UNUSED(last_part_len);
+CK_RV decrypt_update(CK_SESSION_HANDLE session, CK_BYTE_PTR encrypted_part, CK_ULONG encrypted_part_len, CK_BYTE_PTR part, CK_ULONG_PTR part_len) {
+    CK_RV rv;
 
-    CK_RV rv = CKR_GENERAL_ERROR;
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
+    if (session_tab[session].op != operation_decrypt) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
 
-    /* nothing to do if opdata is supplied externally */
-    if (supplied_opdata) {
-        /* do not goto out, no opdata to clear */
+    if (sizeof(session_tab[session].opdata.encryptdecrypt.cipher) -
+            session_tab[session].opdata.encryptdecrypt.cipher_size < encrypted_part_len) {
+        LOGE("Total encrypted data exceeds internal buffer");
+        return CKR_ENCRYPTED_DATA_LEN_RANGE;
+    }
+
+    memcpy(&session_tab[session].opdata.encryptdecrypt.cipher[session_tab[session].opdata.encryptdecrypt.cipher_size],
+           encrypted_part, encrypted_part_len);
+    session_tab[session].opdata.encryptdecrypt.cipher_size += encrypted_part_len;
+
+    //TODO: Check for actually expected initial size
+    if (session_tab[session].opdata.encryptdecrypt.cipher_size < 10) {
+        LOGV("Part saved, waiting for minimum cipher buffer to start.");
+        *part_len = 0;
         return CKR_OK;
     }
 
-    encrypt_op_data *opdata = NULL;
-    rv = session_ctx_opdata_get(ctx, op, &opdata);
+    rv = tss_rsa_decrypt(session_tab[session].slot_id,
+                         session_tab[session].opdata.encryptdecrypt.key,
+                         &session_tab[session].seal[0],
+                         session_tab[session].opdata.encryptdecrypt.mtype,
+                         &session_tab[session].opdata.encryptdecrypt.oaep,
+                         &session_tab[session].opdata.encryptdecrypt.cipher[0],
+                         session_tab[session].opdata.encryptdecrypt.cipher_size,
+                         &session_tab[session].opdata.encryptdecrypt.plain[0],
+                         &session_tab[session].opdata.encryptdecrypt.plain_size);
     if (rv != CKR_OK) {
+        LOGE("Encountered error during decryption.");
         return rv;
     }
+    //TODO: Assuming that the wholse cipher is consumed for now
+    session_tab[session].opdata.encryptdecrypt.cipher_size = 0;
 
-    assert(opdata->tobj);
-    rv = tobject_user_decrement(opdata->tobj);
-    if (rv != CKR_OK) {
-        return rv;
-    }
+    if (session_tab[session].opdata.encryptdecrypt.plain_size < *part_len)
+        *part_len = session_tab[session].opdata.encryptdecrypt.plain_size;
 
-    session_ctx_opdata_clear(ctx);
+    memcpy(part, &session_tab[session].opdata.encryptdecrypt.plain, *part_len);
+    memmove(&session_tab[session].opdata.encryptdecrypt.plain,
+            &session_tab[session].opdata.encryptdecrypt.plain[*part_len],
+            session_tab[session].opdata.encryptdecrypt.plain_size - *part_len);
+    session_tab[session].opdata.encryptdecrypt.plain_size -= *part_len;
+
+    LOGV("Returning %li bytes for this part.", *part_len);
+
+    // TODO check for part==NULL and also return results for encrypted_part_len==0
 
     return CKR_OK;
 }
 
-CK_RV encrypt_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV decrypt_final(CK_SESSION_HANDLE session, CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
+    if (session_tab[session].op != operation_decrypt) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
 
-    return common_init_op(ctx, supplied_opdata, operation_encrypt, mechanism, key);
+    if (session_tab[session].opdata.encryptdecrypt.cipher_size != 0) {
+        LOGE("Cipher not fully consumed. %zi bytes left",
+             session_tab[session].opdata.encryptdecrypt.cipher_size);
+        return CKR_ENCRYPTED_DATA_LEN_RANGE;
+    }
+
+    if (!session_tab[session].opdata.encryptdecrypt.plain_size)
+        return CKR_OK;
+
+    if (!last_part_len || session_tab[session].opdata.encryptdecrypt.plain_size > *last_part_len) {
+        LOGE("Last part buffer too small.");
+        return CKR_BUFFER_TOO_SMALL;
+    }
+
+    *last_part_len = session_tab[session].opdata.encryptdecrypt.plain_size;
+    memcpy(last_part, &session_tab[session].opdata.encryptdecrypt.plain, *last_part_len);
+
+    return CKR_OK;
 }
 
-CK_RV decrypt_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV decrypt_oneshot(CK_SESSION_HANDLE session, CK_BYTE_PTR encrypted_data, CK_ULONG encrypted_data_len, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
 
-    return common_init_op(ctx, supplied_opdata, operation_decrypt, mechanism, key);
-}
-
-CK_RV encrypt_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR part, CK_ULONG part_len, CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
-
-    return common_update_op(ctx, supplied_opdata, operation_encrypt, part, part_len, encrypted_part, encrypted_part_len);
-}
-
-CK_RV decrypt_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR part, CK_ULONG part_len, CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
-
-    return common_update_op(ctx, supplied_opdata, operation_decrypt, part, part_len, encrypted_part, encrypted_part_len);
-}
-
-CK_RV encrypt_final_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR last_encrypted_part, CK_ULONG_PTR last_encrypted_part_len) {
-
-    return common_final_op(ctx, supplied_opdata, operation_encrypt, last_encrypted_part, last_encrypted_part_len);
-}
-
-CK_RV decrypt_final_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
-
-    return common_final_op(ctx, supplied_opdata, operation_decrypt, last_part, last_part_len);
-}
-
-CK_RV decrypt_oneshot_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR encrypted_data, CK_ULONG encrypted_data_len, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
-
-    CK_RV rv = decrypt_update_op(ctx, supplied_opdata, encrypted_data, encrypted_data_len,
+    CK_RV rv = decrypt_update(session, encrypted_data, encrypted_data_len,
             data, data_len);
     if (rv != CKR_OK || !data) {
         return rv;
     }
 
-    return decrypt_final_op(ctx, supplied_opdata, NULL, NULL);
+    return decrypt_final(session, NULL, NULL);
 }
 
-CK_RV encrypt_oneshot_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR encrypted_data, CK_ULONG_PTR encrypted_data_len) {
+CK_RV encrypt_update (CK_SESSION_HANDLE session,
+        CK_BYTE_PTR part, CK_ULONG part_len,
+        CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
 
-    CK_RV rv = encrypt_update_op (ctx, supplied_opdata, data, data_len, encrypted_data, encrypted_data_len);
+    CK_RV rv;
+
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
+    if (session_tab[session].op != operation_encrypt) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
+
+    if (sizeof(session_tab[session].opdata.encryptdecrypt.plain) -
+            session_tab[session].opdata.encryptdecrypt.plain_size < part_len) {
+        LOGE("Total encrypted data exceeds internal buffer");
+        return CKR_ENCRYPTED_DATA_LEN_RANGE;
+    }
+
+    memcpy(&session_tab[session].opdata.encryptdecrypt.plain[
+               session_tab[session].opdata.encryptdecrypt.plain_size],
+           part, part_len);
+    session_tab[session].opdata.encryptdecrypt.plain_size += part_len;
+
+    //TODO: Check for actually expected initial size
+    if (session_tab[session].opdata.encryptdecrypt.plain_size < 10) {
+        LOGV("Part saved, waiting for minimum plaintext buffer to start.");
+        *encrypted_part_len = 0;
+        return CKR_OK;
+    }
+
+    rv = CKR_OK;
+    //TODO
+/*    rv = tss_rsa_encrypt(session_tab[session].slot_id,
+                         session_tab[session].opdata.encryptdecrypt.key,
+                         session_tab[session].opdata.encryptdecrypt.mtype,
+                         &session_tab[session].opdata.encryptdecrypt.oaep,
+                         &session_tab[session].opdata.encryptdecrypt.plain[0],
+                         session_tab[session].opdata.encryptdecrypt.plain_size);
+                         &session_tab[session].opdata.encryptdecrypt.cipher[0],
+                         &session_tab[session].opdata.encryptdecrypt.cipher_size,
+*/    if (rv != CKR_OK) {
+        LOGE("Encountered error during decryption.");
+        return rv;
+    }
+    //TODO: Assuming that the whole plaintext is consumed for now
+    session_tab[session].opdata.encryptdecrypt.plain_size = 0;
+
+    if (session_tab[session].opdata.encryptdecrypt.cipher_size < *encrypted_part_len)
+        *encrypted_part_len = session_tab[session].opdata.encryptdecrypt.cipher_size;
+
+    memcpy(encrypted_part, &session_tab[session].opdata.encryptdecrypt.cipher,
+           *encrypted_part_len);
+    memmove(&session_tab[session].opdata.encryptdecrypt.cipher,
+            &session_tab[session].opdata.encryptdecrypt.cipher[*encrypted_part_len],
+            session_tab[session].opdata.encryptdecrypt.cipher_size - *encrypted_part_len);
+    session_tab[session].opdata.encryptdecrypt.cipher_size -= *encrypted_part_len;
+
+    LOGV("Returning %li bytes for this part.", *encrypted_part_len);
+
+    // TODO check for encrypted_part==NULL and also return results for part_len==0
+
+    return CKR_OK;
+}
+
+CK_RV encrypt_final(CK_SESSION_HANDLE session, CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
+    if (session_tab[session].op != operation_encrypt) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
+
+    if (session_tab[session].opdata.encryptdecrypt.plain_size != 0) {
+        LOGE("Plaintext not fully consumed. %zi bytes left",
+             session_tab[session].opdata.encryptdecrypt.plain_size);
+        return CKR_ENCRYPTED_DATA_LEN_RANGE;
+    }
+
+    if (!session_tab[session].opdata.encryptdecrypt.cipher_size)
+        return CKR_OK;
+
+    if (!last_part_len || session_tab[session].opdata.encryptdecrypt.cipher_size > *last_part_len) {
+        LOGE("Last part buffer too small.");
+        return CKR_BUFFER_TOO_SMALL;
+    }
+
+    *last_part_len = session_tab[session].opdata.encryptdecrypt.cipher_size;
+    memcpy(last_part, &session_tab[session].opdata.encryptdecrypt.cipher, *last_part_len);
+
+    return CKR_OK;
+}
+
+CK_RV encrypt_oneshot(CK_SESSION_HANDLE session, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR encrypted_data, CK_ULONG_PTR encrypted_data_len) {
+
+    CK_RV rv = encrypt_update (session, data, data_len, encrypted_data, encrypted_data_len);
     if (rv != CKR_OK || !encrypted_data) {
         return rv;
     }
 
-    return encrypt_final_op(ctx, supplied_opdata, NULL, NULL);
+    return encrypt_final(session, NULL, NULL);
 }

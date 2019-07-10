@@ -9,10 +9,12 @@
 #include "checks.h"
 #include "object.h"
 #include "pkcs11.h"
-#include "session_ctx.h"
 #include "tpm.h"
 #include "twist.h"
 #include "utils.h"
+
+CK_RV token_get_info(CK_SLOT_ID slotID, CK_TOKEN_INFO *info);
+CK_RV token_init(CK_SLOT_ID slotID, CK_BYTE_PTR pin, CK_ULONG pin_len, CK_BYTE_PTR label);
 
 typedef struct session_table session_table;
 typedef struct session_ctx session_ctx;
@@ -78,7 +80,7 @@ void token_free(token *t);
  */
 void token_free_list(token *t, size_t len);
 
-CK_RV token_get_info(token *t, CK_TOKEN_INFO *info);
+//CK_RV token_get_info(token *t, CK_TOKEN_INFO *info);
 
 /**
  * Causes a login event to be propagated through the token
@@ -119,9 +121,10 @@ CK_RV token_logout(token *tok);
  * @param new_len
  * @return
  */
-CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR old_pin, CK_ULONG old_len, CK_UTF8CHAR_PTR new_pin, CK_ULONG new_len);
+CK_RV token_setpin(CK_SESSION_HANDLE session, CK_UTF8CHAR_PTR old_pin, CK_ULONG old_len, CK_UTF8CHAR_PTR new_pin, CK_ULONG new_len);
 
-CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR new_pin, CK_ULONG new_len);
+CK_RV token_initpin(CK_SESSION_HANDLE session, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen);
+//CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR new_pin, CK_ULONG new_len);
 
 void token_lock(token *t);
 void token_unlock(token *t);

@@ -12,7 +12,7 @@ typedef struct token token;
 typedef struct session_ctx session_ctx;
 
 CK_RV key_gen (
-        session_ctx *ctx,
+        CK_SESSION_HANDLE session,
 
         CK_MECHANISM_PTR mechanism,
 

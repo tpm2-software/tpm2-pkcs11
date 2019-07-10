@@ -6,39 +6,56 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <tss2/tss2_fapi.h>
+
 #include "checks.h"
-#include "db.h"
 #include "pkcs11.h"
+#include "log.h"
 #include "slot.h"
 #include "token.h"
 #include "utils.h"
 
-static struct {
-    size_t token_cnt;
-    token *token;
-} global;
+/* We provide one empty token in a slot for each library invocation.
+   In order to detect that token, we the following variable. */
+CK_SLOT_ID emptyTokenSlot;
 
 CK_RV slot_init(void) {
+    CK_RV rv;
+    CK_SLOT_ID *slot_list;
+    CK_ULONG count, i;
 
-    return db_get_tokens(&global.token, &global.token_cnt);
+    rv = tss_get_card_ids(NULL, &count);
+    if (rv != CKR_OK)
+        return rv;
+
+    slot_list = calloc(count, sizeof(*slot_list));
+    if (!slot_list)
+        return CKR_GENERAL_ERROR;
+
+    rv = tss_get_card_ids(slot_list, &count);
+    if (rv != CKR_OK)
+        goto cleanup;
+
+    do {
+        emptyTokenSlot = (((CK_SLOT_ID) rand()) & 0x0ffffffe) + 1;
+        for (i = 0; i < count; i++) {
+            if (slot_list[i] == emptyTokenSlot) {
+                LOGV("Slot %i occupied, searching", emptyTokenSlot);
+                emptyTokenSlot = 0;
+                break;
+            }
+        }
+    } while (emptyTokenSlot == 0);
+
+    emptyTokenSlot |= EMPTY_TOKEN_BIT;
+
+cleanup:
+    free(slot_list);
+
+    return CKR_OK;
 }
 
 void slot_destroy(void) {
-
-    token_free_list(global.token, global.token_cnt);
-}
-
-token *slot_get_token(CK_SLOT_ID slot_id) {
-
-    size_t i;
-    for (i=0; i < global.token_cnt; i++) {
-        token *t = &global.token[i];
-        if (slot_id == t->id) {
-            return t;
-        }
-    }
-
-    return NULL;
 }
 
 CK_RV slot_get_list (CK_BYTE token_present, CK_SLOT_ID *slot_list, CK_ULONG_PTR count) {
@@ -51,72 +68,52 @@ CK_RV slot_get_list (CK_BYTE token_present, CK_SLOT_ID *slot_list, CK_ULONG_PTR 
 
     check_pointer(count);
 
-    if (!slot_list) {
-        *count = global.token_cnt;
-        return CKR_OK;
+    CK_RV rv;
+
+    rv = tss_get_card_ids(slot_list, count);
+    if (rv != CKR_OK) {
+        LOGE("Erro during tss access");
+        return rv;
     }
 
-    if (*count < global.token_cnt) {
-        return CKR_BUFFER_TOO_SMALL;
+    if (emptyTokenSlot) {
+        *count += 1;
+        if (slot_list) {
+            slot_list[*count - 1] = emptyTokenSlot;
+        }
     }
-
-    size_t i;
-    for (i=0; i < global.token_cnt; i++) {
-        token *t = &global.token[i];
-        slot_list[i] = t->id;
-    }
-
-    *count = global.token_cnt;
-
-    return CKR_OK;
+    return rv;
 }
 
 CK_RV slot_get_info (CK_SLOT_ID slot_id, CK_SLOT_INFO *info) {
-
-    token *token;
-    CK_TOKEN_INFO token_info;
-
+    UNUSED(slot_id);
     check_pointer(info);
 
-    token = slot_get_token(slot_id);
-    if (!token) {
-        return CKR_SLOT_ID_INVALID;
-    }
-
     memset(info, 0, sizeof(*info));
-
-    if (token_get_info(token, &token_info)) {
-        return CKR_GENERAL_ERROR;
-    }
-
-    str_padded_copy(info->manufacturerID, token_info.manufacturerID, sizeof(info->manufacturerID));
-    str_padded_copy(info->slotDescription, token_info.label, sizeof(info->slotDescription));
-    info->hardwareVersion = token_info.hardwareVersion;
-    info->firmwareVersion = token_info.firmwareVersion;
+    strcpy((char *)&info->slotDescription[0], "tpm2-pkcs11");
+    strcpy((char *)&info->manufacturerID[0], "tpm2-software");
 
     info->flags = CKF_TOKEN_PRESENT | CKF_HW_SLOT;
 
+    //TODO
+    info->hardwareVersion.major = 0;
+    info->hardwareVersion.minor = 0;
+    info->firmwareVersion.major = 0;
+    info->firmwareVersion.minor = 0;
     return CKR_OK;
 }
 
-
 CK_RV slot_mechanism_list_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE *mechanism_list, CK_ULONG_PTR count) {
-    token *t = slot_get_token(slot_id);
-    if (!t) {
-        return CKR_SLOT_ID_INVALID;
-    }
+    (void)(slot_id);
 
-    CK_RV rv = tpm2_getmechanisms(t->tctx, mechanism_list, count);
+    CK_RV rv = tpm2_getmechanisms(mechanism_list, count);
+
     return rv;
 }
 
 CK_RV slot_mechanism_info_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE type, CK_MECHANISM_INFO *info) {
-
+    (void)(slot_id);
     check_pointer(info);
-
-    if (!slot_get_token(slot_id)) {
-        return CKR_SLOT_ID_INVALID;
-    }
 
     /* TODO pull these from TPM, currently they match the simulator */
     CK_ULONG aes_min_keysize = 128/8; // in bytes

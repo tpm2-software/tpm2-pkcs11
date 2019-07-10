@@ -266,7 +266,7 @@ static inline CK_RV auth_min_ro_pub(session_ctx *ctx) {
 
 static inline CK_RV auth_min_ro_user(session_ctx *ctx) {
 
-    CK_STATE state = session_ctx_state_get(ctx);
+    CK_STATE state = 0;//session_ctx_state_get(ctx);
     switch(state) {
     case CKS_RO_USER_FUNCTIONS:
         /* falls-thru */
@@ -280,7 +280,7 @@ static inline CK_RV auth_min_ro_user(session_ctx *ctx) {
 
 static inline CK_RV auth_min_rw_user(session_ctx *ctx) {
 
-    CK_STATE state = session_ctx_state_get(ctx);
+    CK_STATE state = 0;//session_ctx_state_get(ctx);
     switch(state) {
     case CKS_RO_USER_FUNCTIONS:
         return CKR_SESSION_READ_ONLY;
@@ -293,7 +293,7 @@ static inline CK_RV auth_min_rw_user(session_ctx *ctx) {
 }
 
 static inline CK_RV auth_any_logged_in(session_ctx *ctx) {
-    CK_STATE state = session_ctx_state_get(ctx);
+    CK_STATE state = 0;//session_ctx_state_get(ctx);
     switch(state) {
     case CKS_RO_USER_FUNCTIONS:
     case CKS_RW_USER_FUNCTIONS:
@@ -315,7 +315,7 @@ static inline CK_RV auth_any_logged_in(session_ctx *ctx) {
  * error CKR_SESSION_READ_ONLY.
  */
 static inline CK_RV auth_set_pin_state(session_ctx *ctx) {
-    CK_STATE state = session_ctx_state_get(ctx);
+    CK_STATE state = 0;//session_ctx_state_get(ctx);
     switch(state) {
     case CKS_RW_PUBLIC_SESSION:
     case CKS_RW_SO_FUNCTIONS:
@@ -329,7 +329,7 @@ static inline CK_RV auth_set_pin_state(session_ctx *ctx) {
 
 static inline CK_RV auth_init_pin_state(session_ctx *ctx) {
 
-    CK_STATE state = session_ctx_state_get(ctx);
+    CK_STATE state = 0;//session_ctx_state_get(ctx);
     switch(state) {
     case CKS_RW_SO_FUNCTIONS:
         return CKR_OK;
@@ -404,7 +404,8 @@ CK_RV C_GetSlotInfo (CK_SLOT_ID slotID, CK_SLOT_INFO *info) {
 }
 
 CK_RV C_GetTokenInfo (CK_SLOT_ID slotID, CK_TOKEN_INFO *info) {
-    TOKEN_WITH_LOCK_BY_SLOT(token_get_info, slotID, info);
+    TOKEN_CALL_INIT(token_get_info, slotID, info);
+    //TOKEN_WITH_LOCK_BY_SLOT(token_get_info, slotID, info);
 }
 
 CK_RV C_WaitForSlotEvent (CK_FLAGS flags, CK_SLOT_ID *slot, void *pReserved) {
@@ -420,15 +421,17 @@ CK_RV C_GetMechanismInfo (CK_SLOT_ID slotID, CK_MECHANISM_TYPE type, CK_MECHANIS
 }
 
 CK_RV C_InitToken (CK_SLOT_ID slotID, CK_BYTE_PTR pin, CK_ULONG pin_len, CK_BYTE_PTR label) {
-    TOKEN_UNSUPPORTED;
+    TOKEN_CALL_INIT(token_init, slotID, pin, pin_len, label);
 }
 
 CK_RV C_InitPIN (CK_SESSION_HANDLE session, CK_UTF8CHAR_PTR pin, CK_ULONG pin_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_INIT_PIN_STATE(token_initpin, session, pin, pin_len);
+    TOKEN_CALL_INIT(token_initpin, session, pin, pin_len);
+//    TOKEN_WITH_LOCK_BY_SESSION_INIT_PIN_STATE(token_initpin, session, pin, pin_len);
 }
 
 CK_RV C_SetPIN (CK_SESSION_HANDLE session, CK_UTF8CHAR_PTR old_pin, CK_ULONG old_len, CK_UTF8CHAR_PTR new_pin, CK_ULONG new_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_SET_PIN_STATE(token_setpin, session, old_pin, old_len, new_pin, new_len);
+    TOKEN_CALL_INIT(token_setpin, session, old_pin, old_len, new_pin, new_len);
+//    TOKEN_WITH_LOCK_BY_SESSION_SET_PIN_STATE(token_setpin, session, old_pin, old_len, new_pin, new_len);
 }
 
 CK_RV C_OpenSession (CK_SLOT_ID slotID, CK_FLAGS flags, void *application, CK_NOTIFY notify, CK_SESSION_HANDLE *session) {
@@ -444,7 +447,8 @@ CK_RV C_CloseAllSessions (CK_SLOT_ID slotID) {
 }
 
 CK_RV C_GetSessionInfo (CK_SESSION_HANDLE session, CK_SESSION_INFO *info) {
-    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO_KEEP_CTX(session_get_info, session, info);
+    TOKEN_CALL_INIT(session_get_info, session, info);
+//    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO_KEEP_CTX(session_get_info, session, info);
 }
 
 CK_RV C_GetOperationState (CK_SESSION_HANDLE session, CK_BYTE_PTR operation_state, CK_ULONG_PTR operation_state_len) {
@@ -456,11 +460,13 @@ CK_RV C_SetOperationState (CK_SESSION_HANDLE session, CK_BYTE_PTR operation_stat
 }
 
 CK_RV C_Login (CK_SESSION_HANDLE session, CK_USER_TYPE user_type, CK_BYTE_PTR pin, CK_ULONG pin_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(session_login, session, user_type, pin, pin_len);
+    TOKEN_CALL_INIT(session_login, session, user_type, pin, pin_len)
+//    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(session_login, session, user_type, pin, pin_len);
 }
 
 CK_RV C_Logout (CK_SESSION_HANDLE session) {
-    TOKEN_WITH_LOCK_BY_SESSION_LOGGED_IN(session_logout, session);
+    TOKEN_CALL_INIT(session_logout, session);
+//    TOKEN_WITH_LOCK_BY_SESSION_LOGGED_IN(session_logout, session);
 }
 
 CK_RV C_CreateObject (CK_SESSION_HANDLE session, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OBJECT_HANDLE *object) {
@@ -472,7 +478,8 @@ CK_RV C_CopyObject (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRI
 }
 
 CK_RV C_DestroyObject (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RW(object_destroy, session, object);
+    TOKEN_CALL_INIT(object_destroy, session, object);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RW(object_destroy, session, object);
 }
 
 CK_RV C_GetObjectSize (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ULONG_PTR size) {
@@ -480,7 +487,8 @@ CK_RV C_GetObjectSize (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_UL
 }
 
 CK_RV C_GetAttributeValue (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
-    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(object_get_attributes, session, object, templ, count);
+    TOKEN_CALL_INIT(object_get_attributes, session, object, templ, count);
+//    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(object_get_attributes, session, object, templ, count);
 }
 
 CK_RV C_SetAttributeValue (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
@@ -488,59 +496,73 @@ CK_RV C_SetAttributeValue (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, C
 }
 
 CK_RV C_FindObjectsInit (CK_SESSION_HANDLE session, CK_ATTRIBUTE *templ, CK_ULONG count) {
-    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(object_find_init, session, templ, count);
+    TOKEN_CALL_INIT(object_find_init, session, templ, count);
+//    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(object_find_init, session, templ, count);
 }
 
 CK_RV C_FindObjects (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE *object, CK_ULONG max_object_count, CK_ULONG_PTR object_count) {
-    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(object_find, session, object, max_object_count, object_count);
+    TOKEN_CALL_INIT(object_find, session, object, max_object_count, object_count);
+//    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(object_find, session, object, max_object_count, object_count);
 }
 
 CK_RV C_FindObjectsFinal (CK_SESSION_HANDLE session) {
-    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(object_find_final, session);
+    TOKEN_CALL_INIT(object_find_final, session);
+//    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(object_find_final, session);
 }
 
 CK_RV C_EncryptInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(encrypt_init, session, mechanism, key);
+    TOKEN_CALL_INIT(encrypt_init, session, mechanism, key);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(encrypt_init, session, mechanism, key);
 }
 
 CK_RV C_Encrypt (CK_SESSION_HANDLE session, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR encrypted_data, CK_ULONG_PTR encrypted_data_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(encrypt_oneshot, session, data, data_len, encrypted_data, encrypted_data_len);
+    TOKEN_CALL_INIT(encrypt_oneshot, session, data, data_len, encrypted_data, encrypted_data_len);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(encrypt_oneshot, session, data, data_len, encrypted_data, encrypted_data_len);
 }
 
 CK_RV C_EncryptUpdate (CK_SESSION_HANDLE session, CK_BYTE_PTR part, CK_ULONG part_len, CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(encrypt_update, session, part, part_len, encrypted_part, encrypted_part_len);
+    TOKEN_CALL_INIT(encrypt_update, session, part, part_len, encrypted_part, encrypted_part_len);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(encrypt_update, session, part, part_len, encrypted_part, encrypted_part_len);
 }
 
 CK_RV C_EncryptFinal (CK_SESSION_HANDLE session, CK_BYTE_PTR last_encrypted_part, CK_ULONG_PTR last_encrypted_part_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(encrypt_final, session, last_encrypted_part, last_encrypted_part_len);
+    TOKEN_CALL_INIT(encrypt_final, session, last_encrypted_part, last_encrypted_part_len);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(encrypt_final, session, last_encrypted_part, last_encrypted_part_len);
 }
 
 CK_RV C_DecryptInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(decrypt_init, session, mechanism, key);
+    TOKEN_CALL_INIT(decrypt_init, session, mechanism, key);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(decrypt_init, session, mechanism, key);
 }
 
 CK_RV C_Decrypt (CK_SESSION_HANDLE session, CK_BYTE_PTR encrypted_data, CK_ULONG encrypted_data_len, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(decrypt_oneshot, session, encrypted_data, encrypted_data_len, data, data_len);
+    TOKEN_CALL_INIT(decrypt_oneshot, session, encrypted_data, encrypted_data_len, data, data_len);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(decrypt_oneshot, session, encrypted_data, encrypted_data_len, data, data_len);
 }
 
 CK_RV C_DecryptUpdate (CK_SESSION_HANDLE session, CK_BYTE_PTR encrypted_part, CK_ULONG encrypted_part_len, CK_BYTE_PTR part, CK_ULONG_PTR part_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(decrypt_update, session, encrypted_part, encrypted_part_len, part, part_len);
+    TOKEN_CALL_INIT(decrypt_update, session, encrypted_part, encrypted_part_len, part, part_len);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(decrypt_update, session, encrypted_part, encrypted_part_len, part, part_len);
 }
 
 CK_RV C_DecryptFinal (CK_SESSION_HANDLE session, CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(decrypt_final, session, last_part, last_part_len);
+    TOKEN_CALL_INIT(decrypt_final, session, last_part, last_part_len);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(decrypt_final, session, last_part, last_part_len);
 }
 
 CK_RV C_DigestInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(digest_init, session, mechanism);
+    TOKEN_UNSUPPORTED;
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(digest_init, session, mechanism);
 }
 
 CK_RV C_Digest (CK_SESSION_HANDLE session, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR digest, CK_ULONG_PTR digest_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(digest_oneshot, session, data, data_len, digest, digest_len);
+    TOKEN_UNSUPPORTED;
+    //TOKEN_WITH_LOCK_BY_SESSION_USER_RO(digest_oneshot, session, data, data_len, digest, digest_len);
 }
 
 CK_RV C_DigestUpdate (CK_SESSION_HANDLE session, CK_BYTE_PTR part, CK_ULONG part_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(digest_update, session, part, part_len);
+    TOKEN_UNSUPPORTED;
+    //TOKEN_WITH_LOCK_BY_SESSION_USER_RO(digest_update, session, part, part_len);
 }
 
 CK_RV C_DigestKey (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE key) {
@@ -548,23 +570,28 @@ CK_RV C_DigestKey (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE key) {
 }
 
 CK_RV C_DigestFinal (CK_SESSION_HANDLE session, CK_BYTE_PTR digest, CK_ULONG_PTR digest_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(digest_final, session, digest, digest_len);
+    TOKEN_UNSUPPORTED;
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(digest_final, session, digest, digest_len);
 }
 
 CK_RV C_SignInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(sign_init, session, mechanism, key);
+    TOKEN_CALL_INIT(sign_init, session, mechanism, key);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(sign_init, session, mechanism, key);
 }
 
 CK_RV C_Sign (CK_SESSION_HANDLE session, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG_PTR signature_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(sign, session, data, data_len, signature, signature_len);
+    TOKEN_CALL_INIT(sign, session, data, data_len, signature, signature_len);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(sign, session, data, data_len, signature, signature_len);
 }
 
 CK_RV C_SignUpdate (CK_SESSION_HANDLE session, CK_BYTE_PTR part, CK_ULONG part_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(sign_update, session, part, part_len);
+    TOKEN_CALL_INIT(sign_update, session, part, part_len);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(sign_update, session, part, part_len);
 }
 
 CK_RV C_SignFinal (CK_SESSION_HANDLE session, CK_BYTE_PTR signature, CK_ULONG_PTR signature_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(sign_final, session, signature, signature_len);
+    TOKEN_CALL_INIT(sign_final, session, signature, signature_len);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(sign_final, session, signature, signature_len);
 }
 
 CK_RV C_SignRecoverInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
@@ -576,19 +603,23 @@ CK_RV C_SignRecover (CK_SESSION_HANDLE session, CK_BYTE_PTR data, CK_ULONG data_
 }
 
 CK_RV C_VerifyInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(verify_init, session, mechanism, key);
+    TOKEN_CALL_INIT(verify_init, session, mechanism, key);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(verify_init, session, mechanism, key);
 }
 
 CK_RV C_Verify (CK_SESSION_HANDLE session, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG signature_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(verify, session, data, data_len, signature, signature_len);
+    TOKEN_CALL_INIT(verify, session, data, data_len, signature, signature_len);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(verify, session, data, data_len, signature, signature_len);
 }
 
 CK_RV C_VerifyUpdate (CK_SESSION_HANDLE session, CK_BYTE_PTR part, CK_ULONG part_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(verify_update, session, part, part_len);
+    TOKEN_CALL_INIT(verify_update, session, part, part_len);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(verify_update, session, part, part_len);
 }
 
 CK_RV C_VerifyFinal (CK_SESSION_HANDLE session, CK_BYTE_PTR signature, CK_ULONG signature_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(verify_final, session, signature, signature_len);
+    TOKEN_CALL_INIT(verify_final, session, signature, signature_len);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(verify_final, session, signature, signature_len);
 }
 
 CK_RV C_VerifyRecoverInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
@@ -620,7 +651,8 @@ CK_RV C_GenerateKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_ATTR
 }
 
 CK_RV C_GenerateKeyPair (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_ATTRIBUTE *public_key_template, CK_ULONG public_key_attribute_count, CK_ATTRIBUTE *private_key_template, CK_ULONG private_key_attribute_count, CK_OBJECT_HANDLE *public_key, CK_OBJECT_HANDLE *private_key) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RW(key_gen, session, mechanism, public_key_template, public_key_attribute_count, private_key_template, private_key_attribute_count, public_key, private_key);
+    TOKEN_CALL_INIT(key_gen, session, mechanism, public_key_template, public_key_attribute_count, private_key_template, private_key_attribute_count, public_key, private_key);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RW(key_gen, session, mechanism, public_key_template, public_key_attribute_count, private_key_template, private_key_attribute_count, public_key, private_key);
 }
 
 CK_RV C_WrapKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE wrapping_key, CK_OBJECT_HANDLE key, CK_BYTE_PTR wrapped_key, CK_ULONG_PTR wrapped_key_len) {
@@ -636,11 +668,12 @@ CK_RV C_DeriveKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT
 }
 
 CK_RV C_SeedRandom (CK_SESSION_HANDLE session, CK_BYTE_PTR seed, CK_ULONG seed_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(seed_random, session, seed, seed_len);
+    TOKEN_UNSUPPORTED;
 }
 
 CK_RV C_GenerateRandom (CK_SESSION_HANDLE session, CK_BYTE_PTR random_data, CK_ULONG random_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(random_get, session, random_data, random_len);
+    TOKEN_CALL_INIT(random_get, random_data, random_len);
+//    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(random_get, session, random_data, random_len);
 }
 
 CK_RV C_GetFunctionStatus (CK_SESSION_HANDLE session) {

@@ -10,12 +10,11 @@
 #include <openssl/rand.h>
 #include <openssl/rsa.h>
 
+#include "session.h"
 #include "checks.h"
 #include "digest.h"
 #include "encrypt.h"
 #include "log.h"
-#include "session.h"
-#include "session_ctx.h"
 #include "sign.h"
 #include "token.h"
 #include "tpm.h"
@@ -30,6 +29,7 @@ struct sign_opdata {
     encrypt_op_data *encrypt_opdata;
 };
 
+#if 0
 static sign_opdata *sign_opdata_new(void) {
     return calloc(1, sizeof(sign_opdata));
 }
@@ -45,7 +45,7 @@ static void sign_opdata_free(sign_opdata **opdata) {
 
     *opdata = NULL;
 }
-
+#endif /*0*/
 
 static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
 
@@ -82,6 +82,14 @@ static bool is_mech_supported(CK_MECHANISM_TYPE mech) {
         /* falls-thru */
     case CKM_SHA512_RSA_PKCS:
         /* falls-thru */
+    case CKM_SHA1_RSA_PKCS_PSS:
+        /* falls-thru */
+    case CKM_SHA256_RSA_PKCS_PSS:
+        /* falls-thru */
+    case CKM_SHA384_RSA_PKCS_PSS:
+        /* falls-thru */
+    case CKM_SHA512_RSA_PKCS_PSS:
+        /* falls-thru */
     case CKM_AES_CBC:
         /* falls-thru */
     case CKM_ECDSA:
@@ -94,7 +102,7 @@ static bool is_mech_supported(CK_MECHANISM_TYPE mech) {
     return false;
 }
 
-static CK_RV ec_fixup_size(CK_MECHANISM_TYPE mech, tobject *tobj, CK_ULONG_PTR signature_len) {
+CK_RV ec_fixup_size(CK_MECHANISM_TYPE mech, tobject *tobj, CK_ULONG_PTR signature_len) {
 
     if (mech != CKM_ECDSA &&
         mech != CKM_ECDSA_SHA1) {
@@ -159,6 +167,62 @@ static CK_RV ec_fixup_size(CK_MECHANISM_TYPE mech, tobject *tobj, CK_ULONG_PTR s
 }
 
 
+static CK_RV common_init2(operation op, CK_SESSION_HANDLE session, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
+
+    check_pointer(mechanism);
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
+
+    bool is_mech_sup = is_mech_supported(mechanism->mechanism);
+    if (!is_mech_sup) {
+        LOGE("Mechanism not supported. Got 0x%lx", mechanism->mechanism);
+        return CKR_MECHANISM_INVALID;
+    }
+    LOGV("Signature mechanism is 0x%lx", mechanism->mechanism);
+
+    if (mechanism->pParameter) {
+        LOGE("Mechanism parameter not supported");
+        return CKR_MECHANISM_INVALID;
+    }
+
+    digest_op_data *digest_opdata = NULL;
+    bool do_hash = is_hashing_needed(mechanism->mechanism);
+    if (do_hash) {
+
+        digest_opdata = digest_op_data_new();
+        if (!digest_opdata) {
+            LOGE("Out of memory");
+            return CKR_HOST_MEMORY;
+        }
+
+        digest_opdata->use_sw_hash = true;
+        digest_opdata->mechanism = mechanism->mechanism;
+
+        rv = digest_sw_init(digest_opdata);
+        if (rv != CKR_OK) {
+            LOGE("Digest init failed");
+            digest_op_data_free(&digest_opdata);
+            return rv;
+        }
+    }
+
+    if (session_tab[session].opdata.signverify.digest_opdata)
+        digest_op_data_free(&session_tab[session].opdata.signverify.digest_opdata);
+
+    session_tab[session].op = op;
+    session_tab[session].opdata.signverify.key = key;
+    session_tab[session].opdata.signverify.do_hash = do_hash;
+    session_tab[session].opdata.signverify.mtype = mechanism->mechanism;
+    session_tab[session].opdata.signverify.digest_opdata = digest_opdata;
+
+    return CKR_OK;
+}
+
+#if 0
 static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
 
     check_pointer(mechanism);
@@ -166,7 +230,8 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
     CK_RV rv = CKR_GENERAL_ERROR;
 
     bool is_mech_sup = is_mech_supported(mechanism->mechanism);
-    if (!is_mech_sup) {
+     if (!is_mech_sup) {
+        LOGE("Mechanism not supported. Got 0x%lx", mechanism->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
@@ -247,17 +312,49 @@ static CK_RV common_update(operation op, session_ctx *ctx, CK_BYTE_PTR part, CK_
 
     return CKR_OK;
 }
+#endif /* 0 */
 
-CK_RV sign_init(session_ctx *ctx, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+static CK_RV common_update2(operation op, CK_SESSION_HANDLE session, CK_BYTE_PTR part, CK_ULONG part_len) {
 
-    return common_init(operation_sign, ctx, mechanism, key);
+    check_pointer(part);
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
+
+    if (session_tab[session].op != op) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
+
+    if (session_tab[session].opdata.signverify.do_hash) {
+        rv = digest_sw_update(session_tab[session].opdata.signverify.digest_opdata, part, part_len);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+    } else {
+        twist tmp = twistbin_append(session_tab[session].opdata.signverify.buffer, part, part_len);
+        if (!tmp) {
+            return CKR_HOST_MEMORY;
+        }
+        session_tab[session].opdata.signverify.buffer = tmp;
+    }
+
+    return CKR_OK;
 }
 
-CK_RV sign_update(session_ctx *ctx, CK_BYTE_PTR part, CK_ULONG part_len) {
+CK_RV sign_init(CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
-    return common_update(operation_sign, ctx, part, part_len);
+    return common_init2(operation_sign, session, mechanism, key);
 }
 
+CK_RV sign_update(CK_SESSION_HANDLE session, CK_BYTE_PTR part, CK_ULONG part_len) {
+
+    return common_update2(operation_sign, session, part, part_len);
+}
+
+#if 0
 static CK_RV pkcs1_5_build_struct(CK_MECHANISM_TYPE mech,
         CK_BYTE_PTR hash, CK_ULONG hash_len,
         char **built, size_t *built_len) {
@@ -363,8 +460,9 @@ static CK_RV apply_pkcs_1_5_pad(tobject *tobj, char *built, size_t built_len, ch
 
     return CKR_OK;
 }
+#endif
 
-CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signature_len, bool is_oneshot) {
+CK_RV sign_final_ex(CK_SESSION_HANDLE session, CK_BYTE_PTR signature, CK_ULONG_PTR signature_len, bool is_oneshot) {
 
     check_pointer(signature_len);
 
@@ -372,36 +470,30 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    CK_BYTE_PTR hash = NULL;
+    CK_BYTE hash[1024];
     CK_ULONG hash_len = 0;
 
-    sign_opdata *opdata = NULL;
-    rv = session_ctx_opdata_get(ctx, operation_sign, &opdata);
-    if (rv != CKR_OK) {
-        return rv;
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
     }
-    assert(opdata);
 
-    token *tok = session_ctx_get_token(ctx);
-    assert(tok);
+    if (session_tab[session].op != operation_sign) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
 
-    tpm_ctx *tpm = tok->tctx;
+    LOGV("Hash before signing: %s", (session_tab[session].opdata.signverify.do_hash)? "true":"false");
 
-    if (opdata->do_hash) {
+    if (session_tab[session].opdata.signverify.do_hash) {
 
-        hash_len = utils_get_halg_size(opdata->mtype);
+        hash_len = utils_get_halg_size(session_tab[session].opdata.signverify.mtype);
 
-        hash = malloc(hash_len);
-        if (!hash) {
-            LOGE("oom");
-            rv = CKR_HOST_MEMORY;
-            goto session_out;
-        }
-
-        rv = digest_final_op(ctx, opdata->digest_opdata, hash, &hash_len);
+        rv = digest_sw_final(session_tab[session].opdata.signverify.digest_opdata, hash, &hash_len);
         if (rv != CKR_OK) {
             goto session_out;
         }
+    } else {
+        hash_len = twist_len(session_tab[session].opdata.signverify.buffer);
+        memcpy(hash, (CK_BYTE_PTR)session_tab[session].opdata.signverify.buffer, hash_len);
     }
 
     /*
@@ -416,11 +508,13 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
      * build digest info ASN1 structure, apply padding and RSA_Decrypt() AND the signing structure
      * is PKCS1.5
      */
-    bool is_raw_sign = utils_mech_is_raw_sign(opdata->mtype);
-    bool is_sw_hash = opdata->digest_opdata && opdata->digest_opdata->use_sw_hash;
+/* TODO make the raw sign via decrypt work */
+#if 0
+    bool is_raw_sign = utils_mech_is_raw_sign(session_tab[session].opdata.signverify.mtype);
+    bool is_sw_hash = session_tab[session].opdata.signverify.digest_opdata && session_tab[session].opdata.signverify.digest_opdata->use_sw_hash;
     if (is_raw_sign || is_sw_hash) {
-
-        bool is_rsa_pkcs1_5 = utils_mech_is_rsa_pkcs(opdata->mtype);
+        return CKR_FUNCTION_REJECTED;
+        bool is_rsa_pkcs1_5 = utils_mech_is_rsa_pkcs(session_tab[session].opdata.signverify.mtype);
         if (!is_rsa_pkcs1_5) {
             LOGE("Do not support synthesizing non PKCS 1_5 signing/padding schemes");
             return CKR_MECHANISM_INVALID;
@@ -430,7 +524,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
         char *built = NULL;
         size_t built_len = 0;
 
-        if(opdata->do_hash) {
+        if(session_tab[session].opdata.signverify.do_hash) {
             /*
              * Ok we did the hash, AND because of the entry condition, it's a SW hash, as is_raw_sign
              * means we didn't do the hashing. In this case, hash and hash_len should be set with
@@ -438,9 +532,9 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
              */
             assert(hash);
             assert(hash_len);
-            assert(!opdata->buffer);
+            assert(!session_tab[session].opdata.signverify.buffer);
 
-            rv = pkcs1_5_build_struct(opdata->mtype, hash, hash_len, &built, &built_len);
+            rv = pkcs1_5_build_struct(session_tab[session].opdata.signverify.mtype, hash, hash_len, &built, &built_len);
             if (rv != CKR_OK) {
                 return rv;
             }
@@ -454,10 +548,10 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
              */
             assert(!hash);
             assert(!hash_len);
-            assert(opdata->buffer);
+            assert(session_tab[session].opdata.signverify.buffer);
 
-            built = (char *)opdata->buffer;
-            built_len = twist_len(opdata->buffer);
+            built = (char *)session_tab[session].opdata.signverify.buffer;
+            built_len = twist_len(session_tab[session].opdata.signverify.buffer);
         }
 
         /* apply padding */
@@ -485,7 +579,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
         };
 
         /* RSA Decrypt is the RSA operation with the private key, which is what we want */
-        rv = decrypt_init_op(ctx, encrypt_opdata, &mechanism, opdata->tobj->id);
+        decrypt_init_op(ctx, encrypt_opdata, &mechanism, opdata->tobj->id);
         if (rv != CKR_OK) {
             free(padded);
             encrypt_op_data_free(&encrypt_opdata);
@@ -513,29 +607,28 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
             goto session_out;
         }
     } else {
-
+#endif /*0*/
+{
         /*
          * CKM_ECDSA is never considered a "raw sign" since the TPM natively supports it
          * by setting the hashalg to TPM2_ALG_NULL. So just make sure that we propagate
          * the raw data provided (hash) into the hash variable and perform a sign.
          */
-        if (opdata->mtype == CKM_ECDSA){
+        if (session_tab[session].opdata.signverify.mtype == CKM_ECDSA){
             assert(!hash);
             assert(!hash_len);
-            assert(opdata->buffer);
-            hash_len = twist_len(opdata->buffer);
+            assert(session_tab[session].opdata.signverify.buffer);
+            hash_len = twist_len(session_tab[session].opdata.signverify.buffer);
             assert(hash_len >= 20); /* Minimum for SHA1 */
-            hash = malloc(hash_len);
-            if (!hash) {
-                LOGE("oom");
-                rv = CKR_HOST_MEMORY;
-                goto session_out;
-            }
 
-            memcpy(hash, opdata->buffer, hash_len);
+            memcpy(hash, session_tab[session].opdata.signverify.buffer, hash_len);
         }
 
-        rv = tpm_sign(tpm, opdata->tobj, opdata->mtype, hash, hash_len, signature, signature_len);
+        rv = tpm_sign(session_tab[session].slot_id,
+                      session_tab[session].opdata.signverify.key,
+                      &session_tab[session].seal[0],
+                      session_tab[session].opdata.signverify.mtype,
+                      hash, hash_len, signature, signature_len);
         if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
             goto session_out;
         }
@@ -553,36 +646,38 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
     if (reset_ctx) {
         /* ec signature size is not stable between calls, fix it up */
         CK_RV tmp; /* we must not overwrite rv */
-        tmp = ec_fixup_size(opdata->mtype, opdata->tobj, signature_len);
+/*        tmp = ec_fixup_size(session_tab[session].opdata.signverify.mtype, opdata->tobj, signature_len);
         if (tmp != CKR_OK) {
             reset_ctx = false;
             goto session_out;
         }
-
-        if (opdata->do_hash) {
+*/
+        if (session_tab[session].opdata.signverify.do_hash) {
             /* reset the hashing state */
             digest_op_data *new_digest_state = digest_op_data_new();
             if (!new_digest_state) {
                 rv = CKR_HOST_MEMORY;
-                reset_ctx = false;
+                //reset_ctx = false;
                 goto session_out;
             }
 
-            assert(opdata->digest_opdata);
+            assert(session_tab[session].opdata.signverify.digest_opdata);
 
-            tmp = digest_init_op(ctx, new_digest_state, opdata->digest_opdata->mechanism);
+            tmp = digest_sw_init(new_digest_state);
             if (tmp != CKR_OK) {
                 digest_op_data_free(&new_digest_state);
-                reset_ctx = false;
+                //reset_ctx = false;
                 goto session_out;
             }
+            new_digest_state->use_sw_hash = true;
+            new_digest_state->mechanism = session_tab[session].opdata.signverify.digest_opdata->mechanism;
 
-            digest_op_data_free(&opdata->digest_opdata);
-            opdata->digest_opdata = new_digest_state;
+            digest_op_data_free(&session_tab[session].opdata.signverify.digest_opdata);
+            session_tab[session].opdata.signverify.digest_opdata = new_digest_state;
 
         } else if (is_oneshot) {
-            twist_free(opdata->buffer);
-            opdata->buffer = NULL;
+            twist_free(session_tab[session].opdata.signverify.buffer);
+            session_tab[session].opdata.signverify.buffer = NULL;
         }
     } else {
         /* not resetting the state, and all is well */
@@ -591,100 +686,82 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
 
 session_out:
 
-    assert(opdata->tobj);
-    if (!reset_ctx) {
-        CK_RV tmp_rv = tobject_user_decrement(opdata->tobj);
-        if (tmp_rv != CKR_OK && rv == CKR_OK) {
-            rv = tmp_rv;
-        }
-    }
-
-    if (!reset_ctx) {
-        session_ctx_opdata_clear(ctx);
-    }
-
-    free(hash);
+    session_tab[session].op = 0;
 
     return rv;
 }
 
-CK_RV sign(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG *signature_len) {
+CK_RV sign(CK_SESSION_HANDLE session, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG *signature_len) {
 
-    CK_RV rv = sign_update(ctx, data, data_len);
+    CK_RV rv = sign_update(session, data, data_len);
     if (rv != CKR_OK) {
         return rv;
     }
-    return sign_final_ex(ctx, signature, signature_len, true);
+    return sign_final_ex(session, signature, signature_len, true);
 }
 
-CK_RV verify_init (session_ctx *ctx, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+CK_RV verify_init (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
-    return common_init(operation_verify, ctx, mechanism, key);
+    return common_init2(operation_verify, session, mechanism, key);
 }
 
-CK_RV verify_update (session_ctx *ctx, CK_BYTE_PTR part, CK_ULONG part_len) {
+CK_RV verify_update (CK_SESSION_HANDLE session, CK_BYTE_PTR part, CK_ULONG part_len) {
 
-    return common_update(operation_verify, ctx, part, part_len);
+    return common_update2(operation_verify, session, part, part_len);
 }
 
-CK_RV verify_final (session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG signature_len) {
+CK_RV verify_final (CK_SESSION_HANDLE session, CK_BYTE_PTR signature, CK_ULONG signature_len) {
 
     check_pointer(signature);
     check_pointer(signature_len);
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    sign_opdata *opdata = NULL;
-    rv = session_ctx_opdata_get(ctx, operation_verify, &opdata);
-    if (rv != CKR_OK) {
-        return rv;
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
     }
 
-    token *tok = session_ctx_get_token(ctx);
-    assert(tok);
-
-    tpm_ctx *tpm = tok->tctx;
+    if (session_tab[session].op != operation_verify) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
 
     // TODO mode to buffer size
     CK_BYTE hash[1024];
     CK_ULONG hash_len = sizeof(hash);
 
-    if (opdata->do_hash) {
-        rv = digest_final_op(ctx, opdata->digest_opdata, hash, &hash_len);
+    if (session_tab[session].opdata.signverify.do_hash) {
+        rv = digest_sw_final(session_tab[session].opdata.signverify.digest_opdata, hash, &hash_len);
         if (rv != CKR_OK) {
             goto out;
         }
     } else {
-        size_t datalen = twist_len(opdata->buffer);
+        size_t datalen = twist_len(session_tab[session].opdata.signverify.buffer);
         if (datalen > hash_len) {
             LOGE("Internal buffer too small, got: %zu expected less than %zu",
                     datalen, hash_len);
             return CKR_GENERAL_ERROR;
         }
         hash_len = datalen;
-        memcpy(hash, opdata->buffer, datalen);
+        memcpy(hash, session_tab[session].opdata.signverify.buffer, datalen);
     }
 
-    rv = tpm_verify(tpm, opdata->tobj, opdata->mtype, hash, hash_len, signature, signature_len);
+    rv = tpm_verify(session_tab[session].slot_id,
+                    session_tab[session].opdata.signverify.key,
+                    session_tab[session].opdata.signverify.mtype,
+                    hash, hash_len, signature, signature_len);
 
 out:
-    assert(opdata->tobj);
-    CK_RV tmp_rv = tobject_user_decrement(opdata->tobj);
-    if (tmp_rv != CKR_OK && rv == CKR_OK) {
-        rv = tmp_rv;
-    }
-
-    session_ctx_opdata_clear(ctx);
+    session_tab[session].op = 0;
 
     return rv;
 }
 
-CK_RV verify(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG signature_len) {
+CK_RV verify(CK_SESSION_HANDLE session, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG signature_len) {
 
-    CK_RV rv = verify_update(ctx, data, data_len);
+    CK_RV rv = verify_update(session, data, data_len);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    return verify_final(ctx, signature, signature_len);
+    return verify_final(session, signature, signature_len);
 }

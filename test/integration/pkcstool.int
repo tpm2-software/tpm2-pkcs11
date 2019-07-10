@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+
+set -eufx
+
+export TPM2_PKCS11_LOG_LEVEL="${TPM2_PKCS11_LOG_LEVEL:-2}"
+#export TPM2_PKCS11_LOG_LEVEL=0
+
+#export TSS2_LOG="${TSS2_LOG:-fapi+trace}"
+export TSS2_LOG="-all+warning"
+
+MKTMP="$(mktemp -d)"
+#TMP=${TMP:-$MKTMP}
+TMP=${TMP:-/tmp}
+
+### Setup
+
+SOPIN="123987"
+PIN="1234"
+PIN2="5678"
+LABEL="My personal testing smartcard"
+echo "testdata">${TMP}/data
+echo -n "123456789012345678901234567890123456789012345678901234567890">${TMP}/raw
+echo -n "123456789012345678901234567890123456789012345678901234567890">>${TMP}/raw
+echo -n "123456789012345678901234567890123456789012345678901234567890">>${TMP}/raw
+echo -n "123456789012345678901234567890123456789012345678901234567890">>${TMP}/raw
+echo -n "1234567890123456">>${TMP}/raw
+
+### General informational tests
+
+#valgrind --error-exitcode=666 \
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --show-info
+
+test "$(pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --generate-random 4096 \
+            | hd | tail -n 1)" == "00001000"
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --list-mechanisms
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --list-slots
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --list-token-slots
+
+### Token management tests
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --init-token \
+            --so-pin "${SOPIN}" --label "${LABEL}"
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --init-pin \
+            --login --so-pin "${SOPIN}" --new-pin "${PIN}"
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --change-pin \
+            --login --pin "${PIN}" --new-pin "${PIN2}"
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --change-pin \
+            --login --pin "${PIN2}" --new-pin "${PIN}"
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --list-token-slots
+
+### Key management tests
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --keypairgen \
+            --login --pin "${PIN}"
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --list-objects \
+            --login --pin "${PIN}"
+
+### Signature tests
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --read-object \
+             --type pubkey --id 00 --output-file ${TMP}/pubkey.der
+
+openssl pkey -in ${TMP}/pubkey.der -pubin -inform DER -text
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --sign \
+            --login --pin "${PIN}" --input-file ${TMP}/data --output-file ${TMP}/sig \
+            --mechanism SHA256-RSA-PKCS
+
+openssl dgst -verify ${TMP}/pubkey.der -keyform DER -signature ${TMP}/sig -sha256 \
+             -sigopt rsa_padding_mode:pkcs1 \
+             ${TMP}/data
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --sign \
+            --login --pin "${PIN}" --input-file ${TMP}/data --output-file ${TMP}/sig \
+            --mechanism SHA1-RSA-PKCS
+
+openssl dgst -verify ${TMP}/pubkey.der -keyform DER -signature ${TMP}/sig -sha1 \
+             -sigopt rsa_padding_mode:pkcs1 \
+             ${TMP}/data
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --sign \
+            --login --pin "${PIN}" --input-file ${TMP}/data --output-file ${TMP}/sig \
+            --mechanism SHA384-RSA-PKCS
+
+openssl dgst -verify ${TMP}/pubkey.der -keyform DER -signature ${TMP}/sig -sha384 \
+             -sigopt rsa_padding_mode:pkcs1 \
+             ${TMP}/data
+
+#pkcs11-tool does not forward this correctly. Look into --list-mechanisms maybe ?
+#pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --sign \
+#            --login --pin "${PIN}" --input-file ${TMP}/data --output-file ${TMP}/sig \
+#            --mechanism SHA256-RSA-PKCS-PSS
+#openssl dgst -verify ${TMP}/pubkey.der -keyform DER -signature ${TMP}/sig -sha256 \
+#             -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:-1 \
+#             ${TMP}/data
+
+#add raw signatures
+#pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --sign \
+#            --login --pin $PIN  --input-file ${TMP}/data --output-file ${TMP}/sig \
+#            --mechanism RSA-PKCS
+#openssl rsautl -verify -inkey ${TMP}/pubkey.der -keyform DER -pubin -in ${TMP}/sig
+
+### Decryption tests
+
+openssl rsautl -encrypt -inkey ${TMP}/pubkey.der -keyform DER -pubin \
+               -in ${TMP}/raw -out ${TMP}/raw.crypt -raw
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --decrypt \
+            --login --pin $PIN --input-file ${TMP}/raw.crypt --output-file ${TMP}/raw2 \
+            --mechanism RSA-X-509
+
+diff ${TMP}/raw ${TMP}/raw2
+
+openssl rsautl -encrypt -inkey ${TMP}/pubkey.der -keyform DER -pubin \
+               -in ${TMP}/data -out ${TMP}/data.crypt -pkcs
+
+pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --decrypt \
+            --login --pin $PIN --input-file ${TMP}/data.crypt --output-file ${TMP}/data2 \
+            --mechanism RSA-PKCS
+
+diff ${TMP}/data ${TMP}/data2
+
+#Not working because pkcs11-tool does not provide parameters to OAEP
+#openssl rsautl -encrypt -inkey ${TMP}/pubkey.der -keyform DER -pubin \
+#               -in ${TMP}/data -out ${TMP}/data.crypt -oaep
+#pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --decrypt \
+#            --login --pin $PIN --input-file ${TMP}/data.crypt --output-file ${TMP}/data2 \
+#            --mechanism RSA-PKCS-OAEP
+#diff ${TMP}/data ${TMP}/data2
+
+### Cleanup
+
+#Not working because pkcs11-tool always chooses the pubkey instead of privkey
+#pkcs11-tool --module $PWD/src/.libs/libtpm2_pkcs11.so -v --delete-object \
+#            --type privkey --id 00
+
+rm -rf $MKTMP || true
+
+echo DONE!
+#false

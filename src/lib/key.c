@@ -3,15 +3,15 @@
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
  */
+#include <assert.h>
 #include <openssl/bn.h>
 #include <openssl/rand.h>
 
 #include "checks.h"
-#include "db.h"
 #include "key.h"
-#include "pkcs11.h"
 #include "session.h"
-#include "session_ctx.h"
+#include "pkcs11.h"
+#include "log.h"
 #include "utils.h"
 
 #define ADD_ATTR(T, A, V, newattrs, offset)           \
@@ -301,7 +301,7 @@ error:
     return rv;
 }
 
-static CK_RV object_add_missing_attrs(tobject *public_tobj, tobject *private_tobj, tpm_object_data *objdata, CK_MECHANISM_TYPE mech) {
+CK_RV object_add_missing_attrs(tobject *public_tobj, tobject *private_tobj, tpm_object_data *objdata, CK_MECHANISM_TYPE mech) {
 
     CK_KEY_TYPE keytype;
     switch (mech) {
@@ -439,43 +439,6 @@ error:
     }
 
     tmp_rv = utils_attr_free(newpubattrs, pubindex);
-    if (tmp_rv != CKR_OK) {
-        LOGW("Could not free attributes");
-        assert(0);
-    }
-
-    return rv;
-}
-
-static CK_RV object_add_missing_ids(tobject *tobj) {
-
-    CK_RV tmp_rv;
-    CK_RV rv = CKR_HOST_MEMORY;
-
-    CK_ULONG privindex = 0;
-    CK_ATTRIBUTE newprivattrs[1] = { 0 };
-
-    CK_ATTRIBUTE_PTR a = tobject_get_attribute_by_type(tobj, CKA_ID);
-    if (a) {
-        /* nothing to do, already has an ID */
-        return CKR_OK;
-    }
-
-    char tmp[32];
-    snprintf(tmp, sizeof(tmp), "%lu", tobj->id);
-    ADD_ATTR_STR(CKA_ID, tmp, newprivattrs, privindex);
-
-    /* add the new attrs */
-    rv = tobject_append_attrs(tobj, newprivattrs, privindex);
-    if (rv != CKR_OK) {
-        LOGE("Could not append CKA_ID to object: %lu", tobj->id);
-        goto error;
-    }
-
-    rv = db_update_attrs(tobj);
-
-error:
-    tmp_rv = utils_attr_free(newprivattrs, privindex);
     if (tmp_rv != CKR_OK) {
         LOGW("Could not free attributes");
         assert(0);
@@ -622,7 +585,7 @@ static CK_RV check_specific_attrs(CK_MECHANISM_TYPE mech,
 }
 
 CK_RV key_gen (
-        session_ctx *ctx,
+        CK_SESSION_HANDLE session,
 
         CK_MECHANISM_PTR mechanism,
 
@@ -635,26 +598,27 @@ CK_RV key_gen (
         CK_OBJECT_HANDLE_PTR public_key_handle,
         CK_OBJECT_HANDLE_PTR private_key_handle) {
 
-    CK_RV rv = CKR_GENERAL_ERROR;
+    TSS2_RC rc;
+    FAPI_CONTEXT *fctx;
+    CK_RV rv;
+    char *path;
+    CK_OBJECT_HANDLE keyhandle;
 
-    twist newauthbin = NULL;
-    twist newauthhex = NULL;
-    twist newwrapped_auth = NULL;
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
 
-    tobject *new_private_tobj = NULL;
-    tobject *new_public_tobj = NULL;
-
-    tpm_object_data objdata = { 0 };
-
-    token *tok = session_ctx_get_token(ctx);
-    assert(tok);
+    if (!session_tab[session].seal_avail) {
+        LOGE("Session %lu has no seal available", session);
+        return CKR_USER_NOT_LOGGED_IN;
+    }
 
     rv = check_common_attrs(
             private_key_template,
             private_key_attribute_count);
     if (rv != CKR_OK) {
         LOGE("Failed checking private attrs");
-        goto out;
+        return rv;
     }
 
     rv = check_common_attrs(
@@ -662,163 +626,33 @@ CK_RV key_gen (
             public_key_attribute_count);
     if (rv != CKR_OK) {
         LOGE("Failed checking public attrs");
-        goto out;
+        return rv;
     }
 
-    check_specific_attrs(mechanism->mechanism,
+    rv = check_specific_attrs(mechanism->mechanism,
             public_key_template, public_key_attribute_count,
             private_key_template, private_key_attribute_count);
-
-    new_private_tobj = tobject_new();
-    if (!new_private_tobj) {
-        goto out;
-    }
-
-    new_public_tobj = tobject_new();
-    if (!new_public_tobj) {
-        goto out;
-    }
-
-    rv = utils_new_random_object_auth(&newauthbin, &newauthhex);
     if (rv != CKR_OK) {
-        LOGE("Failed to create new object auth");
-        goto out;
+        LOGE("Failed checking other attrs");
+        return rv;
     }
 
-    rv = utils_ctx_wrap_objauth(tok, newauthhex, &newwrapped_auth);
-    if (rv != CKR_OK) {
-        LOGE("Failed to wrap new object auth");
-        goto out;
-    }
+    rc = Fapi_Initialize(&fctx, NULL);
+    check_tssrc(rc, return CKR_GENERAL_ERROR);
 
-    rv = tpm2_generate_key(
-            tok->tctx,
-            tok->sobject.handle,
-            tok->sobject.authraw,
-            newauthbin,
-            mechanism,
-            public_key_attribute_count, public_key_template,
-            private_key_attribute_count, private_key_template,
-            &objdata);
-    if (rv != CKR_OK) {
-        LOGE("Failed to generate key");
-        goto out;
-    }
+    do {
+        keyhandle = (CK_OBJECT_HANDLE) rand() & 0x0FFFFFFF;
+        path = tss_keypath_from_id(session_tab[session].slot_id, keyhandle);
 
-    /* set the tpm object handles */
-    tobject_set_handle(new_private_tobj, objdata.privhandle);
-    tobject_set_handle(new_public_tobj, objdata.pubhandle);
+        rc = Fapi_CreateKey(fctx, path, "sign, decrypt",
+                            NULL, (char *)&session_tab[session].seal[0]);
+        free(path);
+    } while (rc == TSS2_FAPI_RC_NAME_ALREADY_EXISTS);
+    Fapi_Finalize(&fctx);
+    check_tssrc(rc, return CKR_GENERAL_ERROR);
 
-    rv = tobject_append_attrs(new_public_tobj, public_key_template, public_key_attribute_count);
-    if (rv != CKR_OK) {
-        LOGE("Failed to append public template");
-        goto out;
-    }
+    *public_key_handle = keyhandle | 0x10000000;
+    *private_key_handle = keyhandle;
 
-    rv = tobject_append_attrs(new_private_tobj, private_key_template, private_key_attribute_count);
-    if (rv != CKR_OK) {
-        LOGE("Failed to append private template");
-        goto out;
-    }
-
-    /*
-     * objects have default required attributes, add them if not present.
-     */
-    /* TODO dispatch table here */
-    rv = object_add_missing_attrs(new_public_tobj, new_private_tobj, &objdata, mechanism->mechanism);
-    if (rv != CKR_OK) {
-        LOGE("Failed to add missing rsa attrs");
-        goto out;
-    }
-
-    /* populate blob data */
-    rv = tobject_set_blob_data(new_private_tobj, objdata.pubblob, objdata.privblob);
-    if (rv != CKR_OK) {
-        goto out;
-    }
-
-    rv = tobject_set_blob_data(new_public_tobj, objdata.pubblob, NULL);
-    if (rv != CKR_OK) {
-        goto out;
-    }
-
-    /* populate auth data */
-    rv = tobject_set_auth(new_public_tobj, newauthbin, newwrapped_auth);
-    if (rv != CKR_OK) {
-        goto out;
-    }
-
-    rv = tobject_set_auth(new_private_tobj, newauthbin, newwrapped_auth);
-    if (rv != CKR_OK) {
-        goto out;
-    }
-
-    /*
-     * Add the missing supported mechanisms
-     */
-    rv = object_add_missing_mechs(new_private_tobj, mechanism->mechanism);
-    if (rv != CKR_OK) {
-        LOGE("Failed to add missing mechanisms");
-        goto out;
-    }
-
-    rv = object_add_missing_mechs(new_public_tobj, mechanism->mechanism);
-    if (rv != CKR_OK) {
-        LOGE("Failed to add missing mechanisms");
-        goto out;
-    }
-
-    /* populates tobj->id */
-    rv = db_add_new_object(tok, new_private_tobj);
-    if (rv != CKR_OK) {
-        LOGE("Failed to add private object to db");
-        goto out;
-    }
-
-    rv = db_add_new_object(tok, new_public_tobj);
-    if (rv != CKR_OK) {
-        LOGE("Failed to add public object to db");
-        goto out;
-    }
-
-    /* set CKA_ID if not present based on tobj->id */
-    rv = object_add_missing_ids(new_private_tobj);
-    if (rv != CKR_OK) {
-        LOGE("Failed to add missing CKA_ID's");
-        goto out;
-    }
-
-    /* set CKA_ID if not present based on tobj->id */
-    rv = object_add_missing_ids(new_public_tobj);
-    if (rv != CKR_OK) {
-        LOGE("Failed to add missing CKA_ID's");
-        goto out;
-    }
-
-    /* start a list of two elements public pointing to private */
-    new_public_tobj->l.next = &new_private_tobj->l;
-
-    /* add to object list preserving old object list if present */
-    if (tok->tobjects) {
-        new_private_tobj->l.next = &tok->tobjects->l;
-    }
-
-    tok->tobjects = new_public_tobj;
-
-    *public_key_handle = new_public_tobj->id;
-    *private_key_handle = new_private_tobj->id;
-
-out:
-
-    tpm_objdata_free(&objdata);
-    twist_free(newauthhex);
-    twist_free(newauthbin);
-    twist_free(newwrapped_auth);
-
-    if (rv != CKR_OK) {
-        tobject_free(new_private_tobj);
-        tobject_free(new_public_tobj);
-    }
-
-    return rv;
+    return CKR_OK;
 }

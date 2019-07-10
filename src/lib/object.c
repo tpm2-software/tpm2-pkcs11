@@ -5,148 +5,18 @@
  */
 #include <limits.h>
 #include <stdlib.h>
+#include <assert.h>
 
-#include "db.h"
+#include "session.h"
 #include "checks.h"
 #include "log.h"
 #include "object.h"
 #include "pkcs11.h"
-#include "session_ctx.h"
 #include "token.h"
 #include "utils.h"
 
-typedef struct tobject_match_list tobject_match_list;
-struct tobject_match_list {
-    CK_OBJECT_HANDLE tobj_handle;
-    tobject_match_list *next;
-};
-
-typedef struct object_find_data object_find_data;
-struct object_find_data {
-    tobject_match_list *head;
-    tobject_match_list *cur;
-};
-
-void tobject_free(tobject *tobj) {
-
-    if (!tobj) {
-        return;
-    }
-
-    twist_free(tobj->priv);
-    twist_free(tobj->pub);
-    twist_free(tobj->objauth);
-    twist_free(tobj->unsealed_auth);
-
-    objattrs *a = tobject_get_attrs(tobj);
-    CK_RV rv = utils_attr_free(a->attrs, a->count);
-    assert(rv == CKR_OK);
-    free(a->attrs);
-
-    CK_ULONG i = 0;
-    for (i=0; i < tobj->mechanisms.count; i++) {
-        CK_MECHANISM_PTR m = &tobj->mechanisms.mech[i];
-        if (m->pParameter) {
-            free(m->pParameter);
-        }
-    }
-
-    free(tobj->mechanisms.mech);
-
-    free(tobj);
-}
-
-void sobject_free(sobject *sobj) {
-    twist_free(sobj->priv);
-    twist_free(sobj->pub);
-    twist_free(sobj->objauth);
-    twist_free(sobj->authraw);
-}
-
-void wrappingobject_free(wrappingobject *wobj) {
-    twist_free(wobj->priv);
-    twist_free(wobj->pub);
-    twist_free(wobj->objauth);
-}
-
-void sealobject_free(sealobject *sealobj) {
-    twist_free(sealobj->soauthsalt);
-    twist_free(sealobj->sopriv);
-    twist_free(sealobj->sopub);
-    twist_free(sealobj->userauthsalt);
-    twist_free(sealobj->userpub);
-    twist_free(sealobj->userpriv);
-}
-
-static bool object_CKM_RSA_PKCS_OAEP_params_supported(
-        CK_RSA_PKCS_OAEP_PARAMS_PTR requested,
-        CK_RSA_PKCS_OAEP_PARAMS_PTR got) {
-
-    return requested->hashAlg == got->hashAlg &&
-            requested->mgf == got->mgf;
-}
-
-static bool object_CKM_AES_CBC_params_supported(
-        CK_MECHANISM_PTR requested
-        ) {
-
-    // IV is blocksize for AES
-    return requested->ulParameterLen == 16;
-}
-
-CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech) {
-
-    bool is_equal;
-    CK_ULONG i;
-    bool got_to_params = false;
-    for (i=0; i < tobj->mechanisms.count; i++) {
-        CK_MECHANISM_PTR m = &tobj->mechanisms.mech[i];
-
-        if (mech->mechanism != m->mechanism) {
-            continue;
-        }
-
-        got_to_params = true;
-
-        /*
-         * Ensure the parameters are supported, this would need to be done for each mechanism
-         * as things like label, etc are flexible. However, keep a default handler of strict
-         * memcmp for things that are empty or can be fully specified in the DB.
-         */
-        switch (mech->mechanism) {
-        case CKM_RSA_X_509:
-            /* no params */
-            is_equal = true;
-            break;
-        case CKM_RSA_PKCS_OAEP:
-            is_equal = object_CKM_RSA_PKCS_OAEP_params_supported(
-                    mech->pParameter,
-                    m->pParameter
-                    );
-            break;
-        case CKM_AES_CBC:
-            is_equal = object_CKM_AES_CBC_params_supported(
-                    mech);
-            break;
-        default:
-            is_equal =
-                mech->ulParameterLen == m->ulParameterLen
-            && !memcmp(mech->pParameter, m->pParameter, m->ulParameterLen);
-        }
-
-        if(!is_equal) {
-            continue;
-        }
-
-        /* match */
-        return CKR_OK;
-    }
-
-    return got_to_params ? CKR_MECHANISM_PARAM_INVALID : CKR_MECHANISM_INVALID;
-}
 
 static bool attr_filter(objattrs *attrs, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
-
 
     CK_ULONG i;
     // If ulCount is set to 0 all items match automatically.
@@ -201,184 +71,93 @@ static bool attr_filter(objattrs *attrs, CK_ATTRIBUTE_PTR templ, CK_ULONG count)
 
 tobject *object_attr_filter(tobject *tobj, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
 
+    if (!tobj) return NULL;
     objattrs *attrs = tobject_get_attrs(tobj);
     bool res = attr_filter(attrs, templ, count);
     return res ? tobj : NULL;
 }
 
 
-void object_find_data_free(object_find_data **fd) {
-
-    if (!*fd) {
-        return;
-    }
-
-    tobject_match_list *cur = (*fd)->head;
-    while (cur) {
-        tobject_match_list *tmp = cur;
-        cur = cur->next;
-        free(tmp);
-    }
-
-    free(*fd);
-    *fd = NULL;
-
-    return;
-}
-
-static object_find_data *object_find_data_new(void) {
-    return calloc(1, sizeof(object_find_data));
-}
-
-CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
+CK_RV object_find_init(CK_SESSION_HANDLE session, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
 
     // if count is 0 template is not used and all objects are requested so templ can be NULL.
     if (count > 0) {
         check_pointer(templ);
     }
 
-    CK_RV rv = CKR_GENERAL_ERROR;
+    CK_RV rv;
 
-    object_find_data *fd = NULL;
-
-    bool is_active = session_ctx_opdata_is_active(ctx);
-    if (is_active) {
-        rv = CKR_OPERATION_ACTIVE;
-        goto out;
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
     }
 
-    fd = object_find_data_new();
-    if (!fd) {
-        rv = CKR_HOST_MEMORY;
-        goto out;
+    if (session_tab[session].search) {
+        return CKR_OPERATION_ACTIVE;
     }
 
-    token *tok = session_ctx_get_token(ctx);
-    assert(tok);
+    rv = tss_get_object_ids(session_tab[session].slot_id, &session_tab[session].search,
+                            &session_tab[session].search_count);
+    if (rv)
+        return rv;
 
-    if (!tok->tobjects) {
-        goto empty;
+    for (size_t i = 0; i < session_tab[session].search_count; i++) {
+        //TODO Filter
+        object_attr_filter(NULL, templ, count);
     }
 
-    tobject_match_list *match_cur = NULL;
-    list *cur = &tok->tobjects->l;
-    while(cur) {
-
-        // Get the current object, and grab it's id for the object handle
-        tobject *tobj = list_entry(cur, tobject, l);
-        cur = cur->next;
-
-        tobject *match = object_attr_filter(tobj, templ, count);
-        if (!match) {
-            continue;
-        }
-
-        /* we have a match, build the list */
-        if (!fd->head) {
-            /* set the head to point into the list */
-            fd->head = calloc(1, sizeof(*match_cur));
-            if (!fd->head) {
-                rv = CKR_HOST_MEMORY;
-                goto out;
-            }
-
-            match_cur = fd->head;
-            match_cur->tobj_handle = tobj->id;
-        } else {
-            assert(match_cur);
-            match_cur->next = calloc(1, sizeof(*match_cur));
-            if (!match_cur->next) {
-                rv = CKR_HOST_MEMORY;
-                goto out;
-            }
-
-            match_cur->next->tobj_handle = tobj->id;
-            match_cur = match_cur->next;
-        }
-    }
-
-    fd->cur = fd->head;
-
-empty:
-
-    session_ctx_opdata_set(ctx, operation_find, fd, (opdata_free_fn)object_find_data_free);
-
-    rv = CKR_OK;
-
-out:
-    if (rv != CKR_OK) {
-        object_find_data_free(&fd);
-    }
-
-    return rv;
+    return CKR_OK;
 }
 
-CK_RV object_find(session_ctx *ctx, CK_OBJECT_HANDLE *object, CK_ULONG max_object_count, CK_ULONG_PTR object_count) {
+CK_RV object_find(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE *object,
+                  CK_ULONG max_object_count, CK_ULONG_PTR object_count) {
 
     check_pointer(object);
     check_pointer(object_count);
 
-    UNUSED(max_object_count);
-
-    CK_RV rv = CKR_OK;
-
-    object_find_data *opdata = NULL;
-    rv = session_ctx_opdata_get(ctx, operation_find, &opdata);
-    if (rv != CKR_OK) {
-        return rv;
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
     }
 
-    CK_ULONG count = 0;
-    while(opdata->cur && count < max_object_count) {
-
-        // Get the current object, and grab it's id for the object handle
-        CK_OBJECT_HANDLE handle = opdata->cur->tobj_handle;
-        object[count] = handle;
-
-        // Update our iterator
-        opdata->cur = opdata->cur->next;
-
-        count++;
+    if (!session_tab[session].search) {
+        return CKR_OPERATION_NOT_INITIALIZED;
     }
 
-    *object_count = count;
+    if (session_tab[session].search_count == 0) {
+        *object_count = 0;
+        return CKR_OK;
+    }
+
+    if (session_tab[session].search_count > max_object_count) {
+        memcpy(object, session_tab[session].search, max_object_count * sizeof(*object));
+        *object_count = max_object_count;
+        session_tab[session].search_count -= max_object_count;
+        memmove(&session_tab[session].search[0], &session_tab[session].search[max_object_count],
+                session_tab[session].search_count * sizeof(*object));
+    } else {
+        memcpy(object, session_tab[session].search,
+               session_tab[session].search_count * sizeof(*object));
+        *object_count = session_tab[session].search_count;
+        session_tab[session].search_count = 0;
+    }
 
     return CKR_OK;
 }
 
-CK_RV object_find_final(session_ctx *ctx) {
+CK_RV object_find_final(CK_SESSION_HANDLE session) {
 
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    object_find_data *opdata = NULL;
-    rv = session_ctx_opdata_get(ctx, operation_find, &opdata);
-    if (rv != CKR_OK) {
-        return rv;
+    if (session_tab[session].slot_id == 0) {
+        LOGE("Session handle invalid");
+        return CKR_SESSION_HANDLE_INVALID;
     }
 
-    session_ctx_opdata_clear(ctx);
+    if (!session_tab[session].search) {
+        LOGE("Session has no pending search");
+        return CKR_OPERATION_NOT_INITIALIZED;
+    }
+
+    free(session_tab[session].search);
 
     return CKR_OK;
-}
-
-static CK_RV find_object_by_id(token *tok, CK_OBJECT_HANDLE handle, bool inc, tobject **tobj) {
-
-    list *cur = &tok->tobjects->l;
-    while(cur) {
-
-        tobject *cur_tobj = list_entry(cur, tobject, l);
-
-        if (handle == cur_tobj->id) {
-            CK_RV rv = inc ? tobject_user_increment(cur_tobj) : CKR_OK;
-            if (rv == CKR_OK) {
-                *tobj = cur_tobj;
-            }
-            return rv;
-        }
-        cur = cur->next;
-    }
-
-    return CK_INVALID_HANDLE;
 }
 
 CK_ATTRIBUTE_PTR tobject_get_attribute_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE needle) {
@@ -393,113 +172,146 @@ CK_ATTRIBUTE_PTR tobject_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR need
     return util_get_attribute_full(needle, attrs->attrs, attrs->count);
 }
 
-CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
+#define setresult(K, V) result.K = V; result_size = sizeof(result.K)
 
-    token *tok = session_ctx_get_token(ctx);
-    assert(tok);
+CK_RV object_get_attributes(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object,
+                            CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
 
-    tobject *tobj = NULL;
-    CK_RV rv = find_object_by_id(tok, object, true, &tobj);
-    /* no match or error */
-    if (rv != CKR_OK) {
+    CK_RV rv = CKR_OK;
+    TPM2B_PUBLIC public;
+
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
+    }
+
+    rv = tss_data_from_id(session_tab[session].slot_id, object, &public, NULL, NULL, NULL);
+    if (rv) {
+        LOGE("Error in tss data retrieval");
         return rv;
     }
+
+    CK_ULONG result_size = 0;
+    union {
+        CK_OBJECT_CLASS class;
+        CK_KEY_TYPE key_type;
+        char label[256];
+        CK_BYTE id[1];
+        CK_BBOOL encrypt;
+        CK_BBOOL decrypt;
+        CK_BBOOL wrap;
+        CK_BBOOL unwrap;
+        CK_BBOOL sign;
+        CK_BBOOL verify;
+        CK_BBOOL derive;
+        CK_BYTE modulus[TPM2_MAX_RSA_KEY_BYTES];
+        CK_ULONG modulus_bits;
+        uint32_t public_exponent;  /* CK_BYTE[4] */
+        CK_BBOOL allways_authenticate;
+        uint8_t buffer[0];
+    } result;
 
     /*
      * For each item requested in the template, find if the request has a match
      * and copy the size and possibly data (if allocated).
      */
-
     CK_ULONG i;
     for (i=0; i < count; i++) {
-
         CK_ATTRIBUTE_PTR t = &templ[i];
+        LOGV("Attribute %x requested for object %08x-%08x", t->type,
+             session_tab[session].slot_id, object);
 
-        CK_ATTRIBUTE_PTR found = tobject_get_attribute_by_type(tobj, t->type);
-        if (found) {
-            if (!t->pValue) {
-                /* only populate size if the buffer is null */
-                t->ulValueLen = found->ulValueLen;
-                continue;
+        switch (t->type) {
+        case CKA_CLASS:
+            if (object & 0x10000000) {
+                setresult(class, CKO_PUBLIC_KEY);
+            } else {
+                setresult(class, CKO_PRIVATE_KEY);
             }
-
-            /* The found attribute should fit inside the one to copy to */
-            if (found->ulValueLen > t->ulValueLen) {
-                t->ulValueLen = CK_UNAVAILABLE_INFORMATION;
-                rv = CKR_BUFFER_TOO_SMALL;
-                continue;
+            result_size = sizeof(result.class);
+            break;
+        case CKA_LABEL:
+            result_size = snprintf(&result.label[0], 255, "The Key");
+            break;
+        case CKA_KEY_TYPE:
+            if (public.publicArea.type == TPM2_ALG_RSA) {
+                setresult(key_type, CKK_RSA);
+            } else if (public.publicArea.type == TPM2_ALG_ECC) {
+                setresult(key_type, CKK_EC);
+            } else {
+                result_size = 0;
             }
+            break;
+        case CKA_ID:
+            memset(result.id, 0, sizeof(result.id));
+            result_size = sizeof(result.id);
+            break;
+        case CKA_ENCRYPT:
+            setresult(encrypt, CK_TRUE);
+            break;
+        case CKA_DECRYPT:
+            setresult(decrypt, CK_TRUE);
+            break;
+        case CKA_WRAP:
+            setresult(wrap, CK_FALSE);
+            break;
+        case CKA_UNWRAP:
+            setresult(unwrap, CK_FALSE);
+            break;
+        case CKA_SIGN:
+            setresult(sign, CK_TRUE);
+            break;
+        case CKA_VERIFY:
+            setresult(verify, CK_TRUE);
+            break;
+        case CKA_DERIVE:
+            setresult(derive, CK_FALSE);
+            break;
+        case CKA_MODULUS:
+            result_size = public.publicArea.unique.rsa.size;
+            memcpy(&result.modulus, &public.publicArea.unique.rsa.buffer[0], result_size);
+            break;
+        case CKA_MODULUS_BITS:
+            setresult(modulus_bits, public.publicArea.parameters.rsaDetail.keyBits);
+            break;
+        case CKA_PUBLIC_EXPONENT:
+            if (public.publicArea.parameters.rsaDetail.exponent) {
+                setresult(public_exponent, htobe32(public.publicArea.parameters.rsaDetail.exponent));
+            } else {
+                setresult(public_exponent, htobe32(65537));
+            }
+            break;
+        case CKA_ALWAYS_AUTHENTICATE:
+            setresult(allways_authenticate, CK_TRUE);
+            break;
+        case 0x80000001:
+            LOGV("Unknown vendor-specific attribute 0x80000001 requested");
+            templ->ulValueLen = CK_UNAVAILABLE_INFORMATION;
+            rv = CKR_ATTRIBUTE_TYPE_INVALID;
+            continue;
+        default:
+            templ->ulValueLen = CK_UNAVAILABLE_INFORMATION;
+            rv = CKR_ATTRIBUTE_TYPE_INVALID;
+            continue;
+        }
 
-            t->ulValueLen = found->ulValueLen;
-            memcpy(t->pValue, found->pValue, found->ulValueLen);
-       } else {
-           /* If it's not found it defaults to empty. */
-           t->pValue = NULL;
-           t->ulValueLen = CK_UNAVAILABLE_INFORMATION;
-           rv = CKR_ATTRIBUTE_TYPE_INVALID;
-       }
+        if (!result_size) {
+            templ->ulValueLen = CK_UNAVAILABLE_INFORMATION;
+            rv = CKR_ATTRIBUTE_TYPE_INVALID;
+            continue;
+        }
+        if (!templ->pValue) {
+            templ->ulValueLen = result_size;
+            continue;
+        }
+        if (templ->ulValueLen < result_size) {
+            templ->ulValueLen = CK_UNAVAILABLE_INFORMATION;
+            rv = CKR_BUFFER_TOO_SMALL;
+        }
+
+        memcpy(templ->pValue, &result.buffer[0], result_size);
+        templ->ulValueLen = result_size;
     }
-
-    tobject_user_decrement(tobj);
-    // if no error occurred rv is CKR_OK from previous call
     return rv;
-}
-
-tobject *tobject_new(void) {
-
-    tobject *tobj = calloc(1, sizeof(tobject));
-    if (!tobj) {
-        LOGE("oom");
-        return NULL;
-    }
-
-    return tobj;
-}
-
-CK_RV tobject_set_blob_data(tobject *tobj, twist pub, twist priv) {
-    assert(pub);
-
-    tobj->priv = twist_dup(priv);
-    if (priv && !tobj->priv) {
-        LOGE("oom");
-        return CKR_HOST_MEMORY;
-    }
-
-    tobj->pub = twist_dup(pub);
-    if (!tobj->pub) {
-        twist_free(tobj->priv);
-        LOGE("oom");
-        return CKR_HOST_MEMORY;
-    }
-
-    return CKR_OK;
-}
-
-CK_RV tobject_set_auth(tobject *tobj, twist authbin, twist wrappedauthhex) {
-    assert(tobj);
-    assert(authbin);
-    assert(wrappedauthhex);
-
-    tobj->unsealed_auth = twist_dup(authbin);
-    if (!tobj->unsealed_auth) {
-        LOGE("oom");
-        return CKR_HOST_MEMORY;
-    }
-
-    tobj->objauth = twist_dup(wrappedauthhex);
-    if (!tobj->objauth) {
-        LOGE("oom");
-        twist_free(tobj->unsealed_auth);
-        return CKR_HOST_MEMORY;
-    }
-
-    return CKR_OK;
-}
-
-void tobject_set_handle(tobject *tobj, uint32_t handle) {
-    assert(tobj);
-
-    tobj->handle = handle;
 }
 
 CK_RV tobject_append_attrs(tobject *tobj, CK_ATTRIBUTE_PTR attrs, CK_ULONG count) {
@@ -529,11 +341,6 @@ CK_RV tobject_append_attrs(tobject *tobj, CK_ATTRIBUTE_PTR attrs, CK_ULONG count
     return utils_attr_deep_copy(attrs, count, &objattrs->attrs[offset]);
 }
 
-void tobject_set_id(tobject *tobj, unsigned id) {
-    assert(tobj);
-    tobj->id = id;
-}
-
 CK_RV tobject_append_mechs(tobject *tobj, CK_MECHANISM_PTR mech, CK_ULONG count) {
     assert(tobj);
 
@@ -560,89 +367,35 @@ objattrs *tobject_get_attrs(tobject *tobj) {
     return &tobj->attrs;
 }
 
-CK_RV tobject_user_increment(tobject *tobj) {
+CK_RV object_destroy(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object) {
 
-    if (tobj->active == UINT_MAX) {
-       LOGE("tobject active at max count, cannot issue. id: %lu", tobj->id);
-       return CKR_GENERAL_ERROR;
+    TSS2_RC rc;
+    FAPI_CONTEXT *fctx;
+    char *path;
+
+    if (session_tab[session].slot_id == 0) {
+        return CKR_SESSION_HANDLE_INVALID;
     }
 
-    tobj->active++;
+    if (object & 0x10000000) {
+        /* Public key object belonging to a private key */
+        LOGE("Cannot delete public object belonging to a private object. Got: 0x%lx", object);
+        return CKR_ACTION_PROHIBITED;
+    } else if ((object & 0xF0000000) == 0) {
+        /* Private key object */
+        path = tss_keypath_from_id(session_tab[session].slot_id, object);
+        if (!path) return CKR_OBJECT_HANDLE_INVALID;
 
-    return CKR_OK;
-}
+        rc = Fapi_Initialize(&fctx, NULL);
+        check_tssrc(rc, return CKR_GENERAL_ERROR);
 
-CK_RV tobject_user_decrement(tobject *tobj) {
+        rc = Fapi_Delete(fctx, path);
+        free(path);
+        Fapi_Finalize(&fctx);
+        check_tssrc(rc, return CKR_FUNCTION_FAILED);
 
-    if (!tobj->active) {
-        LOGE("Returning a non-active tobject id: %lu", tobj->id);
-        return CKR_GENERAL_ERROR;
+        return CKR_OK;
     }
-
-    tobj->active--;
-
-    return CKR_OK;
-}
-
-static bool tobject_is_busy(tobject *tobj) {
-    assert(tobj);
-
-    return tobj->active > 0;
-}
-
-CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object) {
-
-    token *tok = session_ctx_get_token(ctx);
-    assert(tok);
-
-    tobject *tobj = NULL;
-    CK_RV rv = find_object_by_id(tok, object, false, &tobj);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    bool is_busy = tobject_is_busy(tobj);
-    if (is_busy) {
-        return CKR_FUNCTION_FAILED;
-    }
-
-    rv = db_delete_object(tobj);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    /*
-     * Remove from list by tying previous to next. We know that tobjects
-     * list is not NULL because we looked up a tobject in that list.
-     *
-     * TODO: Consider bi-directional circular linked list, it would
-     * make this a lot easier.
-     *
-     * Since we already found tobject, it's impossible for tobject
-     * to not exist in the list, thus we will always find a match.
-     */
-
-    /* if its head, just make head next */
-    if (tok->tobjects->id == tobj->id) {
-        list *next = tok->tobjects->l.next;
-        tobject *n = next ? list_entry(next, tobject, l) : NULL;
-        tok->tobjects = n;
-    /* go fish - not head so skip head, keep track of previous */
-    } else {
-        tobject *prev = tok->tobjects;
-        list *cur;
-        list_for_each(tok->tobjects->l.next, cur) {
-            tobject *c = list_entry(cur, tobject, l);
-            if (c->id == tobj->id) {
-                /* set previous to point to current "c's" next object */
-                prev->l.next = c->l.next;
-                break;
-            }
-        }
-    }
-
-    tobject_free(tobj);
-    rv = CKR_OK;
-
-    return rv;
+    /* Unknown object type */
+    return CKR_OBJECT_HANDLE_INVALID;
 }

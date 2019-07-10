@@ -87,6 +87,8 @@ static void test_get_slot_list(void **state) {
     rv = C_GetSlotList(true, slots, &count);
     assert_int_equal(rv, CKR_OK);
 
+    if (!count) skip();
+
     CK_SLOT_INFO sinfo;
     rv = C_GetSlotInfo(slots[0], &sinfo);
     assert_int_equal(rv, CKR_OK);

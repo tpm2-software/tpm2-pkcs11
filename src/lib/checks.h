@@ -21,4 +21,6 @@
         }\
     } while (0)
 
+#define check_tssrc(rc, next) if (rc) { LOGE("TSS-Error 0x%08x", rc); next; }
+
 #endif /* SRC_PKCS11_CHECKS_H_ */
