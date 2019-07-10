@@ -204,6 +204,10 @@ echo ${TPM2_PKCS11_TCTI}
 # if provided, run the test script
 if [ -z "${TSETUP_SCRIPT}" ]; then
     echo "No setup script provided"
+    # execute the test script and capture exit code
+    echo $@
+    env $@
+    ret_test=$?
 else
 	echo "Run setup script ${TSETUP_SCRIPT}"
     sh ${TSETUP_SCRIPT} --tmpdir=${SIM_TMP_DIR}
