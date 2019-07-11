@@ -41,7 +41,10 @@ def rand_str(num):
     return binascii.hexlify(os.urandom(32))
 
 
-def hash_pass(password, iters=100000, salt=os.urandom(32)):
+def hash_pass(password, iters=100000, salt=None):
+
+    if salt is None:
+        salt = os.urandom(32)
 
     phash = hashlib.pbkdf2_hmac('sha256', password, salt, iters)
     rhash = phash
