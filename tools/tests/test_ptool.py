@@ -12,7 +12,7 @@ from tpm2_pkcs11 import tpm2_ptool as tool
 from tpm2_pkcs11.utils import TemporaryDirectory
 
 
-class TestPTool(SimulatorTest):
+class TestPTool(SimulatorTest, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
