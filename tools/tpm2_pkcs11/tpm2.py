@@ -100,7 +100,7 @@ class Tpm2(object):
         cmd = ['tpm2_encryptdecrypt', '-c', ctx, '-p', 'hex:' + auth.decode()]
 
         if decrypt:
-            cmd.extend(['-D'])
+            cmd.extend(['-d'])
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, stdin=PIPE, env=os.environ)
         stdout, stderr = p.communicate(input=data)
