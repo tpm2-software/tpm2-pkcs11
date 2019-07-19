@@ -158,7 +158,7 @@ class Tpm2(object):
     def getcap(self, cap):
 
         # tpm2_getcap -Q -l $cap
-        cmd = ['tpm2_getcap', '-c', cap]
+        cmd = ['tpm2_getcap', cap]
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         stdout, stderr = p.communicate()
         rc = p.wait()
