@@ -274,7 +274,7 @@ class AddTokenCommand(Command):
             if args['wrap'] != 'auto':
                 if args['wrap'] == 'software' and sym_support:
                     print(
-                        "Warning: confifuring software wrapping key when TPM has support.\n"
+                        "Warning: configuring software wrapping key when TPM has support.\n"
                         "THIS IS NOT RECOMENDED")
                     sym_support = False
                 elif args['wrap'] == 'tpm' and not sym_support:
