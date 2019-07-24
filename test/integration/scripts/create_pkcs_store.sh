@@ -53,7 +53,7 @@ set -e
 tpm2_ptool init --pobj-pin=mypobjpin --path=$TPM2_PKCS11_STORE
 
 # Test the existing primary object init functionality
-tpm2_createprimary -p foopass -o $TPM2_PKCS11_STORE/primary.ctx -g sha256 -G rsa
+tpm2_createprimary -p foopass -c $TPM2_PKCS11_STORE/primary.ctx -g sha256 -G rsa
 handle=`tpm2_evictcontrol -C o -c $TPM2_PKCS11_STORE/primary.ctx | grep -Po '(?<=persistent-handle: )\S+'`
 
 tpm2_ptool init --pobj-pin=anotherpobjpin --primary-handle=$handle --primary-auth=foopass --path=$TPM2_PKCS11_STORE
