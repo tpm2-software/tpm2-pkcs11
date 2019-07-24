@@ -18,7 +18,7 @@ class Tpm2(object):
     def createprimary(self, ownerauth, objauth):
         ctx = os.path.join(self._tmp, "context.out")
         cmd = [
-            'tpm2_createprimary', '-p', 'hex:%s' % objauth.decode(), '-o', ctx,
+            'tpm2_createprimary', '-p', 'hex:%s' % objauth.decode(), '-c', ctx,
             '-g', 'sha256', '-G', 'rsa'
         ]
 
