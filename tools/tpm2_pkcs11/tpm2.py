@@ -66,11 +66,11 @@ class Tpm2(object):
 
         ctx = os.path.join(self._tmp, uuid.uuid4().hex + '.out')
 
-        #tpm2_load -C $file_primary_key_ctx  -u $file_load_key_pub  -r $file_load_key_priv -n $file_load_key_name -o $file_load_key_ctx
+        #tpm2_load -C $file_primary_key_ctx  -u $file_load_key_pub  -r $file_load_key_priv -n $file_load_key_name -c $file_load_key_ctx
         if priv != None:
             cmd = [
                 'tpm2_load', '-C', str(pctx), '-P', 'hex:' + pauth.decode(), '-u',
-                pub, '-r', priv, '-n', '/dev/null', '-o', ctx
+                pub, '-r', priv, '-n', '/dev/null', '-c', ctx
             ]
         else:
             cmd = [
