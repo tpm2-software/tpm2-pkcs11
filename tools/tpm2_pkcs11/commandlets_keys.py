@@ -260,8 +260,6 @@ class NewKeyCommandBase(Command):
                     privkey = args['privkey']
                 except:
                     privkey = None
-                else:
-                    path = args['path']
 
                 path = args['path']
 
