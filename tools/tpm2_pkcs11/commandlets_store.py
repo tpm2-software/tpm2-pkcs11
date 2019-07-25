@@ -101,7 +101,7 @@ class InitCommand(Command):
                         pobjauth = binascii.hexlify(pobjauth.encode())
 
                         handle = args['primary_handle']
-                        if handle == None:
+                        if handle is None:
                             handle = 0x81000001
 
                         # verify handle is persistent
@@ -161,7 +161,7 @@ class DestroyCommand(Command):
         # create the db
         with Db(path) as db:
             pobj = db.getprimary(pid)
-            if pobj == None:
+            if pobj is None:
                 sys.exit('Primary Object id "%s"not found' % pid)
 
             db.rmprimary(pid)

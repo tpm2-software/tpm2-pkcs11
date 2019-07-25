@@ -32,7 +32,7 @@ class Db(object):
         c = self._conn.cursor()
         c.execute("SELECT * from tokens WHERE label=?", (label,))
         x = c.fetchone()
-        if x == None:
+        if x is None:
             sys.exit('No token labeled "%s"' % label)
         return x
 

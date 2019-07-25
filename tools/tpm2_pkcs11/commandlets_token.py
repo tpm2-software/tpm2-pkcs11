@@ -71,7 +71,7 @@ class VerifyCommand(Command):
         label = args['label']
 
         token = db.gettoken(label)
-        if token == None:
+        if token is None:
             sys.exit('No token labeled "%s"' % label)
 
         sopin = args['sopin']
@@ -165,7 +165,7 @@ class VerifyCommand(Command):
                       (tobj['id'], tobjauth))
 
     def __call__(self, args):
-        if args['userpin'] == None and args['sopin'] == None:
+        if args['userpin'] is None and args['sopin'] is None:
             sys.exit("Expected one or both of sopin or userpin")
 
         with Db(args['path']) as db:

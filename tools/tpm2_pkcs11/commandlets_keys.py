@@ -311,7 +311,7 @@ class ImportCommand(NewKeyCommandBase):
             sys.exit('Unknown algorithm or algorithm not supported, got "%s"' %
                      alg)
 
-        if privkey == None:
+        if privkey is None:
             sys.exit("Invalid private key path")
 
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.importkey(
