@@ -1,10 +1,8 @@
 from __future__ import print_function
 
 import os
-import shutil
 import sys
-import tempfile
-from tempfile import NamedTemporaryFile
+from tempfile import mkstemp, NamedTemporaryFile
 import uuid
 import yaml
 
@@ -124,8 +122,8 @@ class Tpm2(object):
                seal=None,
                alg=None):
         # tpm2_create -Q -C context.out -g $gAlg -G $GAlg -u key.pub -r key.priv
-        _, priv = tempfile.mkstemp(prefix='', suffix='.priv', dir=self._tmp)
-        _, pub = tempfile.mkstemp(prefix='', suffix='.pub', dir=self._tmp)
+        _, priv = mkstemp(prefix='', suffix='.priv', dir=self._tmp)
+        _, pub = mkstemp(prefix='', suffix='.pub', dir=self._tmp)
 
         cmd = ['tpm2_create', '-C', str(phandle), '-u', pub, '-r', priv]
 
@@ -183,8 +181,8 @@ class Tpm2(object):
         else:
             sys.exit("Invalid file path")
 
-        _, priv = tempfile.mkstemp(prefix='', suffix='.priv', dir=self._tmp)
-        _, pub = tempfile.mkstemp(prefix='', suffix='.pub', dir=self._tmp)
+        _, priv = mkstemp(prefix='', suffix='.priv', dir=self._tmp)
+        _, pub = mkstemp(prefix='', suffix='.pub', dir=self._tmp)
 
         parent_path = str(phandle)
         cmd = [

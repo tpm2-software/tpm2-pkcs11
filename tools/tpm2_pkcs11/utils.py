@@ -4,11 +4,10 @@ import os
 import argparse
 import sys
 import shutil
-import tempfile
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import (Cipher, algorithms, modes)
-from tempfile import NamedTemporaryFile
+from tempfile import mkdtemp
 
 import sys
 if sys.version_info.major < 3:
@@ -213,7 +212,7 @@ class TemporaryDirectory(object):
     """Context manager for tempfile.mkdtemp() so it's usable with "with" statement."""
 
     def __enter__(self):
-        self.name = tempfile.mkdtemp()
+        self.name = mkdtemp()
         return self.name
 
     def __exit__(self, exc_type, exc_value, traceback):
