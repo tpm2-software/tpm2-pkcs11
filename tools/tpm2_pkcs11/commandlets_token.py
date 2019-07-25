@@ -76,7 +76,6 @@ class VerifyCommand(Command):
 
         sopin = args['sopin']
         userpin = args['userpin']
-        path = args['path']
 
         print('Verifying label: "%s"' % label)
 
@@ -488,8 +487,6 @@ class ChangePinCommand(Command):
 
         sealobject = db.getsealobject(token['id'])
 
-        oldpriv = sealobject['{}priv'.format('so' if is_so else 'user')]
-
         #
         # Now we need to use the newpin to wrap the primaryobject auth value AND
         # call tpm2_changeauth ON the seal key and update it's tpm private portion blob
@@ -555,12 +552,6 @@ class InitPinCommand(Command):
         pobj, sealctx, sealauth = load_sealobject(token, tpm2, db, pobjauth,
                                                   sopin, True)
         wrappingkeyauth = tpm2.unseal(sealctx, sealauth)
-
-        # get the public and private data blobs for the old/current user seal object, ie the one
-        # that is going to be replaced.
-        oldsealobject = db.getsealobject(token['id'])
-        oldsealpub = oldsealobject['userpub']
-        oldsealpriv = oldsealobject['userpriv']
 
         #
         # Now we need to create a new pobject auth wrapping key and seal object for the user,

@@ -163,7 +163,6 @@ class DestroyCommand(Command):
             pobj = db.getprimary(pid)
             if pobj == None:
                 sys.exit('Primary Object id "%s"not found' % pid)
-            tokens = db.gettokens(pid)
 
             db.rmprimary(pid)
             Tpm2.evictcontrol(ownerauth, pobj['handle'])
