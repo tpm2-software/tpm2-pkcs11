@@ -195,7 +195,7 @@ if [ $? -ne 0 ]; then
     echo "failed to start tabrmd with name ${TABRMD_NAME}"
 fi
 
-export TPM2TOOLS_TCTI="abrmd:${TABRMD_TEST_TCTI_CONF}"
+export TPM2TOOLS_TCTI="tabrmd:${TABRMD_TEST_TCTI_CONF}"
 echo ${TPM2TOOLS_TCTI}
 
 export TPM2_PKCS11_TCTI="abrmd:${TABRMD_TEST_TCTI_CONF}"
