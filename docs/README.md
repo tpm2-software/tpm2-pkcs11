@@ -2,7 +2,8 @@
 
 [![Build Status](https://travis-ci.org/tpm2-software/tpm2-pkcs11.svg?branch=master)](https://travis-ci.org/tpm2-software/tpm2-pkcs11)
 [![Coverage Status](https://codecov.io/gh/tpm2-software/tpm2-pkcs11/branch/master/graph/badge.svg)](https://codecov.io/gh/tpm2-software/tpm2-pkcs11)
-
+[![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/tpm2-software/tpm2-pkcs11.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/tpm2-software/tpm2-pkcs11/context:cpp)
+[![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/tpm2-software/tpm2-pkcs11.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/tpm2-software/tpm2-pkcs11/context:python)
 
 **This is currently being developed and is not production ready, patches welcome**
 
