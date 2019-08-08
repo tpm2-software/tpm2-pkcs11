@@ -52,11 +52,10 @@ fi
 # Bootstrap the project
 ./bootstrap
 
-# clang has asan enabled with options exported that fail
-# make distcheck, so only do this with gcc.
-# Do a make distcheck in the root, clear it and than
-# cd to the variant directory.
-if [ "$CC" == "gcc" ]; then
+# clang and gcc can have features enabled in the config_flags that
+# avoid error checking or cause make distcheck to fail. So run a
+# pure check with gcc before adding those flags.
+if [[ "$CC" != clang* ]]; then
     ./configure --enable-esapi-session-manage-flags
     make distcheck
     make distclean
@@ -68,7 +67,7 @@ pushd ./build
 
 # Run scan-build for gcc only.
 # Scan-build does not work with clang because of asan linking errors.
-if [[ "$CC" == gcc* ]]; then
+if [[ "$CC" != clang* ]]; then
     scan-build ../configure --enable-unit --enable-integration --enable-debug=yes $config_flags
     scan-build --status-bugs make -j$(nproc)
 
@@ -80,7 +79,7 @@ fi
 make -j$(nproc)
 make -j check
 
-if [ "$CC" == "gcc" ] && [ "$PYTHON_INTERPRETER" == "python3" ]; then
+if [[ "$CC" != clang* ]] && [ "$PYTHON_INTERPRETER" == "python3" ]; then
     bash <(curl -s https://codecov.io/bash)
 fi
 
