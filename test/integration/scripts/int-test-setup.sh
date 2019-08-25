@@ -92,7 +92,7 @@ PORT_MAX=65534
 # sanity tests
 
 if [ -z "${TABRMD_BIN}" ]; then
-    echo "no tarbmd binary provided or not executable"
+    echo "no tabrmd binary provided or not executable"
     exit 1
 fi
 if [ ! -x "${TEST_BIN}" ]; then
