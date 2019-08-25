@@ -73,7 +73,7 @@ CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
     check_pointer(info);
     int rval;
     time_t rawtime;
-    struct tm * tminfo;
+    struct tm tminfo;
 
     memset(info, 0, sizeof(*info));
 
@@ -113,8 +113,8 @@ CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
 
     // Time
     time (&rawtime);
-    tminfo = gmtime(&rawtime);
-    strftime ((char *)info->utcTime, sizeof(info->utcTime), "%Y%m%d%H%M%S", tminfo);
+    gmtime_r(&rawtime, &tminfo);
+    strftime ((char *)info->utcTime, sizeof(info->utcTime), "%Y%m%d%H%M%S", &tminfo);
     // The last two bytes must be '0', not NULL/'\0' terminated.
     info->utcTime[14] = '0';
     info->utcTime[15] = '0';
