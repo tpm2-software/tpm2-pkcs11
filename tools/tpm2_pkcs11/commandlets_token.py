@@ -485,8 +485,6 @@ class ChangePinCommand(Command):
         pobj, sealctx, sealauth = load_sealobject(token, tpm2, db, pobjauth,
                                                   oldpin, is_so)
 
-        sealobject = db.getsealobject(token['id'])
-
         #
         # Now we need to use the newpin to wrap the primaryobject auth value AND
         # call tpm2_changeauth ON the seal key and update it's tpm private portion blob
