@@ -258,7 +258,7 @@ class NewKeyCommandBase(Command):
                 privkey = None
                 try:
                     privkey = args['privkey']
-                except:
+                except KeyError:
                     privkey = None
 
                 path = args['path']
