@@ -2617,7 +2617,7 @@ CK_RV tpm2_generate_key(
         rv = tpm_object_data_populate_ecc(out_pub, objdata);
         break;
     default:
-        LOGE("Impossible keygen type, got: 0x%x");
+        LOGE("Impossible keygen type, got: 0x%x", mechanism->mechanism);
         assert(0);
     }
 
