@@ -665,11 +665,11 @@ TPMI_ALG_HASH mech_to_hash_alg_ex(CK_MECHANISM_TYPE mode, CK_ULONG datalen) {
 
     case CKM_ECDSA_SHA1:
         return TPM2_ALG_SHA1;
-    case CKM_ECDSA: 
-	// ECDSA is NOT using a hash.
-	// It needs a length (determined by the name of an hash alg) anyway.
-	// The length/hash_alg with correct length will be specified later.
-	return datalen ? hashlen_to_alg_guess(datalen) : TPM2_ALG_ERROR;
+    case CKM_ECDSA:
+        // ECDSA is NOT using a hash.
+        // It needs a length (determined by the name of an hash alg) anyway.
+        // The length/hash_alg with correct length will be specified later.
+        return datalen ? hashlen_to_alg_guess(datalen) : TPM2_ALG_ERROR;
 
     default:
         return TPM2_ALG_ERROR;
@@ -770,113 +770,49 @@ static CK_RV flatten_rsassa(TPMS_SIGNATURE_RSASSA *rsassa, CK_BYTE_PTR sig, CK_U
 
 static CK_RV flatten_ecdsa(TPMS_SIGNATURE_ECDSA *ecdsa, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
 
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    /*
-     * This code is a bit of hack for converting from a TPM ECDSA
-     * signature, to an ASN1 encoded one for things like OSSL.
-     *
-     * The problem here, is that it is unclear the proper OSSL
-     * calls to make the SEQUENCE HEADER populate.
-     *
-     * AN ECDSA Signature is an ASN1 sequence of 2 ASNI Integers,
-     * the R and the S portions of the signature.
-     */
-    static const unsigned SEQ_HDR_SIZE = 2;
-
-    CK_BYTE_PTR buf_r = NULL;
-    CK_BYTE_PTR buf_s = NULL;
-
     TPM2B_ECC_PARAMETER *R = &ecdsa->signatureR;
     TPM2B_ECC_PARAMETER *S = &ecdsa->signatureS;
 
     /*
-     * 1. Calculate the sizes of the ASN1 INTEGERS
-     *    DER encoded.
-     * 2. Allocate an array big enough for them and
-     *    the SEQUENCE header.
-     * 3. Set the header 0x30 and length
-     * 4. Copy in R then S
-     */
-    ASN1_INTEGER *asn1_r = ASN1_INTEGER_new();
-    ASN1_INTEGER *asn1_s = ASN1_INTEGER_new();
-    if (!asn1_r || !asn1_s) {
-        LOGE("oom");
-        rv = CKR_HOST_MEMORY;
-        goto out;
-    }
-
-    /*
-     * I wanted to calc the total size with i2d_ASN1_INTEGER
-     * using a NULL output buffer, per the man page this should
-     * work, however the code was dereferencing the pointer.
+     * From PKCS#11 Current Mechanisms Specification:
      *
-     * I'll just let is alloc the buffers
+     * "For the purposes of these mechanisms, an ECDSA signature is an
+     * octet string of even length which is at most two times nLen
+     * octets, where nLen is the length in octets of the base point
+     * order n. The signature octets correspond to the concatenation
+     * of the ECDSA values r and s, both represented as an octet
+     * string of equal length of at most nLen with the most
+     * significant byte first."
      */
-    ASN1_STRING_set(asn1_r, R->buffer, R->size);
-    int size_r = i2d_ASN1_INTEGER(asn1_r, &buf_r);
-    if (size_r < 0) {
-        LOGE("Error converting R to ASN1");
-        goto out;
-    }
-
-    ASN1_STRING_set(asn1_s, S->buffer, S->size);
-    int size_s = i2d_ASN1_INTEGER(asn1_s, &buf_s);
-    if (size_s < 0) {
-        LOGE("Error converting R to ASN1");
-        goto out;
-    }
 
     /*
-     * If the size doesn't fit in a byte my
-     * encoding hack for ASN1 Sequence won't
-     * work, so fail...loudly.
+     * From TCG TPM 2.0, Part 1: Architecture, Appendix C.8:
+     *
+     * "When ECC parameters are returned by the TPM as output
+     * parameters in a response, they must be padded with zeros to the
+     * length of the respective curve (e.g., 32 bytes for NIST
+     * P-256)."
      */
-    if (size_s + size_r > 0xFF) {
-        LOGE("Cannot encode ASN1 Sequence, too big!");
-        goto out;
+
+    if (R->size != S->size) {
+        LOGE("TPM returned ECC signature with inconsistent padding");
+        return CKR_DEVICE_ERROR;
     }
 
     if (!sig) {
-        *siglen = size_r + size_s + SEQ_HDR_SIZE;
-        rv = CKR_OK;
-        goto out;
+        *siglen = R->size + S->size;
+        return CKR_OK;
     }
 
-    if (size_s + size_r + SEQ_HDR_SIZE > *siglen) {
-        *siglen = size_r + size_s + SEQ_HDR_SIZE;
-        rv = CKR_BUFFER_TOO_SMALL;
-        goto out;
+    if (R->size + S->size > *siglen) {
+        *siglen = R->size + S->size;
+        return CKR_BUFFER_TOO_SMALL;
     }
 
-    CK_BYTE_PTR p = sig;
-
-    /* populate header and skip */
-    p[0] = 0x30;
-    p[1] = size_r + size_s;
-    p += 2;
-
-    memcpy(p, buf_r, size_r);
-    p += size_r;
-    memcpy(p, buf_s, size_s);
-
-    *siglen = size_r + size_s + SEQ_HDR_SIZE;
-
-    rv = CKR_OK;
-
-out:
-    if (asn1_r) {
-        ASN1_INTEGER_free(asn1_r);
-    }
-
-    if (asn1_s) {
-        ASN1_INTEGER_free(asn1_s);
-    }
-
-    free(buf_r);
-    free(buf_s);
-
-    return rv;
+    memcpy(sig, R->buffer, R->size);
+    memcpy(sig + R->size, S->buffer, S->size);
+    *siglen = R->size + S->size;
+    return CKR_OK;
 }
 
 static CK_RV sig_flatten(TPMT_SIGNATURE *signature, TPMT_SIG_SCHEME *scheme, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
@@ -967,47 +903,25 @@ static CK_RV init_rsassa_sig(CK_BYTE_PTR sig, CK_ULONG siglen, TPMS_SIGNATURE_RS
 
 static CK_RV init_ecdsa_sig(CK_BYTE_PTR sig, CK_ULONG siglen, TPMS_SIGNATURE_ECDSA *ecdsa) {
 
-    int tag;
-    int class;
-    long len;
-    const CK_BYTE_PTR p = sig;
-
-    int j = ASN1_get_object((const unsigned char **)&p, &len, &tag, &class, siglen);
-    if (!(j & V_ASN1_CONSTRUCTED)) {
-        LOGE("Expected ECDSA signature to start as ASN1 Constructed object");
-        return CKR_GENERAL_ERROR;
-    }
-
-    if (tag != V_ASN1_SEQUENCE) {
-        LOGE("Expected ECDSA signature to be an ASN1 sequence");
-        return CKR_GENERAL_ERROR;
-    }
-
-    /*
-     * Get R
-     */
     TPM2B_ECC_PARAMETER *R = &ecdsa->signatureR;
-    ASN1_INTEGER *r = d2i_ASN1_INTEGER(NULL, (const unsigned char **)&p, len);
-    if (!r) {
-        LOGE("oom");
-        return CKR_HOST_MEMORY;
-    }
-    memcpy(R->buffer, r->data, r->length);
-    R->size = r->length;
-    ASN1_INTEGER_free(r);
-
-    /*
-     * Get S
-     */
     TPM2B_ECC_PARAMETER *S = &ecdsa->signatureS;
-    ASN1_INTEGER *s = d2i_ASN1_INTEGER(NULL, (const unsigned char **)&p, len);
-    if (!s) {
-        LOGE("oom");
-        return CKR_HOST_MEMORY;
+
+    // See comments in flatten_ecdsa about signature format.
+
+    if ((siglen % 2) != 0) {
+        return CKR_SIGNATURE_LEN_RANGE;
     }
-    memcpy(S->buffer, s->data, s->length);
-    S->size = s->length;
-    ASN1_INTEGER_free(s);
+
+    CK_ULONG coordlen = siglen / 2;
+    if (coordlen > sizeof(R->buffer)) {
+        return CKR_SIGNATURE_LEN_RANGE;
+    }
+
+    R->size = coordlen;
+    memcpy(R->buffer, sig, coordlen);
+
+    S->size = coordlen;
+    memcpy(S->buffer, sig + coordlen, coordlen);
 
     return CKR_OK;
 }
