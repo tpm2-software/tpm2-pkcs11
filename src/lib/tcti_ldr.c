@@ -58,12 +58,12 @@ bool tpm2_tcti_ldr_is_tcti_present(const char *name) {
     char path[PATH_MAX];
     snprintf(path, sizeof(path), "libtss2-tcti-%s.so", name);
 
-    void *handle = dlopen (path, RTLD_LAZY);
-    if (handle) {
-        dlclose(handle);
+    void *dlhandle = dlopen (path, RTLD_LAZY);
+    if (dlhandle) {
+        dlclose(dlhandle);
     }
 
-    return handle != NULL;
+    return dlhandle != NULL;
 }
 
 TSS2_TCTI_CONTEXT *tpm2_tcti_ldr_load(const char *path, const char *opts) {
