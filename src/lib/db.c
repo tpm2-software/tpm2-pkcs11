@@ -913,7 +913,7 @@ error:
     return rc;
 }
 
-CK_RV db_get_tokens(token **t, size_t *len) {
+CK_RV db_get_tokens(token **tok, size_t *len) {
 
     size_t cnt = 0;
 
@@ -1082,7 +1082,7 @@ CK_RV db_get_tokens(token **t, size_t *len) {
         }
     }
 
-    *t = tmp;
+    *tok = tmp;
     *len = cnt;
     sqlite3_finalize(stmt);
 
