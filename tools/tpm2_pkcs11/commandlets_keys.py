@@ -20,7 +20,7 @@ from .utils import asn1_format_ec_point_uncompressed
 
 from .tpm2 import Tpm2
 
-from .pkcs11t import *
+from .pkcs11t import * # noqa
 
 
 class NewKeyCommandBase(Command):

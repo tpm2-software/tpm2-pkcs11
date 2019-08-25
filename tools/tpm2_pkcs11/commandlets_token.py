@@ -372,7 +372,7 @@ class AddTokenCommand(Command):
                 tokid = db.addwrapping(tokid, wrappingobjpriv, wrappingobjpub)
 
             # Update the secondary object table
-            tokid = db.addsecondary(tokid, encsobjauth, sobjpriv, sobjpub)
+            tokid = db.addsecondary(tokid, encsobjauth, sobjpriv, sobjpub) # noqa
 
             print("Created token label: %s" % label)
 
