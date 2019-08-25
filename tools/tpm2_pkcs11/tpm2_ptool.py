@@ -2,21 +2,21 @@ from .command import commandlet
 
 # These imports are required to add the commandlet even though they appear unused
 # Store level commands
-from .commandlets_store import InitCommand  # pylint: disable=unused-import
-from .commandlets_store import DestroyCommand  # pylint: disable=unused-import
+from .commandlets_store import InitCommand  # noqa # pylint: disable=unused-import
+from .commandlets_store import DestroyCommand  # noqa # pylint: disable=unused-import
 
 # Token Level Commands
-from .commandlets_token import AddTokenCommand  # pylint: disable=unused-import
-from .commandlets_token import AddEmptyTokenCommand  # pylint: disable=unused-import
-from .commandlets_token import RmTokenCommand  # pylint: disable=unused-import
+from .commandlets_token import AddTokenCommand  # noqa # pylint: disable=unused-import
+from .commandlets_token import AddEmptyTokenCommand  # noqa # pylint: disable=unused-import
+from .commandlets_token import RmTokenCommand  # noqa # pylint: disable=unused-import
 
-from .commandlets_token import VerifyCommand  # pylint: disable=unused-import
+from .commandlets_token import VerifyCommand  # noqa # pylint: disable=unused-import
 
-from .commandlets_token import InitPinCommand  # pylint: disable=unused-import
-from .commandlets_token import ChangePinCommand  # pylint: disable=unused-import
+from .commandlets_token import InitPinCommand  # noqa # pylint: disable=unused-import
+from .commandlets_token import ChangePinCommand  # noqa # pylint: disable=unused-import
 
-from .commandlets_keys import AddKeyCommand  # pylint: disable=unused-import
-from .commandlets_keys import ImportCommand  # pylint: disable=unused-import
+from .commandlets_keys import AddKeyCommand  # noqa # pylint: disable=unused-import
+from .commandlets_keys import ImportCommand  # noqa # pylint: disable=unused-import
 
 def main():
     '''The main entry point.'''
