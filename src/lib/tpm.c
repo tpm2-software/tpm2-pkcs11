@@ -450,7 +450,7 @@ bool tpm_getrandom(tpm_ctx *ctx, BYTE *data, size_t size) {
 
     while (size) {
 
-        UINT16 requested_size = size > sizeof(rand_bytes->buffer) ?
+        UINT16 request_size = size > sizeof(rand_bytes->buffer) ?
                 sizeof(rand_bytes->buffer) : size;
 
         TSS2_RC rval = Esys_GetRandom(
@@ -458,17 +458,17 @@ bool tpm_getrandom(tpm_ctx *ctx, BYTE *data, size_t size) {
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
-            size,
+            request_size,
             &rand_bytes);
         if (rval != TSS2_RC_SUCCESS) {
             LOGE("Esys_GetRandom: 0x%x:", rval);
             goto out;
         }
 
-        memcpy(&data[offset], rand_bytes->buffer, requested_size);
+        memcpy(&data[offset], rand_bytes->buffer, rand_bytes->size);
 
-        offset += requested_size;
-        size -= requested_size;
+        offset += rand_bytes->size;
+        size -= rand_bytes->size;
     }
 
     result = true;
