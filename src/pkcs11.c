@@ -636,11 +636,11 @@ CK_RV C_DeriveKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT
 }
 
 CK_RV C_SeedRandom (CK_SESSION_HANDLE session, CK_BYTE_PTR seed, CK_ULONG seed_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(seed_random, session, seed, seed_len);
+    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(seed_random, session, seed, seed_len);
 }
 
 CK_RV C_GenerateRandom (CK_SESSION_HANDLE session, CK_BYTE_PTR random_data, CK_ULONG random_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(random_get, session, random_data, random_len);
+    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(random_get, session, random_data, random_len);
 }
 
 CK_RV C_GetFunctionStatus (CK_SESSION_HANDLE session) {
