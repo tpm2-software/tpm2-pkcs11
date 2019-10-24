@@ -179,23 +179,26 @@ CK_RV object_get_attributes(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object,
 
     CK_RV rv = CKR_OK;
     TPM2B_PUBLIC public;
+    char *description, *str;
 
     if (session_tab[session].slot_id == 0) {
         return CKR_SESSION_HANDLE_INVALID;
     }
 
-    rv = tss_data_from_id(session_tab[session].slot_id, object, &public, NULL, NULL, NULL);
+    rv = tss_data_from_id(session_tab[session].slot_id, object, &public, NULL,
+                          &description, NULL, NULL);
     if (rv) {
         LOGE("Error in tss data retrieval");
         return rv;
     }
+    LOGV("Got key with description %s", description);
 
     CK_ULONG result_size = 0;
     union {
         CK_OBJECT_CLASS class;
         CK_KEY_TYPE key_type;
         char label[256];
-        CK_BYTE id[1];
+        CK_BYTE id[32];
         CK_BBOOL encrypt;
         CK_BBOOL decrypt;
         CK_BBOOL wrap;
@@ -230,7 +233,21 @@ CK_RV object_get_attributes(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object,
             result_size = sizeof(result.class);
             break;
         case CKA_LABEL:
-            result_size = snprintf(&result.label[0], 255, "The Key");
+            memset(&result.label[0], 0, sizeof(result.label));
+            str = description;
+            if (object & 0x10000000) {
+                strsep(&str, ":");
+                strsep(&str, ":");
+                strsep(&str, ":");
+                str = strsep(&str, ":");
+            } else {
+                strsep(&str, ":");
+                str = strsep(&str, ":");
+            }
+            LOGV("Attribute label %s", str);
+            strcpy(&result.label[0], str);
+            result_size = strlen(str);
+            Fapi_Free(description);
             break;
         case CKA_KEY_TYPE:
             if (public.publicArea.type == TPM2_ALG_RSA) {
@@ -242,8 +259,20 @@ CK_RV object_get_attributes(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object,
             }
             break;
         case CKA_ID:
-            memset(result.id, 0, sizeof(result.id));
-            result_size = sizeof(result.id);
+            memset(&result.id[0], 0, sizeof(result.id));
+            str = description;
+            if (object & 0x10000000) {
+                strsep(&str, ":");
+                strsep(&str, ":");
+                str = strsep(&str, ":");
+            } else {
+                str = strsep(&str, ":");
+            }
+            LOGV("Attribute id %s", str);
+            for (size_t i = 0; i < strlen(str) / 2; i++)
+                sscanf(&str[i*2], "%02"SCNx8, &result.id[i]);
+            result_size = strlen(str) / 2;
+            Fapi_Free(description);
             break;
         case CKA_ENCRYPT:
             setresult(encrypt, CK_TRUE);
@@ -285,31 +314,31 @@ CK_RV object_get_attributes(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object,
             break;
         case 0x80000001:
             LOGV("Unknown vendor-specific attribute 0x80000001 requested");
-            templ->ulValueLen = CK_UNAVAILABLE_INFORMATION;
+            t->ulValueLen = CK_UNAVAILABLE_INFORMATION;
             rv = CKR_ATTRIBUTE_TYPE_INVALID;
             continue;
         default:
-            templ->ulValueLen = CK_UNAVAILABLE_INFORMATION;
+            t->ulValueLen = CK_UNAVAILABLE_INFORMATION;
             rv = CKR_ATTRIBUTE_TYPE_INVALID;
             continue;
         }
 
         if (!result_size) {
-            templ->ulValueLen = CK_UNAVAILABLE_INFORMATION;
+            t->ulValueLen = CK_UNAVAILABLE_INFORMATION;
             rv = CKR_ATTRIBUTE_TYPE_INVALID;
             continue;
         }
-        if (!templ->pValue) {
-            templ->ulValueLen = result_size;
+        if (!t->pValue) {
+            t->ulValueLen = result_size;
             continue;
         }
-        if (templ->ulValueLen < result_size) {
-            templ->ulValueLen = CK_UNAVAILABLE_INFORMATION;
+        if (t->ulValueLen < result_size) {
+            t->ulValueLen = CK_UNAVAILABLE_INFORMATION;
             rv = CKR_BUFFER_TOO_SMALL;
         }
 
-        memcpy(templ->pValue, &result.buffer[0], result_size);
-        templ->ulValueLen = result_size;
+        memcpy(t->pValue, &result.buffer[0], result_size);
+        t->ulValueLen = result_size;
     }
     return rv;
 }

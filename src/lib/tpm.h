@@ -46,6 +46,7 @@ char * tss_keypath_from_id(CK_SLOT_ID slot_id, CK_OBJECT_HANDLE object);
 
 CK_RV tss_data_from_id(CK_SLOT_ID slot_id, CK_OBJECT_HANDLE object,
                         TPM2B_PUBLIC *public, TPM2B_PRIVATE *private,
+                        char **description,
                         uint8_t **appData, size_t *appDataSize);
 
 CK_RV tss_rsa_decrypt(CK_SLOT_ID slot_id, CK_OBJECT_HANDLE key, uint8_t *auth, CK_MECHANISM_TYPE mtype, oaepparams *params, CK_BYTE_PTR cipher, CK_ULONG cipherlen, CK_BYTE_PTR part, CK_ULONG_PTR partlen);

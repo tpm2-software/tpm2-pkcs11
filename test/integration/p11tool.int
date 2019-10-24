@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+
+set -eufx
+
+export TPM2_PKCS11_LOG_LEVEL="${TPM2_PKCS11_LOG_LEVEL:-2}"
+#export TPM2_PKCS11_LOG_LEVEL=0
+
+#export TSS2_LOG="${TSS2_LOG:-fapi+trace}"
+export TSS2_LOG="-all+warning"
+
+PKCS11SPY_LIB=/usr/lib/x86_64-linux-gnu/pkcs11-spy.so
+MODULE=${PKCS11SPY_LIB:-${PWD}/src/.libs/libtpm2_pkcs11.so}
+
+export PKCS11SPY=${PWD}/src/.libs/libtpm2_pkcs11.so
+export PKCS11SPY_OUTPUT=${0}_pkcs11spy.log
+
+MKTMP="$(mktemp -d)"
+#TMP=${TMP:-$MKTMP}
+TMP=${TMP:-/tmp}
+
+### Setup
+SOPIN="123987"
+PIN="1234"
+PIN2="5678"
+LABEL="My personal testing smartcard"
+LABEL20="My%20personal%20testing%20smartcard"
+echo "testdata">${TMP}/data
+echo -n "123456789012345678901234567890123456789012345678901234567890">${TMP}/raw
+echo -n "123456789012345678901234567890123456789012345678901234567890">>${TMP}/raw
+echo -n "123456789012345678901234567890123456789012345678901234567890">>${TMP}/raw
+echo -n "123456789012345678901234567890123456789012345678901234567890">>${TMP}/raw
+echo -n "1234567890123456">>${TMP}/raw
+
+export HOME=${TMP}
+mkdir -p $HOME/.config/pkcs11/modules
+echo "module: ${MODULE}" >$HOME/.config/pkcs11/modules/tpm2-pkcs11.module
+
+### General informational tests
+
+#valgrind --error-exitcode=666 \
+p11tool -d 9999 --list-tokens
+
+#TODO: Make this the simulator
+TOKENURL=$(p11tool --list-token-urls | grep TODO)
+
+p11tool -d 9999 --generate-random=4096 ${TOKENURL} \
+            | hd
+test "$(p11tool --generate-random=4096 ${TOKENURL} \
+            | hd | tail -n 1)" == "00001000"
+
+p11tool -d 9999 --list-mechanisms ${TOKENURL}
+
+GNUTLS_SO_PIN=${SOPIN} \
+p11tool -d 9999 --initialize --label="${LABEL}" ${TOKENURL}
+
+p11tool -d 9999 --list-tokens
+
+TOKENURL=$(p11tool --list-token-urls | grep ${LABEL20})
+
+#GNUTLS_SO_PIN=${SOPIN} \
+#p11tool -d 9999 --initialize-so-pin ${TOKENURL}
+
+GNUTLS_SO_PIN=${SOPIN} \
+GNUTLS_PIN=${PIN} \
+p11tool -d 9999 --initialize-pin ${TOKENURL}
+
+test "$(! p11tool --list-all ${TOKENURL} 2>&1 | tail -n 1)" == "No matching objects found"
+
+#if test "$(p11tool --version)" -gte "x.y.z"; then
+#New parameter for the future, since generate-rsa is deprecated
+
+#GNUTLS_PIN=${PIN} \
+#p11tool --generate-privkey=rsa ${TOKENURL}
+#GNUTLS_PIN=${PIN} \
+#p11tool --generate-privkey=rsa --bits=2048 --id="123456" --label="TestKey1" ${TOKENURL}
+
+#else # p11tool --version and deprecation
+
+GNUTLS_PIN=${PIN} \
+p11tool --generate-rsa --login --label="" --outfile="${TMP}/pubkey.pem" ${TOKENURL}
+
+GNUTLS_PIN=${PIN} \
+p11tool --generate-rsa --login --bits=2048 --id="123456" --label="${LABEL}" \
+        --outfile="${TMP}/pubkey2.pem" ${TOKENURL}
+
+#fi # p11tool --version and deprecation
+
+GNUTLS_PIN=${PIN} \
+p11tool --list-all ${TOKENURL}
+
+rm -rf $MKTMP || true
+
+echo DONE!
+#false

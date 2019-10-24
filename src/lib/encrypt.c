@@ -28,6 +28,7 @@ static CK_RV common_init(CK_SESSION_HANDLE session, operation op, CK_MECHANISM_P
         LOGV("OAEP mode selected");
         if (!mechanism->pParameter) {
             LOGE("OAEP without parameters");
+            //TODO: Is this a size request ?
             return CKR_MECHANISM_PARAM_INVALID;
         }
         if (mechanism->ulParameterLen != sizeof(CK_RSA_PKCS_OAEP_PARAMS)) {

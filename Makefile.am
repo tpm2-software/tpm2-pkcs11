@@ -118,7 +118,8 @@ test_integration_libtest_a_CFLAGS = -fPIC $(AM_CFLAGS)
 TESTS_LDADD += $(LIB_TEST)
 
 TESTS += \
-    test/integration/pkcstool.int
+    test/integration/pkcstool.int \
+    test/integration/p11tool.int
 #    $(check_PROGRAMS)
 #TODO: check_PROGRAMS tests are currently dysfunc because they assume 3 initialized slots
 check_PROGRAMS += \

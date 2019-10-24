@@ -90,16 +90,16 @@ CK_RV slot_get_info (CK_SLOT_ID slot_id, CK_SLOT_INFO *info) {
     check_pointer(info);
 
     memset(info, 0, sizeof(*info));
-    strcpy((char *)&info->slotDescription[0], "tpm2-pkcs11");
-    strcpy((char *)&info->manufacturerID[0], "tpm2-software");
+    str_padded_copy(info->manufacturerID, "tpm2-pkcs11", sizeof(info->manufacturerID));
+    str_padded_copy(info->slotDescription, "tpm2-software.github.io", sizeof(info->slotDescription));
 
     info->flags = CKF_TOKEN_PRESENT | CKF_HW_SLOT;
 
-    //TODO
+    //TODO: pkg-version
     info->hardwareVersion.major = 0;
-    info->hardwareVersion.minor = 0;
+    info->hardwareVersion.minor = 1;
     info->firmwareVersion.major = 0;
-    info->firmwareVersion.minor = 0;
+    info->firmwareVersion.minor = 1;
     return CKR_OK;
 }
 

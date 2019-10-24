@@ -3,6 +3,10 @@
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
  */
+
+#define _GNU_SOURCE
+#include <stdio.h>
+
 #include <assert.h>
 #include <openssl/bn.h>
 #include <openssl/rand.h>
@@ -584,6 +588,128 @@ static CK_RV check_specific_attrs(CK_MECHANISM_TYPE mech,
     }
 }
 
+struct ATTRS {
+    char pubid[65];
+    char publabel[65];
+    char privid[65];
+    char privlabel[65];
+    uint64_t keysize;
+    uint32_t exponent;
+};
+
+static CK_RV extract_attrs(CK_MECHANISM_PTR mechanism,
+        CK_ATTRIBUTE_PTR pub, CK_ULONG pub_count,
+        CK_ATTRIBUTE_PTR priv, CK_ULONG priv_count,
+        struct ATTRS *attrs) {
+    memset(attrs, 0, sizeof(*attrs));
+
+    switch(mechanism->mechanism) {
+    case CKM_RSA_PKCS_KEY_PAIR_GEN:
+        break;
+    default:
+        LOGE("Unknown key generation type: 0x%x", mechanism->mechanism);
+        return CKR_ATTRIBUTE_TYPE_INVALID;
+    }
+
+    /* Starting with public attributes */
+    for (CK_ULONG i = 0; i < pub_count; i++) {
+        switch(pub[i].type) {
+        //TODO: Check that we can ignore them all
+        case CKA_CLASS:
+        case CKA_TOKEN:
+        case CKA_PRIVATE:
+        case CKA_ENCRYPT:
+        case CKA_VERIFY:
+            LOGV("Ignoring public attribute: 0x%x", pub[i].type);
+            break;
+        case CKA_ID:
+            LOGV("Copying public key id");
+            if (pub[i].ulValueLen > 64) {
+                LOGE("CKA_ID's ulValueLen too large. Expect <=64, got: %li",
+                     pub[i].ulValueLen);
+                return CKR_ATTRIBUTE_VALUE_INVALID;
+            }
+            for (CK_ULONG j = 0; j < pub[i].ulValueLen; j++)
+                sprintf(&attrs->pubid[2*j], "%02x", ((CK_BYTE *)pub[i].pValue)[j]);
+            break;
+        case CKA_LABEL:
+            LOGV("Copying public key label");
+            if (pub[i].ulValueLen > 64) {
+                LOGE("CKA_LABEL's ulValueLen too large. Expect <=64, got: %li",
+                     pub[i].ulValueLen);
+                return CKR_ATTRIBUTE_VALUE_INVALID;
+            }
+            memcpy(&attrs->publabel[0], pub[i].pValue, pub[i].ulValueLen);
+            break;
+        case CKA_MODULUS_BITS:
+            LOGV("Copying modulus bits");
+            if (pub[i].ulValueLen > 8) {
+                LOGE("CKA_MODULUS_BITS's ulValueLen too large. Expect <=8, got: %li",
+                     pub[i].ulValueLen);
+                return CKR_ATTRIBUTE_VALUE_INVALID;
+            }
+            uint8_t tmp1[8] = { 0 };
+            memcpy(&tmp1[8-pub[i].ulValueLen], pub[i].pValue, pub[i].ulValueLen);
+            memcpy(&attrs->keysize, &tmp1[0], 8);
+            attrs->keysize = be64toh(attrs->keysize);
+            break;
+        case CKA_PUBLIC_EXPONENT:
+            LOGV("Copying public exponent");
+            if (pub[i].ulValueLen > 4) {
+                LOGE("CKA_PUBLIC_EXPONENT's ulValueLen too large. Expect <=4, got: %li",
+                     pub[i].ulValueLen);
+                return CKR_ATTRIBUTE_VALUE_INVALID;
+            }
+            uint8_t tmp2[4] = { 0 };
+            memcpy(&tmp2[4-pub[i].ulValueLen], pub[i].pValue, pub[i].ulValueLen);
+            memcpy(&attrs->exponent, &tmp2[0], 4);
+            attrs->exponent = be32toh(attrs->exponent);
+            break;
+        default:
+            LOGE("Unknown attribute: 0x%x", pub[i].type);
+            return CKR_ATTRIBUTE_TYPE_INVALID;
+        }
+    }
+
+    for (CK_ULONG i = 0; i < priv_count; i++) {
+        switch(priv[i].type) {
+        //TODO: Look at these, esp decrypt vs sign
+        case CKA_CLASS:
+        case CKA_DECRYPT:
+        case CKA_SIGN:
+        case CKA_PRIVATE:
+        case CKA_TOKEN:
+        case CKA_SENSITIVE:
+            LOGV("Ignoring private attribute: 0x%x", priv[i].type);
+            break;
+        case CKA_ID:
+            LOGV("Copying priv key id");
+            if (priv[i].ulValueLen > 32) {
+                LOGE("CKA_ID's ulValueLen too large. Expect <=64, got: %li",
+                     priv[i].ulValueLen);
+                return CKR_ATTRIBUTE_VALUE_INVALID;
+            }
+            for (CK_ULONG j = 0; j < priv[i].ulValueLen; j++)
+                sprintf(&attrs->privid[2*j], "%02x", ((CK_BYTE *)priv[i].pValue)[j]);
+            break;
+        case CKA_LABEL:
+            LOGV("Copying priv key label");
+            if (priv[i].ulValueLen > 64) {
+                LOGE("CKA_LABEL's ulValueLen too large. Expect <=64, got: %li",
+                     priv[i].ulValueLen);
+                return CKR_ATTRIBUTE_VALUE_INVALID;
+            }
+            memcpy(&attrs->privlabel[0], priv[i].pValue, priv[i].ulValueLen);
+            break;
+        default:
+            LOGE("Unknown attribute: 0x%x", priv[i].type);
+            return CKR_ATTRIBUTE_TYPE_INVALID;
+        }
+    }
+
+    return CKR_OK;
+}
+
 CK_RV key_gen (
         CK_SESSION_HANDLE session,
 
@@ -599,10 +725,12 @@ CK_RV key_gen (
         CK_OBJECT_HANDLE_PTR private_key_handle) {
 
     TSS2_RC rc;
-    FAPI_CONTEXT *fctx;
     CK_RV rv;
-    char *path;
+    int ri;
+    FAPI_CONTEXT *fctx;
+    char *path, *description;
     CK_OBJECT_HANDLE keyhandle;
+    struct ATTRS attrs;
 
     if (session_tab[session].slot_id == 0) {
         return CKR_SESSION_HANDLE_INVALID;
@@ -637,17 +765,49 @@ CK_RV key_gen (
         return rv;
     }
 
+    rv = extract_attrs(mechanism,
+            public_key_template, public_key_attribute_count,
+            private_key_template, private_key_attribute_count,
+            &attrs);
+    if (rv != CKR_OK) {
+        LOGE("Failed extracting attrs");
+        return rv;
+    }
+
+    //TODO: Turn attributes into Fapi_CreateKey-attributes, wrt sign, decrypt, keysize, exponent
+
     rc = Fapi_Initialize(&fctx, NULL);
     check_tssrc(rc, return CKR_GENERAL_ERROR);
 
+    path = NULL;
     do {
+        if (path)
+            free(path);
+
         keyhandle = (CK_OBJECT_HANDLE) rand() & 0x0FFFFFFF;
         path = tss_keypath_from_id(session_tab[session].slot_id, keyhandle);
 
         rc = Fapi_CreateKey(fctx, path, "sign, decrypt",
                             NULL, (char *)&session_tab[session].seal[0]);
+    } while (rc == TSS2_FAPI_RC_PATH_ALREADY_EXISTS);
+    check_tssrc(rc, free(path); Fapi_Finalize(&fctx); return CKR_GENERAL_ERROR);
+    LOGV("Created key at path %s", path);
+
+    /* Put those attributes that belong there into the description */
+    //TODO: Escape the label for reading
+    ri = asprintf(&description, "%s:%s:%s:%s", &attrs.privid[0], &attrs.privlabel[0],
+                                               &attrs.pubid[0], &attrs.publabel[0]);
+    if (ri < 0) {
+        LOGE("asprintf failed");
         free(path);
-    } while (rc == TSS2_FAPI_RC_NAME_ALREADY_EXISTS);
+        Fapi_Finalize(&fctx);
+        return CKR_GENERAL_ERROR;
+    }
+
+    LOGV("Setting description of key %s to %s", path, description);
+    Fapi_SetDescription(fctx, path, description);
+    free(path);
+    free(description);
     Fapi_Finalize(&fctx);
     check_tssrc(rc, return CKR_GENERAL_ERROR);
 

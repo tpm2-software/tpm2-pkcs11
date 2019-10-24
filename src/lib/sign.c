@@ -615,7 +615,7 @@ CK_RV sign_final_ex(CK_SESSION_HANDLE session, CK_BYTE_PTR signature, CK_ULONG_P
          * the raw data provided (hash) into the hash variable and perform a sign.
          */
         if (session_tab[session].opdata.signverify.mtype == CKM_ECDSA){
-            assert(!hash);
+            //assert(!hash);
             assert(!hash_len);
             assert(session_tab[session].opdata.signverify.buffer);
             hash_len = twist_len(session_tab[session].opdata.signverify.buffer);

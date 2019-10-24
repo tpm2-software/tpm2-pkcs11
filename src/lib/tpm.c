@@ -90,6 +90,7 @@ CK_RV tss_get_card_ids(CK_SLOT_ID *slot_list, CK_ULONG_PTR count) {
 
         if (numPaths > *count) {
             LOGE("buffer too small, count = %u, required=%u", *count, numPaths);
+            *count = numPaths;
             Fapi_Free(pathlist);
             return CKR_BUFFER_TOO_SMALL;
         }
@@ -181,12 +182,13 @@ char * tss_keypath_from_id(CK_SLOT_ID slot_id, CK_OBJECT_HANDLE object) {
 
 CK_RV tss_data_from_id(CK_SLOT_ID slot_id, CK_OBJECT_HANDLE object,
                         TPM2B_PUBLIC *public, TPM2B_PRIVATE *private,
+                        char **description,
                         uint8_t **appData, size_t *appDataSize) {
     TSS2_RC rc;
     FAPI_CONTEXT *fctx;
     uint8_t *tpm2bPublic, *tpm2bPrivate;
     size_t tpm2bPublicSize, tpm2bPrivateSize;
-    char *path;
+    char *path, *d;
 
     rc = Fapi_Initialize(&fctx, NULL);
     check_tssrc(rc, return CKR_GENERAL_ERROR);
@@ -196,6 +198,14 @@ CK_RV tss_data_from_id(CK_SLOT_ID slot_id, CK_OBJECT_HANDLE object,
     rc = Fapi_GetTpmBlobs(fctx, path, &tpm2bPublic, &tpm2bPublicSize,
                           &tpm2bPrivate, &tpm2bPrivateSize, NULL /* policy */);
     check_tssrc(rc, free(path); Fapi_Finalize(&fctx); return CKR_GENERAL_ERROR);
+
+    rc = Fapi_GetDescription(fctx, path, &d);
+    if (rc == 0x00060007) {
+        if (description) *description = NULL;
+    } else {
+        check_tssrc(rc, Fapi_Free(tpm2bPublic); Fapi_Free(tpm2bPrivate); return CKR_GENERAL_ERROR);
+        if (description) *description = d;
+    }
 
     rc = Fapi_GetAppData(fctx, path, appData, appDataSize);
     free(path);
@@ -464,7 +474,7 @@ fprintf(stderr, "Signature:");
 fprintf(stderr, "\n\n");
 
 TPM2B_PUBLIC public;
-tss_data_from_id(slot_id, key, &public, NULL, NULL, NULL);
+tss_data_from_id(slot_id, key, &public, NULL, NULL, NULL, NULL);
 fprintf(stderr, "key:");
     for (size_t i = 0; i < public.publicArea.unique.rsa.size; i++)
         fprintf(stderr, "%02x", public.publicArea.unique.rsa.buffer[i]);
@@ -659,7 +669,7 @@ CK_RV tss_rsa_decrypt(CK_SLOT_ID slot_id, CK_OBJECT_HANDLE key, uint8_t *auth, C
     }
     memcpy(cipher2b.buffer, cipher, cipherlen);
 
-    rv = tss_data_from_id(slot_id, key, &public, &private, NULL, NULL);
+    rv = tss_data_from_id(slot_id, key, &public, &private, NULL, NULL, NULL);
     check_tssrc(rv, return rv);
 
     switch(mtype) {
