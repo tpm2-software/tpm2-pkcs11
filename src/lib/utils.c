@@ -13,22 +13,21 @@
 #include "token.h"
 #include "utils.h"
 
-CK_RV utils_setup_new_object_auth(twist newpin, twist *newauthbin, twist *newauthhex, twist *newsalthex) {
+CK_RV utils_setup_new_object_auth(twist newpin, twist *newauthhex, twist *newsalthex) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
     bool allocated_pin_to_use = false;
     twist pin_to_use = NULL;
-    twist newsaltbin = NULL;
 
-    newsaltbin = utils_get_rand(SALT_SIZE);
-    if (!newsaltbin) {
+    *newsalthex = utils_get_rand_hex_str(SALT_HEX_STR_SIZE);
+    if (!newsalthex) {
         goto out;
     }
 
     if (!newpin) {
         allocated_pin_to_use = true;
-        pin_to_use = utils_get_rand(32);
+        pin_to_use = utils_get_rand_hex_str(32);
         if (!pin_to_use) {
             goto out;
         }
@@ -36,25 +35,9 @@ CK_RV utils_setup_new_object_auth(twist newpin, twist *newauthbin, twist *newaut
         pin_to_use = newpin;
     }
 
-    *newauthbin = utils_pdkdf2_hmac_sha256_bin_raw(pin_to_use, newsaltbin, ITERS);
-    if (!newauthbin) {
+    *newauthhex = utils_hash_pass(pin_to_use, *newsalthex);
+    if (!*newauthhex) {
         goto out;
-    }
-
-    if (newsalthex) {
-        *newsalthex = twist_hexlify(newsaltbin);
-        if (!*newsalthex) {
-            rv = CKR_HOST_MEMORY;
-            goto out;
-        }
-    }
-
-    if (newauthhex) {
-        *newauthhex = twist_hexlify(*newauthbin);
-        if (!*newauthhex) {
-            rv = CKR_HOST_MEMORY;
-            goto out;
-        }
     }
 
     rv = CKR_OK;
@@ -63,21 +46,17 @@ out:
 
     if (rv != CKR_OK) {
         twist_free(*newauthhex);
-        twist_free(*newauthbin);
         if (newsalthex) {
             twist_free(*newsalthex);
             *newsalthex = NULL;
         }
 
         *newauthhex = NULL;
-        *newauthbin = NULL;
     }
 
     if (allocated_pin_to_use) {
         twist_free(pin_to_use);
     }
-
-    twist_free(newsaltbin);
 
     return rv;
 }
@@ -318,76 +297,20 @@ out:
 
 }
 
-twist utils_pdkdf2_hmac_sha256_bin_raw(const twist pin, const twist binsalt,
-        int iterations) {
-
-    twist digest = twist_calloc(SHA256_DIGEST_LENGTH);
-    if (!digest) {
-        return NULL;
-    }
-
-    int rc = PKCS5_PBKDF2_HMAC(pin, twist_len(pin),
-            (const CK_BYTE_PTR )binsalt, twist_len(binsalt),
-            iterations,
-            EVP_sha256(), SHA256_DIGEST_LENGTH, (CK_BYTE_PTR )digest);
-    if (!rc) {
-        LOGE("Error pdkdf2_hmac_sha256");
-        goto error;
-    }
-
-    return digest;
-
-error:
-    twist_free(digest);
-    twist_free(binsalt);
-    return NULL;
-}
-
-twist utils_pdkdf2_hmac_sha256_raw(const twist pin, const twist salt,
-        int iterations) {
-
-    twist binsalt = twistbin_unhexlify(salt);
-    if (!binsalt) {
-        return NULL;
-    }
-
-    twist x = utils_pdkdf2_hmac_sha256_bin_raw(pin, binsalt, iterations);
-    twist_free(binsalt);
-
-    return x;
-}
-
-twist decrypt(const twist pin, const twist salt, unsigned iters,
-        const twist objauth) {
-
-    twist key = utils_pdkdf2_hmac_sha256_raw(pin, salt, iters);
-    if (!key) {
-        return NULL;
-    }
-
-    twist ptext = aes256_gcm_decrypt(key, objauth);
-    twist_free(key);
-    if (!ptext) {
-        return NULL;
-    }
-
-    twist raw = twistbin_unhexlify(ptext);
-    twist_free(ptext);
-
-    return raw;
-}
-
-twist utils_pdkdf2_hmac_sha256(const twist pin, const twist salt, int iterations) {
+twist utils_hash_pass(const twist pin, const twist salt) {
 
 
-    twist digest = utils_pdkdf2_hmac_sha256_raw(pin, salt, iterations);
-    if (!digest) {
-        return NULL;
-    }
+    unsigned char md[SHA256_DIGEST_LENGTH];
 
-    twist hex = twist_hexlify(digest);
-    twist_free(digest);
-    return hex;
+    SHA256_CTX sha256;
+    SHA256_Init(&sha256);
+
+    SHA256_Update(&sha256, pin, twist_len(pin));
+    SHA256_Update(&sha256, salt, twist_len(salt));
+    SHA256_Final(md, &sha256);
+
+    /* truncate the password to 32 characters */
+    return twist_hex_new((char *)md, sizeof(md)/2);
 }
 
 size_t utils_get_halg_size(CK_MECHANISM_TYPE mttype) {
@@ -449,9 +372,13 @@ bool utils_mech_is_ecdsa(CK_MECHANISM_TYPE mech) {
     }
 }
 
-twist utils_get_rand(size_t size) {
+twist utils_get_rand_hex_str(size_t size) {
 
     if (size == 0) {
+        return NULL;
+    }
+
+    if (size & 0x1) {
         return NULL;
     }
 
@@ -466,7 +393,10 @@ twist utils_get_rand(size_t size) {
         return NULL;
     }
 
-    return salt;
+    twist hex = twist_hex_new(salt, twist_len(salt));
+    twist_free(salt);
+
+    return hex;
 }
 
 CK_RV utils_ctx_unwrap_objauth(token *tok, twist objauth, twist *unwrapped_auth) {
@@ -474,66 +404,12 @@ CK_RV utils_ctx_unwrap_objauth(token *tok, twist objauth, twist *unwrapped_auth)
     assert(objauth);
     assert(unwrapped_auth);
 
-    twist unwrapped_raw = NULL;
-    wrappingobject *wobj = &tok->wrappingobject;
-    tpm_ctx *tpm = tok->tctx;
-
-    if (tok->config.sym_support) {
-        twist objauthraw = twistbin_unhexlify(objauth);
-        if (!objauthraw) {
-            LOGE("unhexlify objauth failed: %u-%s", twist_len(objauth), objauth);
-            return CKR_HOST_MEMORY;
-        }
-
-        tpm_encrypt_data *encdata = NULL;
-        CK_MECHANISM mech = {
-                CKM_AES_CFB1, NULL, 0
-        };
-
-        CK_RV rv = tpm_encrypt_data_init(tpm, wobj->handle, wobj->objauth, &mech, &encdata);
-        if (rv != CKR_OK) {
-            LOGE("tpm_encrypt_data_init failed: 0x%x", rv);
-            return CKR_GENERAL_ERROR;
-        }
-
-        CK_BYTE ptext[256];
-        CK_ULONG ptextlen = sizeof(ptext);
-
-        rv = tpm_decrypt(encdata,
-             (CK_BYTE_PTR)objauthraw, twist_len(objauthraw),
-             ptext, &ptextlen);
-        tpm_encrypt_data_free(encdata);
-        twist_free(objauthraw);
-        if (rv != CKR_OK) {
-            LOGE("tpm_decrypt_handle failed: 0x%x", rv);
-            return CKR_GENERAL_ERROR;
-        }
-
-        unwrapped_raw = twistbin_new(ptext, ptextlen);
-        if (!unwrapped_raw) {
-            return CKR_HOST_MEMORY;
-        }
-
-    } else {
-        twist swkey = twistbin_unhexlify(wobj->objauth);
-        if (!swkey) {
-            return CKR_GENERAL_ERROR;
-        }
-        unwrapped_raw = aes256_gcm_decrypt(swkey, objauth);
-        twist_free(swkey);
-        if (!unwrapped_raw) {
-            return CKR_GENERAL_ERROR;
-        }
+     twist tmp = aes256_gcm_decrypt(tok->wappingkey, objauth);
+    if (!tmp) {
+        return CKR_GENERAL_ERROR;
     }
 
-    twist objauth_unwrapped = twistbin_unhexlify(unwrapped_raw);
-    twist_free(unwrapped_raw);
-    if (!objauth_unwrapped) {
-        LOGE("unhexlify failed");
-        return CKR_HOST_MEMORY;
-    }
-
-    *unwrapped_auth = objauth_unwrapped;
+    *unwrapped_auth = tmp;
 
     return CKR_OK;
 }
@@ -542,56 +418,14 @@ CK_RV utils_ctx_wrap_objauth(token *tok, twist data, twist *wrapped_auth) {
     assert(tok);
     assert(data);
 
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    twist wrapped = NULL;
-
-    wrappingobject *wobj = &tok->wrappingobject;
-
-    if (tok->config.sym_support) {
-        tpm_encrypt_data *encdata = NULL;
-        CK_MECHANISM mech = {
-                CKM_AES_CFB1, NULL, 0
-        };
-
-        rv = tpm_encrypt_data_init(tok->tctx, wobj->handle, wobj->objauth, &mech, &encdata);
-        if (rv != CKR_OK) {
-            LOGE("tpm_encrypt_data_init failed: 0x%x", rv);
-            goto out;
-        }
-
-        CK_BYTE xtext[256];
-        CK_ULONG xtextlen = sizeof(xtext);
-
-        rv = tpm_encrypt(encdata,
-             (CK_BYTE_PTR)data, twist_len(data),
-             xtext, &xtextlen);
-        tpm_encrypt_data_free(encdata);
-        if (rv != CKR_OK) {
-            LOGE("tpm_encrypt failed: 0x%x", rv);
-            goto out;
-        }
-
-        wrapped = twist_hex_new((char *)xtext, xtextlen);
-
-    } else {
-        twist swkey = twistbin_unhexlify(wobj->objauth);
-        if (!swkey) {
-            goto out;
-        }
-        wrapped = aes256_gcm_encrypt(swkey, data);
-        twist_free(swkey);
-    }
-
+    twist wrapped = aes256_gcm_encrypt(tok->wappingkey, data);
     if (!wrapped) {
-        goto out;
+        return CKR_GENERAL_ERROR;
     }
 
     *wrapped_auth = wrapped;
-    rv = CKR_OK;
 
-out:
-    return rv;
+    return CKR_OK;
 }
 
 CK_RV generic_attr_copy(CK_ATTRIBUTE_PTR in, CK_ULONG count, void *udata) {

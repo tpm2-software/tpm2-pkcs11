@@ -14,8 +14,7 @@
 #include "pkcs11.h"
 #include "twist.h"
 
-#define ITERS 10000
-#define SALT_SIZE 32
+#define SALT_HEX_STR_SIZE 64 /* 64 hex chars is 32 bits entropy */
 
 #define xstr(s) str(s)
 #define str(s) #s
@@ -38,29 +37,7 @@ static inline void str_padded_copy(unsigned char * dst, const unsigned char * sr
     memcpy(dst, src, strnlen((char *)(src), dst_len));
 }
 
-/**
- *
- * @param pin
- * @param salt
- * @param iterations
- * @return
- */
-twist utils_pdkdf2_hmac_sha256_raw(const twist pin, const twist salt,
-        int iterations);
-
-/**
- *
- * @param pin
- * @param binsalt
- * @param iterations
- * @return
- */
-twist utils_pdkdf2_hmac_sha256_bin_raw(const twist pin, const twist binsalt,
-        int iterations);
-
-twist utils_pdkdf2_hmac_sha256(const twist pin, const twist salt, int iterations);
-
-twist decrypt(const twist pin, const twist salt, unsigned iters, const twist objauth);
+twist utils_hash_pass(const twist pin, const twist salt);
 
 twist aes256_gcm_decrypt(const twist key, const twist objauth);
 
@@ -110,16 +87,15 @@ bool utils_mech_is_ecdsa(CK_MECHANISM_TYPE mech);
  * @param size
  * @return
  */
-twist utils_get_rand(size_t size);
+twist utils_get_rand_hex_str(size_t size);
 
-CK_RV utils_setup_new_object_auth(twist newpin, twist *newauthbin, twist *newauthhex, twist *newsalthex);
+CK_RV utils_setup_new_object_auth(twist newpin, twist *newauthhex, twist *newsalthex);
 
 static inline CK_RV utils_new_random_object_auth(twist *newauthbin, twist *newauthhex) {
-    return utils_setup_new_object_auth(NULL, newauthbin, newauthhex, NULL);
+    return utils_setup_new_object_auth(NULL, newauthbin, newauthhex);
 }
 
 typedef struct tpm_ctx tpm_ctx;
-typedef struct wrappingobject wrappingobject;
 typedef struct token token;
 CK_RV utils_ctx_unwrap_objauth(token *tok, twist objauth, twist *unwrapped_auth);
 CK_RV utils_ctx_wrap_objauth(token *tok, twist objauth, twist *wrapped_auth);

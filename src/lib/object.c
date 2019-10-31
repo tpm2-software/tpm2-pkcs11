@@ -56,19 +56,6 @@ void tobject_free(tobject *tobj) {
     free(tobj);
 }
 
-void sobject_free(sobject *sobj) {
-    twist_free(sobj->priv);
-    twist_free(sobj->pub);
-    twist_free(sobj->objauth);
-    twist_free(sobj->authraw);
-}
-
-void wrappingobject_free(wrappingobject *wobj) {
-    twist_free(wobj->priv);
-    twist_free(wobj->pub);
-    twist_free(wobj->objauth);
-}
-
 void sealobject_free(sealobject *sealobj) {
     twist_free(sealobj->soauthsalt);
     twist_free(sealobj->sopriv);

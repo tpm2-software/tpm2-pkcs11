@@ -491,9 +491,7 @@ static bool parse_token_config(const char *key, const char *value, size_t index,
 
     token *t = (token *)userdata;
 
-    if(!strcmp(key, "sym-support")) {
-        return !str_to_bool(value, &t->config.sym_support);
-    } else if (!strcmp(key, "token-init")) {
+    if (!strcmp(key, "token-init")) {
         return !str_to_bool(value, &t->config.is_initialized);
     } else {
         LOGE("Unknown token config key: \"%s\"", key);
@@ -597,8 +595,8 @@ tobject *db_tobject_new(sqlite3_stmt *stmt) {
         if (!strcmp(name, "id")) {
             tobj->id = sqlite3_column_int(stmt, i);
 
-        } else if (!strcmp(name, "sid")) {
-            // Ignore sid we don't need it as sobject has that data.
+        } else if (!strcmp(name, "tokid")) {
+            // Ignore sid we don't need it as token has that data.
         } else if (!strcmp(name, "priv")) {
             goto_error(get_blob_null(stmt, i, &tobj->priv), error);
 
@@ -647,12 +645,10 @@ error:
     return NULL;
 }
 
-int init_tobjects(unsigned sid, tobject **head) {
-
-    UNUSED(sid);
+int init_tobjects(unsigned tokid, tobject **head) {
 
     const char *sql =
-            "SELECT * FROM tobjects WHERE sid=?1";
+            "SELECT * FROM tobjects WHERE tokid=?1";
 
     sqlite3_stmt *stmt;
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
@@ -661,9 +657,9 @@ int init_tobjects(unsigned sid, tobject **head) {
         return rc;
     }
 
-    rc = sqlite3_bind_int(stmt, 1, sid);
+    rc = sqlite3_bind_int(stmt, 1, tokid);
     if (rc != SQLITE_OK) {
-        LOGE("Cannot bind tobject sid: %s\n", sqlite3_errmsg(global.db));
+        LOGE("Cannot bind tobject tokid: %s\n", sqlite3_errmsg(global.db));
         goto error;
     }
 
@@ -694,69 +690,10 @@ error:
     return rc;
 }
 
-int init_sobject(unsigned tokid, sobject *sobj) {
-
-    const char *sql =
-            "SELECT * FROM sobjects WHERE id=?1";
-
-    sqlite3_stmt *stmt;
-    int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("Cannot prepare sobject query: %s\n", sqlite3_errmsg(global.db));
-        return rc;
-    }
-
-    rc = sqlite3_bind_int(stmt, 1, tokid);
-    if (rc != SQLITE_OK) {
-        LOGE("Cannot bind sobject tokid: %s\n", sqlite3_errmsg(global.db));
-        goto error;
-    }
-
-    rc = sqlite3_step(stmt);
-    if (rc != SQLITE_ROW) {
-        LOGE("stepping in sobjects, got: %s\n", sqlite3_errstr(rc));
-        goto error;
-    }
-
-    int i;
-    int col_count = sqlite3_data_count(stmt);
-    for (i=0; i < col_count; i++) {
-        const char *name = sqlite3_column_name(stmt, i);
-
-        if (!strcmp(name, "id")) {
-            sobj->id = sqlite3_column_int(stmt, i);
-
-        } else if (!strcmp(name, "priv")) {
-            goto_error(get_blob(stmt, i, &sobj->priv), error);
-
-        } else if (!strcmp(name, "pub")) {
-            goto_error(get_blob(stmt, i, &sobj->pub), error);
-
-        } else if (!strcmp(name, "objauth")) {
-            sobj->objauth = twist_new((char *)sqlite3_column_text(stmt, i));
-            goto_oom(sobj->objauth, error);
-
-        } else if (!strcmp(name, "tokid")) {
-            // pass
-
-        } else {
-            LOGE("Unknown row, got: %s", name);
-            goto error;
-        }
-    }
-
-    rc = SQLITE_OK;
-
-error:
-    sqlite3_finalize(stmt);
-
-    return rc;
-}
-
 int init_pobject(unsigned pid, pobject *pobj) {
 
     const char *sql =
-            "SELECT handle FROM pobjects WHERE id=?1";
+            "SELECT handle,objauth FROM pobjects WHERE id=?1";
 
     sqlite3_stmt *stmt;
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
@@ -778,6 +715,8 @@ int init_pobject(unsigned pid, pobject *pobj) {
     }
 
     pobj->handle = sqlite3_column_int(stmt, 0);
+    pobj->objauth = twist_new((char *)sqlite3_column_text(stmt, 1));
+    goto_oom(pobj->objauth, error);
 
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
@@ -793,60 +732,6 @@ error:
     return rc;
 }
 
-
-int init_wrappingobject(unsigned tokid, wrappingobject *wobj) {
-
-    const char *sql =
-            "SELECT * FROM wrappingobjects WHERE tokid=?1";
-
-    sqlite3_stmt *stmt;
-    int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("Cannot prepare wrappingobject query: %s\n", sqlite3_errmsg(global.db));
-        return rc;
-    }
-
-    rc = sqlite3_bind_int(stmt, 1, tokid);
-    if (rc != SQLITE_OK) {
-        LOGE("Cannot bind tokid: %s\n", sqlite3_errmsg(global.db));
-        goto error;
-    }
-
-    rc = sqlite3_step(stmt);
-    if (rc != SQLITE_ROW) {
-        LOGE("stepping in wrappingobjects, got: %s\n", sqlite3_errstr(rc));
-        goto error;
-    }
-
-    int i;
-    int col_count = sqlite3_data_count(stmt);
-    for (i=0; i < col_count; i++) {
-        const char *name = sqlite3_column_name(stmt, i);
-
-        if (!strcmp(name, "id")) {
-            wobj->id = sqlite3_column_int(stmt, i);
-        } else if (!strcmp(name, "objauth")) {
-            wobj->objauth = twist_new((char *)sqlite3_column_text(stmt, i));
-            goto_oom(wobj->objauth, error);
-        } else if (!strcmp(name, "pub")) {
-            goto_error(get_blob(stmt, i, &wobj->pub), error);
-        } else if (!strcmp(name, "priv")) {
-            goto_error(get_blob(stmt, i, &wobj->priv), error);
-        } else if (!strcmp(name, "tokid")) {
-            // pass
-        } else {
-            LOGE("Unknown token: %s", name);
-            goto error;
-        }
-    }
-
-    rc = SQLITE_OK;
-
-error:
-    sqlite3_finalize(stmt);
-
-    return rc;
-}
 
 int init_sealobjects(unsigned tokid, sealobject *sealobj) {
 
@@ -879,8 +764,6 @@ int init_sealobjects(unsigned tokid, sealobject *sealobj) {
 
         if (!strcmp(name, "id")) {
             sealobj->id = sqlite3_column_int(stmt, i);
-        } else if (!strcmp(name, "userauthiters")) {
-            sealobj->userauthiters = sqlite3_column_int(stmt, i);
         } else if (!strcmp(name, "userauthsalt")) {
             sealobj->userauthsalt = twist_new((char *)sqlite3_column_text(stmt, i));
             goto_oom(sealobj->userauthsalt, error);
@@ -888,8 +771,6 @@ int init_sealobjects(unsigned tokid, sealobject *sealobj) {
             goto_error(get_blob(stmt, i, &sealobj->userpriv), error);
         } else if (!strcmp(name, "userpub")) {
             goto_error(get_blob(stmt, i, &sealobj->userpub), error);
-        } else if (!strcmp(name, "soauthiters")) {
-            sealobj->soauthiters = sqlite3_column_int(stmt, i);
         } else if (!strcmp(name, "soauthsalt")) {
             sealobj->soauthsalt = twist_new((char *)sqlite3_column_text(stmt, i));
             goto_oom(sealobj->soauthsalt, error);
@@ -971,28 +852,6 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
                 snprintf((char *)t->label, sizeof(t->label), "%s",
                         sqlite3_column_text(stmt, i));
 
-            } else if (!strcmp(name, "userpobjauthkeysalt")) {
-                t->userpobjauthkeysalt = twist_new((char *)sqlite3_column_text(stmt, i));
-                goto_oom(t->userpobjauthkeysalt, error);
-
-            } else if (!strcmp(name, "userpobjauthkeyiters")) {
-                t->userpobjauthkeyiters = sqlite3_column_int(stmt, i);
-
-            } else if (!strcmp(name, "userpobjauth")) {
-                t->userpobjauth = twist_new((char *)sqlite3_column_text(stmt, i));
-                goto_oom(t->userpobjauth, error);
-
-            } else if (!strcmp(name, "sopobjauthkeysalt")) {
-                t->sopobjauthkeysalt = twist_new((char *)sqlite3_column_text(stmt, i));
-                goto_oom(t->sopobjauthkeysalt, error);
-
-            } else if (!strcmp(name, "sopobjauthkeyiters")) {
-                t->sopobjauthkeyiters = sqlite3_column_int(stmt, i);
-
-            } else if (!strcmp(name, "sopobjauth")) {
-                t->sopobjauth = twist_new((char *)sqlite3_column_text(stmt, i));
-                goto_oom(t->sopobjauth, error);
-
             } else if (!strcmp(name, "config")) {
                 const char *config = (const char *)sqlite3_column_text(stmt, i);
                 CK_RV rv = parse_generic_kvp_line(config, t, NULL,
@@ -1026,7 +885,7 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
         }
 
         /*
-         * Intiialize the per-token tpm context
+         * Initialize the per-token tpm context
          */
         rv = tpm_ctx_new(&t->tctx);
         if (rv != CKR_OK) {
@@ -1051,32 +910,12 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
             continue;
         }
 
-        /*
-         * If we're using the TPM to wrap objects, get the wrapping objet
-         * details.
-         *
-         * Note: the other case of SW, where the wrapping object auth value
-         * is the key, the assignment occurs later when the key is unsealed
-         * via login.
-         */
-        if (t->config.sym_support) {
-            rc = init_wrappingobject(t->id, &t->wrappingobject);
-            if (rc != SQLITE_OK) {
-                goto error;
-            }
-        }
-
         rc = init_sealobjects(t->id, &t->sealobject);
         if (rc != SQLITE_OK) {
             goto error;
         }
 
-        rc = init_sobject(t->id, &t->sobject);
-        if (rc != SQLITE_OK) {
-            goto error;
-        }
-
-        rc = init_tobjects(t->sobject.id, &t->tobjects);
+        rc = init_tobjects(t->id, &t->tobjects);
         if (rc != SQLITE_OK) {
             goto error;
         }
@@ -1112,138 +951,93 @@ static int rollback(void) {
 CK_RV db_update_for_pinchange(
         token *tok,
         bool is_so,
-        /* primary object wrapping meta data */
-        twist newkeysalthex,
-        unsigned newkeyiters,
-        twist newpobjauth,
 
         /* new seal object auth metadata */
         twist newauthsalthex,
-        unsigned newauthiters,
 
         /* private and public blobs */
         twist newprivblob,
         twist newpubblob) {
 
-    sqlite3_stmt *stmt[2] = { 0 };
-    unsigned i;
+    sqlite3_stmt *stmt = NULL;
 
     int rc = start();
     if (rc != SQLITE_OK) {
         return CKR_GENERAL_ERROR;
     }
 
-    char *sql[2] = { NULL, NULL};
+    char *sql = NULL;
     /* so update statements */
     if (is_so) {
-            sql[0] = "UPDATE tokens SET"
-                 " sopobjauthkeysalt=?,"    /* index: 1 */
-                 " sopobjauthkeyiters=?,"   /* index: 2 */
-                 " sopobjauth=?"            /* index: 3 */
-                 " WHERE id=?";             /* index: 4 */
-
         if (newpubblob) {
-            sql[1] = "UPDATE sealobjects SET"
+            sql = "UPDATE sealobjects SET"
                      " soauthsalt=?,"           /* index: 1 */
-                     " soauthiters=?,"          /* index: 2 */
-                     " sopriv=?,"               /* index: 3 */
-                     " sopub=?"                 /* index: 4 */
-                     " WHERE tokid=?";          /* index: 5 */
+                     " sopriv=?,"               /* index: 2 */
+                     " sopub=?"                 /* index: 3 */
+                     " WHERE tokid=?";          /* index: 4 */
         } else {
-            sql[1] = "UPDATE sealobjects SET"
+            sql = "UPDATE sealobjects SET"
                  " soauthsalt=?,"           /* index: 1 */
-                 " soauthiters=?,"          /* index: 2 */
-                 " sopriv=?"                /* index: 3 */
-                 " WHERE tokid=?";          /* index: 4 */
+                 " sopriv=?"                /* index: 2 */
+                 " WHERE tokid=?";          /* index: 3 */
         }
     /* user */
     } else {
-        sql[0] = "UPDATE tokens SET"
-                 " userpobjauthkeysalt=?,"    /* index: 1 */
-                 " userpobjauthkeyiters=?,"   /* index: 2 */
-                 " userpobjauth=?"            /* index: 3 */
-                 " WHERE id=?";               /* index: 4 */
-
         if (newpubblob) {
-            sql[1] = "UPDATE sealobjects SET"
+            sql = "UPDATE sealobjects SET"
                      " userauthsalt=?,"           /* index: 1 */
-                     " userauthiters=?,"          /* index: 2 */
-                     " userpriv=?,"               /* index: 3 */
-                     " userpub=?"                 /* index: 4 */
-                     " WHERE tokid=?" ;           /* index: 5 */
+                     " userpriv=?,"               /* index: 2 */
+                     " userpub=?"                 /* index: 3 */
+                     " WHERE tokid=?" ;           /* index: 4 */
         } else {
-            sql[1] = "UPDATE sealobjects SET"
+            sql = "UPDATE sealobjects SET"
                  " userauthsalt=?,"           /* index: 1 */
-                 " userauthiters=?,"          /* index: 2 */
-                 " userpriv=?"                /* index: 3 */
-                 " WHERE tokid=?";            /* index: 4 */
+                 " userpriv=?"                /* index: 2 */
+                 " WHERE tokid=?";            /* index: 3 */
         }
     }
 
     /*
      * Prepare statements
      */
-    for (i=0; i < ARRAY_LEN(stmt); i++) {
-        rc = sqlite3_prepare(global.db, sql[i], -1, &stmt[i], NULL);
-        if (rc) {
-            LOGE("Could not prepare statement: \"%s\" error: \"%s\"",
-            sql[i], sqlite3_errmsg(global.db));
-            goto error;
-        }
+    rc = sqlite3_prepare(global.db, sql, -1, &stmt, NULL);
+    if (rc) {
+        LOGE("Could not prepare statement: \"%s\" error: \"%s\"",
+        sql, sqlite3_errmsg(global.db));
+        goto error;
     }
 
-    /*
-     * bind values:
-     *  stmt[0] --> table: tokens
-     *  stmt[1] --> table: sealobjects
-     */
-    rc = sqlite3_bind_text(stmt[0], 1, newkeysalthex, -1, SQLITE_STATIC);
-    gotobinderror(rc, "newkeysalthex");
-
-    rc = sqlite3_bind_int(stmt[0],  2, newkeyiters);
-    gotobinderror(rc, "newkeyiters");
-
-    rc = sqlite3_bind_text(stmt[0], 3, newpobjauth,   -1, SQLITE_STATIC);
-    gotobinderror(rc, "newpobjauth");
-
-    rc = sqlite3_bind_int(stmt[0],  4, tok->id);
-    gotobinderror(rc, "id");
-
+    /* bind values */
     /* sealobjects */
 
     int index = 1;
-    rc = sqlite3_bind_text(stmt[1], index++, newauthsalthex, -1, SQLITE_STATIC);
+    rc = sqlite3_bind_text(stmt, index++, newauthsalthex, -1, SQLITE_STATIC);
     gotobinderror(rc, "newauthsalthex");
 
-    rc = sqlite3_bind_int(stmt[1],  index++, newauthiters);
-    gotobinderror(rc, "newauthiters");
-
-    rc = sqlite3_bind_blob(stmt[1], index++, newprivblob, twist_len(newprivblob), SQLITE_STATIC);
+    rc = sqlite3_bind_blob(stmt, index++, newprivblob, twist_len(newprivblob), SQLITE_STATIC);
     gotobinderror(rc, "newprivblob");
 
     if (newpubblob) {
-        rc = sqlite3_bind_blob(stmt[1], index++, newpubblob, twist_len(newpubblob), SQLITE_STATIC);
+        rc = sqlite3_bind_blob(stmt, index++, newpubblob, twist_len(newpubblob), SQLITE_STATIC);
         gotobinderror(rc, "newpubblob");
     }
 
-    rc = sqlite3_bind_int(stmt[1],  index++, tok->id);
+    rc = sqlite3_bind_int(stmt,  index++, tok->id);
     gotobinderror(rc, "tokid");
 
     /*
      * Everything is bound, fire off the sql statements
      */
-    for (i=0; i < ARRAY_LEN(stmt); i++) {
-        rc = sqlite3_step(stmt[i]);
-        if (rc != SQLITE_DONE) {
-            LOGE("Could not execute stmt %u", i);
-            goto error;
-        }
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        LOGE("Could not execute stmt");
+        goto error;
+    }
 
-        rc = sqlite3_finalize(stmt[i]);
-        if (rc != SQLITE_OK) {
-            LOGE("Could not finalize stmt %u", i);
-            goto error;
-        }
+    rc = sqlite3_finalize(stmt);
+    if (rc != SQLITE_OK) {
+        LOGE("Could not finalize stmt");
+        goto error;
     }
 
     rc = commit();
@@ -1255,11 +1049,9 @@ CK_RV db_update_for_pinchange(
 
 error:
 
-    for (i=0; i < ARRAY_LEN(stmt); i++) {
-        rc = sqlite3_finalize(stmt[i]);
-        if (rc != SQLITE_OK) {
-            LOGW("Could not finalize stmt %u", i);
-        }
+    rc = sqlite3_finalize(stmt);
+    if (rc != SQLITE_OK) {
+        LOGW("Could not finalize stmt");
     }
 
     rollback();
@@ -1548,7 +1340,7 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
 
     const char *sql =
           "INSERT INTO tobjects ("
-            "sid, "       // index: 1 type: INT
+            "tokid, "     // index: 1 type: INT
             "pub, "       // index: 2 type: BLOB
             "priv, "      // index: 3 type: BLOB
             "objauth, "   // index: 4 type: TEXT
@@ -1569,8 +1361,8 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
         goto error;
     }
 
-    rc = sqlite3_bind_int(stmt, 1, tok->sobject.id);
-    gotobinderror(rc, "sid");
+    rc = sqlite3_bind_int(stmt, 1, tok->id);
+    gotobinderror(rc, "tokid");
 
     rc = sqlite3_bind_blob(stmt, 2, tobj->pub,
             tobj->pub ? twist_len(tobj->pub) : 0, SQLITE_STATIC);

@@ -22,7 +22,7 @@ static test_info *test_info_new(void) {
     CK_ULONG count = ARRAY_LEN(slots);
     CK_RV rv = C_GetSlotList(true, slots, &count);
     assert_int_equal(rv, CKR_OK);
-    assert_int_equal(count, 3);
+    assert_int_equal(count, TOKEN_COUNT);
 
     ti->slot_id = slots[0];
 

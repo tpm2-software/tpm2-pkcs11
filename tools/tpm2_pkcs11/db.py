@@ -11,7 +11,6 @@ from .utils import list_dict_to_kvp
 # // do stuff
 #
 class Db(object):
-
     def __init__(self, dirpath):
         self._path = os.path.join(dirpath, "tpm2_pkcs11.sqlite3")
 
@@ -30,7 +29,7 @@ class Db(object):
 
     def gettoken(self, label):
         c = self._conn.cursor()
-        c.execute("SELECT * from tokens WHERE label=?", (label,))
+        c.execute("SELECT * from tokens WHERE label=?", (label, ))
         x = c.fetchone()
         if x is None:
             sys.exit('No token labeled "%s"' % label)
@@ -38,68 +37,43 @@ class Db(object):
 
     def getsealobject(self, tokid):
         c = self._conn.cursor()
-        c.execute("SELECT * from sealobjects WHERE tokid=?", (tokid,))
+        c.execute("SELECT * from sealobjects WHERE tokid=?", (tokid, ))
         x = c.fetchone()
         return x
 
     def gettokens(self, pid):
         c = self._conn.cursor()
-        c.execute("SELECT * from tokens WHERE pid=?", (pid,))
+        c.execute("SELECT * from tokens WHERE pid=?", (pid, ))
         x = c.fetchall()
         return x
 
     def rmtoken(self, label):
         # This works on the premise of a cascading delete tied by foriegn
         # key relationships.
-        self._conn.execute('DELETE from tokens WHERE label=?', (label,))
+        self._conn.execute('DELETE from tokens WHERE label=?', (label, ))
 
     def getprimary(self, pid):
         c = self._conn.cursor()
-        c.execute("SELECT * from pobjects WHERE id=?", (pid,))
+        c.execute("SELECT * from pobjects WHERE id=?", (pid, ))
         x = c.fetchone()
         return x
 
     def rmprimary(self, pid):
         # This works on the premise of a cascading delete tied by foriegn
         # key relationships.
-        self._conn.execute('DELETE from pobjects WHERE id=?', (pid,))
+        self._conn.execute('DELETE from pobjects WHERE id=?', (pid, ))
 
-    def getsecondary(self, tokid):
+    def gettertiary(self, tokid):
         c = self._conn.cursor()
-        c.execute("SELECT * from sobjects WHERE id=?", (tokid,))
-        x = c.fetchone()
-        return x
-
-    def getwrapping(self, tokid):
-        c = self._conn.cursor()
-        c.execute("SELECT * from wrappingobjects WHERE tokid=?", (tokid,))
-        x = c.fetchone()
-        return x
-
-    def gettertiary(self, sid):
-        c = self._conn.cursor()
-        c.execute("SELECT * from tobjects WHERE sid=?", (sid,))
+        c.execute("SELECT * from tobjects WHERE tokid=?", (tokid, ))
         x = c.fetchall()
         return x
 
-    def addtoken(self,
-                 pid,
-                 sopobjkey,
-                 sopobjauth,
-                 userpobjkey,
-                 userpobjauth,
-                 config,
-                 label=None):
+    def addtoken(self, pid, config, label=None):
 
         token = {
             # General Metadata
             'pid': pid,
-            'sopobjauthkeysalt': sopobjkey['salt'],
-            'sopobjauthkeyiters': sopobjkey['iters'],
-            'sopobjauth': sopobjauth,
-            'userpobjauthkeysalt': userpobjkey['salt'],
-            'userpobjauthkeyiters': userpobjkey['iters'],
-            'userpobjauth': userpobjauth,
             'config': list_dict_to_kvp(config)
         }
 
@@ -129,9 +103,7 @@ class Db(object):
             'sopriv': Db._blobify(sosealpriv),
             'sopub': Db._blobify(sosealpub),
             'userauthsalt': usersealauth['salt'],
-            'userauthiters': usersealauth['iters'],
             'soauthsalt': sosealauth['salt'],
-            'soauthiters': sosealauth['iters'],
         }
 
         columns = ', '.join(sealobjects.keys())
@@ -143,12 +115,7 @@ class Db(object):
 
         return c.lastrowid
 
-    def addprimary(self,
-                   handle,
-                   pobjauth,
-                   pobjauthsalt,
-                   pobjauthiters,
-                   hierarchy='o'):
+    def addprimary(self, handle, objauth, hierarchy='o'):
 
         # Subordiante commands will need some of this data
         # when deriving subordinate objects, so pass it back
@@ -156,9 +123,7 @@ class Db(object):
             # General Metadata
             'hierarchy': hierarchy,
             'handle': handle,
-            'pobjauth': pobjauth,
-            'pobjauthsalt': pobjauthsalt,
-            'pobjauthiters': pobjauthiters,
+            'objauth': objauth,
         }
 
         columns = ', '.join(pobject.keys())
@@ -170,42 +135,9 @@ class Db(object):
 
         return c.lastrowid
 
-    def addsecondary(self, tokid, objauth, priv, pub):
-
-        sobject = {
-            'tokid': tokid,
-            'objauth': objauth,
-            'pub': Db._blobify(pub),
-            'priv': Db._blobify(priv),
-        }
-
-        columns = ', '.join(sobject.keys())
-        placeholders = ', '.join('?' * len(sobject))
-        sql = 'INSERT INTO sobjects ({}) VALUES ({})'.format(columns,
-                                                             placeholders)
-        c = self._conn.cursor()
-        c.execute(sql, list(sobject.values()))
-        return c.lastrowid
-
-    def addwrapping(self, tokid, priv, pub):
-
-        wrapping = {
-            'tokid': tokid,
-            'pub': Db._blobify(pub),
-            'priv': Db._blobify(priv),
-        }
-
-        columns = ', '.join(wrapping.keys())
-        placeholders = ', '.join('?' * len(wrapping))
-        sql = 'INSERT INTO wrappingobjects ({}) VALUES ({})'.format(
-            columns, placeholders)
-        c = self._conn.cursor()
-        c.execute(sql, list(wrapping.values()))
-        return c.lastrowid
-
-    def addtertiary(self, sid, priv, pub, objauth, mech, attrs):
+    def addtertiary(self, tokid, priv, pub, objauth, mech, attrs):
         tobject = {
-            'sid': sid,
+            'tokid': tokid,
             'pub': Db._blobify(pub),
             'objauth': objauth,
             'mech': list_dict_to_kvp(mech),
@@ -227,50 +159,32 @@ class Db(object):
 
         c = self._conn.cursor()
         attrs = list_dict_to_kvp(attrs)
-        values =  [attrs, tid]
+        values = [attrs, tid]
 
         sql = 'UPDATE tobjects SET attrs=? WHERE id=?'
 
         c.execute(sql, values)
 
-    def updatepin(self,
-                  is_so,
-                  token,
-                  pobjkey,
-                  pobjauth,
-                  sealauth,
-                  sealpriv,
-                  sealpub=None):
+    def updatepin(self, is_so, token, sealauth, sealpriv, sealpub=None):
 
         tokid = token['id']
 
         c = self._conn.cursor()
 
-        # TABLE tokens UPDATE
-        # [user|so]pobjauthkeysalt TEXT,
-        # [user|so]pobjauthkeyiters NUMBER,
-        # [user|so]pobjauth TEXT,
-
-        sql = 'UPDATE tokens SET {}pobjauthkeysalt=?, {}pobjauthkeyiters=?, {}pobjauth=? WHERE id=?;'.format(
-            * ['so' if is_so else 'user'] * 3)
-        c.execute(sql, (pobjkey['salt'], pobjkey['iters'], pobjauth, tokid))
-
         # TABLE sealobjects UPDATE
         # [user|so]priv TEXT NOT NULL,
         # [user|so]pub TEXT NOT NULL,
         # [user|so]authsalt TEXT NOT NULL,
-        # [user|so]authiters NUMBER NOT NULL,
 
         if sealpub:
-            sql = 'UPDATE sealobjects SET {}authsalt=?, {}authiters=?, {}priv=?, {}pub=? WHERE id=?;'.format(
-                * ['so' if is_so else 'user'] * 4)
-            c.execute(sql, (sealauth['salt'], sealauth['iters'], Db._blobify(sealpriv),
+            sql = 'UPDATE sealobjects SET {}authsalt=?, {}priv=?, {}pub=? WHERE id=?;'.format(
+                * ['so' if is_so else 'user'] * 3)
+            c.execute(sql, (sealauth['salt'], Db._blobify(sealpriv),
                             Db._blobify(sealpub), tokid))
         else:
-            sql = 'UPDATE sealobjects SET {}authsalt=?, {}authiters=?, {}priv=? WHERE id=?;'.format(
-                * ['so' if is_so else 'user'] * 3)
-            c.execute(sql,
-                      (sealauth['salt'], sealauth['iters'], Db._blobify(sealpriv), tokid))
+            sql = 'UPDATE sealobjects SET {}authsalt=?, {}priv=? WHERE id=?;'.format(
+                * ['so' if is_so else 'user'] * 2)
+            c.execute(sql, (sealauth['salt'], Db._blobify(sealpriv), tokid))
 
     def commit(self):
         self._conn.commit()
@@ -304,12 +218,6 @@ class Db(object):
                 id INTEGER PRIMARY KEY,
                 pid INTEGER NOT NULL,
                 label TEXT UNIQUE,
-                userpobjauthkeysalt TEXT,
-                userpobjauthkeyiters NUMBER,
-                userpobjauth TEXT,
-                sopobjauthkeysalt TEXT,
-                sopobjauthkeyiters NUMBER,
-                sopobjauth TEXT,
                 config TEXT NOT NULL,
                 FOREIGN KEY (pid) REFERENCES pobjects(id) ON DELETE CASCADE
             );
@@ -321,20 +229,9 @@ class Db(object):
                 userpub BLOB NOT NULL,
                 userpriv BLOB NOT NULL,
                 userauthsalt TEXT NOT NULL,
-                userauthiters NUMBER NOT NULL,
                 sopub BLOB NOT NULL,
                 sopriv BLOB NOT NULL,
                 soauthsalt TEXT NOT NULL,
-                soauthiters NUMBER NOT NULL,
-                FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
-            );
-            '''),
-            textwrap.dedent('''
-            CREATE TABLE IF NOT EXISTS wrappingobjects(
-                id INTEGER PRIMARY KEY,
-                tokid INTEGER NOT NULL,
-                pub BLOB NOT NULL,
-                priv BLOB NOT NULL,
                 FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
             );
             '''),
@@ -343,31 +240,19 @@ class Db(object):
                 id INTEGER PRIMARY KEY,
                 hierarchy TEXT NOT NULL,
                 handle INTEGER NOT NULL,
-                pobjauth TEXT NOT NULL,
-                pobjauthsalt TEXT NOT NULL,
-                pobjauthiters INTEGER NOT NULL
-            );
-            '''),
-            textwrap.dedent('''
-            CREATE TABLE IF NOT EXISTS sobjects(
-                id INTEGER PRIMARY KEY,
-                tokid INTEGER NOT NULL,
-                pub BLOB NOT NULL,
-                priv BLOB NOT NULL,
-                objauth TEXT NOT NULL,
-                FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
+                objauth TEXT NOT NULL
             );
             '''),
             textwrap.dedent('''
             CREATE TABLE IF NOT EXISTS tobjects(
                 id INTEGER PRIMARY KEY,
-                sid INTEGER NOT NULL,
+                tokid INTEGER NOT NULL,
                 pub BLOB NOT NULL,
                 priv BLOB,
                 objauth TEXT NOT NULL,
                 mech TEXT NOT NULL,
                 attrs TEXT NOT NULL,
-                FOREIGN KEY (sid) REFERENCES sobjects(id) ON DELETE CASCADE
+                FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
             );
             '''),
             textwrap.dedent('''
@@ -379,7 +264,7 @@ class Db(object):
             # NOTE: Update the DB Schema Version if the format above changes!
             # REPLACE updates the value if it exists, or inserts it if it doesn't
             textwrap.dedent('''
-            REPLACE INTO schema (id, schema_version) VALUES (1, 1);
+                REPLACE INTO schema (id, schema_version) VALUES (1, 1);
             '''),
         ]
 

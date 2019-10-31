@@ -8,16 +8,16 @@ import yaml
 
 from subprocess import Popen, PIPE
 
-class Tpm2(object):
 
+class Tpm2(object):
     def __init__(self, tmp):
         self._tmp = tmp
 
     def createprimary(self, ownerauth, objauth):
         ctx = os.path.join(self._tmp, "context.out")
         cmd = [
-            'tpm2_createprimary', '-p', 'hex:%s' % objauth.decode(), '-c', ctx,
-            '-g', 'sha256', '-G', 'rsa'
+            'tpm2_createprimary', '-p', '%s' % objauth, '-c', ctx, '-g',
+            'sha256', '-G', 'rsa'
         ]
 
         if ownerauth and len(ownerauth) > 0:
@@ -57,7 +57,7 @@ class Tpm2(object):
             priv = sealprivf.name
 
         if not isinstance(pub, str):
-            sealpubf  = NamedTemporaryFile()
+            sealpubf = NamedTemporaryFile()
             sealpubf.write(pub)
             sealpubf.flush()
             pub = sealpubf.name
@@ -67,13 +67,11 @@ class Tpm2(object):
         #tpm2_load -C $file_primary_key_ctx  -u $file_load_key_pub  -r $file_load_key_priv -n $file_load_key_name -c $file_load_key_ctx
         if priv != None:
             cmd = [
-                'tpm2_load', '-C', str(pctx), '-P', 'hex:' + pauth.decode(), '-u',
-                pub, '-r', priv, '-n', '/dev/null', '-c', ctx
+                'tpm2_load', '-C', str(pctx), '-P', pauth, '-u', pub, '-r',
+                priv, '-n', '/dev/null', '-c', ctx
             ]
         else:
-            cmd = [
-                'tpm2_loadexternal', '-u', pub
-            ]
+            cmd = ['tpm2_loadexternal', '-u', pub, '-c', ctx]
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         _, stderr = p.communicate()
@@ -85,7 +83,7 @@ class Tpm2(object):
     def unseal(self, ctx, auth):
 
         # tpm2_unseal -Q -c $file_unseal_key_ctx
-        cmd = ['tpm2_unseal', '-c', ctx, '-p', 'hex:' + auth.decode()]
+        cmd = ['tpm2_unseal', '-c', ctx, '-p', auth]
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         stdout, stderr = p.communicate()
         rc = p.wait()
@@ -95,7 +93,7 @@ class Tpm2(object):
 
     def _encryptdecrypt(self, ctx, auth, data, decrypt=False):
 
-        cmd = ['tpm2_encryptdecrypt', '-c', ctx, '-p', 'hex:' + auth.decode()]
+        cmd = ['tpm2_encryptdecrypt', '-c', ctx, '-p', auth]
 
         if decrypt:
             cmd.extend(['-d'])
@@ -128,10 +126,10 @@ class Tpm2(object):
         cmd = ['tpm2_create', '-C', str(phandle), '-u', pub, '-r', priv]
 
         if pauth and len(pauth) > 0:
-            cmd.extend(['-P', 'hex:%s' % pauth.decode()])
+            cmd.extend(['-P', '%s' % pauth])
 
         if objauth and len(objauth) > 0:
-            cmd.extend(['-p', 'hex:%s' % objauth.decode()])
+            cmd.extend(['-p', objauth])
 
         if objattrs != None:
             cmd.extend(['-a', objattrs])
@@ -191,10 +189,10 @@ class Tpm2(object):
         ]
 
         if pauth and len(pauth) > 0:
-            cmd.extend(['-P', 'hex:%s' % pauth.decode()])
+            cmd.extend(['-P', pauth])
 
         if objauth and len(objauth) > 0:
-            cmd.extend(['-p', 'hex:%s' % objauth.decode()])
+            cmd.extend(['-p', objauth])
 
         if objattrs != None:
             cmd.extend(['-a', objattrs])
@@ -222,9 +220,16 @@ class Tpm2(object):
 
         #tpm2_load -C $file_primary_key_ctx  -u $file_load_key_pub  -r $file_load_key_priv -n $file_load_key_name -o $file_load_key_ctx
         cmd = [
-            'tpm2_changeauth', '-C', str(pctx), '-c', str(objctx), '-p',
-            'hex:' + oldobjauth.decode(), '-r', newpriv,
-            'hex:' + newobjauth.decode(),
+            'tpm2_changeauth',
+            '-C',
+            str(pctx),
+            '-c',
+            str(objctx),
+            '-p',
+            oldobjauth,
+            '-r',
+            newpriv,
+            newobjauth,
         ]
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         _, stderr = p.communicate()

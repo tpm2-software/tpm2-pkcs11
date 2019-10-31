@@ -23,18 +23,6 @@ struct pobject {
     twist objauth;
 };
 
-typedef struct sobject sobject;
-struct sobject {
-
-    uint32_t handle;
-
-    unsigned id;
-    twist pub;
-    twist priv;
-    twist objauth;
-    twist authraw;
-};
-
 typedef struct objattrs objattrs;
 struct objattrs {
     unsigned long count;
@@ -74,26 +62,12 @@ struct sealobject {
     twist userpub;
     twist userpriv;
     twist userauthsalt;
-    unsigned userauthiters;
 
     twist sopub;
     twist sopriv;
     twist soauthsalt;
-    unsigned soauthiters;
 
     uint32_t handle;
-};
-
-typedef struct wrappingobject wrappingobject;
-struct wrappingobject {
-
-    uint32_t handle;
-
-    unsigned id;
-    twist pub;
-    twist priv;
-
-    twist objauth;
 };
 
 tobject *tobject_new(void);
@@ -131,9 +105,6 @@ CK_RV tobject_append_attrs(tobject *tobj, CK_ATTRIBUTE_PTR attrs, CK_ULONG count
 CK_RV tobject_append_mechs(tobject *tobj, CK_MECHANISM_PTR mech, CK_ULONG count);
 void tobject_set_id(tobject *tobj, unsigned id);
 void tobject_free(tobject *tobj);
-void sobject_free(sobject *sobj);
-
-void wrappingobject_free(wrappingobject *wobj);
 void sealobject_free(sealobject *sealobj);
 
 CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, unsigned long count);

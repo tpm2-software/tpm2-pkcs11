@@ -693,8 +693,8 @@ CK_RV key_gen (
 
     rv = tpm2_generate_key(
             tok->tctx,
-            tok->sobject.handle,
-            tok->sobject.authraw,
+            tok->pobject.handle,
+            tok->pobject.objauth,
             newauthbin,
             mechanism,
             public_key_attribute_count, public_key_template,

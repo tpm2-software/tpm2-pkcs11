@@ -8,19 +8,16 @@ import yaml
 from .command import Command
 from .command import commandlet
 from .db import Db
+from .utils import AESAuthUnwrapper
 from .utils import TemporaryDirectory
 from .utils import hash_pass
-from .utils import check_pin
-from .utils import rand_str
-from .utils import getwrapper
-from .utils import load_sobject
-from .utils import load_sealobject
+from .utils import rand_hex_str
 from .utils import get_ec_params
 from .utils import asn1_format_ec_point_uncompressed
 
 from .tpm2 import Tpm2
 
-from .pkcs11t import * # noqa
+from .pkcs11t import *  # noqa
 
 
 class NewKeyCommandBase(Command):
@@ -38,42 +35,39 @@ class NewKeyCommandBase(Command):
         pinopts.add_argument('--userpin', help='The User pin.\n'),
 
     # Implemented by derived class
-    def new_key_create(self, sobjctx, sobjauth, objauth, tpm2, path, alg,
-                       privkey):
+    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey):
         raise NotImplementedError('Implement: new_key')
 
     @staticmethod
-    def new_key_init(label, sopin, userpin, db, tpm2):
-
-        token = db.gettoken(label)
+    def new_key_init(label, sopin, userpin, pobj, sealobjects, tpm2):
 
         # Get the primary object encrypted auth value and sokey information
         # to decode it. Based on the incoming pin
         is_so = sopin != None
         pin = sopin if is_so else userpin
 
-        pobjauth = check_pin(token, pin, is_so)
+        pubkey = '%spub' % ('so' if is_so else 'user')
+        privkey = '%spriv' % ('so' if is_so else 'user')
+        saltkey = '%sauthsalt' % ('so' if is_so else 'user')
 
-        # At this point we have recovered the ACTUAL auth value for the primary object, so now we
-        # can load up the seal objects
-        pobj, sealctx, sealauth = load_sealobject(token, tpm2, db, pobjauth,
-                                                  pin, is_so)
+        sealpub = sealobjects[pubkey]
+        sealpriv = sealobjects[privkey]
+        sealsalt = sealobjects[saltkey]
 
-        # Now that the sealobject is loaded, we need to unseal the wrapping key
-        # object auth or the key when the TPM doesn't support encryptdecrypt
-        wrappingkeyauth = tpm2.unseal(sealctx, sealauth)
+        sealctx = tpm2.load(pobj['handle'], pobj['objauth'], sealpriv, sealpub)
 
-        wrapper = getwrapper(token, db, tpm2, pobjauth, wrappingkeyauth)
+        sealauth = hash_pass(pin, salt=sealsalt)['hash']
 
-        sobjctx, sobjauth = load_sobject(token, db, tpm2, wrapper, pobj,
-                                         pobjauth)
+        wrappingkey = tpm2.unseal(sealctx, sealauth)
+
+        wrapper = AESAuthUnwrapper(wrappingkey)
 
         #create an auth value for the tertiary object.
-        objauth = hash_pass(rand_str(32))['hash']
+        objauth = rand_hex_str()
 
         encobjauth = wrapper.wrap(objauth)
 
-        return (sobjctx, sobjauth, encobjauth, objauth)
+        return (encobjauth, objauth)
 
     @staticmethod
     def new_key_save(alg, keylabel, tid, label, tertiarypriv, tertiarypub,
@@ -108,85 +102,99 @@ class NewKeyCommandBase(Command):
                     CKA_CLASS: CKO_PRIVATE_KEY
                 },
                 {
-                    CKA_MODULUS_BITS : y['bits']
+                    CKA_MODULUS_BITS: y['bits']
                 },
             ]
 
-            moddetails = [
-                {
-                    CKA_MODULUS: y['rsa']
-                },
-                {
-                    CKA_MODULUS_BITS : y['bits']
-                },
-                {
-                    CKA_PUBLIC_EXPONENT: 65537
-                }
-            ]
+            moddetails = [{
+                CKA_MODULUS: y['rsa']
+            }, {
+                CKA_MODULUS_BITS: y['bits']
+            }, {
+                CKA_PUBLIC_EXPONENT: 65537
+            }]
 
             pubattrs.extend(moddetails)
             privattrs.extend(moddetails)
 
-            pubmech = [
-                { CKM_RSA_X_509: "" },
-                { CKM_RSA_PKCS_OAEP: {
+            pubmech = [{
+                CKM_RSA_X_509: ""
+            }, {
+                CKM_RSA_PKCS_OAEP: {
                     "hashalg": CKM_SHA_1,
                     "mgf": CKG_MGF1_SHA1
-                  }
-                },
-                { CKM_RSA_PKCS_OAEP: {
+                }
+            }, {
+                CKM_RSA_PKCS_OAEP: {
                     "hashalg": CKM_SHA256,
                     "mgf": CKG_MGF1_SHA256
-                  }
-                },
-                { CKM_RSA_PKCS: "" }
-            ]
+                }
+            }, {
+                CKM_RSA_PKCS: ""
+            }]
 
-            privmech = [
-                { CKM_RSA_X_509: "" },
-                { CKM_RSA_PKCS_OAEP: {
+            privmech = [{
+                CKM_RSA_X_509: ""
+            }, {
+                CKM_RSA_PKCS_OAEP: {
                     "hashalg": CKM_SHA_1,
                     "mgf": CKG_MGF1_SHA1
-                  }
-                },
-                { CKM_RSA_PKCS_OAEP: {
+                }
+            }, {
+                CKM_RSA_PKCS_OAEP: {
                     "hashalg": CKM_SHA256,
                     "mgf": CKG_MGF1_SHA256
-                  }
-                },
-                { CKM_RSA_PKCS: "" }
-            ]
+                }
+            }, {
+                CKM_RSA_PKCS: ""
+            }]
         elif alg.startswith('ecc'):
 
             ecparams = get_ec_params(alg)
             ecpoint = asn1_format_ec_point_uncompressed(y['x'], y['y'])
 
             pubattrs = [
-                { CKA_KEY_TYPE: CKK_EC },
-                { CKA_CLASS: CKO_PUBLIC_KEY },
-                { CKA_EC_PARAMS: ecparams },
-                { CKA_EC_POINT: ecpoint },
+                {
+                    CKA_KEY_TYPE: CKK_EC
+                },
+                {
+                    CKA_CLASS: CKO_PUBLIC_KEY
+                },
+                {
+                    CKA_EC_PARAMS: ecparams
+                },
+                {
+                    CKA_EC_POINT: ecpoint
+                },
             ]
 
             privattrs = [
-                { CKA_KEY_TYPE: CKK_EC },
-                { CKA_CLASS: CKO_PRIVATE_KEY},
-                { CKA_EC_PARAMS: ecparams },
-                { CKA_EC_POINT: ecpoint },
+                {
+                    CKA_KEY_TYPE: CKK_EC
+                },
+                {
+                    CKA_CLASS: CKO_PRIVATE_KEY
+                },
+                {
+                    CKA_EC_PARAMS: ecparams
+                },
+                {
+                    CKA_EC_POINT: ecpoint
+                },
             ]
 
-            pubmech = [
-                {CKM_ECDSA: ""}
-            ]
+            pubmech = [{CKM_ECDSA: ""}]
             privmech = pubmech
         elif alg.startswith('aes'):
-            privattrs = [
-                { CKA_CLASS: CKO_SECRET_KEY},
-                { CKA_KEY_TYPE: CKK_AES },
-                { CKA_VALUE_LEN: y['sym-keybits'] / 8}
-            ]
+            privattrs = [{
+                CKA_CLASS: CKO_SECRET_KEY
+            }, {
+                CKA_KEY_TYPE: CKK_AES
+            }, {
+                CKA_VALUE_LEN: y['sym-keybits'] / 8
+            }]
 
-            privmech = [{CKM_AES_CBC: ""},]
+            privmech = [{CKM_AES_CBC: ""}, ]
         else:
             sys.exit('Cannot handle algorithm: "{}"'.format(alg))
 
@@ -195,30 +203,30 @@ class NewKeyCommandBase(Command):
         if pubattrs:
             pubattrs.append({CKA_ID: binascii.hexlify(tid.encode()).decode()})
 
-        privattrs.append({CKA_TOKEN: True })
-        privattrs.append({CKA_SENSITIVE: True })
-        privattrs.append({CKA_ALWAYS_SENSITIVE: True })
-        privattrs.append({CKA_EXTRACTABLE: False })
-        privattrs.append({CKA_NEVER_EXTRACTABLE: True })
+        privattrs.append({CKA_TOKEN: True})
+        privattrs.append({CKA_SENSITIVE: True})
+        privattrs.append({CKA_ALWAYS_SENSITIVE: True})
+        privattrs.append({CKA_EXTRACTABLE: False})
+        privattrs.append({CKA_NEVER_EXTRACTABLE: True})
 
         # Add keylabel for ALL objects if set
         if keylabel is not None:
-            privattrs.append({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
+            privattrs.append({
+                CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()
+            })
             if pubattrs:
-                pubattrs.append({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
-
-        # Now get the secondary object from db
-        sobj = db.getsecondary(token['id'])
+                pubattrs.append({
+                    CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()
+                })
 
         # Store private to database
-        privrowid = db.addtertiary(sobj['id'], tertiarypriv, tertiarypub,
-                               encobjauth, privmech, privattrs)
+        privrowid = db.addtertiary(token['id'], tertiarypriv, tertiarypub,
+                                   encobjauth, privmech, privattrs)
 
         # if it's asymmetric, add a public object too
         if pubattrs:
-            pubrowid = db.addtertiary(sobj['id'], None, tertiarypub,
-                               encobjauth, pubmech, pubattrs)
-
+            pubrowid = db.addtertiary(token['id'], None, tertiarypub,
+                                      encobjauth, pubmech, pubattrs)
 
         # if the keylabel is not set, use the tertiary object tid as the keylabel
         # Normally we would use a transaction to make this atomic, but Pythons
@@ -230,10 +238,14 @@ class NewKeyCommandBase(Command):
         #   - https://stackoverflow.com/questions/107005/predict-next-auto-inserted-row-tid-sqlite
         if keylabel is None:
             keylabel = str(privrowid)
-            privattrs.append({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
+            privattrs.append({
+                CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()
+            })
             db.updatetertiaryattrs(privrowid, privattrs)
             if pubattrs:
-                pubattrs.append({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
+                pubattrs.append({
+                    CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()
+                })
                 db.updatetertiaryattrs(pubrowid, pubattrs)
 
         db.commit()
@@ -263,11 +275,17 @@ class NewKeyCommandBase(Command):
 
                 path = args['path']
 
-                sobjctx, sobjauth, encobjauth, objauth = NewKeyCommandBase.new_key_init(
-                    label, sopin, userpin, db, tpm2)
+                token = db.gettoken(label)
+                pobjectid = token['pid']
+                pobj = db.getprimary(pobjectid)
+
+                sealobjects = db.getsealobject(token['id'])
+
+                encobjauth, objauth = NewKeyCommandBase.new_key_init(
+                    label, sopin, userpin, pobj, sealobjects, tpm2)
 
                 tertiarypriv, tertiarypub, tertiarypubdata = self.new_key_create(
-                    sobjctx, sobjauth, objauth, tpm2, path, alg, privkey)
+                    pobj, objauth, tpm2, path, alg, privkey)
 
                 final_key_label = NewKeyCommandBase.new_key_save(
                     alg, key_label, tid, label, tertiarypriv, tertiarypub,
@@ -305,8 +323,7 @@ class ImportCommand(NewKeyCommandBase):
             required=True)
 
     # Imports a new key
-    def new_key_create(self, sobjctx, sobjauth, objauth, tpm2, path, alg,
-                       privkey):
+    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey):
         if alg != 'rsa':
             sys.exit('Unknown algorithm or algorithm not supported, got "%s"' %
                      alg)
@@ -315,12 +332,12 @@ class ImportCommand(NewKeyCommandBase):
             sys.exit("Invalid private key path")
 
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.importkey(
-            sobjctx, sobjauth, objauth, privkey=privkey, alg=alg)
+            pobj['handle'], pobj['objauth'], objauth, privkey=privkey, alg=alg)
 
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 
     def __call__(self, args):
-        keylabel = super(self.__class__, self).__call__(args)
+        keylabel = super(ImportCommand, self).__call__(args)
         print('Imported key as label: "{keylabel}"'.format(keylabel=keylabel))
 
 
@@ -333,7 +350,7 @@ class AddKeyCommand(NewKeyCommandBase):
     # adhere to an interface
     # pylint: disable=no-self-use
     def generate_options(self, group_parser):
-        super(self.__class__, self).generate_options(group_parser)
+        super(AddKeyCommand, self).generate_options(group_parser)
         group_parser.add_argument(
             '--label',
             help='The tokens label to add a key too.\n',
@@ -352,14 +369,13 @@ class AddKeyCommand(NewKeyCommandBase):
         )
 
     # Creates a new key
-    def new_key_create(self, sobjctx, sobjauth, objauth, tpm2, path, alg,
-                       privkey):
+    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey):
 
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.create(
-            sobjctx, sobjauth, objauth, alg=alg)
+            pobj['handle'], pobj['objauth'], objauth, alg=alg)
 
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 
     def __call__(self, args):
-        keylabel = super(self.__class__, self).__call__(args)
+        keylabel = super(AddKeyCommand, self).__call__(args)
         print('Added key as label: "{keylabel}"'.format(keylabel=keylabel))

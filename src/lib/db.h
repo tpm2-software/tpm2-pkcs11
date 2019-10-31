@@ -29,14 +29,9 @@ CK_RV db_get_tokens(token **t, size_t *len);
 CK_RV db_update_for_pinchange(
         token *tok,
         bool is_so,
-        /* primary object wrapping meta data */
-        twist newkeysalthex,
-        unsigned newkeyiters,
-        twist newpobjauth,
 
         /* new seal object auth metadata */
         twist newauthsalthex,
-        unsigned newauthiters,
 
         /* private and public blobs */
         twist newprivblob,
