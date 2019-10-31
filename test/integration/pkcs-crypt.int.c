@@ -27,11 +27,11 @@ static int test_setup(void **state) {
     CK_ULONG count = ARRAY_LEN(slots);
     CK_RV rv = C_GetSlotList(true, slots, &count);
     assert_int_equal(rv, CKR_OK);
-    assert_int_equal(count, 3);
+    assert_int_equal(count, TOKEN_COUNT);
 
-    /* open a session on slot 1 */
+    /* open a session on slot 0 */
     CK_SESSION_HANDLE handle;
-    rv = C_OpenSession(slots[1], CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL,
+    rv = C_OpenSession(slots[0], CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL,
             NULL, &handle);
     assert_int_equal(rv, CKR_OK);
 

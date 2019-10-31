@@ -4,7 +4,6 @@ import os
 import argparse
 import sys
 import shutil
-from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import (Cipher, algorithms, modes)
 from tempfile import mkdtemp
@@ -12,6 +11,7 @@ from tempfile import mkdtemp
 import sys
 if sys.version_info.major < 3:
     input = raw_input
+
 
 # The delimiter changes based on nesting level to make parsing easier. We assume one key-value entry per line
 # where a key can have N KVPs as a CSV.
@@ -36,25 +36,35 @@ def dict_from_kvp(kvp):
     return dict(x.split('=') for x in kvp.split('\n'))
 
 
-def rand_str(num):
-    return binascii.hexlify(os.urandom(32))
+def rand_hex_str(num=32):
+    if num % 2:
+        raise RuntimeError("Expected even number of bytes, got: %u", num)
+
+    return binascii.hexlify(os.urandom(num // 2))
 
 
-def hash_pass(password, iters=100000, salt=None):
+def hash_pass(password, salt=None):
 
     if salt is None:
-        salt = os.urandom(32)
+        # get a 32 bit salt hex encoded (hex len 64)
+        salt = rand_hex_str(64)
 
-    phash = hashlib.pbkdf2_hmac('sha256', password, salt, iters)
-    rhash = phash
-    salt = binascii.hexlify(salt)
-    phash = binascii.hexlify(phash)
+    # python 3.5.2 (doesn't seem to affect >= 3.5.6) is dumb...
+    if isinstance(password, str):
+         password = password.encode()
+
+    if isinstance(salt, str):
+         salt = salt.encode()
+
+    m = hashlib.sha256(password)
+    m.update(salt)
+
+    # the TPM auth size is limited to 32 bytes in most cases 
+    hash = m.hexdigest()[:32]
 
     return {
         'salt': salt,
-        'iters': iters,
-        'hash': phash,
-        'rhash': rhash,
+        'hash': hash,
     }
 
 
@@ -90,31 +100,6 @@ def query_yes_no(question, default="no"):
                              "(or 'y' or 'n').\n")
 
 
-def check_pin(token, pin, is_so=False):
-
-    # Get the primary object encrypted auth value and sokey information
-    # to decode it. Based on the incoming pin
-    if is_so:
-        pinpobjauthkeysalt = token['sopobjauthkeysalt']
-        pinpobjauthkeyiters = token['sopobjauthkeyiters']
-        pinpobjauth = token['sopobjauth']
-    else:
-        pinpobjauthkeysalt = token['userpobjauthkeysalt']
-        pinpobjauthkeyiters = token['userpobjauthkeyiters']
-        pinpobjauth = token['userpobjauth']
-
-    pinpobjauthkeysalt = binascii.unhexlify(pinpobjauthkeysalt)
-    pinpobjauthkey = hash_pass(
-        pin.encode(), iters=pinpobjauthkeyiters, salt=pinpobjauthkeysalt)
-
-    try:
-        pinpobjauth = AESCipher(pinpobjauthkey['rhash']).decrypt(pinpobjauth)
-    except InvalidTag:
-        sys.exit('Invalid {} pin'.format('so' if is_so else 'user'))
-
-    return pinpobjauth
-
-
 def load_sealobject(token, tpm2, db, pobjauth, pin, is_so):
 
     pobj = db.getprimary(token['pid'])
@@ -123,15 +108,12 @@ def load_sealobject(token, tpm2, db, pobjauth, pin, is_so):
         sealpub = sealobject['sopub']
         sealpriv = sealobject['sopriv']
         salt = sealobject['soauthsalt']
-        iters = sealobject['soauthiters']
     else:
         sealpub = sealobject['userpub']
         sealpriv = sealobject['userpriv']
         salt = sealobject['userauthsalt']
-        iters = sealobject['userauthiters']
 
-    salt = binascii.unhexlify(salt)
-    sealauth = hash_pass(pin.encode(), iters, salt)['hash']
+    sealauth = hash_pass(pin.encode(), salt)['hash']
 
     # Load the so sealobject using the PARENTS AUTH (primaryobject)
     sealctx = tpm2.load(pobj['handle'], pobjauth, sealpriv, sealpub)
@@ -139,38 +121,7 @@ def load_sealobject(token, tpm2, db, pobjauth, pin, is_so):
     return pobj, sealctx, sealauth
 
 
-def load_sobject(token, db, tpm2, wrapper, pobj, pobjauth):
-    # Now get the secondary object from db
-    sobj = db.getsecondary(token['id'])
-
-    # decrypt sobj auth with wrapping
-    encsobjauth = sobj['objauth']
-    sobjauth = wrapper.unwrap(encsobjauth)
-
-    # load the secondary object
-    sobjctx = tpm2.load(pobj['handle'], pobjauth, sobj['priv'], sobj['pub'])
-
-    return sobjctx, sobjauth
-
-
-def getwrapper(token, db, tpm2, pobjauth, wrappingkeyauth):
-    token_config = dict_from_kvp(token['config'])
-    sym_support = str2bool(token_config['sym-support'])
-
-    if sym_support:
-        pobj = db.getprimary(token['pid'])
-        wrappingkey = db.getwrapping(token['id'])
-        wrapper = TPMAuthUnwrapper(tpm2, pobj['handle'], pobjauth,
-                                   wrappingkeyauth, wrappingkey['priv'],
-                                   wrappingkey['pub'])
-    else:
-        wrapper = AESAuthUnwrapper(wrappingkeyauth)
-
-    return wrapper
-
-
 class AESCipher:
-
     def __init__(self, key):
         self.key = key
 
@@ -218,32 +169,8 @@ class TemporaryDirectory(object):
     def __exit__(self, exc_type, exc_value, traceback):
         shutil.rmtree(self.name)
 
-class TPMAuthUnwrapper(object):
-
-    def __init__(self, tpm2, pobjhandle, pobjauth, wrappingkeyauth,
-                 wrappingkeypriv, wrappingkeypub):
-        self._wrappingkeyauth = wrappingkeyauth
-        self._tpm2 = tpm2
-
-        wrappingkeyctx = tpm2.load(pobjhandle, pobjauth, wrappingkeypriv,
-                                   wrappingkeypub)
-        self._wrappingkeyctx = wrappingkeyctx
-
-    def unwrap(self, value):
-        unhexlified = binascii.unhexlify(value)
-        unwrapped = self._tpm2.decrypt(self._wrappingkeyctx,
-                                       self._wrappingkeyauth, unhexlified)
-        return unwrapped
-
-    def wrap(self, value):
-        wrapped = self._tpm2.encrypt(self._wrappingkeyctx,
-                                     self._wrappingkeyauth, value)
-        hexlified = binascii.hexlify(wrapped)
-        return hexlified
-
 
 class AESAuthUnwrapper(object):
-
     def __init__(self, key):
 
         self._cipher = AESCipher(binascii.unhexlify(key))
@@ -264,6 +191,7 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+
 
 def get_ec_params(alg):
     """Return a string representation of a hex encoded ASN1 object X9.62 EC parameter
@@ -286,9 +214,10 @@ def get_ec_params(alg):
         raise RuntimeError("alg %s has no EC params mapping" % alg)
 
     # start building the DER object tag + len + obj in hex
-    der = "06{:02x}{}".format(len(obj)//2, obj)
+    der = "06{:02x}{}".format(len(obj) // 2, obj)
 
     return der
+
 
 def asn1_format_ec_point_uncompressed(x, y):
 
@@ -309,9 +238,10 @@ def asn1_format_ec_point_uncompressed(x, y):
     len_x = len_x // 2
 
     # ensure that the binary representation fits into a byte
-    total_len =  len_y + len_x + 1
+    total_len = len_y + len_x + 1
     if (total_len > 255):
-        raise RuntimeError("Length of X and Y plus uncompressed format byte greater than 255")
+        raise RuntimeError(
+            "Length of X and Y plus uncompressed format byte greater than 255")
 
     # The uncompressed point format is:
     # <asn1 octet hdr> <len> <uncompressed point format byte> <X> <Y>

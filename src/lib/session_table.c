@@ -142,6 +142,10 @@ CK_RV session_table_free_ctx_all(token *t) {
 
     bool had_error = false;
 
+    if (!t->s_table) {
+        return CKR_OK;
+    }
+
     unsigned i;
     for (i=0; i < ARRAY_LEN(t->s_table->table); i++) {
         CK_SESSION_HANDLE handle = i;

@@ -31,25 +31,15 @@ struct token {
     unsigned pid;
     unsigned char label[32];
 
-    twist userpobjauthkeysalt;
-    unsigned userpobjauthkeyiters;
-    twist userpobjauth;
-
-    twist sopobjauthkeysalt;
-    unsigned sopobjauthkeyiters;
-    twist sopobjauth;
-
     pobject pobject;
 
-    sealobject sealobject;
-    wrappingobject wrappingobject;
+    twist wappingkey;
 
-    sobject sobject;
+    sealobject sealobject;
 
     tobject *tobjects;
 
     struct {
-        bool sym_support; /* use TPM for unwrapping if true else use software */
         bool is_initialized; /* token initialization state */
     } config;
 

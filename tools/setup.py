@@ -14,7 +14,7 @@ setup(
     description='Command line tools for the TPM2.0 PKCS11 module',
     url='https://github.com/tpm2-software/tpm2-pkcs11',
     license='BSD2',
-    keywords=['',],
+    keywords=['', ],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
@@ -35,5 +35,4 @@ setup(
     tests_require=[],
     entry_points={
         'console_scripts': ['tpm2_ptool = tpm2_pkcs11.tpm2_ptool:main'],
-    },
-)
+    }, )

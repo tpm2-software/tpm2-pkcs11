@@ -26,6 +26,8 @@
 #include "openssl_compat.h"
 #include "utils.h"
 
+#define TOKEN_COUNT 2
+
 #define GOOD_USERPIN "myuserpin"
 #define GOOD_SOPIN   "mysopin"
 

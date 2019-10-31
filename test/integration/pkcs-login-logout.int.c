@@ -5,7 +5,12 @@
  * All rights reserved.
  ***********************************************************************/
 
+#include "tcti_ldr.h"
 #include "test.h"
+
+/* we need to manage lockout counter for testing bad auths */
+#include <tss2/tss2_esys.h>
+#include <tss2/tss2_tcti.h>
 
 typedef struct test_session_handle test_session_handle;
 struct test_session_handle {
@@ -33,6 +38,27 @@ struct test_slot {
 struct test_info {
     test_slot slots[2]; /* slots with sessions for use */
 };
+
+ESYS_CONTEXT *_g_ectx = NULL;
+TSS2_TCTI_CONTEXT *_g_tcti = NULL;
+
+static int _group_setup_locking(void **state) {
+
+    _g_tcti = tcti_ldr_load();
+
+    TSS2_RC rc = Esys_Initialize(&_g_ectx, _g_tcti, NULL);
+    assert_int_equal(rc, TSS2_RC_SUCCESS);
+
+    return group_setup_locking(state);
+}
+
+static int _group_teardown(void **state) {
+
+    Esys_Finalize(&_g_ectx);
+    Tss2_Tcti_Finalize(_g_tcti);
+    free(_g_tcti);
+    return group_teardown(state);
+}
 
 /**
  * Opens a session on a slot
@@ -72,7 +98,7 @@ static test_info *_test_info_new(void) {
     CK_ULONG count = ARRAY_LEN(slots);
     CK_RV rv = C_GetSlotList(true, slots, &count);
     assert_int_equal(rv, CKR_OK);
-    assert_int_equal(count, 3);
+    assert_int_equal(count, TOKEN_COUNT);
 
     ti->slots[0].slot_id = slots[0];
     ti->slots[1].slot_id = slots[1];
@@ -114,6 +140,22 @@ static test_info *test_info_new(bool is_rw) {
     return ti;
 }
 
+static void test_setup_teardown_common(void) {
+
+    /*
+     * Reset the DA counter as login tests can affect
+     * the count
+     */
+
+    TPM2B_AUTH auth = { .size = 0 };
+    TSS2_RC rc = Esys_TR_SetAuth(_g_ectx, ESYS_TR_RH_LOCKOUT, &auth);
+    assert_int_equal(rc, TSS2_RC_SUCCESS);
+
+    rc = Esys_DictionaryAttackLockReset(_g_ectx, ESYS_TR_RH_LOCKOUT,
+            ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE);
+    assert_int_equal(rc, TSS2_RC_SUCCESS);
+}
+
 /**
  * Sets up a test run with read/write sessions
  * @param state
@@ -122,6 +164,8 @@ static test_info *test_info_new(bool is_rw) {
  *  0 on success or asserts on error.
  */
 static int test_setup_rw(void **state) {
+
+    test_setup_teardown_common();
 
     *state = test_info_new(true);
     return 0;
@@ -135,6 +179,8 @@ static int test_setup_rw(void **state) {
  *  0 on success or asserts on error.
  */
 static int test_setup_ro(void **state) {
+
+    test_setup_teardown_common();
 
     *state = test_info_new(false);
     return 0;
@@ -150,6 +196,8 @@ static int test_setup_ro(void **state) {
 static int test_teardown(void **state) {
 
     test_info *ti = test_info_from_state(state);
+
+    test_setup_teardown_common();
 
     unsigned i;
     for (i=0; i < ARRAY_LEN(ti->slots); i++) {
@@ -551,8 +599,6 @@ int main() {
          */
         cmocka_unit_test_setup_teardown(test_user_state_pin_change_good,
                 test_setup_rw, test_teardown),
-        cmocka_unit_test_setup_teardown(test_user_state_pin_change_good,
-                test_setup_rw, test_teardown),
         cmocka_unit_test_setup_teardown(test_so_state_pin_change_good,
                 test_setup_rw, test_teardown),
         cmocka_unit_test_setup_teardown(test_ro_function_state_pin_change_bad,
@@ -566,5 +612,5 @@ int main() {
                 test_setup_rw, test_teardown),
     };
 
-    return cmocka_run_group_tests(tests, group_setup_locking, group_teardown);
+    return cmocka_run_group_tests(tests, _group_setup_locking, _group_teardown);
 }
