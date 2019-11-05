@@ -115,14 +115,14 @@ class Db(object):
 
         return c.lastrowid
 
-    def addprimary(self, handle, objauth, hierarchy='o'):
+    def addprimary(self, tr_handle, objauth, hierarchy='o'):
 
         # Subordiante commands will need some of this data
         # when deriving subordinate objects, so pass it back
         pobject = {
             # General Metadata
             'hierarchy': hierarchy,
-            'handle': handle,
+            'handle': Db._blobify(tr_handle),
             'objauth': objauth,
         }
 
@@ -239,7 +239,7 @@ class Db(object):
             CREATE TABLE IF NOT EXISTS pobjects(
                 id INTEGER PRIMARY KEY,
                 hierarchy TEXT NOT NULL,
-                handle INTEGER NOT NULL,
+                handle BLOB NOT NULL,
                 objauth TEXT NOT NULL
             );
             '''),

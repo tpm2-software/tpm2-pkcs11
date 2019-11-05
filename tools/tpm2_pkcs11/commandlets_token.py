@@ -5,6 +5,7 @@ import sys
 from .command import Command
 from .command import commandlet
 from .db import Db
+from .utils import bytes_to_file
 from .utils import TemporaryDirectory
 from .utils import hash_pass
 from .utils import dict_from_kvp
@@ -80,10 +81,11 @@ class VerifyCommand(Command):
             tpm2 = Tpm2(d)
 
             pobjauth = pobj['objauth']
+            tr_handle = bytes_to_file(pobj['handle'], d)
 
             if sopin != None:
 
-                sosealctx = tpm2.load(pobj['handle'], pobjauth,
+                sosealctx = tpm2.load(tr_handle, pobjauth,
                                       sealobj['sopriv'], sealobj['sopub'])
 
                 # Unseal the wrapping key auth
@@ -97,7 +99,7 @@ class VerifyCommand(Command):
 
             if userpin != None:
 
-                usersealctx = tpm2.load(pobj['handle'], pobjauth,
+                usersealctx = tpm2.load(tr_handle, pobjauth,
                                         sealobj['userpriv'],
                                         sealobj['userpub'])
 
@@ -120,7 +122,7 @@ class VerifyCommand(Command):
             tobjs = db.gettertiary(token['id'])
 
             for tobj in tobjs:
-                tpm2.load(pobj['handle'], pobjauth, tobj['priv'], tobj['pub'])
+                tpm2.load(tr_handle, pobjauth, tobj['priv'], tobj['pub'])
                 tobjauth = wrapper.unwrap(tobj['objauth'])
 
                 print("Tertiary object verified(%d), auth: %s" %
@@ -187,13 +189,16 @@ class AddTokenCommand(Command):
             # auth values and sealing the wrappingkey value to it.
             # soobject will be an AES key used for decrypting tertiary object
             # auth values.
+
+            tr_handle = bytes_to_file(pobject['handle'], d)
+
             usersealpriv, usersealpub, _ = tpm2.create(
-                pobject['handle'],
+                tr_handle,
                 pobject['objauth'],
                 usersealauth['hash'],
                 seal=wrappingkey)
             sosealpriv, sosealpub, _ = tpm2.create(
-                pobject['handle'],
+                tr_handle,
                 pobject['objauth'],
                 sosealauth['hash'],
                 seal=wrappingkey)
@@ -303,13 +308,18 @@ class ChangePinCommand(Command):
         pobject = db.getprimary(pobjectid)
         pobjauth = pobject['objauth']
 
-        pobj, sealctx, sealauth = load_sealobject(token, tpm2, db, pobjauth,
-                                                  oldpin, is_so)
+        with TemporaryDirectory() as d:
 
-        # call tpm2_changeauth and get new private portion
-        newsealauth = hash_pass(newpin)
-        newsealpriv = tpm2.changeauth(pobj['handle'], sealctx, sealauth,
-                                      newsealauth['hash'])
+            tr_handle = bytes_to_file(pobject['handle'], d)
+
+            sealctx, sealauth = load_sealobject(token, db, tpm2, tr_handle, pobjauth,
+                                                      oldpin, is_so)
+
+            newsealauth = hash_pass(newpin)
+
+            # call tpm2_changeauth and get new private portion
+            newsealpriv = tpm2.changeauth(tr_handle, sealctx, sealauth,
+                                          newsealauth['hash'])
 
         # update the database
         db.updatepin(is_so, token, newsealauth, newsealpriv)
@@ -358,18 +368,24 @@ class InitPinCommand(Command):
         pobject = db.getprimary(pobjectid)
         pobjauth = pobject['objauth']
 
-        pobj, sealctx, sealauth = load_sealobject(token, tpm2, db, pobjauth,
-                                                  sopin, True)
-        wrappingkeyauth = tpm2.unseal(sealctx, sealauth)
+        with TemporaryDirectory() as d:
 
-        # call tpm2_create and create a new sealobject protected by the seal auth and sealing
-        #    the wrapping key auth value
-        newsealauth = hash_pass(newpin)
-        newsealpriv, newsealpub, _ = tpm2.create(
-            pobj['handle'],
-            pobjauth,
-            newsealauth['hash'],
-            seal=wrappingkeyauth)
+            tr_handle = bytes_to_file(pobject['handle'], d)
+
+            sealctx, sealauth = load_sealobject(token, db, tpm2, tr_handle, pobjauth,
+                                                  sopin, True)
+            wrappingkeyauth = tpm2.unseal(sealctx, sealauth)
+
+            # call tpm2_create and create a new sealobject protected by the seal auth and sealing
+            #    the wrapping key auth value
+            newsealauth = hash_pass(newpin)
+
+
+            newsealpriv, newsealpub, _ = tpm2.create(
+                tr_handle,
+                pobjauth,
+                newsealauth['hash'],
+                seal=wrappingkeyauth)
 
         # update the database
         db.updatepin(False, token, newsealauth, newsealpriv, newsealpub)

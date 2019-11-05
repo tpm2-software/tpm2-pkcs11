@@ -510,23 +510,15 @@ CK_RV tpm_stirrandom(tpm_ctx *ctx, CK_BYTE_PTR seed, CK_ULONG seed_len) {
     return CKR_OK;
 }
 
-bool tpm_register_handle(tpm_ctx *ctx, uint32_t *handle) {
+bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle) {
 
-    ESYS_TR object;
-
-    TSS2_RC rval =
-        Esys_TR_FromTPMPublic(
-            ctx->esys_ctx,
-            *handle,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            &object);
+    TSS2_RC rval = Esys_TR_Deserialize(ctx->esys_ctx,
+                        (uint8_t *)handle_blob,
+                        twist_len(handle_blob), handle);
     if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_TR_FromTPMPublic: 0x%x", rval);
+        LOGE("Esys_TR_Deserialize: 0x%x:", rval);
         return false;
     }
-    *handle = object;
 
     return true;
 }

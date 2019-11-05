@@ -9,12 +9,12 @@ from .command import Command
 from .command import commandlet
 
 from .db import Db
+from .utils import bytes_to_file
 from .utils import TemporaryDirectory
 from .utils import rand_hex_str
 from .utils import query_yes_no
 
 from .tpm2 import Tpm2
-
 
 @commandlet("init")
 class InitCommand(Command):
@@ -32,7 +32,7 @@ class InitCommand(Command):
         group_parser.add_argument(
             '--primary-handle',
             nargs='?',
-            type=InitCommand.str_to_int,
+            type=InitCommand.str_to_handle,
             action=InitCommand.make_action(primary=True),
             help='Use an existing primary key object, defaults to 0x81000001.')
         group_parser.add_argument(
@@ -41,8 +41,15 @@ class InitCommand(Command):
         )
 
     @staticmethod
-    def str_to_int(arg):
-        return int(arg, 0)
+    def str_to_handle(arg):
+        try:
+            return int(arg, 0)
+        except ValueError:
+                if not os.path.exists(arg):
+                    sys.exit('arg "%s" neither a handle nor esys handle file')
+                else:
+                    return arg
+
 
     @staticmethod
     def make_action(**kwargs):
@@ -70,7 +77,7 @@ class InitCommand(Command):
         with Db(path) as db:
             db.create()
 
-            handle = None
+            shall_evict = False
             with TemporaryDirectory() as d:
                 try:
                     tpm2 = Tpm2(d)
@@ -79,31 +86,42 @@ class InitCommand(Command):
                         pobjauth = pobjauth if pobjauth != None else rand_hex_str(
                         )
                         ctx = tpm2.createprimary(ownerauth, pobjauth)
-                        handle = Tpm2.evictcontrol(ownerauth, ctx)
+                        tr_handle = tpm2.evictcontrol(ownerauth, ctx)
+                        shall_evict = True
                     else:
                         # get the primary object auth value and convert it to hex
                         if pobjauth is None:
                             pobjauth = ""
 
-                        handle = args['primary_handle']
-                        if handle is None:
-                            handle = 0x81000001
+                        handle = args['primary_handle'] if args['primary_handle'] is not None else 0x81000001
 
-                        # verify handle is persistent
-                        output = tpm2.getcap('handles-persistent')
-                        y = yaml.safe_load(output)
-                        if handle not in y:
-                            sys.exit('Handle 0x%x is not persistent' %
-                                     (handle))
+                        # If we get a raw handle, capture the ESYS_TR serialized and
+                        # and verify that its persistent.
+                        #
+                        # TODO: with python bindings call esys_tr_from_public() over readpublic.
+                        # TODO: we need a sapi handle from esys tr to look into getcap to see if
+                        # its persistent.
+                        if isinstance(handle, int):
+                            tr_handle = tpm2.readpublic(handle)
 
-                    pid = db.addprimary(handle, pobjauth)
+                            # verify handle is persistent
+                            output = tpm2.getcap('handles-persistent')
+                            y = yaml.safe_load(output)
+                            if handle not in y:
+                                sys.exit('Handle 0x%x is not persistent' %
+                                         (handle))
+                        else:
+                            tr_handle = handle
+
+
+                    pid = db.addprimary(tr_handle, pobjauth)
 
                     action_word = "Added" if use_existing_primary else "Created"
                     print("%s a primary object of id: %d" % (action_word, pid))
 
                 except Exception as e:
-                    if handle != None:
-                        Tpm2.evictcontrol(ownerauth, handle)
+                    if shall_evict and tr_handle != None:
+                        tpm2.evictcontrol(ownerauth, tr_handle)
 
                     traceback.print_exc(file=sys.stdout)
                     sys.exit(e)
@@ -146,5 +164,10 @@ class DestroyCommand(Command):
             if pobj is None:
                 sys.exit('Primary Object id "%s"not found' % pid)
 
-            db.rmprimary(pid)
-            Tpm2.evictcontrol(ownerauth, pobj['handle'])
+            with TemporaryDirectory() as d:
+                tpm2 = Tpm2(d)
+
+                tr_file = bytes_to_file(pobj['handle'], d)
+
+                db.rmprimary(pid)
+                tpm2.evictcontrol(ownerauth, tr_file)

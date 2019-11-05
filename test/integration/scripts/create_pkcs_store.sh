@@ -52,15 +52,31 @@ set -e
 # init
 tpm2_ptool init --primary-auth=mypobjpin --path=$TPM2_PKCS11_STORE
 
-# Test the existing primary object init functionality
+echo one
+
+# Test the existing primary object init functionality using a raw handle
 tpm2_createprimary -p foopass -c $TPM2_PKCS11_STORE/primary.ctx -g sha256 -G rsa
 handle=`tpm2_evictcontrol -C o -c $TPM2_PKCS11_STORE/primary.ctx | grep -Po '(?<=persistent-handle: )\S+'`
 
+echo 2
+
+echo "tpm2_ptool init --primary-auth=anotherpobjpin --primary-handle=$handle --primary-auth=foopass --path=$TPM2_PKCS11_STORE"
 tpm2_ptool init --primary-auth=anotherpobjpin --primary-handle=$handle --primary-auth=foopass --path=$TPM2_PKCS11_STORE
+
+echo 3
+
+# Test the existing primary object init functionality using an esys_tr
+tpm2_createprimary -c $TPM2_PKCS11_STORE/primary.ctx -g sha256 -G rsa
+esys_tr_file="$TPM2_PKCS11_STORE/primary3.handle"
+tpm2_evictcontrol -C o -c $TPM2_PKCS11_STORE/primary.ctx -o "$esys_tr_file"
+
+echo "tpm2_ptool init --primary-handle="$esys_tr_file" --path=$TPM2_PKCS11_STORE"
+tpm2_ptool init --primary-handle="$esys_tr_file" --path=$TPM2_PKCS11_STORE
 
 # add 3 tokens
 tpm2_ptool addtoken --pid=1 --sopin=myBADsopin --userpin=myBADuserpin --label=label --path $TPM2_PKCS11_STORE
 tpm2_ptool addtoken --pid=2 --sopin=anothersopin --userpin=anotheruserpin --label=import-keys --path $TPM2_PKCS11_STORE
+tpm2_ptool addtoken --pid=3 --sopin=sopin3 --userpin=userpin3 --label=esys-tr --path $TPM2_PKCS11_STORE
 
 # Change the bad pins to something good (test tpm2_ptool changepin commandlet)
 tpm2_ptool changepin --label=label --user=user --old=myBADuserpin --new=myuserpin --path=$TPM2_PKCS11_STORE
