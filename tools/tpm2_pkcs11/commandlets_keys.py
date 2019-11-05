@@ -8,6 +8,7 @@ import yaml
 from .command import Command
 from .command import commandlet
 from .db import Db
+from .utils import bytes_to_file
 from .utils import AESAuthUnwrapper
 from .utils import TemporaryDirectory
 from .utils import hash_pass
@@ -35,11 +36,13 @@ class NewKeyCommandBase(Command):
         pinopts.add_argument('--userpin', help='The User pin.\n'),
 
     # Implemented by derived class
-    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey):
+    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey, d):
         raise NotImplementedError('Implement: new_key')
 
     @staticmethod
-    def new_key_init(label, sopin, userpin, pobj, sealobjects, tpm2):
+    def new_key_init(label, sopin, userpin, pobj, sealobjects, tpm2, d):
+
+        tr_handle = bytes_to_file(pobj['handle'], d)
 
         # Get the primary object encrypted auth value and sokey information
         # to decode it. Based on the incoming pin
@@ -54,7 +57,7 @@ class NewKeyCommandBase(Command):
         sealpriv = sealobjects[privkey]
         sealsalt = sealobjects[saltkey]
 
-        sealctx = tpm2.load(pobj['handle'], pobj['objauth'], sealpriv, sealpub)
+        sealctx = tpm2.load(tr_handle, pobj['objauth'], sealpriv, sealpub)
 
         sealauth = hash_pass(pin, salt=sealsalt)['hash']
 
@@ -282,10 +285,10 @@ class NewKeyCommandBase(Command):
                 sealobjects = db.getsealobject(token['id'])
 
                 encobjauth, objauth = NewKeyCommandBase.new_key_init(
-                    label, sopin, userpin, pobj, sealobjects, tpm2)
+                    label, sopin, userpin, pobj, sealobjects, tpm2, d)
 
                 tertiarypriv, tertiarypub, tertiarypubdata = self.new_key_create(
-                    pobj, objauth, tpm2, path, alg, privkey)
+                    pobj, objauth, tpm2, path, alg, privkey, d)
 
                 final_key_label = NewKeyCommandBase.new_key_save(
                     alg, key_label, tid, label, tertiarypriv, tertiarypub,
@@ -323,7 +326,7 @@ class ImportCommand(NewKeyCommandBase):
             required=True)
 
     # Imports a new key
-    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey):
+    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey, d):
         if alg != 'rsa':
             sys.exit('Unknown algorithm or algorithm not supported, got "%s"' %
                      alg)
@@ -331,8 +334,10 @@ class ImportCommand(NewKeyCommandBase):
         if privkey is None:
             sys.exit("Invalid private key path")
 
+        tr_handle = bytes_to_file(pobj['handle'], d)
+
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.importkey(
-            pobj['handle'], pobj['objauth'], objauth, privkey=privkey, alg=alg)
+            tr_handle, pobj['objauth'], objauth, privkey=privkey, alg=alg)
 
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 
@@ -369,10 +374,12 @@ class AddKeyCommand(NewKeyCommandBase):
         )
 
     # Creates a new key
-    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey):
+    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey, d):
+
+        tr_handle = bytes_to_file(pobj['handle'], d)
 
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.create(
-            pobj['handle'], pobj['objauth'], objauth, alg=alg)
+            tr_handle, pobj['objauth'], objauth, alg=alg)
 
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 

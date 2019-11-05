@@ -31,6 +31,11 @@ def list_dict_to_kvp(l):
     x = "\n".join(kvp_row(d) for d in l)
     return x
 
+def bytes_to_file(bites, tmpdir):
+    path = os.path.join(tmpdir, "primary.handle")
+    open(path, 'w+b').write(bites)
+    return path
+
 
 def dict_from_kvp(kvp):
     return dict(x.split('=') for x in kvp.split('\n'))
@@ -100,9 +105,8 @@ def query_yes_no(question, default="no"):
                              "(or 'y' or 'n').\n")
 
 
-def load_sealobject(token, tpm2, db, pobjauth, pin, is_so):
+def load_sealobject(token, db, tpm2, pobjhandle, pobjauth, pin, is_so):
 
-    pobj = db.getprimary(token['pid'])
     sealobject = db.getsealobject(token['id'])
     if is_so:
         sealpub = sealobject['sopub']
@@ -116,9 +120,9 @@ def load_sealobject(token, tpm2, db, pobjauth, pin, is_so):
     sealauth = hash_pass(pin.encode(), salt)['hash']
 
     # Load the so sealobject using the PARENTS AUTH (primaryobject)
-    sealctx = tpm2.load(pobj['handle'], pobjauth, sealpriv, sealpub)
+    sealctx = tpm2.load(pobjhandle, pobjauth, sealpriv, sealpub)
 
-    return pobj, sealctx, sealauth
+    return sealctx, sealauth
 
 
 class AESCipher:

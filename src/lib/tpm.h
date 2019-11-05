@@ -71,6 +71,8 @@ bool tpm_flushcontext(tpm_ctx *ctx, uint32_t handle);
 
 twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth);
 
+bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle);
+
 /**
  * Perform a signing operation using the TPM.
  * @param ctx

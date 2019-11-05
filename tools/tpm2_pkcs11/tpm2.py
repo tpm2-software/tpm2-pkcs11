@@ -4,7 +4,6 @@ import os
 import sys
 from tempfile import mkstemp, NamedTemporaryFile
 import uuid
-import yaml
 
 from subprocess import Popen, PIPE
 
@@ -30,23 +29,34 @@ class Tpm2(object):
                                stderr)
         return ctx
 
-    @staticmethod
-    def evictcontrol(ownerauth, ctx):
+    def evictcontrol(self, ownerauth, ctx):
 
-        cmd = ['tpm2_evictcontrol', '-c', str(ctx)]
+        tr_file = os.path.join(self._tmp, "primary.handle")
+
+        cmd = ['tpm2_evictcontrol', '-c', str(ctx), '-o', tr_file]
 
         if ownerauth and len(ownerauth) > 0:
             cmd.extend(['-P', ownerauth])
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         stdout, stderr = p.communicate()
-        y = yaml.safe_load(stdout)
-        rc = p.wait()
-        handle = y['persistent-handle'] if rc == 0 else None
         if (p.wait()):
             raise RuntimeError("Could not execute tpm2_evictcontrol: %s",
                                stderr)
-        return handle
+        return tr_file
+
+    def readpublic(self, handle):
+
+        tr_file = os.path.join(self._tmp, "primary.handle")
+
+        cmd = ['tpm2_readpublic', '-c', str(handle), '-t', tr_file]
+
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+        stdout, stderr = p.communicate()
+        if (p.wait()):
+            raise RuntimeError("Could not execute tpm2_readpublic: %s",
+                               stderr)
+        return tr_file
 
     def load(self, pctx, pauth, priv, pub):
 

@@ -690,7 +690,7 @@ error:
     return rc;
 }
 
-int init_pobject(unsigned pid, pobject *pobj) {
+int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
 
     const char *sql =
             "SELECT handle,objauth FROM pobjects WHERE id=?1";
@@ -714,7 +714,22 @@ int init_pobject(unsigned pid, pobject *pobj) {
         goto error;
     }
 
-    pobj->handle = sqlite3_column_int(stmt, 0);
+    twist blob = NULL;
+    rc = _get_blob(stmt, 0, false, &blob);
+    if (rc != SQLITE_OK) {
+        LOGE("Cannot get ESYS_TR handle blob %s\n", sqlite3_errmsg(global.db));
+        goto error;
+    }
+
+
+    bool res = tpm_deserialize_handle(tpm, blob, &pobj->handle);
+    twist_free(blob);
+    if (!res) {
+        /* just set a general error as rc could be success right now */
+        rc = SQLITE_ERROR;
+        goto error;
+    }
+
     pobj->objauth = twist_new((char *)sqlite3_column_text(stmt, 1));
     goto_oom(pobj->objauth, error);
 
@@ -879,11 +894,6 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
             goto error;
         }
 
-        int rc = init_pobject(t->pid, &t->pobject);
-        if (rc != SQLITE_OK) {
-            goto error;
-        }
-
         /*
          * Initialize the per-token tpm context
          */
@@ -893,9 +903,8 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
             goto error;
         }
 
-        /* register the primary object handle with the TPM */
-        bool res = tpm_register_handle(t->tctx, &t->pobject.handle);
-        if (!res) {
+        int rc = init_pobject(t->pid, &t->pobject, t->tctx);
+        if (rc != SQLITE_OK) {
             goto error;
         }
 
