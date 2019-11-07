@@ -288,7 +288,7 @@ CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, CK_ULONG count)
 
 empty:
 
-    session_ctx_opdata_set(ctx, operation_find, fd, (opdata_free_fn)object_find_data_free);
+    session_ctx_opdata_set(ctx, operation_find, NULL, fd, (opdata_free_fn)object_find_data_free);
 
     rv = CKR_OK;
 

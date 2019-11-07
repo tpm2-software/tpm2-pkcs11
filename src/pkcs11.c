@@ -350,11 +350,6 @@ static inline CK_RV auth_init_pin_state(session_ctx *ctx) {
 #define TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION(auth_min_ro_pub, userfunc, session, ##__VA_ARGS__)
 
 /*
- * Does what TOKEN_WITH_LOCK_BY_SESSION_PUB_RO does, but passes the session_ctx to the internal api.
- */
-#define TOKEN_WITH_LOCK_BY_SESSION_PUB_RO_KEEP_CTX(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION_KEEP_CTX(auth_min_ro_pub, userfunc, session, ##__VA_ARGS__)
-
-/*
  * Does what __TOKEN_WITH_LOCK_BY_SESSION does, and checks that the session is at least RW Public. Ie no one logged in and R/W session.
  */
 #define TOKEN_WITH_LOCK_BY_SESSION_PUB_RW(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION(auth_min_rw_pub, userfunc, session, ##__VA_ARGS__)
@@ -372,7 +367,7 @@ static inline CK_RV auth_init_pin_state(session_ctx *ctx) {
 /*
  * Does what __TOKEN_WITH_LOCK_BY_SESSION does, and checks that the session is at least RO User. Ie user or so logged in and R/O or R/W session.
  */
-#define TOKEN_WITH_LOCK_BY_SESSION_LOGGED_IN(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION_TOKEN(auth_any_logged_in, userfunc, session, ##__VA_ARGS__)
+#define TOKEN_WITH_LOCK_BY_SESSION_LOGGED_IN(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION(auth_any_logged_in, userfunc, session, ##__VA_ARGS__)
 
 #define TOKEN_WITH_LOCK_BY_SESSION_SET_PIN_STATE(userfunc, session, ...) __TOKEN_WITH_LOCK_BY_SESSION_TOKEN(auth_set_pin_state, userfunc, session, ##__VA_ARGS__)
 
@@ -444,7 +439,7 @@ CK_RV C_CloseAllSessions (CK_SLOT_ID slotID) {
 }
 
 CK_RV C_GetSessionInfo (CK_SESSION_HANDLE session, CK_SESSION_INFO *info) {
-    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO_KEEP_CTX(session_get_info, session, info);
+    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(session_ctx_get_info, session, info);
 }
 
 CK_RV C_GetOperationState (CK_SESSION_HANDLE session, CK_BYTE_PTR operation_state, CK_ULONG_PTR operation_state_len) {
@@ -456,11 +451,11 @@ CK_RV C_SetOperationState (CK_SESSION_HANDLE session, CK_BYTE_PTR operation_stat
 }
 
 CK_RV C_Login (CK_SESSION_HANDLE session, CK_USER_TYPE user_type, CK_BYTE_PTR pin, CK_ULONG pin_len) {
-    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(session_login, session, user_type, pin, pin_len);
+    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(session_ctx_login, session, user_type, pin, pin_len);
 }
 
 CK_RV C_Logout (CK_SESSION_HANDLE session) {
-    TOKEN_WITH_LOCK_BY_SESSION_LOGGED_IN(session_logout, session);
+    TOKEN_WITH_LOCK_BY_SESSION_LOGGED_IN(session_ctx_logout, session);
 }
 
 CK_RV C_CreateObject (CK_SESSION_HANDLE session, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OBJECT_HANDLE *object) {

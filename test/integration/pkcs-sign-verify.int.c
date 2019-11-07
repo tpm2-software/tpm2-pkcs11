@@ -843,9 +843,83 @@ static void test_sign_verify_public(void **state) {
     RSA_free(r);
 }
 
+static void test_sign_verify_context_specific_good(void **state) {
+
+    static CK_BBOOL _true = CK_TRUE;
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_OBJECT_CLASS key_class = CKO_PRIVATE_KEY;
+    CK_KEY_TYPE key_type = CKK_RSA;
+    CK_ATTRIBUTE tmpl[] = {
+        { CKA_CLASS, &key_class, sizeof(key_class)  },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+        { CKA_ALWAYS_AUTHENTICATE, &_true, sizeof(_true) },
+    };
+
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    /* Find an RSA key w/CKA_ALWAYS_AUTHENTICATE set */
+    CK_ULONG count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    /* context specific require C_Login(USER) before */
+    context_login_expects(session, CKR_USER_NOT_LOGGED_IN);
+
+    user_login(session);
+
+    CK_MECHANISM mech = { .mechanism =  CKM_SHA256_RSA_PKCS };
+    /*
+     * OK now internally hash/sign the data via CKM_SHA256_RSA_PKCS
+     */
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE ckm_sha256_rsa_pkcs_sig[4096];
+    CK_ULONG ckm_sha256_rsa_pkcs_siglen = sizeof(ckm_sha256_rsa_pkcs_sig);
+
+    /* this should fail with CKR_USER_NOT_LOGGED_IN */
+    rv = C_Sign(session, (CK_BYTE_PTR ) _data, sizeof(_data),
+            ckm_sha256_rsa_pkcs_sig, &ckm_sha256_rsa_pkcs_siglen);
+    assert_int_equal(rv, CKR_USER_NOT_LOGGED_IN);
+
+    /* bad pin should fail */
+    context_login_bad_pin(session);
+
+    /* finally logged in, should work */
+    context_login(session);
+
+    rv = C_Sign(session, (CK_BYTE_PTR ) _data, sizeof(_data),
+            ckm_sha256_rsa_pkcs_sig, &ckm_sha256_rsa_pkcs_siglen);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_VerifyInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    /* this should fail */
+    rv = C_Verify(session, (CK_BYTE_PTR ) _data, sizeof(_data),
+            ckm_sha256_rsa_pkcs_sig, ckm_sha256_rsa_pkcs_siglen);
+    assert_int_equal(rv, CKR_USER_NOT_LOGGED_IN);
+
+    context_login(session);
+    rv = C_Verify(session, (CK_BYTE_PTR ) _data, sizeof(_data),
+            ckm_sha256_rsa_pkcs_sig, ckm_sha256_rsa_pkcs_siglen);
+    assert_int_equal(rv, CKR_OK);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_sign_verify_context_specific_good,
+            test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_public,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_RSA_PKCS_5_2_returns,
@@ -866,7 +940,6 @@ int main() {
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_ECDSA,
             test_setup, test_teardown),
-
     };
 
     return cmocka_run_group_tests(tests, group_setup, group_teardown);

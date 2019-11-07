@@ -86,13 +86,16 @@ CK_RV session_table_new_entry(session_table *t, CK_SESSION_HANDLE *handle,
     return CKR_OK;
 }
 
-static CK_RV do_logout_if_needed(token *tok) {
+static CK_RV do_logout_if_needed(session_ctx *ctx) {
+
+    token *tok = session_ctx_get_token(ctx);
+    assert(tok);
 
     if (tok->login_state == token_no_one_logged_in) {
         return CKR_OK;
     }
 
-    return token_logout(tok);
+    return session_ctx_logout(ctx);
 }
 
 static CK_RV session_table_free_ctx_by_ctx(token *t, session_ctx **ctx) {
@@ -113,7 +116,7 @@ static CK_RV session_table_free_ctx_by_ctx(token *t, session_ctx **ctx) {
 
     /* Per the spec, when session count hits 0, logout */
     if (!stable->cnt) {
-        rv = do_logout_if_needed(t);
+        rv = do_logout_if_needed(*ctx);
         if (rv != CKR_OK) {
             LOGE("do_logout_if_needed failed: 0x%x", rv);
         }

@@ -30,6 +30,7 @@ enum operation {
 typedef struct generic_opdata generic_opdata;
 struct generic_opdata {
     operation op;
+    tobject *tobj;
     void *data;
 };
 
@@ -125,10 +126,21 @@ typedef void (*opdata_free_fn)(void **opdata);
  *  The session_ctx to set operational data on
  * @param op
  *  The operation setting the data
+ * @param tobj
+ *   The active object or NULL if no single active object (like find objects has a list)
  * @param data
  *  The data to set
  */
-void session_ctx_opdata_set(session_ctx *ctx, operation op, void *data, opdata_free_fn fn);
+void session_ctx_opdata_set(session_ctx *ctx, operation op, tobject *tobj, void *data, opdata_free_fn fn);
+
+/**
+ * Returns the active object for the session, or NULL.
+ * @param ctx
+ *  The session context
+ * @returns
+ *  The tobject or NULL.
+ */
+tobject *session_ctx_opdata_get_tobject(session_ctx *ctx);
 
 /**
  * Clears the session_ctx opdata state. NOTE that callers
@@ -152,5 +164,61 @@ void session_ctx_opdata_clear(session_ctx *ctx);
  */
 #define session_ctx_opdata_get(ctx, op, data) _session_ctx_opdata_get(ctx, op, (void **)data)
 CK_RV _session_ctx_opdata_get(session_ctx *ctx, operation op, void **data);
+
+/**
+ * Causes a login event to be propagated through the token
+ * associated with the session context if the user is not CKU_CONTEXT_SPECIFIC. A login event is
+ * Propagated by:
+ *   1. setting the token level who is logged in state with whom is logged in.
+ *   2. updating all open session states in the session table
+ *
+ * If the user is CKU_CONTEXT_SPECIIFC the session state is marked that it's "logged in" and a
+ * logout should occur at the end. If a login request for CKU_USER occurs after a CKU_CONTEXT_SPECIFIC
+ * call, an error is thrown.
+ *
+ * @param ctx
+ *  The session context to update, and possibly the global state of the
+ *  associated token.
+ * @param user
+ *  The user
+ * @param pin
+ *  The pin
+ * @param pinlen
+ *   The length of the pin in bytes.
+ * @return
+ *  CKR_OK on success, anything else is a failure.
+ */
+CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK_ULONG pinlen);
+
+/**
+ * Generates a logout event to be propagated throughout the token.
+ * A logout event is propagated by:
+ *   1. setting the token level "who is logged in state" to no one is logged in.
+ *   2. setting all existing sessions back to their original state.
+ *
+ * @param tok
+ *  The token to propagate the login event
+ * @return
+ *  CKR_OK on success, anything else is a failure.
+ */
+CK_RV session_ctx_logout(session_ctx *ctx);
+
+/**
+ * Gets session info
+ * @param ctx
+ *  session ctx
+ * @param info
+ *  structure to populate
+ * @return
+ *  CKR_OK on success, anything else is a failure.
+ */
+CK_RV session_ctx_get_info(session_ctx *ctx, CK_SESSION_INFO *info);
+
+/**
+ * True if the object has been authenticated for use.
+ * @param ctx
+ * @return
+ */
+CK_RV session_ctx_tobject_authenticated(session_ctx *ctx);
 
 #endif /* SRC_PKCS11_SESSION_CTX_H_ */

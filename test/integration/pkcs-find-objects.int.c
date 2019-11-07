@@ -109,20 +109,19 @@ static void test_find_objects_aes_good(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     /*
-     * We know there are 2 private key objects in the first item, so break up the calls
+     * We know there are 3 secret key objects in the first item, so break up the calls
      * so we test state tracking across C_FindObject(). You can think of
      * C_FindObject like read, where it keeps moving the file pointer ahead,
      * and eventually returns EOF, in our case, count == 0.
      */
+    unsigned i = 0;
     CK_ULONG count;
     CK_OBJECT_HANDLE objhandles[1];
-    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
-    assert_int_equal(rv, CKR_OK);
-    assert_int_equal(count, 1);
-
-    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
-    assert_int_equal(rv, CKR_OK);
-    assert_int_equal(count, 1);
+    for (i=0; i < 3; i++) {
+        rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+        assert_int_equal(rv, CKR_OK);
+        assert_int_equal(count, ARRAY_LEN(objhandles));
+    }
 
     rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
     assert_int_equal(rv, CKR_OK);

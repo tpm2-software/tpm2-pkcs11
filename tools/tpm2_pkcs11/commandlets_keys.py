@@ -31,6 +31,10 @@ class NewKeyCommandBase(Command):
             '--id',
             help='The key id. Defaults to a random 8 bytes of hex.\n',
             default=binascii.hexlify(os.urandom(8)).decode())
+        group_parser.add_argument(
+            '--attr-always-authenticate',
+            action='store_true',
+            help='Sets the CKA_ALWAYS_AUTHENTICATE attribute to CK_TRUE.\n')
         pinopts = group_parser.add_mutually_exclusive_group(required=True)
         pinopts.add_argument('--sopin', help='The Administrator pin.\n'),
         pinopts.add_argument('--userpin', help='The User pin.\n'),
@@ -74,7 +78,7 @@ class NewKeyCommandBase(Command):
 
     @staticmethod
     def new_key_save(alg, keylabel, tid, label, tertiarypriv, tertiarypub,
-                     tertiarypubdata, encobjauth, objauth, db, tpm2):
+                     tertiarypubdata, encobjauth, objauth, db, tpm2, extra_privattrs=None, extra_pubattrs=None):
         token = db.gettoken(label)
 
         #
@@ -222,6 +226,13 @@ class NewKeyCommandBase(Command):
                     CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()
                 })
 
+        # add additional attrs
+        if extra_privattrs:
+            privattrs.extend(extra_privattrs)
+
+        if pubattrs and extra_pubattrs:
+            pubattrs.extend(extra_pubattrs)
+
         # Store private to database
         privrowid = db.addtertiary(token['id'], tertiarypriv, tertiarypub,
                                    encobjauth, privmech, privattrs)
@@ -290,9 +301,14 @@ class NewKeyCommandBase(Command):
                 tertiarypriv, tertiarypub, tertiarypubdata = self.new_key_create(
                     pobj, objauth, tpm2, path, alg, privkey, d)
 
+                # handle options that can add additional attributes
+                priv_attrs = None
+                always_auth = args['attr_always_authenticate']
+                priv_attrs = [{CKA_ALWAYS_AUTHENTICATE : always_auth}]
+
                 final_key_label = NewKeyCommandBase.new_key_save(
                     alg, key_label, tid, label, tertiarypriv, tertiarypub,
-                    tertiarypubdata, encobjauth, objauth, db, tpm2)
+                    tertiarypubdata, encobjauth, objauth, db, tpm2, extra_privattrs=priv_attrs)
 
                 return final_key_label
 

@@ -164,7 +164,7 @@ CK_RV digest_init_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_MECHA
 
     if (!supplied_opdata) {
         /* Store everything for later */
-        session_ctx_opdata_set(ctx, operation_digest, opdata, (opdata_free_fn)digest_op_data_free);
+        session_ctx_opdata_set(ctx, operation_digest, NULL, opdata, (opdata_free_fn)digest_op_data_free);
     }
 
     return CKR_OK;

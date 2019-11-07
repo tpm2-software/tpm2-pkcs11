@@ -63,8 +63,6 @@ static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata,
         opdata = supplied_opdata;
     }
 
-    opdata->tobj = tobj;
-
     rv = tpm_encrypt_data_init(tok->tctx, tobj->handle, tobj->unsealed_auth, mechanism, &opdata->tpm_enc_data);
     if (rv != CKR_OK) {
         tobject_user_decrement(tobj);
@@ -73,7 +71,7 @@ static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata,
     }
 
     if (!supplied_opdata) {
-        session_ctx_opdata_set(ctx, op, opdata, (opdata_free_fn)encrypt_op_data_free);
+        session_ctx_opdata_set(ctx, op, tobj, opdata, (opdata_free_fn)encrypt_op_data_free);
     }
 
     return CKR_OK;
@@ -98,6 +96,11 @@ static CK_RV common_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdat
     encrypt_op_data *opdata = NULL;
     if (!supplied_opdata) {
         rv = session_ctx_opdata_get(ctx, op, &opdata);
+        if (rv != CKR_OK) {
+            goto out;
+        }
+
+        rv = session_ctx_tobject_authenticated(ctx);
         if (rv != CKR_OK) {
             goto out;
         }
@@ -155,8 +158,15 @@ static CK_RV common_final_op(session_ctx *ctx, encrypt_op_data *supplied_opdata,
         return rv;
     }
 
-    assert(opdata->tobj);
-    rv = tobject_user_decrement(opdata->tobj);
+    rv = session_ctx_tobject_authenticated(ctx);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    tobject *tobj = session_ctx_opdata_get_tobject(ctx);
+    assert(tobj);
+    tobj->is_authenticated = false;
+    rv = tobject_user_decrement(tobj);
     if (rv != CKR_OK) {
         return rv;
     }

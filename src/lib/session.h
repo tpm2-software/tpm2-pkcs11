@@ -29,11 +29,4 @@ CK_RV session_closeall(CK_SLOT_ID slot_id);
 
 CK_RV session_lookup(CK_SESSION_HANDLE session, token **tok, session_ctx **ctx);
 
-CK_RV session_login(session_ctx *ctx, CK_USER_TYPE user_type,
-        unsigned char *pin, unsigned long pin_len);
-
-CK_RV session_logout(token *tok );
-
-CK_RV session_get_info(token *tok, session_ctx *ctx, CK_SESSION_INFO *info);
-
 #endif /* SRC_PKCS11_SESSION_H_ */

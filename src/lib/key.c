@@ -403,6 +403,12 @@ static CK_RV object_add_missing_attrs(tobject *public_tobj, tobject *private_tob
         ADD_ATTR(CK_BBOOL, CKA_NEVER_EXTRACTABLE, extractable ? CK_FALSE : CK_TRUE, newprivattrs, privindex);
     }
 
+    /* add CKA_ALWAYS_AUTHENTICATE false if not specified by the user */
+    a = tobject_get_attribute_by_type(private_tobj, CKA_ALWAYS_AUTHENTICATE);
+    if (!a) {
+        ADD_ATTR(CK_BBOOL, CKA_ALWAYS_AUTHENTICATE, CK_FALSE, newprivattrs, privindex);
+    }
+
     /* key type specific stuff */
     /* TODO dispatch table */
     switch (keytype) {
@@ -526,6 +532,14 @@ static CK_RV handle_extractable(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *uda
     return handle_extractable_common(attr, true, udata);
 }
 
+static CK_RV handle_always_auth(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+    UNUSED(index);
+    UNUSED(udata);
+
+    CK_BBOOL value;
+    return generic_CK_BBOOL(attr, &value);
+}
+
 static CK_RV handle_derive(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
     UNUSED(index);
     UNUSED(udata);
@@ -565,7 +579,8 @@ CK_RV check_common_attrs(
         { CKA_SENSITIVE,       ATTR_HANDLER_IGNORE   },
         { CKA_CLASS,           ATTR_HANDLER_IGNORE   },
         /* TODO should be sanity checking this here? */
-        { CKA_EC_PARAMS,       ATTR_HANDLER_IGNORE   }
+        { CKA_EC_PARAMS,       ATTR_HANDLER_IGNORE   },
+        { CKA_ALWAYS_AUTHENTICATE, handle_always_auth },
     };
 
     sanity_check_data udata = { 0 };

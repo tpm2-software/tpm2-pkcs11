@@ -52,6 +52,8 @@ struct tobject {
     twist unsealed_auth; /** unwrapped auth value */
 
     uint32_t handle;     /** loaded tpm handle */
+
+    bool is_authenticated; /** true if a context specific login has authenticated use of the object */
 };
 
 typedef struct sealobject sealobject;
