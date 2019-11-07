@@ -57,6 +57,7 @@ CK_RV slot_get_list (CK_BYTE token_present, CK_SLOT_ID *slot_list, CK_ULONG_PTR 
     }
 
     if (*count < global.token_cnt) {
+        *count = global.token_cnt;
         return CKR_BUFFER_TOO_SMALL;
     }
 

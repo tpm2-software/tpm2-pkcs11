@@ -17,10 +17,20 @@ static test_info *test_info_new(void) {
     test_info *ti = calloc(1, sizeof(*ti));
     assert_non_null(ti);
 
-    /* get the slots */
-    CK_SLOT_ID slots[6];
-    CK_ULONG count = ARRAY_LEN(slots);
-    CK_RV rv = C_GetSlotList(true, slots, &count);
+    /* get the slots and verify that count is updated
+     * when buffer is null or count is too small */
+    CK_SLOT_ID slots[TOKEN_COUNT];
+    CK_ULONG count = 0;
+    CK_RV rv = C_GetSlotList(true, NULL, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, TOKEN_COUNT);
+
+    CK_ULONG count2 = count - 1;
+    rv = C_GetSlotList(true, slots, &count2);
+    assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
+    assert_int_equal(count2, count);
+
+    rv = C_GetSlotList(true, slots, &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(count, TOKEN_COUNT);
 
