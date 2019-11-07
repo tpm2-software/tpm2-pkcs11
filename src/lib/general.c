@@ -51,6 +51,10 @@ CK_RV general_get_info(CK_INFO *info) {
     return CKR_OK;
 }
 
+void unused_function(int x) {
+	printf("foobar\n");
+}
+
 CK_RV general_get_func_list(CK_FUNCTION_LIST **function_list) {
 
     if (function_list == NULL_PTR) {
