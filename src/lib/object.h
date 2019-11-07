@@ -54,6 +54,8 @@ struct tobject {
     uint32_t handle;     /** loaded tpm handle */
 
     bool is_authenticated; /** true if a context specific login has authenticated use of the object */
+
+    twist tobjauthpolicy;
 };
 
 typedef struct sealobject sealobject;
@@ -68,6 +70,8 @@ struct sealobject {
     twist sopub;
     twist sopriv;
     twist soauthsalt;
+
+    twist sealobjauthpolicy;
 
     uint32_t handle;
 };

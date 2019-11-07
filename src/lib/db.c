@@ -615,6 +615,9 @@ tobject *db_tobject_new(sqlite3_stmt *stmt) {
         } else if (!strcmp(name, "pub")) {
             goto_error(get_blob(stmt, i, &tobj->pub), error);
 
+        } else if (!strcmp(name, "tobjauthpolicy")) {
+            goto_error(get_blob_null(stmt, i, &tobj->tobjauthpolicy), error);
+
         } else if (!strcmp(name, "objauth")) {
             tobj->objauth = twist_new((char *)sqlite3_column_text(stmt, i));
             goto_oom(tobj->objauth, error);
@@ -805,6 +808,8 @@ int init_sealobjects(unsigned tokid, sealobject *sealobj) {
             goto_error(get_blob(stmt, i, &sealobj->sopriv), error);
         } else if (!strcmp(name, "sopub")) {
             goto_error(get_blob(stmt, i, &sealobj->sopub), error);
+        } else if (!strcmp(name, "sealobjauthpolicy")) {
+            goto_error(get_blob_null(stmt, i, &sealobj->sealobjauthpolicy), error);
         } else if (!strcmp(name, "tokid")) {
             // pass
         } else {

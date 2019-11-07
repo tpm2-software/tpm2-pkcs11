@@ -243,6 +243,7 @@ class Db(object):
                 sopub BLOB NOT NULL,
                 sopriv BLOB NOT NULL,
                 soauthsalt TEXT NOT NULL,
+                sealobjauthpolicy BLOB,
                 FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
             );
             '''),
@@ -251,7 +252,8 @@ class Db(object):
                 id INTEGER PRIMARY KEY,
                 hierarchy TEXT NOT NULL,
                 handle BLOB NOT NULL,
-                objauth TEXT NOT NULL
+                objauth TEXT NOT NULL,
+                pobjauthpolicy BLOB
             );
             '''),
             textwrap.dedent('''
@@ -263,6 +265,7 @@ class Db(object):
                 objauth TEXT NOT NULL,
                 mech TEXT NOT NULL,
                 attrs TEXT NOT NULL,
+                tobjauthpolicy BLOB,
                 FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
             );
             '''),
