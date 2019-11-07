@@ -276,3 +276,16 @@ class Tpm2(object):
             raise RuntimeError("Could not execute tpm2_startauthsession: %s", stderr)
 
         return session_ctx
+
+    def createpolicypassword(self, session_ctx):
+
+        policypassword = os.path.join(self._tmp, uuid.uuid4().hex + '.policypassword')
+        cmd = ['tpm2_policypassword', '-S', session_ctx, '-L', policypassword]
+
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+        _, stderr = p.communicate()
+        rc = p.wait()
+        if rc:
+            raise RuntimeError("Could not execute tpm2_startauthsession: %s", stderr)
+
+        return policypassword, session_ctx
