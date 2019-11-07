@@ -248,3 +248,31 @@ class Tpm2(object):
             raise RuntimeError("Could not execute tpm2_load: %s", stderr)
 
         return newpriv
+
+    def startauthsession(self, is_policy_session):
+
+        session_ctx = os.path.join(self._tmp, uuid.uuid4().hex + '.sessionctx')
+        cmd = ['tpm2_startauthsession', '-S', session_ctx]
+
+        if is_policy_session:
+            cmd.extend(['--policy-session'])
+
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+        _, stderr = p.communicate()
+        rc = p.wait()
+        if rc:
+            raise RuntimeError("Could not execute tpm2_startauthsession: %s", stderr)
+
+        return session_ctx
+
+    def flushsession(self, session_ctx):
+
+        cmd = ['tpm2_flushcontext', session_ctx]
+
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+        _, stderr = p.communicate()
+        rc = p.wait()
+        if rc:
+            raise RuntimeError("Could not execute tpm2_startauthsession: %s", stderr)
+
+        return session_ctx
