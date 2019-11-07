@@ -12,7 +12,7 @@ class Tpm2(object):
     def __init__(self, tmp):
         self._tmp = tmp
 
-    def createprimary(self, ownerauth, objauth):
+    def createprimary(self, ownerauth, objauth, policy=None):
         ctx = os.path.join(self._tmp, "context.out")
         cmd = [
             'tpm2_createprimary', '-p', '%s' % objauth, '-c', ctx, '-g',
@@ -21,6 +21,9 @@ class Tpm2(object):
 
         if ownerauth and len(ownerauth) > 0:
             cmd.extend(['-P', ownerauth])
+
+        if policy != None:
+            cmd.extend(['-L', policy])
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         _, stderr = p.communicate()
@@ -126,6 +129,7 @@ class Tpm2(object):
                phandle,
                pauth,
                objauth,
+               policy=None,
                objattrs=None,
                seal=None,
                alg=None):
@@ -149,6 +153,9 @@ class Tpm2(object):
 
         if alg != None:
             cmd.extend(['-G', alg])
+
+        if policy != None:
+            cmd.extend(['-L', policy])
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, stdin=PIPE, env=os.environ)
         stdout, stderr = p.communicate(input=seal)
