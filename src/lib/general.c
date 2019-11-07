@@ -21,8 +21,8 @@
   #define VERSION "UNKNOWN"
 #endif
 
-#define LIBRARY_DESCRIPTION "TPM2.0 Cryptoki"
-#define LIBRARY_MANUFACTURER "tpm2-software.github.io"
+#define LIBRARY_DESCRIPTION (CK_UTF8CHAR_PTR)"TPM2.0 Cryptoki"
+#define LIBRARY_MANUFACTURER (CK_UTF8CHAR_PTR)"tpm2-software.github.io"
 
 #define CRYPTOKI_VERSION { \
            .major = CRYPTOKI_VERSION_MAJOR, \
@@ -34,17 +34,16 @@ CK_RV general_get_info(CK_INFO *info) {
 
     CK_INFO _info = {
         .cryptokiVersion = CRYPTOKI_VERSION,
-        .manufacturerID = LIBRARY_MANUFACTURER,
         .flags = 0,
-        .libraryDescription = LIBRARY_DESCRIPTION,
         .libraryVersion = {
             /* TODO get from build VERSION */
             .major = 42,
             .minor = 42
         },
     };
-    str_pad(_info.manufacturerID, sizeof(_info.manufacturerID));
-    str_pad(_info.libraryDescription, sizeof(_info.libraryDescription));
+
+    str_padded_copy(_info.manufacturerID, LIBRARY_MANUFACTURER, sizeof(_info.manufacturerID));
+    str_padded_copy(_info.libraryDescription, LIBRARY_DESCRIPTION, sizeof(_info.libraryDescription));
 
     *info = _info;
 
