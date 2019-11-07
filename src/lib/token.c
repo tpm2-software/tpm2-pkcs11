@@ -63,6 +63,7 @@ void token_free(token *t) {
 CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
     check_pointer(t);
     check_pointer(info);
+
     int rval;
     time_t rawtime;
     struct tm tminfo;

@@ -74,7 +74,6 @@ CK_RV slot_get_list (CK_BYTE token_present, CK_SLOT_ID *slot_list, CK_ULONG_PTR 
 CK_RV slot_get_info (CK_SLOT_ID slot_id, CK_SLOT_INFO *info) {
 
     token *token;
-    CK_TOKEN_INFO token_info;
 
     check_pointer(info);
 
@@ -83,14 +82,14 @@ CK_RV slot_get_info (CK_SLOT_ID slot_id, CK_SLOT_INFO *info) {
         return CKR_SLOT_ID_INVALID;
     }
 
-    memset(info, 0, sizeof(*info));
-
+    CK_TOKEN_INFO token_info;
     if (token_get_info(token, &token_info)) {
         return CKR_GENERAL_ERROR;
     }
 
     str_padded_copy(info->manufacturerID, token_info.manufacturerID, sizeof(info->manufacturerID));
     str_padded_copy(info->slotDescription, token_info.label, sizeof(info->slotDescription));
+
     info->hardwareVersion = token_info.hardwareVersion;
     info->firmwareVersion = token_info.firmwareVersion;
 
