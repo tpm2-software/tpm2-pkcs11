@@ -15,7 +15,6 @@ typedef struct token token;
 
 typedef struct encrypt_op_data encrypt_op_data;
 struct encrypt_op_data {
-    tobject *tobj;
     tpm_encrypt_data *tpm_enc_data;
 };
 

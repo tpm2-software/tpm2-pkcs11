@@ -82,6 +82,25 @@ void user_login(CK_SESSION_HANDLE handle) {
     user_login_expects(handle, CKR_OK);
 }
 
+void context_login_expects(CK_SESSION_HANDLE handle, CK_RV expected) {
+
+    unsigned char upin[] = GOOD_USERPIN;
+    login_expects(handle, CKU_CONTEXT_SPECIFIC, expected, upin, sizeof(upin) - 1);
+}
+
+void context_login(CK_SESSION_HANDLE handle) {
+
+    unsigned char upin[] = GOOD_USERPIN;
+    login_expects(handle, CKU_CONTEXT_SPECIFIC, CKR_OK, upin, sizeof(upin) - 1);
+}
+
+void context_login_bad_pin(CK_SESSION_HANDLE handle) {
+
+    unsigned char upin[] = BAD_USERPIN;
+    login_expects(handle, CKU_CONTEXT_SPECIFIC, CKR_PIN_INCORRECT, upin, sizeof(upin) - 1);
+}
+
+
 void so_login_expects(CK_SESSION_HANDLE handle, CK_RV expected) {
 
     unsigned char sopin[] = GOOD_SOPIN;

@@ -2037,6 +2037,7 @@ static const attr_handler tpm_handlers[] = {
     { CKA_EC_PARAMS,       handle_ecparams       },
     { CKA_EC_POINT,        ATTR_HANDLER_IGNORE   }, // TODO PH
     { CKA_KEY_TYPE,        handle_key_type       },
+    { CKA_ALWAYS_AUTHENTICATE, ATTR_HANDLER_IGNORE }, // can't really enforce with tpm, sw emulated.
 };
 
 static TSS2_RC create_loaded(

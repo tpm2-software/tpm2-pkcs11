@@ -72,6 +72,12 @@ void user_login_bad_pin(CK_SESSION_HANDLE handle);
 
 void user_login(CK_SESSION_HANDLE handle);
 
+void context_login(CK_SESSION_HANDLE handle);
+
+void context_login_expects(CK_SESSION_HANDLE handle, CK_RV expected);
+
+void context_login_bad_pin(CK_SESSION_HANDLE handle);
+
 void so_login_expects(CK_SESSION_HANDLE handle, CK_RV expected);
 
 void so_login(CK_SESSION_HANDLE handle);

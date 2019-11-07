@@ -13,6 +13,7 @@ struct test_info {
     bool is_logged_in;
     struct {
         CK_OBJECT_HANDLE aes;
+        CK_OBJECT_HANDLE aes_always_auth;
         CK_OBJECT_HANDLE rsa;
     } objects;
 };
@@ -35,19 +36,35 @@ static int test_setup(void **state) {
             NULL, &handle);
     assert_int_equal(rv, CKR_OK);
 
+    CK_BBOOL _false = FALSE;
+    CK_BBOOL _true  = TRUE;
+
     CK_OBJECT_CLASS key_class = CKO_SECRET_KEY;
     CK_KEY_TYPE key_type = CKK_AES;
     CK_ATTRIBUTE tmpl[] = {
       {CKA_CLASS, &key_class, sizeof(key_class)},
       {CKA_KEY_TYPE, &key_type, sizeof(key_type)},
+      {CKA_ALWAYS_AUTHENTICATE, &_false, sizeof(_false)},
     };
 
     rv = C_FindObjectsInit(handle, tmpl, ARRAY_LEN(tmpl));
     assert_int_equal(rv, CKR_OK);
 
-    /* get a AES key */
-    CK_OBJECT_HANDLE objhandles[2];
-    rv = C_FindObjects(handle, objhandles, 1, &count);
+    /* get a AES key without always auth*/
+    CK_OBJECT_HANDLE objhandles[3];
+    rv = C_FindObjects(handle, &objhandles[0], 1, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(handle);
+    assert_int_equal(rv, CKR_OK);
+
+    /* get an aes key with always auth */
+    tmpl[2].pValue = &_true;
+    rv = C_FindObjectsInit(handle, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjects(handle, &objhandles[1], 1, &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(count, 1);
 
@@ -64,11 +81,12 @@ static int test_setup(void **state) {
     tmpl[1].type = CKA_KEY_TYPE;
     tmpl[1].pValue = &key_type;
     tmpl[1].ulValueLen = sizeof(key_type);
+    tmpl[2].pValue = &_false;
 
     rv = C_FindObjectsInit(handle, tmpl, ARRAY_LEN(tmpl));
     assert_int_equal(rv, CKR_OK);
 
-    rv = C_FindObjects(handle, &objhandles[1], 1, &count);
+    rv = C_FindObjects(handle, &objhandles[2], 1, &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(count, 1);
 
@@ -79,7 +97,8 @@ static int test_setup(void **state) {
     info->handle = handle;
     info->slot = slots[1];
     info->objects.aes = objhandles[0];
-    info->objects.rsa = objhandles[1];
+    info->objects.aes_always_auth = objhandles[1];
+    info->objects.rsa = objhandles[2];
 
     *state = info;
 
@@ -511,9 +530,87 @@ static void test_rsa_oaep_encrypt_decrypt_oneshot_good(void **state) {
     assert_memory_equal(plaintext, plaintext2, sizeof(plaintext));
 }
 
+static void test_aes_always_authenticate(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+
+    CK_SESSION_HANDLE session = ti->handle;
+
+    /* context specific require C_Login(USER) before */
+    context_login_expects(session, CKR_USER_NOT_LOGGED_IN);
+
+    user_login(session);
+
+    /* should be able to initialize operation */
+    /* init encryption */
+    CK_BYTE iv[16] = {
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xDE, 0xAD, 0xBE, 0xEF,
+    };
+
+    CK_MECHANISM mechanism = {
+        CKM_AES_CBC, iv, sizeof(iv)
+    };
+
+    /*
+     * We're not dealing with padding schemes yet, but we do want to handle multi stage encrypt and decrypt.
+     */
+    CK_BYTE plaintext[] = {
+        'm', 'y', ' ', 's', 'e', 'c', 'r', 'e', 't', ' ', 'i', 's', 'c', 'o', 'o', 'l',
+        'm', 'y', ' ', 's', 'e', 'c', 'r', 'e', 't', ' ', 'i', 's', 'c', 'o', 'o', 'l',
+    };
+
+    CK_BYTE ciphertext[sizeof(plaintext)] = { 0 };
+
+    /* init */
+    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.aes_always_auth);
+    assert_int_equal(rv, CKR_OK);
+
+    /* shouldn't be able to perform actual operation */
+    CK_ULONG ciphertext_len = sizeof(plaintext);
+    rv = C_Encrypt(session, plaintext, ciphertext_len,
+            ciphertext, &ciphertext_len);
+    assert_int_equal(rv, CKR_USER_NOT_LOGGED_IN);
+
+    /* bad pin should fail */
+    context_login_bad_pin(session);
+
+    /* ok log in and go */
+    context_login(session);
+
+    rv = C_Encrypt(session, plaintext, ciphertext_len,
+            ciphertext, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, sizeof(plaintext));
+
+    rv = C_DecryptInit (session, &mechanism, ti->objects.aes_always_auth);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE plaintext2[sizeof(plaintext)];
+    CK_ULONG plaintext2_len = sizeof(plaintext2);
+
+    /* shouldn't work */
+    rv = C_Decrypt (session, ciphertext, ciphertext_len,
+            plaintext2, &plaintext2_len);
+    assert_int_equal(rv, CKR_USER_NOT_LOGGED_IN);
+
+    context_login(session);
+
+    rv = C_Decrypt (session, ciphertext, ciphertext_len,
+            plaintext2, &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(plaintext2_len, sizeof(plaintext2));
+
+    assert_memory_equal(plaintext, plaintext2, sizeof(plaintext2));
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_aes_always_authenticate,
+                test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_aes_encrypt_decrypt_oneshot_5_2_returns,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_aes_encrypt_decrypt_5_2_returns,

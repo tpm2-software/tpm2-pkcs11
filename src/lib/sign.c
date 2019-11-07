@@ -22,7 +22,6 @@
 
 typedef struct sign_opdata sign_opdata;
 struct sign_opdata {
-    tobject *tobj;
     CK_MECHANISM_TYPE mtype;
     bool do_hash;
     twist buffer;
@@ -201,7 +200,8 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
         return CKR_HOST_MEMORY;
     }
 
-    rv = token_load_object(tok, key, &opdata->tobj);
+    tobject *tobj = NULL;
+    rv = token_load_object(tok, key, &tobj);
     if (rv != CKR_OK) {
         digest_op_data_free(&digest_opdata);
         sign_opdata_free(&opdata);
@@ -215,7 +215,7 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
     /*
      * Store everything for later
      */
-    session_ctx_opdata_set(ctx, op, opdata, (opdata_free_fn)sign_opdata_free);
+    session_ctx_opdata_set(ctx, op, tobj, opdata, (opdata_free_fn)sign_opdata_free);
 
     return CKR_OK;
 }
@@ -228,6 +228,11 @@ static CK_RV common_update(operation op, session_ctx *ctx, CK_BYTE_PTR part, CK_
 
     sign_opdata *opdata = NULL;
     rv = session_ctx_opdata_get(ctx, op, &opdata);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    rv = session_ctx_tobject_authenticated(ctx);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -382,10 +387,18 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
     }
     assert(opdata);
 
+    rv = session_ctx_tobject_authenticated(ctx);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
     token *tok = session_ctx_get_token(ctx);
     assert(tok);
 
     tpm_ctx *tpm = tok->tctx;
+
+    tobject *tobj = session_ctx_opdata_get_tobject(ctx);
+    assert(tobj);
 
     if (opdata->do_hash) {
 
@@ -423,7 +436,8 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
         bool is_rsa_pkcs1_5 = utils_mech_is_rsa_pkcs(opdata->mtype);
         if (!is_rsa_pkcs1_5) {
             LOGE("Do not support synthesizing non PKCS 1_5 signing/padding schemes");
-            return CKR_MECHANISM_INVALID;
+            rv = CKR_MECHANISM_INVALID;
+            goto session_out;
         }
 
         bool free_built = false;
@@ -442,7 +456,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
 
             rv = pkcs1_5_build_struct(opdata->mtype, hash, hash_len, &built, &built_len);
             if (rv != CKR_OK) {
-                return rv;
+                goto session_out;
             }
 
             free_built = true;
@@ -463,7 +477,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
         /* apply padding */
         char *padded = NULL;
         size_t padded_len = 0;
-        rv = apply_pkcs_1_5_pad(opdata->tobj, built, built_len, &padded, &padded_len);
+        rv = apply_pkcs_1_5_pad(tobj, built, built_len, &padded, &padded_len);
         if (free_built) {
             free(built);
         }
@@ -485,7 +499,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
         };
 
         /* RSA Decrypt is the RSA operation with the private key, which is what we want */
-        rv = decrypt_init_op(ctx, encrypt_opdata, &mechanism, opdata->tobj->id);
+        rv = decrypt_init_op(ctx, encrypt_opdata, &mechanism, tobj->id);
         if (rv != CKR_OK) {
             free(padded);
             encrypt_op_data_free(&encrypt_opdata);
@@ -506,8 +520,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
            Without reworking the whole logic and breaking other valid use cases it is the easiest
            to decrement the usage counter here.
         */
-        assert(opdata->tobj);
-        CK_RV rv_tmp = tobject_user_decrement(opdata->tobj);
+        CK_RV rv_tmp = tobject_user_decrement(tobj);
         if (rv_tmp != CKR_OK) {
             rv = rv_tmp;
             goto session_out;
@@ -535,7 +548,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
             memcpy(hash, opdata->buffer, hash_len);
         }
 
-        rv = tpm_sign(tpm, opdata->tobj, opdata->mtype, hash, hash_len, signature, signature_len);
+        rv = tpm_sign(tpm, tobj, opdata->mtype, hash, hash_len, signature, signature_len);
         if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
             goto session_out;
         }
@@ -553,7 +566,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
     if (reset_ctx) {
         /* ec signature size is not stable between calls, fix it up */
         CK_RV tmp; /* we must not overwrite rv */
-        tmp = ec_fixup_size(opdata->mtype, opdata->tobj, signature_len);
+        tmp = ec_fixup_size(opdata->mtype, tobj, signature_len);
         if (tmp != CKR_OK) {
             reset_ctx = false;
             goto session_out;
@@ -591,9 +604,10 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
 
 session_out:
 
-    assert(opdata->tobj);
+    assert(tobj);
     if (!reset_ctx) {
-        CK_RV tmp_rv = tobject_user_decrement(opdata->tobj);
+        tobj->is_authenticated = false;
+        CK_RV tmp_rv = tobject_user_decrement(tobj);
         if (tmp_rv != CKR_OK && rv == CKR_OK) {
             rv = tmp_rv;
         }
@@ -640,6 +654,14 @@ CK_RV verify_final (session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG signature_
         return rv;
     }
 
+    rv = session_ctx_tobject_authenticated(ctx);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    tobject *tobj = session_ctx_opdata_get_tobject(ctx);
+    assert(tobj);
+
     token *tok = session_ctx_get_token(ctx);
     assert(tok);
 
@@ -659,17 +681,19 @@ CK_RV verify_final (session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG signature_
         if (datalen > hash_len) {
             LOGE("Internal buffer too small, got: %zu expected less than %zu",
                     datalen, hash_len);
-            return CKR_GENERAL_ERROR;
+            rv = CKR_GENERAL_ERROR;
+            goto out;
         }
         hash_len = datalen;
         memcpy(hash, opdata->buffer, datalen);
     }
 
-    rv = tpm_verify(tpm, opdata->tobj, opdata->mtype, hash, hash_len, signature, signature_len);
+    rv = tpm_verify(tpm, tobj, opdata->mtype, hash, hash_len, signature, signature_len);
 
 out:
-    assert(opdata->tobj);
-    CK_RV tmp_rv = tobject_user_decrement(opdata->tobj);
+    assert(tobj);
+    tobj->is_authenticated = false;
+    CK_RV tmp_rv = tobject_user_decrement(tobj);
     if (tmp_rv != CKR_OK && rv == CKR_OK) {
         rv = tmp_rv;
     }

@@ -71,34 +71,13 @@ void token_free_list(token *t, size_t len);
 CK_RV token_get_info(token *t, CK_TOKEN_INFO *info);
 
 /**
- * Causes a login event to be propagated through the token
- * associated with the session context. A login event is
- * Propagated by:
- *   1. setting the token level who is logged in state with whom is logged in.
- *   2. updating all open session states in the session table
- * @param ctx
- *  The session context to update
- * @param pin
- *  The pin
- * @param user
- *  The user
- * @return
- *  CKR_OK on success, anything else is a failure.
- */
-CK_RV token_login(token *tok, twist pin, CK_USER_TYPE user);
-
-/**
- * Generates a logout event to be propagated through the token.
- * A logout event is propagated by:
- *   1. setting the token level "who is logged in state" to no one is logged in.
- *   2. setting all existing sessions back to their original state.
- *
+ * Checks if anyone is logged into the token.
  * @param tok
- *  The token to propagate the login event
+ *  The token to check
  * @return
- *  CKR_OK on success, anything else is a failure.
+ *  True if logged in, false otherwise.
  */
-CK_RV token_logout(token *tok);
+bool token_is_any_user_logged_in(token *tok);
 
 /**
  * TODO
