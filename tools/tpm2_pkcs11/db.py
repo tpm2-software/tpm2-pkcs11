@@ -126,7 +126,7 @@ class Db(object):
 
         return c.lastrowid
 
-    def addprimary(self, tr_handle, objauth, hierarchy='o'):
+    def addprimary(self, tr_handle, objauth, policy, hierarchy='o'):
 
         # Subordiante commands will need some of this data
         # when deriving subordinate objects, so pass it back
@@ -135,6 +135,7 @@ class Db(object):
             'hierarchy': hierarchy,
             'handle': Db._blobify(tr_handle),
             'objauth': objauth,
+            'pobjauthpolicy': Db._blobify(policy),
         }
 
         columns = ', '.join(pobject.keys())

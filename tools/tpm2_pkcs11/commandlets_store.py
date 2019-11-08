@@ -79,11 +79,13 @@ class InitCommand(Command):
             with TemporaryDirectory() as d:
                 try:
                     tpm2 = Tpm2(d)
-
+                    session_ctx = tpm2.startauthsession(False)
+                    policypassword, session_ctx = tpm2.createpolicypassword(session_ctx)
+                    tpm2.flushsession(session_ctx)
                     if not use_existing_primary:
                         pobjauth = pobjauth if pobjauth != None else rand_hex_str(
                         )
-                        ctx = tpm2.createprimary(ownerauth, pobjauth)
+                        ctx = tpm2.createprimary(ownerauth, pobjauth, policypassword)
                         tr_handle = tpm2.evictcontrol(ownerauth, ctx)
                         shall_evict = True
                     else:
@@ -112,7 +114,7 @@ class InitCommand(Command):
                             tr_handle = handle
 
 
-                    pid = db.addprimary(tr_handle, pobjauth)
+                    pid = db.addprimary(tr_handle, pobjauth, policypassword)
 
                     action_word = "Added" if use_existing_primary else "Created"
                     print("%s a primary object of id: %d" % (action_word, pid))

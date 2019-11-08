@@ -21,6 +21,7 @@ typedef struct pobject pobject;
 struct pobject {
     uint32_t handle;
     twist objauth;
+    twist pobjauthpolicy;
 };
 
 typedef struct objattrs objattrs;

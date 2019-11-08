@@ -12,7 +12,7 @@ class Tpm2(object):
     def __init__(self, tmp):
         self._tmp = tmp
 
-    def createprimary(self, ownerauth, objauth, policy=None):
+    def createprimary(self, ownerauth, objauth, policy):
         ctx = os.path.join(self._tmp, "context.out")
         cmd = [
             'tpm2_createprimary', '-p', '%s' % objauth, '-c', ctx, '-g',
@@ -281,8 +281,6 @@ class Tpm2(object):
         rc = p.wait()
         if rc:
             raise RuntimeError("Could not execute tpm2_startauthsession: %s", stderr)
-
-        return session_ctx
 
     def createpolicypassword(self, session_ctx):
 

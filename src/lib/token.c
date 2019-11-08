@@ -54,7 +54,7 @@ void token_free(token *t) {
             tobject_free(tobj);
         }
     }
-
+    twist_free(t->pobject.pobjauthpolicy);
     tpm_ctx_free(t->tctx);
 
     mutex_destroy(t->mutex);

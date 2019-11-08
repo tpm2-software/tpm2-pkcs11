@@ -708,7 +708,7 @@ error:
 int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
 
     const char *sql =
-            "SELECT handle,objauth FROM pobjects WHERE id=?1";
+            "SELECT handle,objauth,pobjauthpolicy FROM pobjects WHERE id=?";
 
     sqlite3_stmt *stmt;
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
@@ -747,6 +747,12 @@ int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
 
     pobj->objauth = twist_new((char *)sqlite3_column_text(stmt, 1));
     goto_oom(pobj->objauth, error);
+
+    rc = _get_blob(stmt, 2, true, &pobj->pobjauthpolicy);
+    if (rc != SQLITE_OK) {
+        LOGE("Cannot get pobjauthpolicy %s\n", sqlite3_errmsg(global.db));
+        goto error;
+    }
 
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
