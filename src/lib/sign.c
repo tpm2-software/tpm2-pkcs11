@@ -46,23 +46,47 @@ static void sign_opdata_free(sign_opdata **opdata) {
 }
 
 
-static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
+static CK_RV is_off_tpm_hashing_needed(tpm_ctx *tctx, CK_MECHANISM_TYPE mech, bool *is_pkcs1_5_hash_needed) {
 
-    switch(mech) {
-    case CKM_SHA1_RSA_PKCS:
-    case CKM_SHA256_RSA_PKCS:
-    case CKM_SHA384_RSA_PKCS:
-    case CKM_SHA512_RSA_PKCS:
-    case CKM_ECDSA_SHA1:
-        return true;
-    case CKM_ECDSA:
-    case CKM_RSA_PKCS:
+    /* all hashing already done, no need to do anything */
+    if (mech == CKM_ECDSA
+        || mech == CKM_RSA_PKCS) {
         return false;
-    default:
-        LOGE("Unknown mech: %lu", mech);
     }
 
-    return false;
+    /* does the TPM natively support it? If it does, nothing to do */
+    CK_MECHANISM_TYPE mechs[32];
+    CK_ULONG count = ARRAY_LEN(mechs);
+    CK_RV rv = tpm2_getmechanisms(tctx, mechs, &count);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    CK_ULONG i;
+    for (i=0; i < count; i++) {
+        CK_MECHANISM_TYPE t = mechs[i];
+        if (t == mech) {
+            *is_pkcs1_5_hash_needed = false;
+            return CKR_OK;
+        }
+    }
+
+    /* tpm doesn't support it, is it what we know how to synthesize */
+    switch (mech) {
+        case CKM_SHA1_RSA_PKCS:
+        case CKM_SHA256_RSA_PKCS:
+        case CKM_SHA384_RSA_PKCS:
+        case CKM_SHA512_RSA_PKCS:
+            *is_pkcs1_5_hash_needed = true;
+            return CKR_OK;
+        /* no default */
+    }
+
+    /*
+     * if it's not in the list, we assume we
+     * can't synthesize it
+     */
+    return CKR_MECHANISM_INVALID;
 }
 
 /*
@@ -157,6 +181,24 @@ static CK_RV ec_fixup_size(CK_MECHANISM_TYPE mech, tobject *tobj, CK_ULONG_PTR s
     return CKR_OK;
 }
 
+static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
+
+   switch(mech) {
+     case CKM_SHA1_RSA_PKCS:
+     case CKM_SHA256_RSA_PKCS:
+     case CKM_SHA384_RSA_PKCS:
+     case CKM_SHA512_RSA_PKCS:
+     case CKM_ECDSA_SHA1:
+         return true;
+     case CKM_ECDSA:
+     case CKM_RSA_PKCS:
+         return false;
+    default:
+        LOGE("Unknown mech: %lu", mech);
+    }
+
+    return false;
+}
 
 static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
 
@@ -169,11 +211,17 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
         return CKR_MECHANISM_INVALID;
     }
 
+    bool is_active = session_ctx_opdata_is_active(ctx);
+    if (is_active) {
+        return CKR_OPERATION_ACTIVE;
+    }
+
     token *tok = session_ctx_get_token(ctx);
     assert(tok);
 
     digest_op_data *digest_opdata = NULL;
     bool do_hash = is_hashing_needed(mechanism->mechanism);
+
     if (do_hash) {
 
         digest_opdata = digest_op_data_new();
@@ -186,12 +234,6 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
             digest_op_data_free(&digest_opdata);
             return rv;
         }
-    }
-
-    bool is_active = session_ctx_opdata_is_active(ctx);
-    if (is_active) {
-        digest_op_data_free(&digest_opdata);
-        return CKR_OPERATION_ACTIVE;
     }
 
     sign_opdata *opdata = sign_opdata_new();
@@ -429,9 +471,15 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
      * build digest info ASN1 structure, apply padding and RSA_Decrypt() AND the signing structure
      * is PKCS1.5
      */
+
     bool is_raw_sign = utils_mech_is_raw_sign(opdata->mtype);
-    bool is_sw_hash = opdata->digest_opdata && opdata->digest_opdata->use_sw_hash;
-    if (is_raw_sign || is_sw_hash) {
+    bool is_not_tpm_supported_pkcs1_5 = false;
+    rv = is_off_tpm_hashing_needed(tok->tctx, opdata->mtype, &is_not_tpm_supported_pkcs1_5);
+    if (rv != CKR_OK) {
+        goto session_out;
+    }
+
+    if (is_raw_sign || is_not_tpm_supported_pkcs1_5) {
 
         bool is_rsa_pkcs1_5 = utils_mech_is_rsa_pkcs(opdata->mtype);
         if (!is_rsa_pkcs1_5) {

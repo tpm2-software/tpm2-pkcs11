@@ -17,12 +17,9 @@
 
 typedef struct digest_op_data digest_op_data;
 struct digest_op_data {
-    bool use_sw_hash;
+    tobject *tobj;
     CK_MECHANISM_TYPE mechanism;
-    union {
-        uint32_t sequence_handle;
-        EVP_MD_CTX *mdctx;
-    };
+    EVP_MD_CTX *mdctx;
 };
 
 digest_op_data *digest_op_data_new(void);
