@@ -986,80 +986,6 @@ CK_RV tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PT
     return CKR_OK;
 }
 
-#define P2_RC_HASH (TPM2_RC_HASH + TPM2_RC_P + TPM2_RC_2)
-
-CK_RV tpm_hash_init(tpm_ctx *ctx, CK_MECHANISM_TYPE mode, uint32_t *sequence_handle) {
-
-    TPM2B_AUTH null_auth = TPM2B_EMPTY_INIT;
-
-    TPMI_ALG_HASH halg = mech_to_hash_alg(mode);
-    if (halg == TPM2_ALG_ERROR) {
-        return CKR_MECHANISM_INVALID;
-    }
-
-    if (halg == TPM2_ALG_NULL) {
-        return CKR_OK;
-    }
-
-    TSS2_RC rval = Esys_HashSequenceStart(
-            ctx->esys_ctx,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            &null_auth,
-            halg,
-            sequence_handle);
-    rval = tpm2_error_get(rval);
-    if (rval != TPM2_RC_SUCCESS) {
-        if (rval == P2_RC_HASH) {
-            return CKR_MECHANISM_INVALID;
-        }
-        LOGE("Esys_HashSequenceStart: 0x%x", rval);
-        return CKR_GENERAL_ERROR;
-    }
-
-    rval = Esys_TR_SetAuth(ctx->esys_ctx, *sequence_handle, &null_auth);
-    if (rval != TPM2_RC_SUCCESS) {
-        LOGE("Esys_TR_SetAuth: 0x%x", rval);
-        return CKR_GENERAL_ERROR;
-    }
-
-    return CKR_OK;
-}
-
-CK_RV tpm_hash_update(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, CK_ULONG data_len) {
-
-    size_t offset = 0;
-    while(offset < data_len) {
-
-        TPM2B_MAX_BUFFER buffer;
-
-        size_t send = data_len > sizeof(buffer.buffer) ? sizeof(buffer.buffer) : data_len;
-
-        buffer.size = send;
-        memcpy(buffer.buffer, &data[offset], send);
-
-        flags_turndown(ctx, TPMA_SESSION_ENCRYPT);
-
-        TSS2_RC rval = Esys_SequenceUpdate(
-                    ctx->esys_ctx,
-                    sequence_handle,
-                    ctx->hmac_session,
-                    ESYS_TR_NONE,
-                    ESYS_TR_NONE,
-                    &buffer);
-        flags_restore(ctx);
-        if (rval != TPM2_RC_SUCCESS) {
-            LOGE("Esys_SequenceUpdate: 0x%x", rval);
-            return CKR_GENERAL_ERROR;
-        }
-
-        offset += send;
-    }
-
-    return CKR_OK;
-}
-
 CK_RV tpm_readpub(tpm_ctx *ctx,
         uint32_t handle,
 
@@ -1073,41 +999,6 @@ CK_RV tpm_readpub(tpm_ctx *ctx,
         LOGE("Esys_ReadPublic: 0x%x", rval);
         return CKR_GENERAL_ERROR;
     }
-
-    return CKR_OK;
-}
-
-CK_RV tpm_hash_final(tpm_ctx *ctx, uint32_t sequence_handle, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
-
-    TPM2B_MAX_BUFFER no_data = { .size = 0 };
-
-    TPMT_TK_HASHCHECK *validation = NULL;
-    TPM2B_DIGEST *result = NULL;
-
-    TSS2_RC rval = Esys_SequenceComplete(
-            ctx->esys_ctx,
-            sequence_handle,
-            ctx->hmac_session,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            &no_data,
-            TPM2_RH_OWNER,
-            &result,
-            &validation);
-    if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_SequenceComplete: 0x%x", rval);
-        return CKR_GENERAL_ERROR;
-    }
-
-    if (*data_len < result->size) {
-        return CKR_BUFFER_TOO_SMALL;
-    }
-
-    *data_len = result->size;
-    memcpy(data, result->buffer, result->size);
-
-    free(result);
-    free(validation);
 
     return CKR_OK;
 }
@@ -2663,9 +2554,7 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
     }
     if (is_algorithm_supported(algs, TPM2_ALG_ECDSA)) {
         add_mech(CKM_ECDSA);
-        if (is_algorithm_supported(algs, TPM2_ALG_SHA1)) {
-            add_mech(CKM_ECDSA_SHA1);
-        }
+        add_mech(CKM_ECDSA_SHA1);
     }
     if (is_algorithm_supported(algs, TPM2_ALG_ECC)) {
         add_mech(CKM_EC_KEY_PAIR_GEN);
