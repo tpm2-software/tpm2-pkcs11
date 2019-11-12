@@ -7,6 +7,12 @@
 
 #include "test.h"
 
+/*
+ * config *MUST* go after test.h or cmocka includes cause some
+ * odd memory issues.
+ */
+#include "config.h"
+
 struct test_info {
     CK_SESSION_HANDLE handles[6];
     CK_SLOT_ID slot_id;
@@ -112,6 +118,47 @@ static void test_get_slot_list(void **state) {
     assert_true(tinfo.flags & CKF_TOKEN_INITIALIZED);
 }
 
+static void parse_lib_version(CK_BYTE *major, CK_BYTE *minor) {
+
+    char buf[] = PACKAGE_VERSION;
+
+    char *minor_str = NULL;
+    char *major_str = &buf[0];
+
+    char *split = strchr(buf, '.');
+    if (split) {
+        split[0] = '\0';
+        minor_str = split + 1;
+    } else {
+        minor_str = "0";
+    }
+
+    if (!major_str || !major_str[0] || !minor_str[0]) {
+        *major = *minor = 0;
+        return;
+    }
+
+    char *endptr = NULL;
+    unsigned long val;
+    errno = 0;
+    val = strtoul(major_str, &endptr, 10);
+    if (errno != 0 || endptr[0] || val > UINT8_MAX) {
+        *major = *minor = 0;
+        return;
+    }
+
+    *major = val;
+
+    endptr = NULL;
+    val = strtoul(minor_str, &endptr, 10);
+    if (errno != 0 || endptr[0] || val > UINT8_MAX) {
+        *major = *minor = 0;
+        return;
+    }
+
+    *minor = val;
+}
+
 static void test_get_info(void **state) {
 
     UNUSED(state);
@@ -130,6 +177,12 @@ static void test_get_info(void **state) {
     assert_int_equal(info.cryptokiVersion.major, 2);
     assert_int_equal(info.cryptokiVersion.minor, 40);
 
+
+    CK_BYTE major;
+    CK_BYTE minor;
+    parse_lib_version(&major, &minor);
+    assert_int_equal(info.libraryVersion.major, major);
+    assert_int_equal(info.libraryVersion.minor, minor);
 }
 
 static void test_random_good(void **state) {

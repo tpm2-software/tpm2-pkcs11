@@ -3,12 +3,13 @@
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
  */
-#include <config.h>
-
+#include <errno.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdlib.h>
 
 #include "checks.h"
+#include "config.h"
 #include "db.h"
 #include "general.h"
 #include "log.h"
@@ -29,23 +30,69 @@
            .minor = CRYPTOKI_VERSION_MINOR \
          }
 
+static void parse_lib_version(CK_BYTE *major, CK_BYTE *minor) {
+
+    char buf[] = PACKAGE_VERSION;
+
+    char *minor_str = "0";
+    char *major_str = &buf[0];
+
+    char *split = strchr(buf, '.');
+    if (split) {
+        split[0] = '\0';
+        minor_str = split + 1;
+    }
+
+    if (!major_str || !major_str[0] || !minor_str[0]) {
+        *major = *minor = 0;
+        return;
+    }
+
+    char *endptr = NULL;
+    unsigned long val;
+    errno = 0;
+    val = strtoul(major_str, &endptr, 10);
+    if (errno != 0 || endptr[0]) {
+        LOGW("Could not strtoul(%s): ", major_str, strerror(errno));
+        *major = *minor = 0;
+        return;
+    }
+
+    assert(val > UINT8_MAX);
+    *major = val;
+
+    endptr = NULL;
+    val = strtoul(minor_str, &endptr, 10);
+    if (errno != 0 || endptr[0]) {
+        LOGW("Could not strtoul(%s): ", minor_str, strerror(errno));
+        *major = *minor = 0;
+        return;
+    }
+
+    assert(val > UINT8_MAX);
+    *minor = val;
+}
+
 CK_RV general_get_info(CK_INFO *info) {
     check_pointer(info);
 
-    CK_INFO _info = {
+    /* we only need one copy and we only need to initialize it on first call */
+    static CK_INFO _info_ = {
         .cryptokiVersion = CRYPTOKI_VERSION,
-        .flags = 0,
-        .libraryVersion = {
-            /* TODO get from build VERSION */
-            .major = 42,
-            .minor = 42
-        },
     };
 
-    str_padded_copy(_info.manufacturerID, LIBRARY_MANUFACTURER, sizeof(_info.manufacturerID));
-    str_padded_copy(_info.libraryDescription, LIBRARY_DESCRIPTION, sizeof(_info.libraryDescription));
+    static CK_INFO *_info = NULL;
+    if (!_info) {
+        str_padded_copy(_info_.manufacturerID, LIBRARY_MANUFACTURER, sizeof(_info_.manufacturerID));
+        str_padded_copy(_info_.libraryDescription, LIBRARY_DESCRIPTION, sizeof(_info_.libraryDescription));
 
-    *info = _info;
+        parse_lib_version(&_info_.libraryVersion.major,
+                &_info_.libraryVersion.minor);
+
+        _info = &_info_;
+    }
+
+    *info = *_info;
 
     return CKR_OK;
 }
