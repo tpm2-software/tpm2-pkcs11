@@ -53,11 +53,9 @@ daemon_start ()
     local daemon_log_file="$3"
     local daemon_pid_file="$4"
     local daemon_env="$5"
-    local valgrind_bin="$6"
-    local valgrind_flags="$7"
 
     printf "starting daemon: %s\n  environment: %s\n  options: %s\n" "${daemon_bin}" "${daemon_env}" "${daemon_opts}"
-    env ${daemon_env} ${valgrind_bin} ${valgrind_flags} ${daemon_bin} ${daemon_opts} > ${daemon_log_file} 2>&1 &
+    env ${daemon_env} ${daemon_bin} ${daemon_opts} > ${daemon_log_file} 2>&1 &
     local ret=$?
     local pid=$!
     if [ ${ret} -ne 0 ]; then
