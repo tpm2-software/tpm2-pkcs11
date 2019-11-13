@@ -58,6 +58,8 @@ void token_free(token *t) {
     tpm_ctx_free(t->tctx);
 
     mutex_destroy(t->mutex);
+
+    free(t->config.tcti);
 }
 
 CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {

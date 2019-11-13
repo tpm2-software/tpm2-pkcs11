@@ -4,7 +4,7 @@ import sys
 import sqlite3
 
 from .utils import list_dict_to_kvp
-
+from .utils import dict_to_kvp
 
 #
 # With Db() as db:
@@ -74,7 +74,7 @@ class Db(object):
         token = {
             # General Metadata
             'pid': pid,
-            'config': list_dict_to_kvp(config)
+            'config': dict_to_kvp(config)
         }
 
         if 'token-init=True' in token['config'] and label is None:
@@ -91,6 +91,17 @@ class Db(object):
         c.execute(sql, list(token.values()))
 
         return c.lastrowid
+
+    def updateconfig(self, token, config):
+
+        new_config = dict_to_kvp(config)
+
+        sql = 'UPDATE tokens SET config=? WHERE id=?'
+
+        values = (new_config, token['id'])
+
+        c = self._conn.cursor()
+        c.execute(sql, values)
 
     def addsealobjects(self, tokid, usersealauth, usersealpriv, usersealpub,
                        sosealauth, sosealpriv, sosealpub):

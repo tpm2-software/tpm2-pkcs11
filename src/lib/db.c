@@ -495,6 +495,16 @@ static bool parse_token_config(const char *key, const char *value, size_t index,
 
     if (!strcmp(key, "token-init")) {
         return !str_to_bool(value, &t->config.is_initialized);
+    } else if (!strcmp(key, "log-level")) {
+            log_set_level(value);
+            return true;
+    } else if (!strcmp(key, "tcti")) {
+            t->config.tcti = strdup(value);
+            if (!t->config.tcti) {
+                LOGE("oom");
+                return false;
+            }
+            return true;
     } else {
         LOGE("Unknown token config key: \"%s\"", key);
     }
@@ -870,16 +880,15 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
                         sqlite3_column_text(stmt, i));
 
             } else if (!strcmp(name, "config")) {
-                const char *config = (const char *)sqlite3_column_text(stmt, i);
-                CK_RV rv = parse_generic_kvp_line(config, t, NULL,
-                        parse_token_config);
-                if (rv != CKR_OK) {
-                    if (rv == CKR_HOST_MEMORY) {
-                        goto_oom(NULL, error);
-                    }
+                char *config = strdup((const char *)sqlite3_column_text(stmt, i));
+                goto_oom(config, error);
+                bool result = generic_parse_kvp(config, 0, t, parse_token_config);
+                if (!result) {
                     LOGE("Could not parse token config, got: \"%s\"", config);
+                    free(config);
                     goto error;
                 }
+                free(config);
 
             } else {
                 LOGE("Unknown key: %s", name);
@@ -899,7 +908,7 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
         /*
          * Initialize the per-token tpm context
          */
-        rv = tpm_ctx_new(&t->tctx);
+        rv = tpm_ctx_new(t->config.tcti, &t->tctx);
         if (rv != CKR_OK) {
             LOGE("Could not initialize tpm ctx: 0x%lx", rv);
             goto error;

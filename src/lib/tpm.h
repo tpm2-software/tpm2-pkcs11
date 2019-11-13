@@ -13,6 +13,9 @@
 #include "twist.h"
 #include "utils.h"
 
+/* config env var for TCTI context */
+#define TPM2_PKCS11_TCTI "TPM2_PKCS11_TCTI"
+
 typedef struct tpm_ctx tpm_ctx;
 
 /**
@@ -27,12 +30,14 @@ void tpm_ctx_free(tpm_ctx *ctx);
 /**
  * Creates a new tpm_ctx with it's own ESAPI
  * and TCTI contexts internally.
+ * @param tcti
+ *  An optional (can be null) tcti config string.
  * @param tctx
  *  The tpm_ctx to create.
  * @return
  *  CJR_OK on success, anything else is a failure.
  */
-CK_RV tpm_ctx_new(tpm_ctx **tctx);
+CK_RV tpm_ctx_new(const char *tcti, tpm_ctx **tctx);
 
 /**
  * Retrieves Spec Version, FW Version, Manufacturer and Model from TPM

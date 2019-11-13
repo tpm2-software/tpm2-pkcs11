@@ -198,7 +198,7 @@ fi
 export TPM2TOOLS_TCTI="tabrmd:${TABRMD_TEST_TCTI_CONF}"
 echo ${TPM2TOOLS_TCTI}
 
-export TPM2_PKCS11_TCTI="abrmd:${TABRMD_TEST_TCTI_CONF}"
+export TPM2_PKCS11_TCTI="tabrmd:${TABRMD_TEST_TCTI_CONF}"
 echo ${TPM2_PKCS11_TCTI}
 
 # if provided, run the test script

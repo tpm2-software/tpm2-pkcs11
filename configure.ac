@@ -144,22 +144,6 @@ AM_CONDITIONAL([ENABLE_INTEGRATION],[test "x$enable_integration" = "xyes"])
 
 # END ENABLE INTEGRATION
 
-# START DISABLE DLCLOSE
-#
-# enable integration tests and check for simulator binary
-#
-AC_ARG_ENABLE(
-  [dlclose],
-  [AS_HELP_STRING([--disable-dlclose],
-                            [Some versions of libc cause a sigsegv on exit with dlclose(),
-                            this disables the dlclose() and works around that bug])],
-  [AC_DEFINE([DISABLE_DLCLOSE], [1],
-  [Some versions of libc cause a sigsegv on exit with dlcolse(), this disables the dlclose()
-  and works around that bug])]
- )
-
-# END DISABLE DLCLOSE
-
 AC_DEFUN([handle_store_dir],[
   AX_NORMALIZE_PATH([with_storedir])
   AC_DEFINE_UNQUOTED([TPM2_PKCS11_STORE_DIR], ["$with_storedir"],

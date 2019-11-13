@@ -23,13 +23,13 @@
 
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_mu.h>
+#include <tss2/tss2_tctildr.h>
 
 #include "checks.h"
 #include "openssl_compat.h"
 #include "pkcs11.h"
 #include "log.h"
 #include "mutex.h"
-#include "tcti_ldr.h"
 #include "tpm.h"
 
 /**
@@ -321,19 +321,25 @@ CK_RV tpm_session_stop(tpm_ctx *ctx) {
 #define ESAPI_MANAGE_FLAGS 0
 #endif
 
-CK_RV tpm_ctx_new(tpm_ctx **tctx) {
+CK_RV tpm_ctx_new(const char *config, tpm_ctx **tctx) {
 
     ESYS_CONTEXT *esys = NULL;
     TSS2_TCTI_CONTEXT *tcti = NULL;
 
+    /* no specific config, try environment */
+    if (!config) {
+        config = getenv(TPM2_PKCS11_TCTI);
+    }
+
+    LOGV("tcti=%s", config ? config : "(null)");
+    TSS2_RC rc = Tss2_TctiLdr_Initialize(config, &tcti);
+    if (rc != TSS2_RC_SUCCESS) {
+        return CKR_GENERAL_ERROR;
+    }
+
     tpm_ctx *t = calloc(1, sizeof(*t));
     if (!t) {
         return CKR_HOST_MEMORY;
-    }
-
-    tcti = tcti_ldr_load();
-    if (!tcti) {
-        goto error;
     }
 
     esys = esys_ctx_init(tcti);
@@ -347,7 +353,7 @@ CK_RV tpm_ctx_new(tpm_ctx **tctx) {
 
     /*
      * allow TPM2_PKCS11_ESAPI_MANAGE_FLAGS to override the configure time default on whether or
-     * not ESAPI should manage the flags ot if the TPM code should do it.
+     * not ESAPI should manage the flags or if the TPM code should do it.
      */
     const char *c = getenv("TPM2_PKCS11_ESAPI_MANAGE_FLAGS");
     t->esapi_manage_session_flags = c ? true : !!ESAPI_MANAGE_FLAGS;

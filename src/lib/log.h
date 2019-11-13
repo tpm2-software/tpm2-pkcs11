@@ -35,39 +35,48 @@ static const char *log_strings[] = {
 #define LOGW(fmt, ...) _log(log_level_warn, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 #define LOGE(fmt, ...) _log(log_level_error, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
+static log_level _g_current_log_level = log_level_error;
+
+static inline void log_set_level(const char *level_str) {
+
+    if (!level_str) {
+        return;
+    }
+
+    char *endptr;
+    errno = 0;
+    unsigned long value = strtoul(level_str, &endptr, 0);
+    if (errno || *endptr != '\0') {
+        fprintf(stderr, "Could not change log level, got: \"%s\"\n", level_str);
+        return;
+    }
+
+    /*
+     * Use a switch to check value, as enum may be signed or
+     * unsigned and when unsigned checking less than can cause
+     * the compiler to complain.
+     */
+    switch(value) {
+        case log_level_error:
+        case log_level_warn:
+        case log_level_verbose:
+            _g_current_log_level = value;
+            break;
+        default:
+            fprintf(stderr, "Could not change log level, got: \"%s\"\n", level_str);
+            return;
+    }
+}
+
 static inline void _log(log_level level, const char *file, unsigned lineno,
         const char *fmt,...) {
 
-    log_level current_log_level = log_level_error;
-    const char *env_level = getenv("TPM2_PKCS11_LOG_LEVEL");
-    if (env_level) {
-        char *endptr;
-        errno = 0;
-        unsigned long value = strtoul(env_level, &endptr, 0);
-        if (errno || *endptr != '\0') {
-            fprintf(stderr, "Could not change log level, got: \"%s\"\n", env_level);
-            return;
-        }
+    /* override config with env var if set */
+    log_set_level(getenv("TPM2_PKCS11_LOG_LEVEL"));
 
-        /*
-         * Use a switch to check value, as enum may be signed or
-         * unsigned and when unsigned checking less than can cause
-         * the compiler to complain.
-         */
-        switch(value) {
-            case log_level_error:
-            case log_level_warn:
-            case log_level_verbose:
-                current_log_level = value;
-                break;
-            default:
-                fprintf(stderr, "Could not change log level, got: \"%s\"\n", env_level);
-                return;
-        }
-    }
 
     /* Skip printing messages outside of the log level */
-    if (level > current_log_level) {
+    if (level > _g_current_log_level) {
         return;
     }
 
@@ -75,7 +84,7 @@ static inline void _log(log_level level, const char *file, unsigned lineno,
     va_start(argptr, fmt);
 
     /* Verbose output prints file and line on error */
-    if (current_log_level >= log_level_verbose) {
+    if (_g_current_log_level >= log_level_verbose) {
         fprintf(stderr, "%s on line: \"%u\" in file: \"%s\": ",
                 log_strings[level], lineno, file);
     }
