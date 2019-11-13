@@ -686,11 +686,13 @@ CK_RV key_gen (
 
     new_private_tobj = tobject_new();
     if (!new_private_tobj) {
+        rv = CKR_HOST_MEMORY;
         goto out;
     }
 
     new_public_tobj = tobject_new();
     if (!new_public_tobj) {
+        rv = CKR_HOST_MEMORY;
         goto out;
     }
 
