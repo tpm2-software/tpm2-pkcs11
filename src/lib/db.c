@@ -1271,7 +1271,6 @@ static CK_RV attr_generic_hex_handler(CK_ATTRIBUTE_PTR attr, CK_ULONG index, voi
 
     int bytes = snprintf(formatted, len, "%lu=%s\n", attr->type, hex);
     if (bytes < 0 || (size_t)bytes >= len) {
-        twist_free(hex);
         LOGE("snprintf concat, needed: %d had %zu", bytes, len);
         goto out;
     }
