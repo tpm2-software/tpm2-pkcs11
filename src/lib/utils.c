@@ -522,7 +522,7 @@ CK_RV utils_handle_attrs(const attr_handler *handlers, size_t handler_count, CK_
         }
 
         if (!handled) {
-            LOGE("Attribute 0x%x not handled", a->type);
+            LOGE("Attribute 0x%lx not handled", a->type);
             return CKR_ATTRIBUTE_TYPE_INVALID;
         }
     }
