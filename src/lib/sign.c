@@ -126,6 +126,7 @@ static CK_RV ec_fixup_size(CK_MECHANISM_TYPE mech, tobject *tobj, CK_ULONG_PTR s
     }
 
     CK_ATTRIBUTE_PTR a = tobject_get_attribute_by_type(tobj, CKA_EC_PARAMS);
+    assert(a);
 
     int nid = 0;
     CK_RV rv = ec_params_to_nid(a, &nid);
