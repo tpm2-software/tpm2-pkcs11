@@ -268,14 +268,6 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
         return CKR_OK;
     }
 
-
-    CK_RV tmp = tpm_session_start(tok->tctx, tok->pobject.objauth, tok->pobject.handle);
-    if (tmp != CKR_OK) {
-        return tmp;
-    }
-
-    on_error_flush_session = true;
-
     /* load seal object */
     sealobject *sealobj = &tok->sealobject;
     twist sealpub = is_user(user) ? sealobj->userpub : sealobj->sopub;
@@ -284,10 +276,23 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
     uint32_t pobj_handle = tok->pobject.handle;
     twist pobjauth = tok->pobject.objauth;
 
+    bool result = tpm2_policy_password(tpm, pobjauth, pobj_handle);
+    if (!result) {
+        LOGE("Failed ");
+        on_error_flush_session = true;
+        goto error;
+    }
+
     // TODO evict sealobjhandle
-    bool res = tpm_loadobj(tpm, pobj_handle, pobjauth, sealpub, sealpriv, &sealobj->handle);
+    bool res = tpm_loadobj(tpm, pobj_handle, pobjauth, sealpub, sealpriv,
+        &sealobj->handle);
     if (!res) {
         goto error;
+    }
+
+    CK_RV policy_flush_return = tpm_session_stop(tpm);
+    if (policy_flush_return != CKR_OK) {
+        return policy_flush_return;
     }
 
     twist tpin = twistbin_new(pin, pinlen);
@@ -304,6 +309,16 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
         rv = CKR_HOST_MEMORY;
         goto error;
     }
+
+    TPMA_SESSION session_attrs =
+        TPMA_SESSION_CONTINUESESSION | TPMA_SESSION_DECRYPT | TPMA_SESSION_ENCRYPT;
+    CK_RV tmp = tpm_session_start(tok->tctx, tok->pobject.objauth,
+        tok->pobject.handle, TPM2_SE_HMAC, session_attrs);
+    if (tmp != CKR_OK) {
+        return tmp;
+    }
+
+    on_error_flush_session = true;
 
     twist wrappingkeyhex = tpm_unseal(tpm, sealobj->handle, sealobjauth);
     if (!wrappingkeyhex) {

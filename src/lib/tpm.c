@@ -49,7 +49,7 @@ struct tpm_ctx {
     TSS2_TCTI_CONTEXT *tcti_ctx;
     ESYS_CONTEXT *esys_ctx;
     bool esapi_manage_session_flags;
-    ESYS_TR hmac_session;
+    ESYS_TR auth_session;
     TPMA_SESSION old_flags;
     TPMA_SESSION original_flags;
 };
@@ -182,7 +182,7 @@ static void flags_turndown(tpm_ctx *ctx, TPMA_SESSION flags) {
         return;
     }
 
-    TSS2_RC rc = Esys_TRSess_GetAttributes(ctx->esys_ctx, ctx->hmac_session, &ctx->old_flags);
+    TSS2_RC rc = Esys_TRSess_GetAttributes(ctx->esys_ctx, ctx->auth_session, &ctx->old_flags);
     assert(rc == TPM2_RC_SUCCESS);
     if (rc != TSS2_RC_SUCCESS) {
         LOGW("Esys_TRSess_SetAttributes: 0x%x", rc);
@@ -192,7 +192,7 @@ static void flags_turndown(tpm_ctx *ctx, TPMA_SESSION flags) {
     assert(ctx->old_flags == ctx->original_flags);
 
     TPMA_SESSION new_flags = (ctx->old_flags & (~flags));
-    rc = Esys_TRSess_SetAttributes(ctx->esys_ctx, ctx->hmac_session, new_flags, 0xff);
+    rc = Esys_TRSess_SetAttributes(ctx->esys_ctx, ctx->auth_session, new_flags, 0xff);
     assert(rc == TSS2_RC_SUCCESS);
     if (rc != TSS2_RC_SUCCESS) {
         LOGW("Esys_TRSess_SetAttributes: 0x%x", rc);
@@ -207,7 +207,7 @@ static void flags_restore(tpm_ctx *ctx) {
 
     assert(ctx->old_flags == ctx->original_flags);
 
-    TSS2_RC rc = Esys_TRSess_SetAttributes(ctx->esys_ctx, ctx->hmac_session, ctx->old_flags, 0xff);
+    TSS2_RC rc = Esys_TRSess_SetAttributes(ctx->esys_ctx, ctx->auth_session, ctx->old_flags, 0xff);
     assert(rc == TSS2_RC_SUCCESS);
     if (rc != TSS2_RC_SUCCESS) {
         LOGW("Esys_TRSess_SetAttributes: 0x%x", rc);
@@ -251,9 +251,10 @@ static bool set_esys_auth(ESYS_CONTEXT *esys_ctx, ESYS_TR handle, twist auth) {
     return true;
 }
 
-CK_RV tpm_session_start(tpm_ctx *ctx, twist auth, uint32_t handle) {
+CK_RV tpm_session_start(tpm_ctx *ctx, twist auth, uint32_t handle,
+    TPM2_SE session_type, TPMA_SESSION session_attrs) {
 
-    assert(!ctx->hmac_session);
+    assert(!ctx->auth_session);
 
     bool res = set_esys_auth(ctx->esys_ctx, handle, auth);
     if (!res) {
@@ -266,18 +267,13 @@ CK_RV tpm_session_start(tpm_ctx *ctx, twist auth, uint32_t handle) {
         .mode = { .aes = TPM2_ALG_CFB }
     };
 
-    TPMA_SESSION session_attrs =
-        TPMA_SESSION_CONTINUESESSION
-      | TPMA_SESSION_DECRYPT
-      | TPMA_SESSION_ENCRYPT;
-
     ESYS_TR session = ESYS_TR_NONE;
     TSS2_RC rc = Esys_StartAuthSession(ctx->esys_ctx,
             handle, //tpmkey
             handle, //bind
             ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
             NULL,
-            TPM2_SE_HMAC, &symmetric, TPM2_ALG_SHA256,
+            session_type, &symmetric, TPM2_ALG_SHA256,
             &session);
     if (rc != TSS2_RC_SUCCESS) {
         LOGE("Esys_StartAuthSession: 0x%x", rc);
@@ -298,7 +294,7 @@ CK_RV tpm_session_start(tpm_ctx *ctx, twist auth, uint32_t handle) {
 
     ctx->original_flags = session_attrs;
 
-    ctx->hmac_session = session;
+    ctx->auth_session = session;
 
     return CKR_OK;
 }
@@ -306,15 +302,36 @@ CK_RV tpm_session_start(tpm_ctx *ctx, twist auth, uint32_t handle) {
 CK_RV tpm_session_stop(tpm_ctx *ctx) {
 
     TSS2_RC rc = Esys_FlushContext(ctx->esys_ctx,
-            ctx->hmac_session);
+            ctx->auth_session);
     if (rc != TSS2_RC_SUCCESS) {
         LOGE("Esys_FlushContext: 0x%x", rc);
         return CKR_GENERAL_ERROR;
     }
 
-    ctx->hmac_session = 0;
+    ctx->auth_session = 0;
 
     return CKR_OK;
+}
+
+bool tpm2_policy_password(tpm_ctx *ctx, twist auth, uint32_t handle) {
+
+    TPMA_SESSION session_attrs =
+        TPMA_SESSION_CONTINUESESSION;
+
+    CK_RV result = tpm_session_start(ctx, auth, handle, TPM2_SE_POLICY, session_attrs);
+    if (result != CKR_OK) {
+        LOGE("Failed to start session for policypassword.");
+        return false;
+    }
+
+    TSS2_RC rval = Esys_PolicyPassword(ctx->esys_ctx, ctx->auth_session,
+        ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_PolicyPassword: 0x%x:", rval);
+        return false;
+    }
+
+    return true;
 }
 
 #ifndef ESAPI_MANAGE_FLAGS
@@ -547,7 +564,7 @@ static bool tpm_load(tpm_ctx *ctx,
     rval = Esys_Load(
            ctx->esys_ctx,
            phandle,
-           ctx->hmac_session,
+           ctx->auth_session,
            ESYS_TR_NONE,
            ESYS_TR_NONE,
            &priv,
@@ -732,7 +749,7 @@ twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth) {
     TSS2_RC rc = Esys_Unseal(
             ctx->esys_ctx,
             handle,
-            ctx->hmac_session,
+            ctx->auth_session,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             &unsealed_data);
@@ -867,7 +884,7 @@ CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR 
     TSS2_RC rval = Esys_Sign(
             ctx->esys_ctx,
             handle,
-            ctx->hmac_session,
+            ctx->auth_session,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             &tdigest,
@@ -1243,7 +1260,7 @@ CK_RV tpm_rsa_decrypt(tpm_encrypt_data *tpm_enc_data,
     TSS2_RC rc = Esys_RSA_Decrypt(
             ctx->esys_ctx,
             handle,
-            ctx->hmac_session,
+            ctx->auth_session,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             &tpm_ctext,
@@ -1380,7 +1397,7 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
         Esys_EncryptDecrypt2(
             ctx->esys_ctx,
             handle,
-            ctx->hmac_session,
+            ctx->auth_session,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             &tpm_data_in,
@@ -1397,7 +1414,7 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
         rval = Esys_EncryptDecrypt(
             ctx->esys_ctx,
             handle,
-            ctx->hmac_session,
+            ctx->auth_session,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             is_decrypt,
@@ -1513,7 +1530,7 @@ CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handl
     TSS2_RC rval = Esys_ObjectChangeAuth(ctx->esys_ctx,
                         object_handle,
                         parent_handle,
-                        ctx->hmac_session, ESYS_TR_NONE, ESYS_TR_NONE,
+                        ctx->auth_session, ESYS_TR_NONE, ESYS_TR_NONE,
                         &new_tpm_auth, &newprivate);
 
     if (rval != TPM2_RC_SUCCESS) {
@@ -1616,7 +1633,7 @@ CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handl
     rc = Esys_CreateLoaded(
             ctx->esys_ctx,
             parent_handle,
-            ctx->hmac_session, ESYS_TR_NONE, ESYS_TR_NONE,
+            ctx->auth_session, ESYS_TR_NONE, ESYS_TR_NONE,
             &sensitive,
             &template,
             handle,
@@ -2345,7 +2362,7 @@ CK_RV tpm2_generate_key(
     TSS2_RC rc = create_loaded(
             tpm->esys_ctx,
             parent,
-            tpm->hmac_session,
+            tpm->auth_session,
             &tpmdat.priv,
             &tpmdat.pub,
 
