@@ -5,12 +5,13 @@
  * All rights reserved.
  ***********************************************************************/
 
-#include "tcti_ldr.h"
+#include "tpm.h"
 #include "test.h"
 
 /* we need to manage lockout counter for testing bad auths */
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_tcti.h>
+#include <tss2/tss2_tctildr.h>
 
 typedef struct test_session_handle test_session_handle;
 struct test_session_handle {
@@ -44,9 +45,15 @@ TSS2_TCTI_CONTEXT *_g_tcti = NULL;
 
 static int _group_setup_locking(void **state) {
 
-    _g_tcti = tcti_ldr_load();
+    const char *config = getenv(TPM2_PKCS11_TCTI);
 
-    TSS2_RC rc = Esys_Initialize(&_g_ectx, _g_tcti, NULL);
+    TSS2_RC rc = Tss2_TctiLdr_Initialize(config, &_g_tcti);
+    if (rc != TSS2_RC_SUCCESS) {
+        return CKR_GENERAL_ERROR;
+    }
+
+
+    rc = Esys_Initialize(&_g_ectx, _g_tcti, NULL);
     assert_int_equal(rc, TSS2_RC_SUCCESS);
 
     return group_setup_locking(state);
@@ -55,7 +62,7 @@ static int _group_setup_locking(void **state) {
 static int _group_teardown(void **state) {
 
     Esys_Finalize(&_g_ectx);
-    Tss2_Tcti_Finalize(_g_tcti);
+    Tss2_TctiLdr_Finalize(&_g_tcti);
     free(_g_tcti);
     return group_teardown(state);
 }

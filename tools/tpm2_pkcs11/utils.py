@@ -26,6 +26,8 @@ def kvp_row(d, delim=" "):
     ])
     return x
 
+def dict_to_kvp(d):
+    return kvp_row(d)
 
 def list_dict_to_kvp(l):
     x = "\n".join(kvp_row(d) for d in l)
@@ -36,10 +38,8 @@ def bytes_to_file(bites, tmpdir):
     open(path, 'w+b').write(bites)
     return path
 
-
 def dict_from_kvp(kvp):
-    return dict(x.split('=') for x in kvp.split('\n'))
-
+    return dict(x.split('=') for x in kvp.split('\t '))
 
 def rand_hex_str(num=32):
     if num % 2:
@@ -64,7 +64,7 @@ def hash_pass(password, salt=None):
     m = hashlib.sha256(password)
     m.update(salt)
 
-    # the TPM auth size is limited to 32 bytes in most cases 
+    # the TPM auth size is limited to 32 bytes in most cases
     hash = m.hexdigest()[:32]
 
     return {

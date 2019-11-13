@@ -40,7 +40,8 @@ struct token {
     tobject *tobjects;
 
     struct {
-        bool is_initialized; /* token initialization state */
+        bool is_initialized;  /* token initialization state */
+        char *tcti;           /* token specific tcti config */
     } config;
 
     session_table *s_table;
