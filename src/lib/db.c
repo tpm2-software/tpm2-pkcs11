@@ -901,7 +901,7 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
          */
         rv = tpm_ctx_new(&t->tctx);
         if (rv != CKR_OK) {
-            LOGE("Could not initialize tpm ctx: 0x%x", rv);
+            LOGE("Could not initialize tpm ctx: 0x%lx", rv);
             goto error;
         }
 
@@ -912,7 +912,7 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
 
         rv = mutex_create(&t->mutex);
         if (rv != CKR_OK) {
-            LOGE("Could not initialize mutex: 0x%x", rv);
+            LOGE("Could not initialize mutex: 0x%lx", rv);
             goto error;
         }
 
@@ -1406,7 +1406,7 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
     }
 
     if (id > UINT_MAX) {
-        LOGE("id is larger than unsigned int, got: %zu", id);
+        LOGE("id is larger than unsigned int, got: %lld", id);
         goto error;
     }
 

@@ -941,7 +941,7 @@ static CK_RV init_sig_from_mech(CK_MECHANISM_TYPE mech, CK_ULONG datalen, CK_BYT
     case TPM2_ALG_ECDSA:
         return init_ecdsa_sig(sig, siglen, &tpmsig->signature.ecdsa);
     default:
-        LOGE("Unsupported verification algorithm, got: 0x%x", mech);
+        LOGE("Unsupported verification algorithm, got: 0x%lx", mech);
         return CKR_GENERAL_ERROR;
     }
 }
@@ -1036,7 +1036,7 @@ static CK_RV mech_to_sym(CK_MECHANISM_PTR mech, tpm_encrypt_data *tpm_enc_data) 
         tpm_enc_data->sym.mode = TPM2_ALG_CFB;
         break;
     default:
-        LOGE("Unsupported mechanism: 0x%x", mech->mechanism);
+        LOGE("Unsupported mechanism: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
@@ -1978,7 +1978,7 @@ static CK_RV sanity_check_mech(CK_MECHANISM_PTR mechanism) {
             break;
         default:
             LOGE("Only supports mechanism \"CKM_RSA_PKCS_KEY_PAIR_GEN\" or"
-                 "\"CKM_EC_KEY_PAIR_GEN\", got: 0x%x", mechanism->mechanism);
+                 "\"CKM_EC_KEY_PAIR_GEN\", got: 0x%lx", mechanism->mechanism);
             return CKR_MECHANISM_INVALID;
     }
 
@@ -2082,7 +2082,7 @@ static CK_RV tpm_data_init(CK_MECHANISM_PTR mechanism,
             break;
         default:
             /* should never happen checked at entry */
-            LOGE("Unsupported keypair mechanism: 0x%x",
+            LOGE("Unsupported keypair mechanism: 0x%lx",
                     mechanism->mechanism);
             assert(0);
             return CKR_MECHANISM_INVALID;
@@ -2230,12 +2230,12 @@ static CK_RV tpm_object_data_populate_ecc(TPM2B_PUBLIC *out_pub, tpm_object_data
     ssize_t len = EC_POINT_point2buf(group, tpm_pub_key, POINT_CONVERSION_UNCOMPRESSED,
             &mydata, NULL);
     if (len <= 0) {
-        LOGE("EC_POINT_point2buf failed: %z", len);
+        LOGE("EC_POINT_point2buf failed: %zd", len);
         goto out;
     }
 
     if (len > 255) {
-        LOGE("Length must fit within a byte, got %z", len);
+        LOGE("Length must fit within a byte, got %zd", len);
         goto out;
     }
 
@@ -2415,7 +2415,7 @@ CK_RV tpm2_generate_key(
         rv = tpm_object_data_populate_ecc(out_pub, objdata);
         break;
     default:
-        LOGE("Impossible keygen type, got: 0x%x", mechanism->mechanism);
+        LOGE("Impossible keygen type, got: 0x%lx", mechanism->mechanism);
         assert(0);
     }
 
@@ -2453,7 +2453,7 @@ void tpm_objdata_free(tpm_object_data *objdata) {
         twist_free(objdata->ecc.ecpoint);
         break;
     default:
-        LOGE("Unsupported keygen mechanism type: 0x%x", objdata->mechanism);
+        LOGE("Unsupported keygen mechanism type: 0x%lx", objdata->mechanism);
         assert(0);
     }
 

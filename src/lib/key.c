@@ -98,7 +98,7 @@ CK_RV object_add_missing_mechs(tobject *tobj, CK_MECHANISM_TYPE mech) {
     case CKM_EC_KEY_PAIR_GEN:
         return ecc_add_missing_mechs(tobj);
     default:
-        LOGE("Unsupported keygen mechanism: 0x%x", mech);
+        LOGE("Unsupported keygen mechanism: 0x%lx", mech);
         return CKR_MECHANISM_INVALID;
     }
 }
@@ -312,7 +312,7 @@ static CK_RV object_add_missing_attrs(tobject *public_tobj, tobject *private_tob
         keytype = CKK_EC;
         break;
     default:
-        LOGE("Unsupported keygen mechanism: 0x%x", mech);
+        LOGE("Unsupported keygen mechanism: 0x%lx", mech);
         return CKR_MECHANISM_INVALID;
     }
 
@@ -420,7 +420,7 @@ static CK_RV object_add_missing_attrs(tobject *public_tobj, tobject *private_tob
         break;
     default:
         rv = CKR_GENERAL_ERROR;
-        LOGE("Unsupported keytype, got: 0x%x", keytype);
+        LOGE("Unsupported keytype, got: 0x%lx", keytype);
         goto error;
     }
 
@@ -631,7 +631,7 @@ static CK_RV check_specific_attrs(CK_MECHANISM_TYPE mech,
         return ecc_check_attrs(public_key_template, public_key_attribute_count,
                     private_key_template, private_key_attribute_count);
     default:
-        LOGE("Unsupported keygen mechanism: 0x%x", mech);
+        LOGE("Unsupported keygen mechanism: 0x%lx", mech);
         return CKR_MECHANISM_INVALID;
     }
 }

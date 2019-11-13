@@ -118,7 +118,7 @@ static CK_RV session_table_free_ctx_by_ctx(token *t, session_ctx **ctx) {
     if (!stable->cnt) {
         rv = do_logout_if_needed(*ctx);
         if (rv != CKR_OK) {
-            LOGE("do_logout_if_needed failed: 0x%x", rv);
+            LOGE("do_logout_if_needed failed: 0x%lx", rv);
         }
     }
 
@@ -163,7 +163,7 @@ CK_RV session_table_free_ctx_all(token *t) {
 
         CK_RV rv = session_table_free_ctx_by_ctx(t, ctx);
         if (rv != CKR_OK) {
-            LOGE("Failed to free session_ctx: 0x%x", rv);
+            LOGE("Failed to free session_ctx: 0x%lx", rv);
             had_error = true;
         }
     }
