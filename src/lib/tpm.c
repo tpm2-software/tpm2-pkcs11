@@ -1359,8 +1359,8 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
 
     memcpy(tpm_data_in.buffer, data_in, tpm_data_in.size);
 
+    TPM2B_IV empty_iv_in = { .size = sizeof(empty_iv_in.buffer), .buffer = { 0 } };
     if (!iv) {
-        TPM2B_IV empty_iv_in = { .size = sizeof(empty_iv_in.buffer), .buffer = { 0 } };
         iv = &empty_iv_in;
     }
 
