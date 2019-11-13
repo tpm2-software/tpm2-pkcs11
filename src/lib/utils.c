@@ -21,7 +21,7 @@ CK_RV utils_setup_new_object_auth(twist newpin, twist *newauthhex, twist *newsal
     twist pin_to_use = NULL;
 
     *newsalthex = utils_get_rand_hex_str(SALT_HEX_STR_SIZE);
-    if (!newsalthex) {
+    if (!*newsalthex) {
         goto out;
     }
 
