@@ -20,6 +20,8 @@ CK_RV utils_setup_new_object_auth(twist newpin, twist *newauthhex, twist *newsal
     bool allocated_pin_to_use = false;
     twist pin_to_use = NULL;
 
+    assert(newsalthex);
+
     *newsalthex = utils_get_rand_hex_str(SALT_HEX_STR_SIZE);
     if (!*newsalthex) {
         goto out;
@@ -46,12 +48,8 @@ out:
 
     if (rv != CKR_OK) {
         twist_free(*newauthhex);
-        if (newsalthex) {
-            twist_free(*newsalthex);
-            *newsalthex = NULL;
-        }
-
-        *newauthhex = NULL;
+        twist_free(*newsalthex);
+        *newsalthex = NULL;
     }
 
     if (allocated_pin_to_use) {
