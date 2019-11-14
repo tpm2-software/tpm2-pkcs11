@@ -65,9 +65,7 @@ class InitCommand(Command):
         use_existing_primary = 'primary' in args and args['primary']
 
         path = args['path']
-        if not os.path.exists(path):
-            os.mkdir(path)
-        elif not os.path.isdir(path):
+        if not os.path.isdir(path):
             sys.exit("Specified path is not a directory, got: %s" % (path))
 
         ownerauth = args['owner_auth']
