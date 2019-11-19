@@ -335,7 +335,7 @@ void verify_missing_priv_attrs_ecc(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE h
 
 void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE keytype, CK_OBJECT_HANDLE h, CK_BBOOL extractable) {
 
-    CK_BYTE tmp[5][256] = { 0 };
+    CK_BYTE tmp[10][256] = { 0 };
 
     CK_ATTRIBUTE attrs[] = {
             ADD_ATTR_ARRAY(CKA_KEY_TYPE, tmp[0]),
@@ -343,6 +343,12 @@ void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE key
             ADD_ATTR_ARRAY(CKA_ALWAYS_SENSITIVE,  tmp[2]),
             ADD_ATTR_ARRAY(CKA_EXTRACTABLE,  tmp[3]),
             ADD_ATTR_ARRAY(CKA_NEVER_EXTRACTABLE,  tmp[4]),
+            ADD_ATTR_ARRAY(CKA_SIGN,  tmp[5]),
+            ADD_ATTR_ARRAY(CKA_DECRYPT,  tmp[6]),
+            ADD_ATTR_ARRAY(CKA_SIGN_RECOVER,  tmp[7]),
+            ADD_ATTR_ARRAY(CKA_UNWRAP,  tmp[8]),
+            ADD_ATTR_ARRAY(CKA_WRAP_WITH_TRUSTED,  tmp[8]),
+            ADD_ATTR_ARRAY(CKA_DERIVE,  tmp[9]),
     };
 
     CK_RV rv = C_GetAttributeValue(session, h, attrs, ARRAY_LEN(attrs));
@@ -389,6 +395,28 @@ void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE key
             assert_int_equal(v, !extractable);
             count++;
         } break;
+        case CKA_SIGN:
+            /* fall-thru */
+        case CKA_DECRYPT: {
+            CK_BBOOL v = CK_FALSE;
+            rv = generic_CK_BBOOL(a, &v);
+            assert_int_equal(rv, CKR_OK);
+            assert_int_equal(v, CK_TRUE);
+            count++;
+        } break;
+        case CKA_SIGN_RECOVER:
+            /* fall-thru */
+        case CKA_WRAP_WITH_TRUSTED:
+            /* fall-thru */
+        case CKA_DERIVE:
+            /* fall-thru */
+        case CKA_UNWRAP: {
+            CK_BBOOL v = CK_FALSE;
+            rv = generic_CK_BBOOL(a, &v);
+            assert_int_equal(rv, CKR_OK);
+            assert_int_equal(v, CK_FALSE);
+            count++;
+        } break;
         default:
             fail_msg("Unknown attribute type to test, got: %lu", a->type);
         }
@@ -399,11 +427,18 @@ void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE key
 
 void verify_missing_pub_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE keytype, CK_OBJECT_HANDLE h) {
 
-    CK_BYTE tmp[2][256] = { 0 };
+    CK_BYTE tmp[9][256] = { 0 };
 
     CK_ATTRIBUTE attrs[] = {
             ADD_ATTR_ARRAY(CKA_KEY_TYPE, tmp[0]),
             ADD_ATTR_ARRAY(CKA_CLASS,    tmp[1]),
+            ADD_ATTR_ARRAY(CKA_CLASS,    tmp[2]),
+            ADD_ATTR_ARRAY(CKA_VERIFY,   tmp[3]),
+            ADD_ATTR_ARRAY(CKA_ENCRYPT,  tmp[4]),
+            ADD_ATTR_ARRAY(CKA_VERIFY_RECOVER, tmp[5]),
+            ADD_ATTR_ARRAY(CKA_WRAP,       tmp[6]),
+            ADD_ATTR_ARRAY(CKA_TRUSTED,    tmp[7]),
+            ADD_ATTR_ARRAY(CKA_DERIVE,     tmp[8]),
     };
 
     CK_RV rv = C_GetAttributeValue(session, h, attrs, ARRAY_LEN(attrs));
@@ -426,6 +461,28 @@ void verify_missing_pub_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE keyt
             rv = generic_CK_ULONG(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, CKO_PUBLIC_KEY);
+            count++;
+        } break;
+        case CKA_ENCRYPT:
+            /* fall-thru */
+        case CKA_VERIFY: {
+            CK_BBOOL v = 0;
+            rv = generic_CK_BBOOL(a, &v);
+            assert_int_equal(rv, CKR_OK);
+            assert_int_equal(v, CK_TRUE);
+            count++;
+        } break;
+        case CKA_TRUSTED:
+            /* fall-thru */
+        case CKA_WRAP:
+            /* fall-thru */
+        case CKA_DERIVE:
+            /* fall-thru */
+        case CKA_VERIFY_RECOVER: {
+            CK_BBOOL v = 0;
+            rv = generic_CK_BBOOL(a, &v);
+            assert_int_equal(rv, CKR_OK);
+            assert_int_equal(v, CK_FALSE);
             count++;
         } break;
         default:

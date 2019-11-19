@@ -211,6 +211,174 @@ out:
     return rv;
 }
 
+static CK_RV public_common_add_missing_atrs(tobject *public_tobj, CK_KEY_TYPE keytype) {
+
+    CK_RV rv = CKR_HOST_MEMORY;
+    CK_RV tmp_rv;
+
+    struct {
+        CK_ATTRIBUTE_TYPE attr;
+        CK_BBOOL value;
+    } attrs[] = {
+            { .attr = CKA_VERIFY, .value = CK_TRUE },
+            { .attr = CKA_ENCRYPT, .value =  CK_TRUE },
+            { .attr = CKA_VERIFY_RECOVER, .value = CK_FALSE },
+            { .attr = CKA_WRAP, .value = CK_FALSE },
+            { .attr = CKA_TRUSTED, .value = CK_FALSE },
+            { .attr = CKA_DERIVE, .value = CK_FALSE },
+    };
+
+    CK_ULONG pubindex = 0;
+    CK_ATTRIBUTE newpubattrs[ARRAY_LEN(attrs) + 3] = { 0 };
+
+    size_t i;
+    for (i=0; i < ARRAY_LEN(attrs); i++) {
+        CK_ATTRIBUTE_PTR a = tobject_get_attribute_by_type(public_tobj, attrs[i].attr);
+        if (!a) {
+            ADD_ATTR(CK_BBOOL, attrs[i].attr, attrs[i].value, newpubattrs, pubindex);
+        }
+    }
+
+    CK_ATTRIBUTE_PTR a = tobject_get_attribute_by_type(public_tobj, CKA_KEY_TYPE);
+    if (!a) {
+        ADD_ATTR(CK_KEY_TYPE, CKA_KEY_TYPE, keytype, newpubattrs, pubindex);
+    }
+
+    CK_OBJECT_CLASS class = CKO_PUBLIC_KEY;
+    CK_ATTRIBUTE match = {
+       .type = CKA_CLASS,
+       .ulValueLen = sizeof(class),
+       .pValue = &class
+    };
+
+    a = tobject_get_attribute_full(public_tobj, &match);
+    if (!a) {
+        ADD_ATTR(CK_OBJECT_CLASS, CKA_CLASS, CKO_PUBLIC_KEY, newpubattrs, pubindex);
+    }
+
+    rv = tobject_append_attrs(public_tobj, newpubattrs, pubindex);
+
+error:
+    tmp_rv = utils_attr_free(newpubattrs, pubindex);
+    if (tmp_rv != CKR_OK) {
+        LOGW("Could not free attributes");
+        assert(0);
+    }
+
+    return rv;
+}
+
+static CK_RV private_common_add_missing_atrs(tobject *private_tobj, CK_KEY_TYPE keytype) {
+
+    CK_RV rv = CKR_HOST_MEMORY;
+    CK_RV tmp_rv;
+
+    struct {
+        CK_ATTRIBUTE_TYPE attr;
+        CK_BBOOL value;
+    } attrs[] = {
+            { .attr = CKA_SIGN, .value = CK_TRUE },
+            { .attr = CKA_DECRYPT, .value =  CK_TRUE },
+            { .attr = CKA_SIGN_RECOVER, .value = CK_FALSE },
+            { .attr = CKA_UNWRAP, .value = CK_FALSE },
+            { .attr = CKA_WRAP_WITH_TRUSTED, .value = CK_FALSE },
+            { .attr = CKA_DERIVE, .value = CK_FALSE },
+    };
+
+    CK_ULONG privindex = 0;
+    CK_ATTRIBUTE newprivattrs[ARRAY_LEN(attrs) + 8] = { 0 };
+
+    size_t i;
+    for (i=0; i < ARRAY_LEN(attrs); i++) {
+        CK_ATTRIBUTE_PTR a = tobject_get_attribute_by_type(private_tobj, attrs[i].attr);
+        if (!a) {
+            ADD_ATTR(CK_BBOOL, attrs[i].attr, attrs[i].value, newprivattrs, privindex);
+        }
+    }
+
+    CK_ATTRIBUTE_PTR a = tobject_get_attribute_by_type(private_tobj, CKA_KEY_TYPE);
+    if (!a) {
+        ADD_ATTR(CK_KEY_TYPE, CKA_KEY_TYPE, keytype, newprivattrs, privindex);
+    }
+
+    CK_OBJECT_CLASS class = CKO_PRIVATE_KEY;
+    CK_ATTRIBUTE match = {
+       .type = CKA_CLASS,
+       .ulValueLen = sizeof(class),
+       .pValue = &class
+    };
+
+    a = tobject_get_attribute_full(private_tobj, &match);
+    if (!a) {
+        ADD_ATTR(CK_OBJECT_CLASS, CKA_CLASS, CKO_PRIVATE_KEY, newprivattrs, privindex);
+    }
+
+    /*
+     * We come into the CKA_SENSITIVE and CKA_EXTRACTABLE block assuming that:
+     * CKA_EXTRACTABLE CKA_SENSITIVE
+     *   0 | 0 = error checked before thus not possible
+     *   0 | 1 = OK
+     *   1 | 0 = OK
+     *   1 | 1 = error checked before thus not possible
+     *
+     * if the object is missing sensitive, the TPM defaults to sensitive, so mark it.
+     * This only applies to the private object, as public objects are always extractable.
+     */
+
+    CK_BBOOL sensitive = CK_TRUE;
+    a = tobject_get_attribute_by_type(private_tobj, CKA_SENSITIVE);
+    if (!a) {
+        ADD_ATTR(CK_BBOOL, CKA_SENSITIVE, CK_TRUE, newprivattrs, privindex);
+    } else {
+        CK_RV tmp_rv = generic_CK_BBOOL(a, &sensitive);
+        if (tmp_rv != CKR_OK) {
+            goto error;
+        }
+    }
+
+    /* mark always sensitive if not specified by user */
+    a = tobject_get_attribute_by_type(private_tobj, CKA_ALWAYS_SENSITIVE);
+    if (!a) {
+        ADD_ATTR(CK_BBOOL, CKA_ALWAYS_SENSITIVE, sensitive ? CK_TRUE : CK_FALSE, newprivattrs, privindex);
+    }
+
+    /* if the object is missing CKA_EXTRACTABLE use the value of CKA_SENSITIVE to determine */
+    CK_BBOOL extractable = CK_FALSE;
+    a = tobject_get_attribute_by_type(private_tobj, CKA_EXTRACTABLE);
+    if (!a) {
+        extractable = !sensitive;
+        ADD_ATTR(CK_BBOOL, CKA_EXTRACTABLE, extractable, newprivattrs, privindex);
+    } else {
+        CK_RV tmp_rv = generic_CK_BBOOL(a, &extractable);
+        if (tmp_rv != CKR_OK) {
+            goto error;
+        }
+    }
+
+    /* mark never extractable if not specified by user */
+    a = tobject_get_attribute_by_type(private_tobj, CKA_NEVER_EXTRACTABLE);
+    if (!a) {
+        ADD_ATTR(CK_BBOOL, CKA_NEVER_EXTRACTABLE, extractable ? CK_FALSE : CK_TRUE, newprivattrs, privindex);
+    }
+
+    /* add CKA_ALWAYS_AUTHENTICATE false if not specified by the user */
+    a = tobject_get_attribute_by_type(private_tobj, CKA_ALWAYS_AUTHENTICATE);
+    if (!a) {
+        ADD_ATTR(CK_BBOOL, CKA_ALWAYS_AUTHENTICATE, CK_FALSE, newprivattrs, privindex);
+    }
+
+    rv = tobject_append_attrs(private_tobj, newprivattrs, privindex);
+
+error:
+    tmp_rv = utils_attr_free(newprivattrs, privindex);
+    if (tmp_rv != CKR_OK) {
+        LOGW("Could not free attributes");
+        assert(0);
+    }
+
+    return rv;
+}
+
 /*
  * Add required attributes to the RSA objects based on:
  *   - http://docs.oasis-open.org/pkcs11/pkcs11-curr/v2.40/errata01/os/pkcs11-curr-v2.40-errata01-os-complete.html#_Toc441850406
@@ -316,97 +484,18 @@ static CK_RV object_add_missing_attrs(tobject *public_tobj, tobject *private_tob
         return CKR_MECHANISM_INVALID;
     }
 
-    CK_RV tmp_rv;
-    CK_RV rv = CKR_HOST_MEMORY;
+    CK_RV rv = CKR_GENERAL_ERROR;
 
-    CK_ULONG privindex = 0;
-    CK_ULONG pubindex = 0;
-    CK_ATTRIBUTE newprivattrs[8] = { 0 };
-    CK_ATTRIBUTE newpubattrs[8] = { 0 };
-
-    /*
-     * Ensure that keytype is set for both public and private
-     */
-    CK_ATTRIBUTE_PTR a = tobject_get_attribute_by_type(public_tobj, CKA_KEY_TYPE);
-    if (!a) {
-        ADD_ATTR(CK_KEY_TYPE, CKA_KEY_TYPE, keytype, newpubattrs, pubindex);
+    rv = public_common_add_missing_atrs(public_tobj, keytype);
+    if (rv != CKR_OK) {
+        LOGE("Could not add public common specific attributes");
+        goto error;
     }
 
-    a = tobject_get_attribute_by_type(private_tobj, CKA_KEY_TYPE);
-    if (!a) {
-        ADD_ATTR(CK_KEY_TYPE, CKA_KEY_TYPE, keytype, newprivattrs, privindex);
-    }
-
-    CK_OBJECT_CLASS class = CKO_PRIVATE_KEY;
-    CK_ATTRIBUTE match = {
-       .type = CKA_CLASS,
-       .ulValueLen = sizeof(class),
-       .pValue = &class
-    };
-
-    a = tobject_get_attribute_full(private_tobj, &match);
-    if (!a) {
-        ADD_ATTR(CK_OBJECT_CLASS, CKA_CLASS, CKO_PRIVATE_KEY, newprivattrs, privindex);
-    }
-
-    class = CKO_PUBLIC_KEY;
-    a = tobject_get_attribute_full(public_tobj, &match);
-    if (!a) {
-        ADD_ATTR(CK_OBJECT_CLASS, CKA_CLASS, CKO_PUBLIC_KEY, newpubattrs, pubindex);
-    }
-
-    /*
-     * We come into the CKA_SENSITIVE and CKA_EXTRACTABLE block assuming that:
-     * CKA_EXTRACTABLE CKA_SENSITIVE
-     *   0 | 0 = error checked before thus not possible
-     *   0 | 1 = OK
-     *   1 | 0 = OK
-     *   1 | 1 = error checked before thus not possible
-     *
-     * if the object is missing sensitive, the TPM defaults to sensitive, so mark it.
-     * This only applies to the private object, as public objects are always extractable.
-     */
-
-    CK_BBOOL sensitive = CK_TRUE;
-    a = tobject_get_attribute_by_type(private_tobj, CKA_SENSITIVE);
-    if (!a) {
-        ADD_ATTR(CK_BBOOL, CKA_SENSITIVE, CK_TRUE, newprivattrs, privindex);
-    } else {
-        tmp_rv = generic_CK_BBOOL(a, &sensitive);
-        if (tmp_rv != CKR_OK) {
-            goto error;
-        }
-    }
-
-    /* mark always sensitive if not specified by user */
-    a = tobject_get_attribute_by_type(private_tobj, CKA_ALWAYS_SENSITIVE);
-    if (!a) {
-        ADD_ATTR(CK_BBOOL, CKA_ALWAYS_SENSITIVE, sensitive ? CK_TRUE : CK_FALSE, newprivattrs, privindex);
-    }
-
-    /* if the object is missing CKA_EXTRACTABLE use the value of CKA_SENSITIVE to determine */
-    CK_BBOOL extractable = CK_FALSE;
-    a = tobject_get_attribute_by_type(private_tobj, CKA_EXTRACTABLE);
-    if (!a) {
-        extractable = !sensitive;
-        ADD_ATTR(CK_BBOOL, CKA_EXTRACTABLE, extractable, newprivattrs, privindex);
-    } else {
-        tmp_rv = generic_CK_BBOOL(a, &extractable);
-        if (tmp_rv != CKR_OK) {
-            goto error;
-        }
-    }
-
-    /* mark never extractable if not specified by user */
-    a = tobject_get_attribute_by_type(private_tobj, CKA_NEVER_EXTRACTABLE);
-    if (!a) {
-        ADD_ATTR(CK_BBOOL, CKA_NEVER_EXTRACTABLE, extractable ? CK_FALSE : CK_TRUE, newprivattrs, privindex);
-    }
-
-    /* add CKA_ALWAYS_AUTHENTICATE false if not specified by the user */
-    a = tobject_get_attribute_by_type(private_tobj, CKA_ALWAYS_AUTHENTICATE);
-    if (!a) {
-        ADD_ATTR(CK_BBOOL, CKA_ALWAYS_AUTHENTICATE, CK_FALSE, newprivattrs, privindex);
+    rv = private_common_add_missing_atrs(private_tobj, keytype);
+    if (rv != CKR_OK) {
+        LOGE("Could not add private common specific attributes");
+        goto error;
     }
 
     /* key type specific stuff */
@@ -429,26 +518,11 @@ static CK_RV object_add_missing_attrs(tobject *public_tobj, tobject *private_tob
         goto error;
     }
 
-    /* add the new attrs */
-    rv = tobject_append_attrs(private_tobj, newprivattrs, privindex);
-    if (rv != CKR_OK) {
-        goto error;
-    }
-
-    rv = tobject_append_attrs(public_tobj, newpubattrs, pubindex);
+    return CKR_OK;
 
 error:
-    tmp_rv = utils_attr_free(newprivattrs, privindex);
-    if (tmp_rv != CKR_OK) {
-        LOGW("Could not free attributes");
-        assert(0);
-    }
-
-    tmp_rv = utils_attr_free(newpubattrs, pubindex);
-    if (tmp_rv != CKR_OK) {
-        LOGW("Could not free attributes");
-        assert(0);
-    }
+    tobject_free(private_tobj);
+    tobject_free(public_tobj);
 
     return rv;
 }
@@ -540,7 +614,7 @@ static CK_RV handle_always_auth(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *uda
     return generic_CK_BBOOL(attr, &value);
 }
 
-static CK_RV handle_derive(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+static CK_RV handle_expect_false(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
     UNUSED(index);
     UNUSED(udata);
 
@@ -563,23 +637,29 @@ CK_RV check_common_attrs(
         CK_ULONG private_key_attribute_count) {
 
     static const attr_handler common_attr_check_handlers[] = {
-        { CKA_PRIVATE,         handle_sensitive      },
-        { CKA_EXTRACTABLE,     handle_extractable    },
-        { CKA_KEY_TYPE,        ATTR_HANDLER_IGNORE   },
-        { CKA_TOKEN,           ATTR_HANDLER_IGNORE   },
-        { CKA_ID,              ATTR_HANDLER_IGNORE   },
-        { CKA_LABEL,           ATTR_HANDLER_IGNORE   },
-        { CKA_VERIFY,          ATTR_HANDLER_IGNORE   },
-        { CKA_ENCRYPT,         ATTR_HANDLER_IGNORE   },
-        { CKA_DECRYPT,         ATTR_HANDLER_IGNORE   },
-        { CKA_SIGN,            ATTR_HANDLER_IGNORE   },
-        { CKA_DERIVE,          handle_derive         },
-        { CKA_MODULUS_BITS,    ATTR_HANDLER_IGNORE   },
-        { CKA_PUBLIC_EXPONENT, ATTR_HANDLER_IGNORE   },
-        { CKA_SENSITIVE,       ATTR_HANDLER_IGNORE   },
-        { CKA_CLASS,           ATTR_HANDLER_IGNORE   },
+        { CKA_PRIVATE,           handle_sensitive     },
+        { CKA_EXTRACTABLE,       handle_extractable   },
+        { CKA_KEY_TYPE,          ATTR_HANDLER_IGNORE  },
+        { CKA_TOKEN,             ATTR_HANDLER_IGNORE  },
+        { CKA_ID,                ATTR_HANDLER_IGNORE  },
+        { CKA_LABEL,             ATTR_HANDLER_IGNORE  },
+        { CKA_VERIFY,            ATTR_HANDLER_IGNORE  },
+        { CKA_ENCRYPT,           ATTR_HANDLER_IGNORE  },
+        { CKA_DECRYPT,           ATTR_HANDLER_IGNORE  },
+        { CKA_SIGN,              ATTR_HANDLER_IGNORE  },
+        { CKA_DERIVE,            handle_expect_false  },
+        { CKA_MODULUS_BITS,      ATTR_HANDLER_IGNORE  },
+        { CKA_PUBLIC_EXPONENT,   ATTR_HANDLER_IGNORE  },
+        { CKA_SENSITIVE,         ATTR_HANDLER_IGNORE  },
+        { CKA_CLASS,             ATTR_HANDLER_IGNORE  },
+        { CKA_SIGN_RECOVER,      handle_expect_false  },
+        { CKA_VERIFY_RECOVER,    handle_expect_false  },
+        { CKA_UNWRAP,            handle_expect_false  },
+        { CKA_WRAP,              handle_expect_false  },
+        { CKA_WRAP_WITH_TRUSTED, handle_expect_false  },
+        { CKA_TRUSTED,           handle_expect_false  },
         /* TODO should be sanity checking this here? */
-        { CKA_EC_PARAMS,       ATTR_HANDLER_IGNORE   },
+        { CKA_EC_PARAMS,       ATTR_HANDLER_IGNORE    },
         { CKA_ALWAYS_AUTHENTICATE, handle_always_auth },
     };
 

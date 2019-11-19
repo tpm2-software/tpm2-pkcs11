@@ -731,6 +731,57 @@ static void test_keygen_keytype(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
+static void test_non_common_template_attrs(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_BBOOL ck_true = CK_TRUE;
+    CK_BBOOL ck_false = CK_FALSE;
+    CK_UTF8CHAR label[] = "test_non_common_template_attrs";
+
+    CK_ATTRIBUTE pub[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_ENCRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_VERIFY, ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_VERIFY_RECOVER, ck_false),
+        ADD_ATTR_BASE(CKA_WRAP, ck_false),
+        ADD_ATTR_BASE(CKA_TRUSTED, ck_false),
+    };
+
+    CK_ATTRIBUTE priv[] = {
+        ADD_ATTR_BASE(CKA_DECRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_SIGN, ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_EXTRACTABLE, ck_false),
+        ADD_ATTR_BASE(CKA_SIGN_RECOVER, ck_false),
+        ADD_ATTR_BASE(CKA_UNWRAP, ck_false),
+        ADD_ATTR_BASE(CKA_WRAP_WITH_TRUSTED, ck_false),
+    };
+
+    CK_MECHANISM mech = {
+        .mechanism = CKM_RSA_PKCS_KEY_PAIR_GEN,
+        .pParameter = NULL,
+        .ulParameterLen = 0
+    };
+
+    CK_OBJECT_HANDLE pubkey;
+    CK_OBJECT_HANDLE privkey;
+
+    user_login(session);
+
+    CK_RV rv = C_GenerateKeyPair (session,
+            &mech,
+            pub, ARRAY_LEN(pub),
+            priv, ARRAY_LEN(priv),
+            &pubkey, &privkey);
+    assert_int_equal(rv, CKR_OK);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
@@ -745,6 +796,8 @@ int main() {
         cmocka_unit_test_setup_teardown(test_rsa_keygen_missing_attributes,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_keygen_keytype,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_non_common_template_attrs,
             test_setup, test_teardown),
     };
 

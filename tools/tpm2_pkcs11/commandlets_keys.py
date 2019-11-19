@@ -99,6 +99,21 @@ class NewKeyCommandBase(Command):
                 {
                     CKA_CLASS: CKO_PUBLIC_KEY
                 },
+                {
+                    CKA_VERIFY: True
+                },
+                {
+                    CKA_ENCRYPT: True
+                },
+                {
+                    CKA_VERIFY_RECOVER: False
+                },
+                {
+                    CKA_WRAP: False
+                },
+                {
+                    CKA_TRUSTED: False
+                },
             ]
 
             privattrs = [
@@ -110,6 +125,21 @@ class NewKeyCommandBase(Command):
                 },
                 {
                     CKA_MODULUS_BITS: y['bits']
+                },
+                {
+                    CKA_SIGN: True
+                },
+                {
+                    CKA_DECRYPT: True
+                },
+                {
+                    CKA_SIGN_RECOVER : False
+                },
+                {
+                    CKA_UNWRAP : False
+                },
+                {
+                    CKA_WRAP_WITH_TRUSTED : False
                 },
             ]
 
@@ -173,6 +203,21 @@ class NewKeyCommandBase(Command):
                 {
                     CKA_EC_POINT: ecpoint
                 },
+                {
+                    CKA_VERIFY: True
+                },
+                {
+                    CKA_ENCRYPT: True
+                },
+                {
+                    CKA_VERIFY_RECOVER: False
+                },
+                {
+                    CKA_WRAP: False
+                },
+                {
+                    CKA_TRUSTED: False
+                },
             ]
 
             privattrs = [
@@ -188,6 +233,21 @@ class NewKeyCommandBase(Command):
                 {
                     CKA_EC_POINT: ecpoint
                 },
+                {
+                    CKA_SIGN: True
+                },
+                {
+                    CKA_DECRYPT: True
+                },
+                {
+                    CKA_SIGN_RECOVER : False
+                },
+                {
+                    CKA_UNWRAP : False
+                },
+                {
+                    CKA_WRAP_WITH_TRUSTED : False
+                },
             ]
 
             pubmech = [{CKM_ECDSA: ""}]
@@ -199,7 +259,29 @@ class NewKeyCommandBase(Command):
                 CKA_KEY_TYPE: CKK_AES
             }, {
                 CKA_VALUE_LEN: y['sym-keybits'] / 8
-            }]
+            },
+            {
+                CKA_ENCRYPT: True
+            },
+            {
+                CKA_DECRYPT: True
+            },
+            {
+                CKA_SIGN: False
+            },
+            {
+                CKA_VERIFY: False
+            },
+            {
+                CKA_WRAP: False
+            },
+            {
+                CKA_UNWRAP: False
+            },
+            {
+                CKA_WRAP_WITH_TRUSTED: False
+            },
+            ]
 
             privmech = [{CKM_AES_CBC: ""}, ]
         else:
@@ -209,12 +291,14 @@ class NewKeyCommandBase(Command):
         privattrs.append({CKA_ID: binascii.hexlify(tid.encode()).decode()})
         if pubattrs:
             pubattrs.append({CKA_ID: binascii.hexlify(tid.encode()).decode()})
+            pubattrs.append({CKA_DERIVE: False})
 
         privattrs.append({CKA_TOKEN: True})
         privattrs.append({CKA_SENSITIVE: True})
         privattrs.append({CKA_ALWAYS_SENSITIVE: True})
         privattrs.append({CKA_EXTRACTABLE: False})
         privattrs.append({CKA_NEVER_EXTRACTABLE: True})
+        privattrs.append({CKA_DERIVE: False})
 
         # Add keylabel for ALL objects if set
         if keylabel is not None:
