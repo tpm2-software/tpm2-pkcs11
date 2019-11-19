@@ -46,7 +46,7 @@ static void sign_opdata_free(sign_opdata **opdata) {
 }
 
 
-static CK_RV is_off_tpm_hashing_needed(tpm_ctx *tctx, CK_MECHANISM_TYPE mech, bool *is_pkcs1_5_hash_needed) {
+static CK_RV is_off_tpm_hashing_needed(token *t, CK_MECHANISM_TYPE mech, bool *is_pkcs1_5_hash_needed) {
 
     /* all hashing already done, no need to do anything */
     if (mech == CKM_ECDSA
@@ -55,17 +55,17 @@ static CK_RV is_off_tpm_hashing_needed(tpm_ctx *tctx, CK_MECHANISM_TYPE mech, bo
     }
 
     /* does the TPM natively support it? If it does, nothing to do */
-    CK_MECHANISM_TYPE mechs[32];
+    CK_MECHANISM_TYPE mechs[64];
     CK_ULONG count = ARRAY_LEN(mechs);
-    CK_RV rv = tpm2_getmechanisms(tctx, mechs, &count);
+    CK_RV rv = token_get_mechanism_list(t, mechs, &count);
     if (rv != CKR_OK) {
         return rv;
     }
 
     CK_ULONG i;
     for (i=0; i < count; i++) {
-        CK_MECHANISM_TYPE t = mechs[i];
-        if (t == mech) {
+        CK_MECHANISM_TYPE m = mechs[i];
+        if (m == mech) {
             *is_pkcs1_5_hash_needed = false;
             return CKR_OK;
         }
@@ -475,7 +475,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
 
     bool is_raw_sign = utils_mech_is_raw_sign(opdata->mtype);
     bool is_not_tpm_supported_pkcs1_5 = false;
-    rv = is_off_tpm_hashing_needed(tok->tctx, opdata->mtype, &is_not_tpm_supported_pkcs1_5);
+    rv = is_off_tpm_hashing_needed(tok, opdata->mtype, &is_not_tpm_supported_pkcs1_5);
     if (rv != CKR_OK) {
         goto session_out;
     }

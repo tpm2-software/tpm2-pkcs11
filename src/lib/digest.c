@@ -37,7 +37,7 @@ void digest_op_data_free(digest_op_data **opdata) {
     *opdata = NULL;
 }
 
-const EVP_MD *ossl_halg_from_mech(CK_MECHANISM_TYPE mech) {
+static const EVP_MD *ossl_halg_from_mech(CK_MECHANISM_TYPE mech) {
 
     switch(mech) {
         case CKM_SHA_1:
@@ -63,6 +63,11 @@ const EVP_MD *ossl_halg_from_mech(CK_MECHANISM_TYPE mech) {
     }
     /* no return, not possible */
 }
+
+bool digest_is_supported(CK_MECHANISM_TYPE type) {
+    return ossl_halg_from_mech(type) != NULL;
+}
+
 
 static CK_RV digest_sw_init(digest_op_data *opdata) {
 

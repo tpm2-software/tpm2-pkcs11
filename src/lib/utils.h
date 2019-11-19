@@ -20,6 +20,7 @@
 #define str(s) #s
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
+#define ARRAY_BYTES(l, t) (l * sizeof(t[0]))
 
 #define UNUSED(x) (void)x
 

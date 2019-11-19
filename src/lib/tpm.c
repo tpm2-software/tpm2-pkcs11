@@ -26,6 +26,7 @@
 #include <tss2/tss2_tctildr.h>
 
 #include "checks.h"
+#include "digest.h"
 #include "openssl_compat.h"
 #include "pkcs11.h"
 #include "log.h"
@@ -44,6 +45,8 @@ static const char *TPM2_MANUFACTURER_MAP[][2] = {
     {"STM ", "STMicro"}
 };
 
+static TPMS_CAPABILITY_DATA *tpms_fixed_property_cache;
+static TPMS_CAPABILITY_DATA *tpms_alg_cache;
 
 struct tpm_ctx {
     TSS2_TCTI_CONTEXT *tcti_ctx;
@@ -368,12 +371,14 @@ error:
     return CKR_GENERAL_ERROR;
 }
 
+static CK_RV tpm_get_properties(tpm_ctx *ctx, TPMS_CAPABILITY_DATA **d) {
 
-CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
+    if (tpms_fixed_property_cache) {
+        *d = tpms_fixed_property_cache;
+        return CKR_OK;
+    }
 
-    CK_RV rv = CKR_OK;
-    check_pointer(ctx);
-    check_pointer(info);
+    assert(!tpms_fixed_property_cache);
 
     TPM2_CAP capability = TPM2_CAP_TPM_PROPERTIES;
     UINT32 property = TPM2_PT_FIXED;
@@ -387,7 +392,6 @@ CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
         ESYS_TR_NONE,
         capability,
         property, propertyCount, &moreData, &capabilityData);
-
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Esys_GetCapability: 0x%x:", rval);
         return CKR_GENERAL_ERROR;
@@ -396,8 +400,415 @@ CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
     if (!capabilityData ||
         capabilityData->data.tpmProperties.count < TPM2_PT_VENDOR_STRING_4 - TPM2_PT_FIXED + 1) {
         LOGE("TPM did not reply with correct amount of capabilities");
-        rv = CKR_GENERAL_ERROR;
-        goto out;
+        Esys_Free(capabilityData);
+        return CKR_GENERAL_ERROR;
+    }
+
+    *d = tpms_fixed_property_cache = capabilityData;
+    return CKR_OK;
+}
+
+static CK_RV tpm_get_algs(tpm_ctx *ctx, TPMS_CAPABILITY_DATA **d) {
+
+    if (tpms_alg_cache) {
+        *d = tpms_alg_cache;
+        return CKR_OK;
+    }
+
+    assert(!tpms_alg_cache);
+
+    TPM2_CAP capability = TPM2_CAP_ALGS;
+    UINT32 property = TPM2_ALG_FIRST;
+    UINT32 propertyCount = TPM2_MAX_CAP_ALGS;
+    TPMS_CAPABILITY_DATA *capabilityData;
+    TPMI_YES_NO moreData;
+
+    TSS2_RC rval = Esys_GetCapability(ctx->esys_ctx,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        capability,
+        property, propertyCount, &moreData, &capabilityData);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_GetCapability: 0x%x:", rval);
+        return CKR_GENERAL_ERROR;
+    }
+
+    if (!capabilityData ||
+        capabilityData->data.tpmProperties.count < TPM2_PT_VENDOR_STRING_4 - TPM2_PT_FIXED + 1) {
+        LOGE("TPM did not reply with correct amount of capabilities");
+        Esys_Free(capabilityData);
+        return CKR_GENERAL_ERROR;
+    }
+
+    *d = tpms_alg_cache = capabilityData;
+    return CKR_OK;
+}
+
+static CK_RV find_fixed_cap(TPMS_CAPABILITY_DATA *d, TPM2_PT property, CK_ULONG_PTR value) {
+
+    TPML_TAGGED_TPM_PROPERTY *t = &d->data.tpmProperties;
+    TPMS_TAGGED_PROPERTY *p = t->tpmProperty;
+
+    CK_ULONG i;
+    for (i=0; i < t->count; i++) {
+            if (property == p[i].property) {
+                *value = p[i].value;
+                return CKR_OK;
+            }
+    }
+
+    return CKR_MECHANISM_INVALID;
+}
+
+static CK_RV find_alg(TPMS_CAPABILITY_DATA *d, TPM2_ALG_ID alg) {
+
+    TPML_ALG_PROPERTY *t = &d->data.algorithms;
+    TPMS_ALG_PROPERTY *p = t->algProperties;
+
+    CK_ULONG i;
+    for (i=0; i < t->count; i++) {
+            if (alg == p[i].alg) {
+                return CKR_OK;
+            }
+    }
+
+    return CKR_MECHANISM_INVALID;
+}
+
+static TPM2_ALG_ID mech_to_alg(CK_MECHANISM_TYPE mech) {
+
+    switch(mech) {
+        case CKM_AES_CBC:
+            return TPM2_ALG_CBC;
+        case CKM_AES_CFB1:
+            return TPM2_ALG_CFB;
+        case CKM_AES_ECB:
+            return TPM2_ALG_ECB;
+        case CKM_AES_KEY_GEN:
+            return TPM2_ALG_AES;
+        case CKM_RSA_PKCS_KEY_PAIR_GEN:
+            /* falls thru */
+        case CKM_RSA_PKCS:
+            /* falls thru */
+        case CKM_RSA_X_509:
+            /* falls thru */
+        case CKM_RSA_PKCS_OAEP:
+            /* falls thru */
+        case CKM_SHA1_RSA_PKCS:
+            /* falls thru */
+        case CKM_SHA256_RSA_PKCS:
+            /* falls thru */
+        case CKM_SHA384_RSA_PKCS:
+            /* falls thru */
+        case CKM_SHA512_RSA_PKCS:
+            return TPM2_ALG_RSA;
+        case CKM_SHA_1:
+            return TPM2_ALG_SHA1;
+        case CKM_SHA256:
+            return TPM2_ALG_SHA256;
+        case CKM_SHA384:
+            return TPM2_ALG_SHA384;
+        case CKM_SHA512:
+            return TPM2_ALG_SHA512;
+        case CKM_EC_KEY_PAIR_GEN:
+            return TPM2_ALG_ECC;
+        case CKM_ECDSA:
+            /* falls thru */
+        case CKM_ECDSA_SHA1:
+            return TPM2_ALG_ECDSA;
+        default:
+            LOGE("Cannot map mechanism 0x%x onto TPM2 algorithm", mech);
+            return TPM2_ALG_ERROR;
+    }
+}
+
+static CK_RV tpm_find_max_rsa_keysize(tpm_ctx *tctx, CK_ULONG_PTR max) {
+
+    TPMT_PUBLIC_PARMS input = { 0 };
+
+    input.type = TPM2_ALG_RSA;
+    input.parameters.rsaDetail.exponent = 0;
+    input.parameters.rsaDetail.scheme.scheme = TPM2_ALG_NULL;
+    input.parameters.rsaDetail.symmetric.algorithm = TPM2_ALG_NULL;
+
+    CK_ULONG max_found = 0;
+
+    TPM2_KEY_BITS i;
+    for(i=2; i < 5; i++) {
+        input.parameters.rsaDetail.keyBits = 1024 * i; /* 2048, 3072, 4096... */
+        TSS2_RC rval = Esys_TestParms(tctx->esys_ctx,
+                ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &input);
+        if (rval != TSS2_RC_SUCCESS) {
+            if ((rval & (TPM2_RC_P | TPM2_RC_1)) == (TPM2_RC_P | TPM2_RC_1)) {
+                rval &= ~(TPM2_RC_P | TPM2_RC_1);
+                if (rval == TPM2_RC_KEY_SIZE || rval == TPM2_RC_VALUE) {
+                    continue;
+                } else {
+                    return CKR_MECHANISM_INVALID;
+                }
+            }
+            return CKR_GENERAL_ERROR;
+        }
+
+        /* key size was good */
+        if (max_found < input.parameters.rsaDetail.keyBits) {
+            max_found = input.parameters.rsaDetail.keyBits;
+        }
+    }
+
+    *max = max_found;
+
+    return CKR_OK;
+}
+
+static CK_RV tpm_find_ecc_keysizes(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR max) {
+
+    TPMT_PUBLIC_PARMS input = { 0 };
+
+    input.type = TPM2_ALG_ECC;
+    input.parameters.eccDetail.kdf.scheme = TPM2_ALG_NULL;
+    input.parameters.eccDetail.scheme.scheme = TPM2_ALG_NULL;
+    input.parameters.eccDetail.symmetric.algorithm = TPM2_ALG_NULL;
+
+    struct {
+        TPM2_ALG_ID alg;
+        unsigned size;
+    } tests[] = {
+        { TPM2_ECC_NIST_P192, 192 * 8 },
+        { TPM2_ECC_NIST_P224, 224 * 8 },
+        { TPM2_ECC_NIST_P256, 256 * 8 },
+        { TPM2_ECC_NIST_P384, 384 * 8 },
+        { TPM2_ECC_NIST_P521, 521 * 8 },
+        { TPM2_ECC_BN_P256,   256 * 8 },
+        { TPM2_ECC_BN_P638,   638 * 8 },
+        { TPM2_ECC_SM2_P256,  256 * 8 },
+    };
+
+    CK_ULONG found_max = 0;
+    CK_ULONG found_min = ~0;
+
+    TPM2_ALG_ID i;
+    for(i=0; i < ARRAY_LEN(tests); i++) {
+        input.parameters.eccDetail.curveID = tests[i].alg;
+        TSS2_RC rval = Esys_TestParms(tctx->esys_ctx,
+                ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &input);
+        if (rval != TSS2_RC_SUCCESS) {
+            if ((rval & (TPM2_RC_P | TPM2_RC_1)) == (TPM2_RC_P | TPM2_RC_1)) {
+                rval &= ~(TPM2_RC_P | TPM2_RC_1);
+                if (rval == TPM2_RC_CURVE) {
+                    continue;
+                } else {
+                    return CKR_MECHANISM_INVALID;
+                }
+            }
+            return CKR_GENERAL_ERROR;
+        }
+
+        if (tests[i].size > found_max) {
+            found_max = tests[i].size;
+        }
+
+        if (tests[i].size < found_min) {
+            found_min = tests[i].size;
+        }
+
+    }
+
+    *max = found_max;
+    *min = found_min;
+
+    return CKR_OK;
+}
+
+static CK_RV handle_aes_mech_info(CK_MECHANISM_TYPE t,
+        TPMS_CAPABILITY_DATA *p, TPMS_CAPABILITY_DATA *a,
+        CK_MECHANISM_INFO_PTR info, CK_FLAGS flag) {
+
+    /* map pkcs11 alg onto tpm2 alg */
+    TPM2_ALG_ID alg = mech_to_alg(t);
+    if (alg == TPM2_ALG_ERROR) {
+        return CKR_MECHANISM_INVALID;
+    }
+
+    /* is tpm2 alg supported? */
+    CK_RV rv = find_alg(a, alg);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    /* ok it's supported, what are the key sizes? */
+    CK_ULONG max;
+
+    rv = find_fixed_cap(p, TPM2_PT_CONTEXT_SYM_SIZE, &max);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    /* if it's supported 128bites is min by spec IIUC */
+    /* convert to bytes for return values */
+    info->ulMinKeySize = 128/8;
+    info->ulMaxKeySize = max/8;
+    info->flags = flag;
+
+    return rv;
+}
+
+static CK_RV handle_rsa_mech_info(tpm_ctx *tctx, CK_MECHANISM_TYPE t,
+        TPMS_CAPABILITY_DATA *a,
+        CK_MECHANISM_INFO_PTR info, CK_FLAGS flag) {
+
+    /* map pkcs11 alg onto tpm2 alg */
+    TPM2_ALG_ID alg = mech_to_alg(t);
+    if (alg == TPM2_ALG_ERROR) {
+        return CKR_MECHANISM_INVALID;
+    }
+
+    /* is tpm2 alg supported? */
+    CK_RV rv = find_alg(a, alg);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    /* ok it's supported, what are the key sizes? */
+    CK_ULONG max;
+    rv = tpm_find_max_rsa_keysize(tctx, &max);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    /* if it's supported 1024 is min by spec IIUC */
+    info->ulMinKeySize = 1024;
+    info->ulMaxKeySize = max;
+    info->flags = flag;
+
+    return rv;
+}
+
+static CK_RV handle_ecc_mech_info(tpm_ctx *tctx, CK_MECHANISM_TYPE t,
+        TPMS_CAPABILITY_DATA *a,
+        CK_MECHANISM_INFO_PTR info, CK_FLAGS flag) {
+
+    /* map pkcs11 alg onto tpm2 alg */
+    TPM2_ALG_ID alg = mech_to_alg(t);
+    if (alg == TPM2_ALG_ERROR) {
+        return CKR_MECHANISM_INVALID;
+    }
+
+    /* is tpm2 alg supported? */
+    CK_RV rv = find_alg(a, alg);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    /* ok it's supported, what are the key sizes? */
+    CK_ULONG max, min;
+    rv = tpm_find_ecc_keysizes(tctx, &min, &max);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    /* TPM reports bits, pkcs11 expects bytes */
+    info->ulMinKeySize = min/8;
+    info->ulMaxKeySize = max/8;
+    info->flags = flag;
+
+    return rv;
+}
+
+static CK_RV handle_hash_mech_info(CK_MECHANISM_TYPE t, CK_MECHANISM_INFO_PTR info) {
+
+    /*
+     * TODO this should be moved out of TPM layer perhaps? or all hashing should
+     * be brought into TPM layer for consistency
+     */
+    bool is_supported = digest_is_supported(t);
+    if (!is_supported) {
+        return CKR_MECHANISM_INVALID;
+    }
+
+    info->ulMinKeySize = 0;
+    info->ulMaxKeySize = 0;
+    info->flags = CKF_DIGEST;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_get_mech_info(tpm_ctx *ctx, CK_MECHANISM_TYPE t, CK_MECHANISM_INFO_PTR info) {
+
+    check_pointer(ctx);
+    check_pointer(info);
+
+    TPMS_CAPABILITY_DATA *fixed_property_data = NULL;
+    CK_RV rv = tpm_get_properties(ctx, &fixed_property_data);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    TPMS_CAPABILITY_DATA *alg_property_data = NULL;
+    rv = tpm_get_algs(ctx, &alg_property_data);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    CK_FLAGS flags = 0;
+
+    switch(t) {
+    /* AES based crypto */
+    case CKM_AES_KEY_GEN:
+        flags = CKF_GENERATE;
+        /* fall-thru */
+    case CKM_AES_CBC:
+    case CKM_AES_CFB1:
+    case CKM_AES_ECB:
+        flags |= CKF_HW;
+        return handle_aes_mech_info(t, fixed_property_data, alg_property_data, info, flags);
+    /* RSA based crypto */
+    case CKM_RSA_PKCS_KEY_PAIR_GEN:
+        flags = CKF_HW | CKF_GENERATE_KEY_PAIR;
+        return handle_rsa_mech_info(ctx, t, alg_property_data, info, flags);
+    case CKM_RSA_PKCS:
+    case CKM_RSA_X_509:
+        flags = CKF_HW | CKF_ENCRYPT | CKF_DECRYPT | CKF_SIGN | CKF_VERIFY;
+        return handle_rsa_mech_info(ctx, t, alg_property_data, info, flags);
+    case CKM_RSA_PKCS_OAEP:
+        flags = CKF_HW | CKF_ENCRYPT| CKF_DECRYPT;
+        return handle_rsa_mech_info(ctx, t, alg_property_data, info, flags);
+    case CKM_SHA1_RSA_PKCS:
+    case CKM_SHA256_RSA_PKCS:
+    case CKM_SHA384_RSA_PKCS:
+    case CKM_SHA512_RSA_PKCS:
+        flags = CKF_HW | CKF_SIGN | CKF_VERIFY;
+        return handle_rsa_mech_info(ctx, t, alg_property_data, info, flags);
+    case CKM_EC_KEY_PAIR_GEN:
+        flags = CKF_HW | CKF_GENERATE_KEY_PAIR;
+        return handle_ecc_mech_info(ctx, t, alg_property_data, info, flags);
+    case CKM_ECDSA:
+    case CKM_ECDSA_SHA1:
+        flags = CKF_HW | CKF_SIGN | CKF_VERIFY;
+        return handle_ecc_mech_info(ctx, t, alg_property_data, info, flags);
+    /* Hashes */
+    case CKM_SHA_1:
+    case CKM_SHA256:
+    case CKM_SHA384:
+    case CKM_SHA512:
+        return handle_hash_mech_info(t, info);
+        /* no default */
+    }
+
+    return CKR_MECHANISM_INVALID;
+}
+
+CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
+
+    check_pointer(ctx);
+    check_pointer(info);
+
+    TPMS_CAPABILITY_DATA *capabilityData = NULL;
+
+    CK_RV rv = tpm_get_properties(ctx, &capabilityData);
+    if (rv !=CKR_OK) {
+        return rv;
     }
 
     TPMS_TAGGED_PROPERTY *tpmProperties = capabilityData->data.tpmProperties.tpmProperty;
@@ -438,9 +849,7 @@ CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
     vendor[3] = ntohl(tpmProperties[TPM2_PT_VENDOR_STRING_4 - TPM2_PT_FIXED].value);
     str_padded_copy(info->model, (unsigned char*) &vendor, sizeof(info->model));
 
-out:
-    free (capabilityData);
-    return rv;
+    return CKR_OK;
 }
 
 bool tpm_getrandom(tpm_ctx *ctx, BYTE *data, size_t size) {
@@ -2465,7 +2874,7 @@ void tpm_objdata_free(tpm_object_data *objdata) {
 
 }
 
-static CK_RV tpm_get_algorithms (tpm_ctx *ctx, TPMS_CAPABILITY_DATA **capabilityData) {
+CK_RV tpm_get_algorithms (tpm_ctx *ctx, TPMS_CAPABILITY_DATA **capabilityData) {
 
     TPM2_CAP capability = TPM2_CAP_ALGS;
     UINT32 property = TPM2_ALG_FIRST;
@@ -2578,4 +2987,13 @@ out:
 
     return rv;
 
+}
+
+void tpm_init(void) {
+    /* nothing to do */
+}
+
+void tpm_destroy(void) {
+    Esys_Free(tpms_fixed_property_cache);
+    Esys_Free(tpms_alg_cache);
 }
