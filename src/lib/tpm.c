@@ -2087,9 +2087,7 @@ struct tpm_key_data {
 UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_BBOOL)
 UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_ULONG)
 
-static CK_RV generic_bbool_true(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
-    UNUSED(udata);
-    UNUSED(index);
+static CK_RV generic_bbool_check(CK_ATTRIBUTE_PTR attr, CK_BBOOL check) {
 
     CK_BBOOL value;
     CK_RV rv = generic_CK_BBOOL(attr, &value);
@@ -2097,11 +2095,26 @@ static CK_RV generic_bbool_true(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *uda
         return rv;
     }
 
-    if (value != CK_TRUE) {
+    if (value != check) {
+        LOGE("Expected attr 0x%x to be %u, got %u", attr->type, value, check);
         return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 
     return CKR_OK;
+}
+
+static CK_RV generic_bbool_true(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+    UNUSED(udata);
+    UNUSED(index);
+
+    return generic_bbool_check(attr, CK_TRUE);
+}
+
+static CK_RV generic_bbool_false(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
+    UNUSED(udata);
+    UNUSED(index);
+
+    return generic_bbool_check(attr, CK_FALSE);
 }
 
 static CK_RV generic_bbool_any(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *udata) {
@@ -2344,6 +2357,15 @@ static const attr_handler tpm_handlers[] = {
     { CKA_EC_POINT,        ATTR_HANDLER_IGNORE   }, // TODO PH
     { CKA_KEY_TYPE,        handle_key_type       },
     { CKA_ALWAYS_AUTHENTICATE, ATTR_HANDLER_IGNORE }, // can't really enforce with tpm, sw emulated.
+
+    { CKA_PUBLIC_KEY_INFO,   ATTR_HANDLER_IGNORE },
+    { CKA_TRUSTED,           generic_bbool_false },
+    { CKA_WRAP_WITH_TRUSTED, generic_bbool_false },
+    { CKA_WRAP,              generic_bbool_false },
+    { CKA_UNWRAP,            generic_bbool_false },
+    { CKA_SIGN_RECOVER,      generic_bbool_false },
+    { CKA_VERIFY_RECOVER,    generic_bbool_false },
+    { CKA_DERIVE,            generic_bbool_false },
 };
 
 static TSS2_RC create_loaded(
@@ -2515,7 +2537,7 @@ static CK_RV tpm_data_init(CK_MECHANISM_PTR mechanism,
 
         CK_RV rv = utils_handle_attrs(tpm_handlers, ARRAY_LEN(tpm_handlers), cur, max, tpmdat);
         if (rv != CKR_OK) {
-            LOGE("Could not process attributes");
+            LOGE("Could not process attributes: 0x%x", cur->type);
             return rv;
         }
     }
