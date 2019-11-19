@@ -22,6 +22,8 @@ struct digest_op_data {
     EVP_MD_CTX *mdctx;
 };
 
+bool digest_is_supported(CK_MECHANISM_TYPE type);
+
 digest_op_data *digest_op_data_new(void);
 void digest_op_data_free(digest_op_data **opdata);
 

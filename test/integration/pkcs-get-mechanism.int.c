@@ -119,7 +119,7 @@ void test_get_mechanism_info_good(void **state) {
 
     assert_int_equal(mech_info.ulMaxKeySize, 256/8);
     assert_int_equal(mech_info.ulMinKeySize, 128/8);
-    assert_int_equal(mech_info.flags, CKF_GENERATE);
+    assert_int_equal(mech_info.flags, CKF_GENERATE|CKF_HW);
 
     /* Test all other mechanisms */
     CK_ULONG aes_mechs[] = {
@@ -133,40 +133,47 @@ void test_get_mechanism_info_good(void **state) {
 
         assert_int_equal(mech_info.ulMinKeySize, 128/8);
         assert_int_equal(mech_info.ulMaxKeySize, 256/8);
-        assert_int_equal(mech_info.flags, 0);
+        assert_int_equal(mech_info.flags, CKF_HW);
     }
 
-    CK_ULONG rsa_mechs[] = {
-        CKM_RSA_PKCS_KEY_PAIR_GEN,
-        CKM_RSA_PKCS,
-        CKM_RSA_X_509,
-        CKM_RSA_PKCS_OAEP,
-        CKM_SHA1_RSA_PKCS,
-        CKM_SHA256_RSA_PKCS,
-        CKM_SHA384_RSA_PKCS,
-        CKM_SHA512_RSA_PKCS,
+    struct {
+        CK_ULONG mech;
+        CK_FLAGS flags;
+    } rsa_mechs[] = {
+        { CKM_RSA_PKCS_KEY_PAIR_GEN, CKF_HW | CKF_GENERATE_KEY_PAIR                             },
+        { CKM_RSA_PKCS,              CKF_HW | CKF_ENCRYPT | CKF_DECRYPT | CKF_SIGN | CKF_VERIFY },
+        { CKM_RSA_X_509,             CKF_HW | CKF_ENCRYPT | CKF_DECRYPT | CKF_SIGN | CKF_VERIFY },
+        { CKM_RSA_PKCS_OAEP,         CKF_HW | CKF_ENCRYPT | CKF_DECRYPT                         },
+        { CKM_SHA1_RSA_PKCS,         CKF_HW | CKF_SIGN    | CKF_VERIFY                          },
+        { CKM_SHA256_RSA_PKCS,       CKF_HW | CKF_SIGN    | CKF_VERIFY                          },
+        { CKM_SHA384_RSA_PKCS,       CKF_HW | CKF_SIGN    | CKF_VERIFY                          },
+        { CKM_SHA512_RSA_PKCS,       CKF_HW | CKF_SIGN    | CKF_VERIFY                          },
     };
     for (size_t i = 0; i < ARRAY_LEN(rsa_mechs); i++) {
-        rv = C_GetMechanismInfo(slot_id, rsa_mechs[i], &mech_info);
+        rv = C_GetMechanismInfo(slot_id, rsa_mechs[i].mech, &mech_info);
         assert_int_equal(rv, CKR_OK);
 
         assert_int_equal(mech_info.ulMinKeySize, 1024);
         assert_int_equal(mech_info.ulMaxKeySize, 2048);
-        assert_int_not_equal(mech_info.flags, 0);
+        assert_int_equal(mech_info.flags, rsa_mechs[i].flags);
     }
 
-    CK_ULONG ecc_mechs[] = {
-        CKM_EC_KEY_PAIR_GEN,
-        CKM_ECDSA,
-        CKM_ECDSA_SHA1,
+    struct {
+        CK_ULONG mech;
+        CK_FLAGS flags;
+    } ecc_mechs[] = {
+        { CKM_EC_KEY_PAIR_GEN, CKF_HW | CKF_GENERATE_KEY_PAIR              },
+        { CKM_ECDSA,           CKF_HW | CKF_SIGN              | CKF_VERIFY },
+        { CKM_ECDSA_SHA1,      CKF_HW | CKF_SIGN              | CKF_VERIFY },
     };
+
     for (size_t i = 0; i < ARRAY_LEN(ecc_mechs); i++) {
-        rv = C_GetMechanismInfo(slot_id, ecc_mechs[i], &mech_info);
+        rv = C_GetMechanismInfo(slot_id, ecc_mechs[i].mech, &mech_info);
         assert_int_equal(rv, CKR_OK);
 
         assert_int_equal(mech_info.ulMinKeySize, 256);
         assert_int_equal(mech_info.ulMaxKeySize, 384);
-        assert_int_not_equal(mech_info.flags, 0);
+        assert_int_equal(mech_info.flags, ecc_mechs[i].flags);
     }
 
     CK_ULONG hash_mechs[] = {
@@ -179,7 +186,7 @@ void test_get_mechanism_info_good(void **state) {
 
         assert_int_equal(mech_info.ulMinKeySize, 0);
         assert_int_equal(mech_info.ulMaxKeySize, 0);
-        assert_int_not_equal(mech_info.flags, 0);
+        assert_int_equal(mech_info.flags, CKF_DIGEST);
     }
 }
 

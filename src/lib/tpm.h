@@ -54,6 +54,8 @@ CK_RV tpm_ctx_new(const char *tcti, tpm_ctx **tctx);
  */
 CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info);
 
+CK_RV tpm_get_mech_info(tpm_ctx *ctx, CK_MECHANISM_TYPE t, CK_MECHANISM_INFO_PTR info);
+
 /**
  * Generates random bytes from the TPM
  * @param ctx
@@ -182,5 +184,9 @@ CK_RV tpm2_generate_key(
         tpm_object_data *objdata);
 
 CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULONG_PTR count);
+
+void tpm_init(void);
+
+void tpm_destroy(void);
 
 #endif /* SRC_PKCS11_TPM_H_ */
