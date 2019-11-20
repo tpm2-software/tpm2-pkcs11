@@ -32,6 +32,8 @@ static int test_setup(void **state) {
     /* assign to state */
     info->session = session;
 
+    user_login(session);
+
     *state = info;
 
     /* success */
@@ -72,6 +74,10 @@ static int test_setup_by_label(void **state) {
             NULL, &session);
     assert_int_equal(rv, CKR_OK);
 
+    unsigned char upin[] = IMPORT_LABEL_USERPIN;
+    rv = C_Login(session, CKU_USER, upin, sizeof(upin)-1);
+    assert_int_equal(rv, CKR_OK);
+
     /* assign to state */
     info->session = session;
 
@@ -85,7 +91,10 @@ static int test_teardown(void **state) {
 
     test_info *ti = test_info_from_state(state);
 
-    CK_RV rv = C_CloseSession(ti->session);
+    CK_RV rv = C_Logout(ti->session);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_CloseSession(ti->session);
     assert_int_equal(rv, CKR_OK);
 
     free(ti);
@@ -161,7 +170,7 @@ static void test_find_objects_by_label(void **state) {
     do_test_find_objects_by_label(state, "mykeylabel", 1);
 }
 
-static void test_find_imprted_objects_by_label(void **state) {
+static void test_find_imported_objects_by_label(void **state) {
 
     /* imported key has a label duplicated on public and private portions */
     do_test_find_objects_by_label(state, "imported_key", 2);
@@ -197,7 +206,7 @@ int main() {
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_find_objects_via_empty_template,
                 test_setup, test_teardown),
-        cmocka_unit_test_setup_teardown(test_find_imprted_objects_by_label,
+        cmocka_unit_test_setup_teardown(test_find_imported_objects_by_label,
                 test_setup_by_label, test_teardown),
     };
 

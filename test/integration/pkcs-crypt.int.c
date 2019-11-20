@@ -10,7 +10,6 @@
 struct test_info {
     CK_SESSION_HANDLE handle;
     CK_SLOT_ID slot;
-    bool is_logged_in;
     struct {
         CK_OBJECT_HANDLE aes;
         CK_OBJECT_HANDLE aes_always_auth;
@@ -46,6 +45,8 @@ static int test_setup(void **state) {
       {CKA_KEY_TYPE, &key_type, sizeof(key_type)},
       {CKA_ALWAYS_AUTHENTICATE, &_false, sizeof(_false)},
     };
+
+    user_login(handle);
 
     rv = C_FindObjectsInit(handle, tmpl, ARRAY_LEN(tmpl));
     assert_int_equal(rv, CKR_OK);
@@ -110,12 +111,10 @@ static int test_teardown(void **state) {
 
     test_info *ti = test_info_from_state(state);
 
-    if (ti->is_logged_in) {
-        CK_RV rv = C_Logout(ti->handle);
-        assert_int_equal(rv, CKR_OK);
-    }
+    CK_RV rv = C_Logout(ti->handle);
+    assert_int_equal(rv, CKR_OK);
 
-    CK_RV rv = C_CloseSession(ti->handle);
+    rv = C_CloseSession(ti->handle);
     assert_int_equal(rv, CKR_OK);
 
     free(ti);
@@ -123,20 +122,11 @@ static int test_teardown(void **state) {
     return 0;
 }
 
-static void do_login(test_info *ti) {
-
-    user_login(ti->handle);
-    ti->is_logged_in = true;
-}
-
 static void test_aes_encrypt_decrypt_good(void **state) {
 
     test_info *ti = test_info_from_state(state);
 
     CK_SESSION_HANDLE session = ti->handle;
-
-    /* now that we have an object, login */
-    do_login(ti);
 
     /* init encryption */
     CK_BYTE iv[16] = {
@@ -210,9 +200,6 @@ static void test_aes_encrypt_decrypt_5_2_returns(void **state) {
     test_info *ti = test_info_from_state(state);
 
     CK_SESSION_HANDLE session = ti->handle;
-
-    /* now that we have an object, login */
-    do_login(ti);
 
     /* init encryption */
     CK_BYTE iv[16] = {
@@ -318,8 +305,6 @@ static void test_aes_encrypt_decrypt_oneshot_good(void **state) {
 
     CK_SESSION_HANDLE session = ti->handle;
 
-    do_login(ti);
-
     /* init encryption */
     CK_BYTE iv[16] = {
         0xDE, 0xAD, 0xBE, 0xEF,
@@ -372,8 +357,6 @@ static void test_aes_encrypt_decrypt_oneshot_5_2_returns(void **state) {
     test_info *ti = test_info_from_state(state);
 
     CK_SESSION_HANDLE session = ti->handle;
-
-    do_login(ti);
 
     /* init encryption */
     CK_BYTE iv[16] = {
@@ -461,8 +444,6 @@ static void test_rsa_oaep_encrypt_decrypt_oneshot_good(void **state) {
 
     CK_SESSION_HANDLE session = ti->handle;
 
-    do_login(ti);
-
     CK_RSA_PKCS_OAEP_PARAMS params = {
         .hashAlg = CKM_SHA256,
         .pSourceData = MGF1_LABEL,
@@ -536,6 +517,9 @@ static void test_aes_always_authenticate(void **state) {
 
     CK_SESSION_HANDLE session = ti->handle;
 
+    CK_RV rv = C_Logout(session);
+    assert_int_equal(rv, CKR_OK);
+
     /* context specific require C_Login(USER) before */
     context_login_expects(session, CKR_USER_NOT_LOGGED_IN);
 
@@ -565,7 +549,7 @@ static void test_aes_always_authenticate(void **state) {
     CK_BYTE ciphertext[sizeof(plaintext)] = { 0 };
 
     /* init */
-    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.aes_always_auth);
+    rv = C_EncryptInit(session, &mechanism, ti->objects.aes_always_auth);
     assert_int_equal(rv, CKR_OK);
 
     /* shouldn't be able to perform actual operation */

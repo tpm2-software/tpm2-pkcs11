@@ -80,6 +80,8 @@ CK_RV token_get_info(token *t, CK_TOKEN_INFO *info);
  */
 bool token_is_any_user_logged_in(token *tok);
 
+bool token_is_user_logged_in(token *tok);
+
 /**
  * TODO
  * @param tok

@@ -42,9 +42,12 @@ static int test_setup(void **state) {
     rv = C_FindObjectsInit(hSession, tmpl, ARRAY_LEN(tmpl));
     assert_int_equal(rv, CKR_OK);
 
+    user_login(hSession);
+
     CK_OBJECT_HANDLE objhandles[1024];
     rv = C_FindObjects(hSession, objhandles, ARRAY_LEN(objhandles), &count);
     assert_int_equal(rv, CKR_OK);
+    assert_true(count >= 1);
 
     rv = C_FindObjectsFinal(hSession);
     assert_int_equal(rv, CKR_OK);

@@ -18,6 +18,7 @@
 typedef struct tobject_match_list tobject_match_list;
 struct tobject_match_list {
     CK_OBJECT_HANDLE tobj_handle;
+    CK_OBJECT_CLASS class;
     tobject_match_list *next;
 };
 
@@ -217,6 +218,31 @@ static object_find_data *object_find_data_new(void) {
     return calloc(1, sizeof(object_find_data));
 }
 
+UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_ULONG);
+
+static CK_RV do_match_set(tobject_match_list *match_cur, tobject *tobj) {
+
+    match_cur->tobj_handle = tobj->id;
+
+    CK_ATTRIBUTE_PTR a = util_get_attribute_by_type(CKA_CLASS,
+            tobj->attrs.attrs, tobj->attrs.count);
+    if (!a) {
+        LOGE("Objects must have CK_OBJECT_CLASS");
+        assert(0);
+        return CKR_GENERAL_ERROR;
+    }
+
+    CK_OBJECT_CLASS objclass;
+    CK_RV rv = generic_CK_ULONG(a, &objclass);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    match_cur->class = objclass;
+
+    return CKR_OK;
+}
+
 CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
 
     // if count is 0 template is not used and all objects are requested so templ can be NULL.
@@ -270,7 +296,7 @@ CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, CK_ULONG count)
             }
 
             match_cur = fd->head;
-            match_cur->tobj_handle = tobj->id;
+
         } else {
             assert(match_cur);
             match_cur->next = calloc(1, sizeof(*match_cur));
@@ -279,8 +305,12 @@ CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, CK_ULONG count)
                 goto out;
             }
 
-            match_cur->next->tobj_handle = tobj->id;
             match_cur = match_cur->next;
+        }
+
+        rv = do_match_set(match_cur, tobj);
+        if (rv != CKR_OK) {
+            goto out;
         }
     }
 
@@ -300,12 +330,15 @@ out:
     return rv;
 }
 
+static bool is_not_public(tobject_match_list *match) {
+
+    return match->class == CKO_SECRET_KEY || match->class == CKO_PRIVATE_KEY;
+}
+
 CK_RV object_find(session_ctx *ctx, CK_OBJECT_HANDLE *object, CK_ULONG max_object_count, CK_ULONG_PTR object_count) {
 
     check_pointer(object);
     check_pointer(object_count);
-
-    UNUSED(max_object_count);
 
     CK_RV rv = CKR_OK;
 
@@ -315,11 +348,21 @@ CK_RV object_find(session_ctx *ctx, CK_OBJECT_HANDLE *object, CK_ULONG max_objec
         return rv;
     }
 
+    token *tok = session_ctx_get_token(ctx);
+    assert(tok);
+
     CK_ULONG count = 0;
     while(opdata->cur && count < max_object_count) {
 
         // Get the current object, and grab it's id for the object handle
         CK_OBJECT_HANDLE handle = opdata->cur->tobj_handle;
+
+        // filter out CKO_PRIVATE and CKO_SECRET if not logged in
+        if (token_is_user_logged_in(tok) && is_not_public(opdata->cur)) {
+            max_object_count--;
+            continue;
+        }
+
         object[count] = handle;
 
         // Update our iterator

@@ -34,6 +34,8 @@
 #define BAD_USERPIN "myBADuserpin"
 #define BAD_SOPIN   "myBADsopin"
 
+#define IMPORT_LABEL_USERPIN "anotheruserpin"
+
 typedef struct test_info test_info;
 
 #define GENERIC_ATTR_TYPE_CONVERT(T) \
