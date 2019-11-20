@@ -1,9 +1,5 @@
 /* src/lib/config.h.in.  Generated from configure.ac by autoheader.  */
 
-/* Some versions of libc cause a sigsegv on exit with dlcolse(), this disables
-   the dlclose() and works around that bug */
-#undef DISABLE_DLCLOSE
-
 /* ESAPI versions below 2.2.1 are known to require manual session flag
    management. */
 #undef ESAPI_MANAGE_FLAGS
