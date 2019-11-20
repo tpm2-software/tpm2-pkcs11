@@ -408,7 +408,7 @@ static CK_RV find_object_by_id(token *tok, CK_OBJECT_HANDLE handle, bool inc, to
         cur = cur->next;
     }
 
-    return CK_INVALID_HANDLE;
+    return CKR_OBJECT_HANDLE_INVALID;
 }
 
 CK_ATTRIBUTE_PTR tobject_get_attribute_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE needle) {
