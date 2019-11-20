@@ -122,6 +122,11 @@ bool token_is_any_user_logged_in(token *tok) {
     return tok->login_state != token_no_one_logged_in;
 }
 
+bool token_is_user_logged_in(token *tok) {
+
+    return tok->login_state != token_user_logged_in;
+}
+
 void token_lock(token *t) {
     mutex_lock_fatal(t->mutex);
 }

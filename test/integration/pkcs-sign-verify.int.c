@@ -122,6 +122,8 @@ static void test_sign_verify_CKM_RSA_PKCS_sha256(void **state) {
     CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
     assert_int_equal(rv, CKR_OK);
 
+    user_login(session);
+
     /* Find an RSA key */
     CK_ULONG count;
     CK_OBJECT_HANDLE objhandles[1];
@@ -134,8 +136,6 @@ static void test_sign_verify_CKM_RSA_PKCS_sha256(void **state) {
 
     rv = C_FindObjectsFinal(session);
     assert_int_equal(rv, CKR_OK);
-
-    user_login(session);
 
     /*
      * Now that we have a key for sign, build up what we need to sign,
@@ -205,6 +205,8 @@ static void test_sign_verify_CKM_RSA_PKCS_5_2_returns(void **state) {
     CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
     assert_int_equal(rv, CKR_OK);
 
+    user_login(session);
+
     /* Find an RSA key */
     unsigned long count;
     CK_OBJECT_HANDLE objhandles[1];
@@ -217,8 +219,6 @@ static void test_sign_verify_CKM_RSA_PKCS_5_2_returns(void **state) {
 
     rv = C_FindObjectsFinal(session);
     assert_int_equal(rv, CKR_OK);
-
-    user_login(session);
 
     /*
      * Now that we have a key for sign, build up what we need to sign,
@@ -315,6 +315,8 @@ static void test_sign_verify_CKM_RSA_PKCS_sha512(void **state) {
     CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
     assert_int_equal(rv, CKR_OK);
 
+    user_login(session);
+
     /* Find an RSA key */
     CK_ULONG count;
     CK_OBJECT_HANDLE objhandles[1];
@@ -327,8 +329,6 @@ static void test_sign_verify_CKM_RSA_PKCS_sha512(void **state) {
 
     rv = C_FindObjectsFinal(session);
     assert_int_equal(rv, CKR_OK);
-
-    user_login(session);
 
     /*
      * Now that we have a key for sign, build up what we need to sign,
@@ -391,9 +391,9 @@ static void test_sign_verify_CKM_ECDSA(void **state) {
     CK_OBJECT_HANDLE pubkey;
     CK_OBJECT_HANDLE privkey;
 
-    get_keypair(session, CKK_EC, &pubkey, &privkey);
-
     user_login(session);
+
+    get_keypair(session, CKK_EC, &pubkey, &privkey);
 
     /* verify that we can use it via a sign operation */
     CK_MECHANISM mech = { .mechanism = CKM_ECDSA };
@@ -459,6 +459,8 @@ static void test_sign_verify_CKM_ECDSA_SHA1(void **state) {
     CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
     assert_int_equal(rv, CKR_OK);
 
+    user_login(session);
+
     /* Find an EC key */
     CK_ULONG count;
     CK_OBJECT_HANDLE objhandles[1];
@@ -468,8 +470,6 @@ static void test_sign_verify_CKM_ECDSA_SHA1(void **state) {
 
     rv = C_FindObjectsFinal(session);
     assert_int_equal(rv, CKR_OK);
-
-    user_login(session);
 
     CK_MECHANISM mech = { .mechanism = CKM_ECDSA_SHA1 };
 
@@ -513,6 +513,8 @@ static void test_double_sign_call_for_size_SHA256(void **state) {
     CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
     assert_int_equal(rv, CKR_OK);
 
+    user_login(session);
+
     /* Find an RSA key */
     unsigned long count;
     CK_OBJECT_HANDLE objhandles[1];
@@ -525,8 +527,6 @@ static void test_double_sign_call_for_size_SHA256(void **state) {
 
     rv = C_FindObjectsFinal(session);
     assert_int_equal(rv, CKR_OK);
-
-    user_login(session);
 
     /* initialize a signing operation */
     CK_MECHANISM mech = { .mechanism = CKM_SHA256_RSA_PKCS };
@@ -569,6 +569,8 @@ static void test_double_sign_call_for_size_SHA512(void **state) {
     CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
     assert_int_equal(rv, CKR_OK);
 
+    user_login(session);
+
     /* Find an RSA key */
     unsigned long count;
     CK_OBJECT_HANDLE objhandles[1];
@@ -581,8 +583,6 @@ static void test_double_sign_call_for_size_SHA512(void **state) {
 
     rv = C_FindObjectsFinal(session);
     assert_int_equal(rv, CKR_OK);
-
-    user_login(session);
 
     /* initialize a signing operation */
     CK_MECHANISM mech = { .mechanism = CKM_SHA512_RSA_PKCS };
@@ -624,6 +624,8 @@ static void test_double_sign_final_call_for_size_SHA256(void **state) {
     CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
     assert_int_equal(rv, CKR_OK);
 
+    user_login(session);
+
     /* Find an RSA key */
     unsigned long count;
     CK_OBJECT_HANDLE objhandles[1];
@@ -636,8 +638,6 @@ static void test_double_sign_final_call_for_size_SHA256(void **state) {
 
     rv = C_FindObjectsFinal(session);
     assert_int_equal(rv, CKR_OK);
-
-    user_login(session);
 
     /* initialize a signing operation */
     CK_MECHANISM mech = { .mechanism = CKM_SHA256_RSA_PKCS };
@@ -678,6 +678,8 @@ static void test_double_sign_final_call_for_size_SHA512(void **state) {
     CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
     assert_int_equal(rv, CKR_OK);
 
+    user_login(session);
+
     /* Find an RSA key */
     unsigned long count;
     CK_OBJECT_HANDLE objhandles[1];
@@ -690,8 +692,6 @@ static void test_double_sign_final_call_for_size_SHA512(void **state) {
 
     rv = C_FindObjectsFinal(session);
     assert_int_equal(rv, CKR_OK);
-
-    user_login(session);
 
     /* initialize a signing operation */
     CK_MECHANISM mech = { .mechanism = CKM_SHA512_RSA_PKCS };
@@ -805,9 +805,10 @@ static void test_sign_verify_public(void **state) {
 
     CK_OBJECT_HANDLE priv_handle;
     CK_OBJECT_HANDLE pub_handle;
-    get_keypair(session, CKK_RSA, &pub_handle, &priv_handle);
 
     user_login(session);
+
+    get_keypair(session, CKK_RSA, &pub_handle, &priv_handle);
 
     /*
      * Now that we have a key for sign, build up what we need to sign,
@@ -861,12 +862,17 @@ static void test_sign_verify_context_specific_good(void **state) {
     CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
     assert_int_equal(rv, CKR_OK);
 
+    user_login(session);
+
     /* Find an RSA key w/CKA_ALWAYS_AUTHENTICATE set */
     CK_ULONG count;
     CK_OBJECT_HANDLE objhandles[1];
     rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(count, 1);
+
+    rv = C_Logout(session);
+    assert_int_equal(rv, CKR_OK);
 
     rv = C_FindObjectsFinal(session);
     assert_int_equal(rv, CKR_OK);
