@@ -5,11 +5,6 @@
  * All rights reserved.
  ***********************************************************************/
 
-#include <openssl/evp.h>
-#include <openssl/rsa.h>
-#include <openssl/bn.h>
-#include <openssl/err.h>
-
 #include "test.h"
 
 struct test_info {
