@@ -212,6 +212,7 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
     }
 
     a->type = type;
+    bool allow_empty_value = false;
 
     switch(a->type) {
     /* CK_BBOOLs */
@@ -277,6 +278,15 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
     } break;
 
     /* native endianess CK_ULONGs */
+    case CKA_NAME_HASH_ALGORITHM:
+        allow_empty_value = true;
+        /* falls through */
+    case CKA_JAVA_MIDP_SECURITY_DOMAIN:
+        /* falls through */
+    case CKA_CERTIFICATE_CATEGORY:
+        /* falls through */
+    case CKA_CERTIFICATE_TYPE:
+        /* falls through */
     case CKA_MODULUS_BITS:
         /* falls through */
     case CKA_KEY_TYPE:
@@ -284,6 +294,15 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
     case CKA_VALUE_LEN:
         /* falls through */
     case CKA_CLASS: {
+
+        if (!strlen(value)) {
+            if (allow_empty_value) {
+                LOGE("Value for key \"%s\" must be specified", key);
+                return false;
+            }
+            a->ulValueLen = 0;
+            break;
+        }
 
         size_t val;
         rc = str_to_ul(value, &val);
@@ -354,6 +373,22 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
     } break;
 
     /* hex-strings */
+    case CKA_PUBLIC_KEY_INFO:
+        /* falls-thru */
+    case CKA_HASH_OF_ISSUER_PUBLIC_KEY:
+        /* falls-thru */
+    case CKA_HASH_OF_SUBJECT_PUBLIC_KEY:
+        /* falls-thru */
+    case CKA_CHECK_VALUE:
+        /* falls-thru */
+    case CKA_SERIAL_NUMBER:
+        /* falls-thru */
+    case CKA_ISSUER:
+        /* falls-thru */
+    case CKA_VALUE:
+        /* falls-thru */
+    case CKA_SUBJECT:
+        /* falls-thru */
     case CKA_ID:
         /* falls-thru */
     case CKA_LABEL: {
@@ -378,6 +413,35 @@ static bool parse_attrs(const char *key, const char *value, size_t index, void *
         a->ulValueLen = len;
         a->pValue = label;
     } break;
+
+    /* strings */
+    case CKA_URL: {
+        assert(value);
+        a->ulValueLen = strlen(value);
+        a->pValue = calloc(1, a->ulValueLen + 1);
+        if (!a->pValue) {
+            LOGE("oom");
+            return false;
+        }
+    } break;
+
+    /* CK_DATE's */
+    case CKA_START_DATE:
+        /* falls through */
+    case CKA_END_DATE:
+        /* falls through */
+        if (strlen(value)) {
+            LOGE("Cannot handle specified CK_DATE types");
+            return false;
+        }
+
+        a->ulValueLen = strlen(value);
+        a->pValue = calloc(1, a->ulValueLen + 1);
+        if (!a->pValue) {
+            LOGE("oom");
+            return false;
+        }
+        break;
     default:
         LOGE("Unknown key, got: \"%s\"", key);
         return false;
@@ -627,11 +691,14 @@ tobject *db_tobject_new(sqlite3_stmt *stmt) {
             goto_error(get_blob_null(stmt, i, &tobj->priv), error);
 
         } else if (!strcmp(name, "pub")) {
-            goto_error(get_blob(stmt, i, &tobj->pub), error);
+            goto_error(get_blob_null(stmt, i, &tobj->pub), error);
 
         } else if (!strcmp(name, "objauth")) {
-            tobj->objauth = twist_new((char *)sqlite3_column_text(stmt, i));
-            goto_oom(tobj->objauth, error);
+            char *x = (char *)sqlite3_column_text(stmt, i);
+            if (x) {
+                tobj->objauth = twist_new(x);
+                goto_oom(tobj->objauth, error);
+            }
         } else if (!strcmp(name, "attrs")) {
 
             const char *attrs = (const char *)sqlite3_column_text(stmt, i);

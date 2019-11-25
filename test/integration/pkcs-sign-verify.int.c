@@ -921,6 +921,43 @@ static void test_sign_verify_context_specific_good(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
+static void test_cert_no_good(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_OBJECT_CLASS obj_class = CKO_CERTIFICATE;
+    CK_KEY_TYPE cert_type = CKC_X_509;
+    CK_ATTRIBUTE tmpl[] = {
+        { CKA_CLASS, &obj_class, sizeof(obj_class)  },
+        { CKA_CERTIFICATE_TYPE, &cert_type, sizeof(cert_type) },
+    };
+
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    /* Find a cert */
+    CK_ULONG count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    /* you cant do a sign without logging in */
+    user_login(session);
+
+    CK_MECHANISM mech = { .mechanism =  CKM_SHA256_RSA_PKCS };
+
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_KEY_HANDLE_INVALID);
+
+    rv = C_Logout(session);
+    assert_int_equal(rv, CKR_OK);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
@@ -945,6 +982,8 @@ int main() {
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_ECDSA_SHA1,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_ECDSA,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_cert_no_good,
             test_setup, test_teardown),
     };
 

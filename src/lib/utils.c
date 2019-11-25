@@ -598,6 +598,21 @@ CK_RV utils_attr_free(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_count) {
         { CKA_UNWRAP,            generic_attr_free },
         { CKA_WRAP_WITH_TRUSTED, generic_attr_free },
         { CKA_DERIVE,            generic_attr_free },
+        { CKA_VALUE,             generic_attr_free },
+        { CKA_CERTIFICATE_TYPE,  generic_attr_free },
+        { CKA_ISSUER,            generic_attr_free },
+        { CKA_SERIAL_NUMBER,     generic_attr_free },
+        { CKA_CERTIFICATE_CATEGORY,      generic_attr_free },
+        { CKA_JAVA_MIDP_SECURITY_DOMAIN, generic_attr_free },
+        { CKA_URL,                       generic_attr_free },
+        { CKA_CHECK_VALUE,       generic_attr_free },
+        { CKA_HASH_OF_SUBJECT_PUBLIC_KEY, generic_attr_free },
+        { CKA_HASH_OF_ISSUER_PUBLIC_KEY,  generic_attr_free },
+        { CKA_NAME_HASH_ALGORITHM,        generic_attr_free },
+        { CKA_SUBJECT,                    generic_attr_free },
+        { CKA_START_DATE,                 generic_attr_free },
+        { CKA_END_DATE,                   generic_attr_free },
+        { CKA_PUBLIC_KEY_INFO,            generic_attr_free },
     };
 
     return utils_handle_attrs(free_attr_handlers, ARRAY_LEN(free_attr_handlers), attrs, attr_count, NULL);

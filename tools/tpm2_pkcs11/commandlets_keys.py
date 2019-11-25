@@ -1,8 +1,14 @@
 # python stdlib dependencies
 import binascii
+import hashlib
 import os
 import sys
 import yaml
+
+from pyasn1_modules import pem, rfc2459
+from pyasn1.codec.der import decoder
+from pyasn1.codec.ber import encoder as berenc
+from pyasn1.codec.der import encoder as derenc
 
 # local imports
 from .command import Command
@@ -15,11 +21,11 @@ from .utils import hash_pass
 from .utils import rand_hex_str
 from .utils import get_ec_params
 from .utils import asn1_format_ec_point_uncompressed
+from .utils import list_dict_from_kvp
 
 from .tpm2 import Tpm2
 
 from .pkcs11t import *  # noqa
-
 
 class NewKeyCommandBase(Command):
     '''
@@ -486,3 +492,132 @@ class AddKeyCommand(NewKeyCommandBase):
     def __call__(self, args):
         keylabel = super(AddKeyCommand, self).__call__(args)
         print('Added key as label: "{keylabel}"'.format(keylabel=keylabel))
+
+
+@commandlet("addcert")
+class AddCert(Command):
+    '''
+    Adds a certificate object
+    '''
+
+    # adhere to an interface
+    # pylint: disable=no-self-use
+    def generate_options(self, group_parser):
+        group_parser.add_argument(
+            '--label', help='The profile label to remove.\n', required=True)
+
+        group_parser.add_argument(
+            '--key-label',
+            help='The associated private key label.\n',
+            required=True)
+
+        group_parser.add_argument(
+            'cert', help='The x509 PEM certificate to add.\n')
+
+    def __call__(self, args):
+
+        path = args['path']
+        label = args['label']
+        keylabel = args['key_label']
+        certpath = args['cert']
+
+        # rather than use pycryptography x509 parser, which gives native type access to certficiate
+        # fields use pyASN1 to get raw ASN1 encoded values for the fields as the spec requires them
+        with open(certpath, "rb") as f:
+            substrate = pem.readPemFromFile(f)
+            cert = decoder.decode(substrate, asn1Spec=rfc2459.Certificate())[0]
+
+        c = cert['tbsCertificate']
+
+        # print(cert.prettyPrint())
+
+        h = binascii.hexlify
+        b = berenc.encode
+        d = derenc.encode
+
+        bercert = b(cert)
+
+        # the CKA_CHECKSUM value is the first 3 bytes of a sha1hash
+        m = hashlib.sha1()
+        m.update(bercert)
+        bercertchecksum = m.digest()[0:3]
+        bercertchecksum = h(bercertchecksum)
+
+        attrs = [
+            { CKA_CLASS : CKO_CERTIFICATE },
+            { CKA_CERTIFICATE_TYPE : CKC_X_509 },
+            { CKA_TRUSTED : False },
+            { CKA_CERTIFICATE_CATEGORY: CK_CERTIFICATE_CATEGORY_UNSPECIFIED },
+            # The value of this attribute is derived by taking the first 3 bytes of the CKA_VALUE
+            # field.
+            { CKA_CHECK_VALUE: bercertchecksum },
+            # Start date for the certificate (default empty)
+            { CKA_START_DATE : "" },
+            # End date for the certificate (default empty)
+            { CKA_END_DATE : "" },
+            # DER-encoding of the SubjectPublicKeyInfo for the public key
+            # contained in this certificate (default empty)
+            { CKA_PUBLIC_KEY_INFO : "" },
+            # DER encoded subject
+            { CKA_SUBJECT : h(d(c['subject'])) },
+            # "label of keypair associated, default empty
+            { CKA_LABEL : h(keylabel) },
+            # der encoding of issuer, default empty
+            { CKA_ISSUER : '' },
+            # der encoding of the cert serial, default empty
+            { CKA_SERIAL_NUMBER : '' },
+            # BER encoding of the certificate
+            { CKA_VALUE : h(bercert) },
+            # RFC2279 string to URL where cert can be found, default empty
+            { CKA_URL : '' },
+            # hash of pub key subj, default empty
+            { CKA_HASH_OF_SUBJECT_PUBLIC_KEY : '' },
+            # Hash of pub key, default empty
+            { CKA_HASH_OF_ISSUER_PUBLIC_KEY : '' },
+            # Java security domain, default CK_SECURITY_DOMAIN_UNSPECIFIED
+            { CKA_JAVA_MIDP_SECURITY_DOMAIN : CK_SECURITY_DOMAIN_UNSPECIFIED },
+            # Name hash algorithm, defaults to SHA1
+            { CKA_NAME_HASH_ALGORITHM : CKM_SHA_1 }
+        ]
+
+        with Db(path) as db:
+
+             # get token to add to
+             token = db.gettoken(label)
+
+             # verify that key is existing
+             # XXX we should be verifying that it's expected, but I guess one could always load up a cert
+             # not associated with a key.
+             tobjs = db.gettertiary(token['id'])
+
+             # look up the id by object label
+             id = None
+             for t in tobjs:
+                 id = AddCert.get_id_by_label(t, keylabel)
+                 if id is not None:
+                     break
+
+             if id is None:
+                 raise RuntimeError('Cannot find key with id "%s"' % keylabel)
+
+             attrs.append({CKA_ID: id})
+             # TODO verify that cert is cryptographically bound to key found
+
+             # add the cert
+             db.addtertiary(token['id'], None, None, None, None, attrs)
+
+        print('Added cert as label: "{keylabel}"'.format(keylabel=keylabel))
+
+
+    @staticmethod
+    def get_id_by_label(tobj, keylabel):
+
+        attrs = list_dict_from_kvp(tobj['attrs'])
+
+        for a in attrs:
+            if str(CKA_LABEL) in a:
+                x = binascii.unhexlify(a[str(CKA_LABEL)])
+                if x == keylabel:
+                    return a[str(CKA_LABEL)]
+
+        return None

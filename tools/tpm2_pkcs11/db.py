@@ -149,14 +149,22 @@ class Db(object):
     def addtertiary(self, tokid, priv, pub, objauth, mech, attrs):
         tobject = {
             'tokid': tokid,
-            'pub': Db._blobify(pub),
-            'objauth': objauth,
-            'mech': list_dict_to_kvp(mech),
             'attrs': list_dict_to_kvp(attrs),
         }
 
         if priv != None:
             tobject['priv'] = Db._blobify(priv)
+
+        if pub != None:
+            tobject['pub'] = Db._blobify(pub)
+
+        if objauth != None:
+            tobject['objauth'] = objauth
+
+        if mech is None:
+            mech = []
+
+        tobject['mech'] = list_dict_to_kvp(mech)
 
         columns = ', '.join(tobject.keys())
         placeholders = ', '.join('?' * len(tobject))
@@ -258,9 +266,9 @@ class Db(object):
             CREATE TABLE IF NOT EXISTS tobjects(
                 id INTEGER PRIMARY KEY,
                 tokid INTEGER NOT NULL,
-                pub BLOB NOT NULL,
+                pub BLOB,
                 priv BLOB,
-                objauth TEXT NOT NULL,
+                objauth TEXT,
                 mech TEXT NOT NULL,
                 attrs TEXT NOT NULL,
                 FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
