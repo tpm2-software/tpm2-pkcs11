@@ -41,6 +41,9 @@ def bytes_to_file(bites, tmpdir):
 def dict_from_kvp(kvp):
     return dict(x.split('=') for x in kvp.split('\t '))
 
+def list_dict_from_kvp(lines):
+    return [ dict_from_kvp(x) for x in lines.split("\n") ]
+
 def rand_hex_str(num=32):
     if num % 2:
         raise RuntimeError("Expected even number of bytes, got: %u", num)

@@ -4,6 +4,30 @@ echo "SETUP SCRIPT - DBUS_SESSION_BUS_ADDRESS: $DBUS_SESSION_BUS_ADDRESS"
 echo "SETUP SCRIPT - TPM2TOOLS_TCTI: $TPM2TOOLS_TCTI"
 echo "SETUP SCRIPT - PYTHONPATH: $PYTHONPATH"
 
+setup_asan()
+{
+    if [ "$ASAN_ENABLED" = "true" ]; then
+        # To get line numbers set up the asan symbolizer
+        clang_version=`$CC --version | head -n 1 | cut -d\  -f 3-3 | cut -d\. -f 1-3 | cut -d- -f 1-1`
+        # Sometimes the version string has an Ubuntu on the front of it and the field
+        # location changes
+        if [ $clang_version == "version" ]; then
+            clang_version=`$CC --version | head -n 1 | cut -d\  -f 4-4 | cut -d\. -f 1-3`
+        fi
+        echo "Detected clang version: $clang_version"
+        minor_maj=`echo "$clang_version" | cut -d\. -f 1-2`
+        export LD_PRELOAD=/usr/lib/llvm-$minor_maj/lib/clang/$clang_version/lib/linux/libclang_rt.asan-$(arch).so
+        echo "export LD_PRELOAD=\"$LD_PRELOAD\""
+        export ASAN_OPTIONS=detect_leaks=0
+        echo "turning off asan detection for running commands..."
+    fi
+}
+
+clear_asan() {
+    unset LD_PRELOAD
+    unset ASAN_OPTIONS
+}
+
 usage_error ()
 {
     echo "$0: $*" >&1
@@ -112,6 +136,59 @@ for i in `seq 0 1`; do
   tpm2_ptool addkey --algorithm=ecc256 --label="label" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 done;
 echo "Added EC Keys"
+
+echo "Adding 1 x509 Certificate under token \"label\""
+
+#
+# Build an OpenSSL config file
+#
+modpath=$(echo /workspace/tpm2-pkcs11/*/src/.libs/libtpm2_pkcs11.so)
+osslconf="$TPM2_PKCS11_STORE/ossl.cnf"
+cat << EOF > "$osslconf"
+openssl_conf = openssl_init
+
+[openssl_init]
+engines = engine_section
+
+[engine_section]
+pkcs11 = pkcs11_section
+
+[pkcs11_section]
+engine_id = pkcs11
+MODULE_PATH = $modpath
+PIN=myuserpin
+init = 0
+
+[ req ]
+distinguished_name = req_dn
+string_mask = utf8only
+utf8 = yes
+
+[ req_dn ]
+commonName = Mr Test Harness
+EOF
+
+export OPENSSL_CONF="$osslconf"
+
+#
+# generate cert
+#
+cert="$TPM2_PKCS11_STORE/cert.pem"
+
+# since we use the shared lib in a non-asan executable via dlopen() we need to set up
+# asan so we have defined symbols and we don't worry about leaks (since the tools are
+# often silly and leak.
+setup_asan
+TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
+    req -new -x509 -days 365 -subj '/CN=my key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_12 -out "$cert"
+clear_asan
+
+#
+# insert cert to token
+#
+tpm2_ptool addcert --label=label --key-label=12 --path=$TPM2_PKCS11_STORE "$cert"
+
+echo "added x509 Certificate"
 
 # add 1 aes key under label "import-keys"
 tpm2_ptool addkey --algorithm=aes128 --label="import-keys" --userpin=anotheruserpin --path=$TPM2_PKCS11_STORE

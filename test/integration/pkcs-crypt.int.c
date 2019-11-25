@@ -590,6 +590,49 @@ static void test_aes_always_authenticate(void **state) {
     assert_memory_equal(plaintext, plaintext2, sizeof(plaintext2));
 }
 
+static void test_cert_no_good(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_OBJECT_CLASS obj_class = CKO_CERTIFICATE;
+    CK_KEY_TYPE cert_type = CKC_X_509;
+    CK_ATTRIBUTE tmpl[] = {
+        { CKA_CLASS, &obj_class, sizeof(obj_class)  },
+        { CKA_CERTIFICATE_TYPE, &cert_type, sizeof(cert_type) },
+    };
+
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    /* Find a cert */
+    CK_ULONG count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE iv[16] = {
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xDE, 0xAD, 0xBE, 0xEF,
+    };
+
+    CK_MECHANISM mechanism = {
+        CKM_AES_CBC, iv, sizeof(iv)
+    };
+
+    rv = C_EncryptInit(session, &mechanism, objhandles[0]);
+    assert_int_equal(rv, CKR_KEY_HANDLE_INVALID);
+
+    rv = C_DecryptInit(session, &mechanism, objhandles[0]);
+    assert_int_equal(rv, CKR_KEY_HANDLE_INVALID);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
@@ -604,6 +647,8 @@ int main() {
         cmocka_unit_test_setup_teardown(test_aes_encrypt_decrypt_oneshot_good,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_rsa_oaep_encrypt_decrypt_oneshot_good,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_cert_no_good,
                 test_setup, test_teardown),
     };
 

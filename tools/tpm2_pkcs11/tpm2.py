@@ -219,6 +219,7 @@ class Tpm2(object):
         if (rc != 0):
             os.remove(pub)
             os.remove(priv)
+            print("command: %s" % str(" ".join(cmd)))
             raise RuntimeError("Could not execute tpm2_import: %s" %
                                str(stderr))
 
