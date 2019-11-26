@@ -22,6 +22,7 @@ from .utils import rand_hex_str
 from .utils import get_ec_params
 from .utils import asn1_format_ec_point_uncompressed
 from .utils import list_dict_from_kvp
+from .utils import str2bytes
 
 from .tpm2 import Tpm2
 
@@ -523,7 +524,7 @@ class AddCert(Command):
 
         # rather than use pycryptography x509 parser, which gives native type access to certficiate
         # fields use pyASN1 to get raw ASN1 encoded values for the fields as the spec requires them
-        with open(certpath, "rb") as f:
+        with open(certpath, "r") as f:
             substrate = pem.readPemFromFile(f)
             cert = decoder.decode(substrate, asn1Spec=rfc2459.Certificate())[0]
 
@@ -536,12 +537,18 @@ class AddCert(Command):
         d = derenc.encode
 
         bercert = b(cert)
+        hexbercert = h(bercert).decode()
 
         # the CKA_CHECKSUM value is the first 3 bytes of a sha1hash
         m = hashlib.sha1()
         m.update(bercert)
         bercertchecksum = m.digest()[0:3]
-        bercertchecksum = h(bercertchecksum)
+        hexbercertchecksum = h(bercertchecksum).decode()
+
+        subj = c['subject']
+        hexsubj=h(d(str2bytes(subj))).decode()
+
+        hexkeylabel = h(str2bytes(keylabel)).decode()
 
         attrs = [
             { CKA_CLASS : CKO_CERTIFICATE },
@@ -550,7 +557,7 @@ class AddCert(Command):
             { CKA_CERTIFICATE_CATEGORY: CK_CERTIFICATE_CATEGORY_UNSPECIFIED },
             # The value of this attribute is derived by taking the first 3 bytes of the CKA_VALUE
             # field.
-            { CKA_CHECK_VALUE: bercertchecksum },
+            { CKA_CHECK_VALUE: hexbercertchecksum },
             # Start date for the certificate (default empty)
             { CKA_START_DATE : "" },
             # End date for the certificate (default empty)
@@ -559,15 +566,15 @@ class AddCert(Command):
             # contained in this certificate (default empty)
             { CKA_PUBLIC_KEY_INFO : "" },
             # DER encoded subject
-            { CKA_SUBJECT : h(d(c['subject'])) },
+            { CKA_SUBJECT : hexsubj },
             # "label of keypair associated, default empty
-            { CKA_LABEL : h(keylabel) },
+            { CKA_LABEL : hexkeylabel },
             # der encoding of issuer, default empty
             { CKA_ISSUER : '' },
             # der encoding of the cert serial, default empty
             { CKA_SERIAL_NUMBER : '' },
             # BER encoding of the certificate
-            { CKA_VALUE : h(bercert) },
+            { CKA_VALUE : hexbercert },
             # RFC2279 string to URL where cert can be found, default empty
             { CKA_URL : '' },
             # hash of pub key subj, default empty
@@ -616,7 +623,7 @@ class AddCert(Command):
 
         for a in attrs:
             if str(CKA_LABEL) in a:
-                x = binascii.unhexlify(a[str(CKA_LABEL)])
+                x = binascii.unhexlify(a[str(CKA_LABEL)]).decode()
                 if x == keylabel:
                     return a[str(CKA_LABEL)]
 
