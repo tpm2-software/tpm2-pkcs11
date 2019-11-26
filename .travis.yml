@@ -8,7 +8,6 @@ compiler:
 env:
   matrix:
     - PYTHON_INTERPRETER=python2
-    - PYTHON_INTERPRETER=python3
 script:
   - ./.ci/travis.run
 after_failure:
