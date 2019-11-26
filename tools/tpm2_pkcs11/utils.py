@@ -12,6 +12,10 @@ import sys
 if sys.version_info.major < 3:
     input = raw_input
 
+def str2bytes(s):
+    if isinstance(s, str):
+        return s.encode()
+    return s
 
 # The delimiter changes based on nesting level to make parsing easier. We assume one key-value entry per line
 # where a key can have N KVPs as a CSV.
