@@ -143,9 +143,9 @@ in
             sleep 1 # give daemon time to bind to ports
             PID=$(cat ${SIM_PID_FILE})
             echo "simulator PID: ${PID}";
-            netstat -ltpn 2> /dev/null | grep "${PID}" | grep -q "${SIM_PORT_DATA}"
+            ss -lt4pn 2> /dev/null | grep "${PID}" | grep -q "${SIM_PORT_DATA}"
             ret_data=$?
-            netstat -ltpn 2> /dev/null | grep "${PID}" | grep -q "${SIM_PORT_CMD}"
+            ss -lt4pn 2> /dev/null | grep "${PID}" | grep -q "${SIM_PORT_CMD}"
             ret_cmd=$?
             if [ \( $ret_data -eq 0 \) -a \( $ret_cmd -eq 0 \) ]; then
                 echo "Simulator with PID ${PID} bound to port ${SIM_PORT_DATA} and " \

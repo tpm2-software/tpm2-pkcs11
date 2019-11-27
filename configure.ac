@@ -130,9 +130,9 @@ AC_DEFUN([integration_test_checks], [
   AS_IF([test "x$tpm_server" != "xyes"],
     [AC_MSG_ERROR([Integration tests enabled but tpm_server not found, try setting PATH])])
 
-  AC_CHECK_PROG([netstat], [netstat], [yes], [no])
-    AS_IF([test "x$netstat" != "xyes"],
-      [AC_MSG_ERROR([Integration tests enabled but netstat executable not found.])])
+  AC_CHECK_PROG([ss], [ss], [yes], [no])
+    AS_IF([test "x$ss" != "xyes"],
+      [AC_MSG_ERROR([Integration tests enabled but ss executable not found.])])
 
   AC_SUBST([ENABLE_INTEGRATION], [$enable_integration])
 ]) # end function integration_test_checks
