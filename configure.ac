@@ -257,8 +257,8 @@ AS_IF([test x"$enable_hardening" != xno], [
   add_hardened_c_flag([-fstack-protector-all])
   add_hardened_c_flag([-Wstrict-overflow=5])
 
-  add_hardened_define_flag([-U_FORTIFY_SOURCE])
-  add_hardened_define_flag([-D_FORTIFY_SOURCE=2])
+  add_hardened_c_flag([-O2])
+  AX_ADD_FORTIFY_SOURCE
 
   add_hardened_c_flag([-fPIC])
   add_hardened_ld_flag([[-shared]])
