@@ -5,9 +5,8 @@
 [![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/tpm2-software/tpm2-pkcs11.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/tpm2-software/tpm2-pkcs11/context:cpp)
 [![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/tpm2-software/tpm2-pkcs11.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/tpm2-software/tpm2-pkcs11/context:python)
 
-**This is currently being developed and is not production ready, ~~patches welcome~~**
-**Please hold your patches for the moment. We're dropping a massive internals change**
-**and I'd hate to waste your time. We expect the drop to arrive middle of September.**
+**This is currently being developed and is not production ready, patches welcome**
+**A 1.0 Release is Planned in December, see the milstones tab**
 
 PKCS #11 is a Public-Key Cryptography Standard that defines a standard method to
 access cryptographic services from tokens/ devices such as hardware security
