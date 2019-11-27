@@ -142,7 +142,7 @@ echo "Adding 1 x509 Certificate under token \"label\""
 #
 # Build an OpenSSL config file
 #
-modpath=$(echo /workspace/tpm2-pkcs11/*/src/.libs/libtpm2_pkcs11.so)
+modpath="$PWD/src/.libs/libtpm2_pkcs11.so"
 osslconf="$TPM2_PKCS11_STORE/ossl.cnf"
 cat << EOF > "$osslconf"
 openssl_conf = openssl_init
