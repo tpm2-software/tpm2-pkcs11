@@ -66,21 +66,29 @@ static void test_rsa_keygen_missing_attributes(void **state) {
     CK_BBOOL ck_false = CK_FALSE;
     CK_UTF8CHAR label[] = "minimum-rsa";
 
-    CK_ATTRIBUTE pub[] = {
+    /*
+     * keep a dead space in the array so we can add CKA_CLASS
+     * and CKA_KEY_TYPE
+     */
+    CK_ATTRIBUTE pub[7] = {
         ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
         ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
         ADD_ATTR_BASE(CKA_ENCRYPT, ck_true),
         ADD_ATTR_BASE(CKA_VERIFY, ck_true),
         ADD_ATTR_STR(CKA_LABEL, label),
+        /* empty */
+        /* empty */
     };
 
-    CK_ATTRIBUTE priv[] = {
+    CK_ATTRIBUTE priv[7] = {
         ADD_ATTR_BASE(CKA_DECRYPT, ck_true),
         ADD_ATTR_BASE(CKA_SIGN, ck_true),
         ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
         ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
         ADD_ATTR_STR(CKA_LABEL, label),
         ADD_ATTR_BASE(CKA_EXTRACTABLE, ck_false),
+        /* empty */
+        /* empty */
     };
 
     CK_MECHANISM mech = {
@@ -96,8 +104,8 @@ static void test_rsa_keygen_missing_attributes(void **state) {
 
     CK_RV rv = C_GenerateKeyPair (session,
             &mech,
-            pub, ARRAY_LEN(pub),
-            priv, ARRAY_LEN(priv),
+            pub, ARRAY_LEN(pub) - 2,
+            priv, ARRAY_LEN(priv) - 2,
             &pubkey, &privkey);
     assert_int_equal(rv, CKR_OK);
 
@@ -124,6 +132,25 @@ static void test_rsa_keygen_missing_attributes(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     /* verify we can find it via pub templ */
+    CK_OBJECT_CLASS class_pub = CKO_PUBLIC_KEY;
+    pub[ARRAY_LEN(pub)-2].type = CKA_CLASS;
+    pub[ARRAY_LEN(pub)-2].ulValueLen = sizeof(class_pub);
+    pub[ARRAY_LEN(pub)-2].pValue = &class_pub;
+
+    CK_OBJECT_CLASS class_priv = CKO_PRIVATE_KEY;
+    priv[ARRAY_LEN(priv)-2].type = CKA_CLASS;
+    priv[ARRAY_LEN(priv)-2].ulValueLen = sizeof(class_pub);
+    priv[ARRAY_LEN(priv)-2].pValue = &class_priv;
+
+    CK_KEY_TYPE keytype = CKK_RSA;
+    pub[ARRAY_LEN(pub)-1].type = CKA_KEY_TYPE;
+    pub[ARRAY_LEN(pub)-1].ulValueLen = sizeof(keytype);
+    pub[ARRAY_LEN(pub)-1].pValue = &keytype;
+
+    priv[ARRAY_LEN(priv)-1].type = CKA_KEY_TYPE;
+    priv[ARRAY_LEN(priv)-1].ulValueLen = sizeof(keytype);
+    priv[ARRAY_LEN(priv)-1].pValue = &keytype;
+
     rv = C_FindObjectsInit(session, pub, ARRAY_LEN(pub));
     assert_int_equal(rv, CKR_OK);
 
@@ -785,15 +812,15 @@ static void test_non_common_template_attrs(void **state) {
 int main() {
 
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_rsa_keygen_missing_attributes,
+            test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_destroy,
-                test_setup, test_teardown),
+            test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_destroy_rsa_pkcs,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_ecc_keygen_p11tool_templ,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_rsa_keygen_p11tool_templ,
-            test_setup, test_teardown),
-        cmocka_unit_test_setup_teardown(test_rsa_keygen_missing_attributes,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_keygen_keytype,
             test_setup, test_teardown),

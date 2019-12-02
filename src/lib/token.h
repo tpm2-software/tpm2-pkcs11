@@ -14,6 +14,12 @@
 #include "twist.h"
 #include "utils.h"
 
+typedef struct token_config token_config;
+struct token_config {
+    bool is_initialized;  /* token initialization state */
+    char *tcti;           /* token specific tcti config */
+} config;
+
 typedef struct session_table session_table;
 typedef struct session_ctx session_ctx;
 
@@ -31,6 +37,8 @@ struct token {
     unsigned pid;
     unsigned char label[32];
 
+    token_config config;
+
     pobject pobject;
 
     twist wappingkey;
@@ -38,11 +46,6 @@ struct token {
     sealobject sealobject;
 
     tobject *tobjects;
-
-    struct {
-        bool is_initialized;  /* token initialization state */
-        char *tcti;           /* token specific tcti config */
-    } config;
 
     session_table *s_table;
 

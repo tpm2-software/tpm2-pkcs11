@@ -13,6 +13,18 @@
 #include "token.h"
 #include "utils.h"
 
+int str_to_ul(const char *val, size_t *res) {
+
+    errno=0;
+    *res = strtoul(val, NULL, 0);
+    if (errno) {
+        LOGE("Could not convert \"%s\" to integer", val);
+        return 1;
+    }
+
+    return 0;
+}
+
 CK_RV utils_setup_new_object_auth(twist newpin, twist *newauthhex, twist *newsalthex) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -469,74 +481,6 @@ CK_RV fake_ec_param_copy(CK_ATTRIBUTE_PTR in, CK_ULONG count, void *udata) {
     return CKR_OK;
 }
 
-CK_RV utils_attr_deep_copy(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_count, CK_ATTRIBUTE_PTR copy) {
-
-    static const attr_handler deep_copy_attr_handlers[] = {
-        { CKA_CLASS,             generic_attr_copy },
-        { CKA_TOKEN,             generic_attr_copy },
-        { CKA_MODULUS,           generic_attr_copy },
-        { CKA_PRIVATE,           generic_attr_copy },
-        { CKA_KEY_TYPE,          generic_attr_copy },
-        { CKA_ID,                generic_attr_copy },
-        { CKA_LABEL,             generic_attr_copy },
-        { CKA_VERIFY,            generic_attr_copy },
-        { CKA_ENCRYPT,           generic_attr_copy },
-        { CKA_DECRYPT,           generic_attr_copy },
-        { CKA_SIGN,              generic_attr_copy },
-        { CKA_MODULUS_BITS,      generic_attr_copy },
-        { CKA_PUBLIC_EXPONENT,   generic_attr_copy },
-        { CKA_SENSITIVE,         generic_attr_copy },
-        { CKA_ALWAYS_SENSITIVE,  generic_attr_copy },
-        { CKA_EXTRACTABLE,       generic_attr_copy },
-        { CKA_NEVER_EXTRACTABLE, generic_attr_copy },
-        { CKA_EC_PARAMS,         fake_ec_param_copy},
-        { CKA_EC_POINT,          generic_attr_copy },
-        { CKA_ALWAYS_AUTHENTICATE, generic_attr_copy },
-        { CKA_VERIFY_RECOVER,    generic_attr_copy },
-        { CKA_WRAP_WITH_TRUSTED, generic_attr_copy },
-        { CKA_WRAP,              generic_attr_copy },
-        { CKA_UNWRAP,            generic_attr_copy },
-        { CKA_TRUSTED,           generic_attr_copy },
-        { CKA_PUBLIC_KEY_INFO,   generic_attr_copy },
-        { CKA_SIGN_RECOVER,      generic_attr_copy },
-        { CKA_VERIFY_RECOVER,    generic_attr_copy },
-        { CKA_DERIVE,            generic_attr_copy },
-    };
-
-    return utils_handle_attrs(deep_copy_attr_handlers, ARRAY_LEN(deep_copy_attr_handlers), attrs, attr_count, copy);
-}
-
-CK_RV utils_handle_attrs(const attr_handler *handlers, size_t handler_count, CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_count, void *udata) {
-
-    CK_ULONG i;
-    for (i=0; i < attr_count; i++) {
-        CK_ATTRIBUTE_PTR a = &attrs[i];
-
-        size_t k = 0;
-        bool handled = false;
-        for (k=0; k < handler_count; k++) {
-            const attr_handler *h = &handlers[k];
-            if (a->type == h->value) {
-                if (h->handler) {
-                    CK_RV tmp = h->handler(a, i, udata);
-                    if (tmp != CKR_OK) {
-                        return tmp;
-                    }
-                }
-                handled = true;
-                break;
-            }
-        }
-
-        if (!handled) {
-            LOGE("Attribute 0x%lx not handled", a->type);
-            return CKR_ATTRIBUTE_TYPE_INVALID;
-        }
-    }
-
-    return CKR_OK;
-}
-
 CK_RV generic_mech_copy(CK_MECHANISM_PTR in, CK_ULONG count, void *udata) {
     CK_MECHANISM_PTR out = &((CK_MECHANISM_PTR)udata)[count];
 
@@ -558,126 +502,6 @@ CK_RV generic_mech_copy(CK_MECHANISM_PTR in, CK_ULONG count, void *udata) {
     return CKR_OK;
 }
 
-static CK_RV generic_attr_free(CK_ATTRIBUTE_PTR in, CK_ULONG count, void *udata) {
-    UNUSED(count);
-    UNUSED(udata);
-
-    free(in->pValue);
-
-    return CKR_OK;
-}
-
-CK_RV utils_attr_free(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_count) {
-
-    static const attr_handler free_attr_handlers[] = {
-        { CKA_CLASS,             generic_attr_free },
-        { CKA_TOKEN,             generic_attr_free },
-        { CKA_MODULUS,           generic_attr_free },
-        { CKA_PRIVATE,           generic_attr_free },
-        { CKA_KEY_TYPE,          generic_attr_free },
-        { CKA_ID,                generic_attr_free },
-        { CKA_LABEL,             generic_attr_free },
-        { CKA_VERIFY,            generic_attr_free },
-        { CKA_ENCRYPT,           generic_attr_free },
-        { CKA_DECRYPT,           generic_attr_free },
-        { CKA_SIGN,              generic_attr_free },
-        { CKA_MODULUS_BITS,      generic_attr_free },
-        { CKA_PUBLIC_EXPONENT,   generic_attr_free },
-        { CKA_SENSITIVE,         generic_attr_free },
-        { CKA_EXTRACTABLE,       generic_attr_free },
-        { CKA_ALWAYS_SENSITIVE,  generic_attr_free },
-        { CKA_NEVER_EXTRACTABLE, generic_attr_free },
-        { CKA_VALUE_LEN,         generic_attr_free },
-        { CKA_EC_PARAMS,         generic_attr_free },
-        { CKA_EC_POINT,          generic_attr_free },
-        { CKA_ALWAYS_AUTHENTICATE, generic_attr_free },
-        { CKA_VERIFY_RECOVER,    generic_attr_free },
-        { CKA_WRAP,              generic_attr_free },
-        { CKA_TRUSTED,           generic_attr_free },
-        { CKA_SIGN_RECOVER,      generic_attr_free },
-        { CKA_UNWRAP,            generic_attr_free },
-        { CKA_WRAP_WITH_TRUSTED, generic_attr_free },
-        { CKA_DERIVE,            generic_attr_free },
-        { CKA_VALUE,             generic_attr_free },
-        { CKA_CERTIFICATE_TYPE,  generic_attr_free },
-        { CKA_ISSUER,            generic_attr_free },
-        { CKA_SERIAL_NUMBER,     generic_attr_free },
-        { CKA_CERTIFICATE_CATEGORY,      generic_attr_free },
-        { CKA_JAVA_MIDP_SECURITY_DOMAIN, generic_attr_free },
-        { CKA_URL,                       generic_attr_free },
-        { CKA_CHECK_VALUE,       generic_attr_free },
-        { CKA_HASH_OF_SUBJECT_PUBLIC_KEY, generic_attr_free },
-        { CKA_HASH_OF_ISSUER_PUBLIC_KEY,  generic_attr_free },
-        { CKA_NAME_HASH_ALGORITHM,        generic_attr_free },
-        { CKA_SUBJECT,                    generic_attr_free },
-        { CKA_START_DATE,                 generic_attr_free },
-        { CKA_END_DATE,                   generic_attr_free },
-        { CKA_PUBLIC_KEY_INFO,            generic_attr_free },
-    };
-
-    return utils_handle_attrs(free_attr_handlers, ARRAY_LEN(free_attr_handlers), attrs, attr_count, NULL);
-}
-
-CK_RV utils_handle_mechs(const mech_handler *handlers, size_t handler_count, CK_MECHANISM_PTR mechs, CK_ULONG mech_count, void *udata) {
-
-    CK_ULONG i;
-    for (i=0; i < mech_count; i++) {
-        CK_MECHANISM_PTR m = &mechs[i];
-
-        size_t k = 0;
-        bool handled = false;
-        for (k=0; k < handler_count; k++) {
-            const mech_handler *h = &handlers[k];
-            if (m->mechanism == h->mechanism) {
-                if (h->handler) {
-                    CK_RV tmp = h->handler(m, i, udata);
-                    if (tmp != CKR_OK) {
-                        return tmp;
-                    }
-                }
-                handled = true;
-                break;
-            }
-        }
-
-        if (!handled) {
-            return CKR_MECHANISM_INVALID;
-        }
-    }
-
-    return CKR_OK;
-}
-
-CK_RV utils_mech_deep_copy(CK_MECHANISM_PTR mechs, CK_ULONG mech_count, CK_MECHANISM_PTR copy) {
-
-    static const mech_handler mech_deep_copy_handlers[] = {
-        { CKM_ECDSA,         generic_mech_copy },
-        { CKM_RSA_X_509,     generic_mech_copy },
-        { CKM_RSA_PKCS_OAEP, generic_mech_copy },
-    };
-
-    return utils_handle_mechs(mech_deep_copy_handlers, ARRAY_LEN(mech_deep_copy_handlers), mechs, mech_count, copy);
-}
-
-static CK_RV generic_mech_free(CK_MECHANISM_PTR in, CK_ULONG count, void *udata) {
-    UNUSED(count);
-    UNUSED(udata);
-
-    free(in->pParameter);
-
-    return CKR_OK;
-}
-
-CK_RV utils_mech_free(CK_MECHANISM_PTR mechs, CK_ULONG mech_count, CK_MECHANISM_PTR copy) {
-
-    static const mech_handler mech_free_handlers[] = {
-        { CKM_RSA_X_509,     generic_mech_free },
-        { CKM_RSA_PKCS_OAEP, generic_mech_free },
-    };
-
-    return utils_handle_mechs(mech_free_handlers, ARRAY_LEN(mech_free_handlers), mechs, mech_count, copy);
-}
-
 CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid) {
 
     const unsigned char *p = ecparams->pValue;
@@ -694,49 +518,7 @@ CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid) {
     return CKR_OK;
 }
 
-CK_ATTRIBUTE_PTR util_get_attribute_by_type(CK_ATTRIBUTE_TYPE needle, CK_ATTRIBUTE_PTR haystack, CK_ULONG count) {
-
-    CK_ULONG i;
-    for (i=0; i < count; i++) {
-
-        CK_ATTRIBUTE_PTR a = &haystack[i];
-
-        if (a->type == needle) {
-            return a;
-        }
-    }
-
-    return NULL;
-}
-
-CK_ATTRIBUTE_PTR util_get_attribute_full(CK_ATTRIBUTE_PTR needle, CK_ATTRIBUTE_PTR haystack, CK_ULONG count) {
-
-    CK_ULONG i;
-    for (i=0; i < count; i++) {
-
-        CK_ATTRIBUTE_PTR a = &haystack[i];
-
-        if (a->type == needle->type
-         && a->ulValueLen == needle->ulValueLen) {
-            if (a->ulValueLen > 0
-             && memcmp(a->pValue, needle->pValue, needle->ulValueLen)) {
-                /* length is greater then 0 and don't match, keep looking */
-                continue;
-            }
-            /* length is both 0 OR length > 0 and matched on memcmp */
-            return a;
-        }
-    }
-
-    return NULL;
-}
-
-void *buf_dup(void *buf, size_t len) {
-
-    void *x = malloc(len);
-    if (x) {
-        memcpy(x, buf, len);
-    }
-
-    return x;
+void __clear_ptr(void **h) {
+    assert(h);
+    *h = NULL;
 }

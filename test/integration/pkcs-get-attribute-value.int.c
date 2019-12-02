@@ -367,30 +367,30 @@ static void test_all_priv_rsa_obj_attrs(void **state) {
     }
 }
 
-#define ADD_ATTR(a, b, index) .type = a, .ulValueLen = sizeof(b[0]), .pValue= b[index]
+#define ADD_ATTR_HANDLER(a, b, index) .type = a, .ulValueLen = sizeof(b[0]), .pValue= b[index]
 
 static void verify_cert_attrs(CK_SESSION_HANDLE s, CK_OBJECT_HANDLE h) {
 
     CK_BYTE _buf[256][1024] = { 0 };
     CK_ATTRIBUTE attrs[] = {
-        { ADD_ATTR(CKA_CLASS, _buf, 0) },
-        { ADD_ATTR(CKA_CERTIFICATE_TYPE, _buf, 1) },
-        { ADD_ATTR(CKA_TRUSTED, _buf, 2) },
-        { ADD_ATTR(CKA_CERTIFICATE_CATEGORY, _buf, 3) },
-        { ADD_ATTR(CKA_CHECK_VALUE, _buf, 4) },
-        { ADD_ATTR(CKA_START_DATE, _buf, 5) },
-        { ADD_ATTR(CKA_END_DATE, _buf, 6) },
-        { ADD_ATTR(CKA_PUBLIC_KEY_INFO, _buf, 7) },
-        { ADD_ATTR(CKA_SUBJECT, _buf, 8) },
-        { ADD_ATTR(CKA_LABEL, _buf, 9) },
-        { ADD_ATTR(CKA_ISSUER, _buf, 10) },
-        { ADD_ATTR(CKA_SERIAL_NUMBER, _buf, 11) },
-        { ADD_ATTR(CKA_VALUE, _buf, 12) },
-        { ADD_ATTR(CKA_URL, _buf, 13) },
-        { ADD_ATTR(CKA_HASH_OF_SUBJECT_PUBLIC_KEY, _buf, 14) },
-        { ADD_ATTR(CKA_HASH_OF_ISSUER_PUBLIC_KEY, _buf, 15) },
-        { ADD_ATTR(CKA_JAVA_MIDP_SECURITY_DOMAIN, _buf, 16) },
-        { ADD_ATTR(CKA_NAME_HASH_ALGORITHM, _buf, 17) },
+        { ADD_ATTR_HANDLER(CKA_CLASS, _buf, 0) },
+        { ADD_ATTR_HANDLER(CKA_CERTIFICATE_TYPE, _buf, 1) },
+        { ADD_ATTR_HANDLER(CKA_TRUSTED, _buf, 2) },
+        { ADD_ATTR_HANDLER(CKA_CERTIFICATE_CATEGORY, _buf, 3) },
+        { ADD_ATTR_HANDLER(CKA_CHECK_VALUE, _buf, 4) },
+        { ADD_ATTR_HANDLER(CKA_START_DATE, _buf, 5) },
+        { ADD_ATTR_HANDLER(CKA_END_DATE, _buf, 6) },
+        { ADD_ATTR_HANDLER(CKA_PUBLIC_KEY_INFO, _buf, 7) },
+        { ADD_ATTR_HANDLER(CKA_SUBJECT, _buf, 8) },
+        { ADD_ATTR_HANDLER(CKA_LABEL, _buf, 9) },
+        { ADD_ATTR_HANDLER(CKA_ISSUER, _buf, 10) },
+        { ADD_ATTR_HANDLER(CKA_SERIAL_NUMBER, _buf, 11) },
+        { ADD_ATTR_HANDLER(CKA_VALUE, _buf, 12) },
+        { ADD_ATTR_HANDLER(CKA_URL, _buf, 13) },
+        { ADD_ATTR_HANDLER(CKA_HASH_OF_SUBJECT_PUBLIC_KEY, _buf, 14) },
+        { ADD_ATTR_HANDLER(CKA_HASH_OF_ISSUER_PUBLIC_KEY, _buf, 15) },
+        { ADD_ATTR_HANDLER(CKA_JAVA_MIDP_SECURITY_DOMAIN, _buf, 16) },
+        { ADD_ATTR_HANDLER(CKA_NAME_HASH_ALGORITHM, _buf, 17) },
     };
 
     assert_true(ARRAY_LEN(attrs) <= ARRAY_LEN(_buf));

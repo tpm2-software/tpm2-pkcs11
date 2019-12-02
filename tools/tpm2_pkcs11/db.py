@@ -1,10 +1,9 @@
-import textwrap
+import io
 import os
 import sys
 import sqlite3
-
-from .utils import list_dict_to_kvp
-from .utils import dict_to_kvp
+import textwrap
+import yaml
 
 #
 # With Db() as db:
@@ -74,7 +73,7 @@ class Db(object):
         token = {
             # General Metadata
             'pid': pid,
-            'config': dict_to_kvp(config)
+            'config': yaml.dump(config, canonical=True)
         }
 
         if 'token-init=True' in token['config'] and label is None:
@@ -94,7 +93,7 @@ class Db(object):
 
     def updateconfig(self, token, config):
 
-        new_config = dict_to_kvp(config)
+        new_config = yaml.safe_load(io.StringIO(config))
 
         sql = 'UPDATE tokens SET config=? WHERE id=?'
 
@@ -146,25 +145,20 @@ class Db(object):
 
         return c.lastrowid
 
-    def addtertiary(self, tokid, priv, pub, objauth, mech, attrs):
+    def addtertiary(self, tokid, pkcs11_object):
         tobject = {
             'tokid': tokid,
-            'attrs': list_dict_to_kvp(attrs),
+            'attrs': yaml.safe_dump(dict(pkcs11_object), canonical=True),
         }
 
-        if priv != None:
-            tobject['priv'] = Db._blobify(priv)
+        if pkcs11_object.tpm_priv != None:
+            tobject['priv'] = Db._blobify(pkcs11_object.tpm_priv)
 
-        if pub != None:
-            tobject['pub'] = Db._blobify(pub)
+        if pkcs11_object.tpm_pub != None:
+            tobject['pub'] = Db._blobify(pkcs11_object.tpm_pub)
 
-        if objauth != None:
-            tobject['objauth'] = objauth
-
-        if mech is None:
-            mech = []
-
-        tobject['mech'] = list_dict_to_kvp(mech)
+        if pkcs11_object.auth != None:
+            tobject['objauth'] = pkcs11_object.auth
 
         columns = ', '.join(tobject.keys())
         placeholders = ', '.join('?' * len(tobject))
@@ -177,7 +171,7 @@ class Db(object):
     def updatetertiaryattrs(self, tid, attrs):
 
         c = self._conn.cursor()
-        attrs = list_dict_to_kvp(attrs)
+        attrs = yaml.safe_load(io.StringIO(attrs))
         values = [attrs, tid]
 
         sql = 'UPDATE tobjects SET attrs=? WHERE id=?'
@@ -269,7 +263,6 @@ class Db(object):
                 pub BLOB,
                 priv BLOB,
                 objauth TEXT,
-                mech TEXT NOT NULL,
                 attrs TEXT NOT NULL,
                 FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
             );

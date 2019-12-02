@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "attrs.h"
 #include "list.h"
 #include "pkcs11.h"
 #include "twist.h"
@@ -23,12 +24,6 @@ struct pobject {
     twist objauth;
 };
 
-typedef struct objattrs objattrs;
-struct objattrs {
-    unsigned long count;
-    CK_ATTRIBUTE_PTR attrs;
-};
-
 typedef struct tobject tobject;
 struct tobject {
 
@@ -40,12 +35,7 @@ struct tobject {
     twist priv;          /** private tpm data */
     twist objauth;       /** wrapped object auth value */
 
-    objattrs attrs;     /** object attributes */
-
-    struct {
-        unsigned long count;
-        CK_MECHANISM_PTR mech;
-    } mechanisms;       /** list of supported object mechanisms */
+    attr_list *attrs;    /** object attributes */
 
     list l;             /** list pointer for "listifying" tobjects */
 
@@ -103,8 +93,6 @@ CK_RV tobject_set_blob_data(tobject *tobj, twist pub, twist priv);
 CK_RV tobject_set_auth(tobject *tobj, twist authbin, twist wrappedauthhex);
 
 void tobject_set_handle(tobject *tobj, uint32_t handle);
-CK_RV tobject_append_attrs(tobject *tobj, CK_ATTRIBUTE_PTR attrs, CK_ULONG count);
-CK_RV tobject_append_mechs(tobject *tobj, CK_MECHANISM_PTR mech, CK_ULONG count);
 void tobject_set_id(tobject *tobj, unsigned id);
 void tobject_free(tobject *tobj);
 void sealobject_free(sealobject *sealobj);
@@ -116,17 +104,6 @@ CK_RV object_find(session_ctx *ctx, CK_OBJECT_HANDLE *object, unsigned long max_
 CK_RV object_find_final(session_ctx *ctx);
 
 CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count);
-
-/**
- * Given an attribute type, retrieves the attribute data if present.
- * @param tobj
- *  The object whose attribute set to query.
- * @param atype
- *  The attribute type to query for.
- * @return
- *  A pointer to the attribute or NULL if nothing found.
- */
-CK_ATTRIBUTE_PTR tobject_get_attribute_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE atype);
 
 CK_ATTRIBUTE_PTR tobject_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR attr);
 
@@ -141,7 +118,7 @@ CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech);
  * @return
  *  The attribute array.
  */
-objattrs *tobject_get_attrs(tobject *tobj);
+attr_list *tobject_get_attrs(tobject *tobj);
 
 /**
  * Marks a tobject no longer being used by an operation.

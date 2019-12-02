@@ -71,6 +71,7 @@ PKG_CHECK_EXISTS([tss2-esys >= 2.2.1], [do_esapi_manage_flags])
 
 # require sqlite3 and libcrypto
 PKG_CHECK_MODULES([SQLITE3],     [sqlite3])
+PKG_CHECK_MODULES([YAML],        [yaml-0.1])
 PKG_CHECK_MODULES([CRYPTO],      [libcrypto >= 1.0.2g])
 
 # check for pthread
