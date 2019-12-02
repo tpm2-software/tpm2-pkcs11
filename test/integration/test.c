@@ -2,6 +2,7 @@
 #include <openssl/err.h>
 #include <openssl/objects.h>
 
+#include "attrs.h"
 #include "test.h"
 
 test_info *test_info_from_state(void **state) {
@@ -166,9 +167,6 @@ void get_keypair(CK_SESSION_HANDLE session, CK_KEY_TYPE key_type, CK_OBJECT_HAND
     assert_int_equal(rv, CKR_OK);
 }
 
-GENERIC_ATTR_TYPE_CONVERT(CK_BBOOL);
-GENERIC_ATTR_TYPE_CONVERT(CK_ULONG);
-
 static void verify_missing_common_attrs_rsa(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE h) {
 
     CK_BYTE tmp[3][256] = { 0 };
@@ -195,7 +193,7 @@ static void verify_missing_common_attrs_rsa(CK_SESSION_HANDLE session, CK_OBJECT
         } break;
         case CKA_MODULUS_BITS: {
             CK_ULONG v = 0;
-            rv = generic_CK_ULONG(a, &v);
+            rv = attr_CK_ULONG(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, 2048);
             count++;
@@ -362,35 +360,35 @@ void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE key
         switch(a->type) {
         case CKA_KEY_TYPE: {
             CK_ULONG v = 0;
-            rv = generic_CK_ULONG(a, &v);
+            rv = attr_CK_ULONG(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, keytype);
             count++;
         } break;
         case CKA_CLASS: {
             CK_ULONG v = 0;
-            rv = generic_CK_ULONG(a, &v);
+            rv = attr_CK_ULONG(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, CKO_PRIVATE_KEY);
             count++;
         } break;
         case CKA_ALWAYS_SENSITIVE: {
             CK_BBOOL v = CK_FALSE;
-            rv = generic_CK_BBOOL(a, &v);
+            rv = attr_CK_BBOOL(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, !extractable);
             count++;
         } break;
         case CKA_EXTRACTABLE: {
             CK_BBOOL v = CK_TRUE;
-            rv = generic_CK_BBOOL(a, &v);
+            rv = attr_CK_BBOOL(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, extractable);
             count++;
         } break;
         case CKA_NEVER_EXTRACTABLE: {
             CK_BBOOL v = CK_FALSE;
-            rv = generic_CK_BBOOL(a, &v);
+            rv = attr_CK_BBOOL(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, !extractable);
             count++;
@@ -399,7 +397,7 @@ void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE key
             /* fall-thru */
         case CKA_DECRYPT: {
             CK_BBOOL v = CK_FALSE;
-            rv = generic_CK_BBOOL(a, &v);
+            rv = attr_CK_BBOOL(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, CK_TRUE);
             count++;
@@ -412,7 +410,7 @@ void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE key
             /* fall-thru */
         case CKA_UNWRAP: {
             CK_BBOOL v = CK_FALSE;
-            rv = generic_CK_BBOOL(a, &v);
+            rv = attr_CK_BBOOL(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, CK_FALSE);
             count++;
@@ -451,14 +449,14 @@ void verify_missing_pub_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE keyt
         switch(a->type) {
         case CKA_KEY_TYPE: {
             CK_ULONG v = 0;
-            rv = generic_CK_ULONG(a, &v);
+            rv = attr_CK_ULONG(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, keytype);
             count++;
         } break;
         case CKA_CLASS: {
             CK_ULONG v = 0;
-            rv = generic_CK_ULONG(a, &v);
+            rv = attr_CK_ULONG(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, CKO_PUBLIC_KEY);
             count++;
@@ -467,9 +465,9 @@ void verify_missing_pub_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE keyt
             /* fall-thru */
         case CKA_VERIFY: {
             CK_BBOOL v = 0;
-            rv = generic_CK_BBOOL(a, &v);
+            rv = attr_CK_BBOOL(a, &v);
             assert_int_equal(rv, CKR_OK);
-            assert_int_equal(v, CK_TRUE);
+            /* is dependent on key type (no ecc keys yes rsa)*/
             count++;
         } break;
         case CKA_TRUSTED:
@@ -480,7 +478,7 @@ void verify_missing_pub_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE keyt
             /* fall-thru */
         case CKA_VERIFY_RECOVER: {
             CK_BBOOL v = 0;
-            rv = generic_CK_BBOOL(a, &v);
+            rv = attr_CK_BBOOL(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, CK_FALSE);
             count++;

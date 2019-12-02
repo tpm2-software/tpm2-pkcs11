@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "attrs.h"
 #include "object.h"
 #include "twist.h"
 #include "utils.h"
@@ -148,16 +149,7 @@ struct tpm_object_data {
     uint32_t privhandle;
     uint32_t pubhandle;
 
-    CK_MECHANISM_TYPE mechanism;
-    union {
-        struct {
-            twist modulus;
-            uint32_t exponent;
-        } rsa;
-        struct {
-            twist ecpoint;
-        } ecc;
-    };
+    attr_list *attrs;
 
     twist pubblob;
     twist privblob;
@@ -175,11 +167,9 @@ CK_RV tpm2_generate_key(
 
         CK_MECHANISM_PTR mechanism,
 
-        CK_ULONG pubcnt,
-        CK_ATTRIBUTE_PTR pubattrs,
+        attr_list *pubattrs,
 
-        CK_ULONG privcnt,
-        CK_ATTRIBUTE_PTR privattrs,
+        attr_list *privattrs,
 
         tpm_object_data *objdata);
 

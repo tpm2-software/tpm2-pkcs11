@@ -1,5 +1,9 @@
 # python stdlib dependencies
+import io
 import sys
+
+# External dependencies
+import yaml
 
 # local imports
 from .command import Command
@@ -8,7 +12,6 @@ from .db import Db
 from .utils import bytes_to_file
 from .utils import TemporaryDirectory
 from .utils import hash_pass
-from .utils import dict_from_kvp
 from .utils import rand_hex_str
 from .utils import AESAuthUnwrapper
 from .utils import load_sealobject
@@ -114,9 +117,11 @@ class VerifyCommand(Command):
 
                 print("USER pin valid, seal auth: %s" % usersealauth['hash'])
 
-            token_config = dict_from_kvp(token['config'])
+            token_config = { 'token-config' : yaml.safe_load(io.StringIO(token['config'])) }
 
-            print('TOKEN CONFIG: {}'.format(token_config))
+            yaml_tok_cconf = yaml.safe_dump(token_config, default_flow_style=False)
+
+            print(yaml_tok_cconf)
 
             wrapper = AESAuthUnwrapper(wrappingkeyauth)
 

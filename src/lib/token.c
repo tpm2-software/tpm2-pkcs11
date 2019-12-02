@@ -14,6 +14,7 @@
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 
+#include "attrs.h"
 #include "checks.h"
 #include "db.h"
 #include "list.h"
@@ -367,8 +368,6 @@ out:
     return rv;
 }
 
-UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_OBJECT_CLASS);
-
 CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj) {
 
     tpm_ctx *tpm = tok->tctx;
@@ -391,16 +390,15 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
         }
 
         /* this might not be the best place for this check */
-        CK_ATTRIBUTE_PTR a = util_get_attribute_by_type(CKA_CLASS,
-                tobj->attrs.attrs, tobj->attrs.count);
+        CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_CLASS);
         if (!a) {
-            LOGE("All objects expected to have CKO_CERTIFICATE, missing"
+            LOGE("All objects expected to have CKA_CLASS, missing"
                     " for tobj id: %u", tobj->id);
             return CKR_GENERAL_ERROR;
         }
 
         CK_OBJECT_CLASS v;
-        rv = generic_CK_OBJECT_CLASS(a, &v);
+        rv = attr_CK_OBJECT_CLASS(a, &v);
         if (rv != CKR_OK) {
             return rv;
         }

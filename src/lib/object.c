@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <stdlib.h>
 
+#include "attrs.h"
 #include "db.h"
 #include "checks.h"
 #include "log.h"
@@ -39,21 +40,8 @@ void tobject_free(tobject *tobj) {
     twist_free(tobj->objauth);
     twist_free(tobj->unsealed_auth);
 
-    objattrs *a = tobject_get_attrs(tobj);
-    CK_RV rv = utils_attr_free(a->attrs, a->count);
-    assert(rv == CKR_OK);
-    free(a->attrs);
-
-    CK_ULONG i = 0;
-    for (i=0; i < tobj->mechanisms.count; i++) {
-        CK_MECHANISM_PTR m = &tobj->mechanisms.mech[i];
-        if (m->pParameter) {
-            free(m->pParameter);
-        }
-    }
-
-    free(tobj->mechanisms.mech);
-
+    attr_list *a = tobject_get_attrs(tobj);
+    attr_list_free(a);
     free(tobj);
 }
 
@@ -66,74 +54,31 @@ void sealobject_free(sealobject *sealobj) {
     twist_free(sealobj->userpriv);
 }
 
-static bool object_CKM_RSA_PKCS_OAEP_params_supported(
-        CK_RSA_PKCS_OAEP_PARAMS_PTR requested,
-        CK_RSA_PKCS_OAEP_PARAMS_PTR got) {
-
-    return requested->hashAlg == got->hashAlg &&
-            requested->mgf == got->mgf;
-}
-
-static bool object_CKM_AES_CBC_params_supported(
-        CK_MECHANISM_PTR requested
-        ) {
-
-    // IV is blocksize for AES
-    return requested->ulParameterLen == 16;
-}
-
 CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech) {
 
-    bool is_equal;
-    CK_ULONG i;
-    bool got_to_params = false;
-    for (i=0; i < tobj->mechanisms.count; i++) {
-        CK_MECHANISM_PTR m = &tobj->mechanisms.mech[i];
-
-        if (mech->mechanism != m->mechanism) {
-            continue;
-        }
-
-        got_to_params = true;
-
-        /*
-         * Ensure the parameters are supported, this would need to be done for each mechanism
-         * as things like label, etc are flexible. However, keep a default handler of strict
-         * memcmp for things that are empty or can be fully specified in the DB.
-         */
-        switch (mech->mechanism) {
-        case CKM_RSA_X_509:
-            /* no params */
-            is_equal = true;
-            break;
-        case CKM_RSA_PKCS_OAEP:
-            is_equal = object_CKM_RSA_PKCS_OAEP_params_supported(
-                    mech->pParameter,
-                    m->pParameter
-                    );
-            break;
-        case CKM_AES_CBC:
-            is_equal = object_CKM_AES_CBC_params_supported(
-                    mech);
-            break;
-        default:
-            is_equal =
-                mech->ulParameterLen == m->ulParameterLen
-            && !memcmp(mech->pParameter, m->pParameter, m->ulParameterLen);
-        }
-
-        if(!is_equal) {
-            continue;
-        }
-
-        /* match */
-        return CKR_OK;
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_ALLOWED_MECHANISMS);
+    if (!a) {
+        LOGE("Expected object to have: CKA_ALLOWED_MECHANISMS");
+        return CKR_GENERAL_ERROR;
     }
 
-    return got_to_params ? CKR_MECHANISM_PARAM_INVALID : CKR_MECHANISM_INVALID;
+    CK_ULONG count = a->ulValueLen/sizeof(CK_MECHANISM_TYPE);
+    CK_MECHANISM_TYPE_PTR mt = (CK_MECHANISM_TYPE_PTR)a->pValue;
+
+    CK_ULONG i;
+    for(i=0; i < count; i++) {
+        CK_MECHANISM_TYPE t = mt[i];
+        if (t == mech->mechanism) {
+            return CKR_OK;
+        }
+    }
+
+    /* TODO further sanity checking for CKR_MECHANISM_PARAM_INVALID */
+
+    return CKR_MECHANISM_INVALID;
 }
 
-static bool attr_filter(objattrs *attrs, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
+static bool attr_filter(attr_list *attrs, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
 
 
     CK_ULONG i;
@@ -148,8 +93,9 @@ static bool attr_filter(objattrs *attrs, CK_ATTRIBUTE_PTR templ, CK_ULONG count)
         CK_ATTRIBUTE_PTR compare = NULL;
         bool is_attr_match = false;
         CK_ULONG j;
-        for(j=0; j < attrs->count; j++) {
-            compare = &attrs->attrs[j];
+        for(j=0; j < attr_list_get_count(attrs); j++) {
+            const CK_ATTRIBUTE_PTR ptr = attr_list_get_ptr(attrs);
+            compare = &ptr[j];
 
             if (search->type != compare->type) {
                 continue;
@@ -189,7 +135,7 @@ static bool attr_filter(objattrs *attrs, CK_ATTRIBUTE_PTR templ, CK_ULONG count)
 
 tobject *object_attr_filter(tobject *tobj, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
 
-    objattrs *attrs = tobject_get_attrs(tobj);
+    attr_list *attrs = tobject_get_attrs(tobj);
     bool res = attr_filter(attrs, templ, count);
     return res ? tobj : NULL;
 }
@@ -218,14 +164,11 @@ static object_find_data *object_find_data_new(void) {
     return calloc(1, sizeof(object_find_data));
 }
 
-UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_ULONG);
-
 static CK_RV do_match_set(tobject_match_list *match_cur, tobject *tobj) {
 
     match_cur->tobj_handle = tobj->id;
 
-    CK_ATTRIBUTE_PTR a = util_get_attribute_by_type(CKA_CLASS,
-            tobj->attrs.attrs, tobj->attrs.count);
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_CLASS);
     if (!a) {
         LOGE("Objects must have CK_OBJECT_CLASS");
         assert(0);
@@ -233,7 +176,7 @@ static CK_RV do_match_set(tobject_match_list *match_cur, tobject *tobj) {
     }
 
     CK_OBJECT_CLASS objclass;
-    CK_RV rv = generic_CK_ULONG(a, &objclass);
+    CK_RV rv = attr_CK_ULONG(a, &objclass);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -411,18 +354,6 @@ static CK_RV find_object_by_id(token *tok, CK_OBJECT_HANDLE handle, bool inc, to
     return CKR_OBJECT_HANDLE_INVALID;
 }
 
-CK_ATTRIBUTE_PTR tobject_get_attribute_by_type(tobject *tobj, CK_ATTRIBUTE_TYPE needle) {
-
-    objattrs *attrs = tobject_get_attrs(tobj);
-    return util_get_attribute_by_type(needle, attrs->attrs, attrs->count);
-}
-
-CK_ATTRIBUTE_PTR tobject_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR needle) {
-
-    objattrs *attrs = tobject_get_attrs(tobj);
-    return util_get_attribute_full(needle, attrs->attrs, attrs->count);
-}
-
 CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
 
     token *tok = session_ctx_get_token(ctx);
@@ -445,7 +376,7 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
 
         CK_ATTRIBUTE_PTR t = &templ[i];
 
-        CK_ATTRIBUTE_PTR found = tobject_get_attribute_by_type(tobj, t->type);
+        CK_ATTRIBUTE_PTR found = attr_get_attribute_by_type(tobj->attrs, t->type);
         if (found) {
             if (!t->pValue) {
                 /* only populate size if the buffer is null */
@@ -461,7 +392,9 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
             }
 
             t->ulValueLen = found->ulValueLen;
-            memcpy(t->pValue, found->pValue, found->ulValueLen);
+            if (found->ulValueLen && found->pValue) {
+                memcpy(t->pValue, found->pValue, found->ulValueLen);
+            }
        } else {
            /* If it's not found it defaults to empty. */
            t->pValue = NULL;
@@ -532,62 +465,13 @@ void tobject_set_handle(tobject *tobj, uint32_t handle) {
     tobj->handle = handle;
 }
 
-CK_RV tobject_append_attrs(tobject *tobj, CK_ATTRIBUTE_PTR attrs, CK_ULONG count) {
-    assert(tobj);
-    assert(attrs);
-
-    if (!attrs->ulValueLen) {
-        return CKR_OK;
-    }
-
-    objattrs *objattrs = tobject_get_attrs(tobj);
-
-    size_t offset = objattrs->count;
-    size_t newlen = objattrs->count + count;
-    size_t newbytes = sizeof(*objattrs->attrs) * newlen;
-    void *newattrs = realloc(objattrs->attrs, newbytes);
-    if (!newattrs) {
-        return CKR_HOST_MEMORY;
-    }
-
-    objattrs->count = newlen;
-    objattrs->attrs = newattrs;
-
-    /* clear out the newly allocated memory */
-    memset(&objattrs->attrs[offset], 0, count * sizeof(*objattrs->attrs));
-
-    return utils_attr_deep_copy(attrs, count, &objattrs->attrs[offset]);
-}
-
 void tobject_set_id(tobject *tobj, unsigned id) {
     assert(tobj);
     tobj->id = id;
 }
 
-CK_RV tobject_append_mechs(tobject *tobj, CK_MECHANISM_PTR mech, CK_ULONG count) {
-    assert(tobj);
-
-    size_t offset = tobj->mechanisms.count;
-    size_t newcnt = tobj->mechanisms.count + count;
-    size_t newbytes = sizeof(*tobj->mechanisms.mech) * newcnt;
-
-    void *newmechs = realloc(tobj->mechanisms.mech, newbytes);
-    if (!newmechs) {
-        LOGE("oom");
-        return CKR_HOST_MEMORY;
-    }
-
-    tobj->mechanisms.count = newcnt;
-    tobj->mechanisms.mech = newmechs;
-
-    /* clear out the newly allocated memory */
-    memset(&tobj->mechanisms.mech[offset], 0, count * sizeof(*tobj->mechanisms.mech));
-
-    return utils_mech_deep_copy(mech, count, &tobj->mechanisms.mech[offset]);
-}
-
-objattrs *tobject_get_attrs(tobject *tobj) {
-    return &tobj->attrs;
+attr_list *tobject_get_attrs(tobject *tobj) {
+    return tobj->attrs;
 }
 
 CK_RV tobject_user_increment(tobject *tobj) {

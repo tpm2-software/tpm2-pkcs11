@@ -29,11 +29,11 @@ INCLUDE_DIRS    = -I$(srcdir)/src -I$(top_srcdir)/src/lib
 ACLOCAL_AMFLAGS = -I m4 --install
 AM_CFLAGS       = $(INCLUDE_DIRS) $(EXTRA_CFLAGS) $(CODE_COVERAGE_CFLAGS) \
                   $(TSS2_ESYS_CFLAGS) $(TSS2_MU_CFLAGS) $(TSS2_TCTILDR_CFLAGS) \
-		  $(SQLITE3_CFLAGS) $(PTHREAD_CFLAGS) $(CRYPTO_CFLAGS)
+		  $(SQLITE3_CFLAGS) $(PTHREAD_CFLAGS) $(CRYPTO_CFLAGS) $(YAML_CFLAGS)
 
 AM_LDFLAGS      = $(EXTRA_LDFLAGS) $(CODE_COVERAGE_LIBS) $(TSS2_ESYS_LIBS) \
                   $(TSS2_MU_LIBS) $(TSS2_TCTILDR_LIBS) $(SQLITE3_LIBS) \
-		  $(PTHREAD_LIBS) $(CRYPTO_LIBS)
+		  $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(YAML_LIBS)
 
 # ax_code_coverage
 if AUTOCONF_CODE_COVERAGE_2019_01_06
@@ -201,12 +201,18 @@ noinst_LTLIBRARIES = $(libtpm2_test_pkcs11) $(libtpm2_test_internal)
 TESTS = $(check_PROGRAMS)
 check_PROGRAMS += \
     test/unit/test_twist\
-    test/unit/test_log
+    test/unit/test_log \
+    test/unit/test_parser \
+    test/unit/test_attr
 
 test_unit_test_twist_CFLAGS    = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
 test_unit_test_twist_LDADD     = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
 test_unit_test_log_CFLAGS      = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
 test_unit_test_log_LDADD       = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
+test_unit_test_parser_CFLAGS   = $(AM_CFLAGS) $(YAML_CFLAGS) $(CMOCKA_CFLAGS)
+test_unit_test_parser_LDADD    = $(CMOCKA_LIBS) $(YAML_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
+test_unit_test_attr_CFLAGS   = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
+test_unit_test_attr_LDADD    = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
 
 endif
 # END UNIT

@@ -20,9 +20,11 @@
 
 #include "config.h"
 #include "db.h"
+#include "emitter.h"
 #include "log.h"
 #include "mutex.h"
 #include "object.h"
+#include "parser.h"
 #include "session_table.h"
 #include "token.h"
 #include "tpm.h"
@@ -41,40 +43,6 @@
 static struct {
     sqlite3 *db;
 } global;
-
-static int str_to_bool(const char *val, bool *res) {
-
-    if (!strcasecmp(val, "yes")
-     || !strcasecmp(val, "true")
-     || !strcasecmp(val, "1")
-     || !strcasecmp(val, "y")) {
-        *res = true;
-        return 0;
-    }
-
-    if (!strcasecmp(val, "no")
-     || !strcasecmp(val, "false")
-     || !strcasecmp(val, "0")
-     || !strcasecmp(val, "n")) {
-        *res = false;
-        return 0;
-    }
-
-    LOGE("Could not convert \"%s\" to bool.", val);
-    return 1;
-}
-
-static int str_to_ul(const char *val, size_t *res) {
-
-    errno=0;
-    *res = strtoul(val, NULL, 0);
-    if (errno) {
-        LOGE("Could not convert \"%s\" to integer", val);
-        return 1;
-    }
-
-    return 0;
-}
 
 static int token_count_cb(void *ud, int argc, char **argv,
                     char **azColName) {
@@ -131,544 +99,6 @@ struct token_get_cb_ud {
     token *tokens;
 };
 
-typedef bool (*pfn_onkvp)(const char *key, const char *value, size_t index, void *data);
-typedef bool (*pfn_onkvp_allocator)(CK_ULONG count, void *data);
-
-bool generic_parse_kvp(char *line, size_t index, void *data, pfn_onkvp cb) {
-
-    char *kvp;
-    char *tmp = line;
-    char *saveptr = NULL;
-    while ((kvp = strtok_r(tmp, "\t ", &saveptr))) {
-        tmp = NULL;
-
-        char *split = strchr(kvp, '=');
-        if (!split) {
-            return false;
-        }
-
-        *split = '\0';
-
-        char *value = split + 1;
-        char *key = kvp;
-
-        bool result = cb(key, value, index, data);
-        if (!result) {
-            return result;
-        }
-    }
-
-    return true;
-}
-
-static bool alloc_attrs(CK_ULONG count, void *userdata) {
-
-    objattrs *attrs = (objattrs *)userdata;
-
-    attrs->attrs = calloc(count, sizeof(*attrs->attrs));
-    if (!attrs->attrs) {
-        LOGE("oom");
-        return false;
-    }
-
-    attrs->count = count;
-
-    return true;
-}
-
-static bool bn2bin(BIGNUM *bn, CK_ATTRIBUTE_PTR a) {
-
-    bool rc = false;
-
-    int len = BN_num_bytes(bn);
-    a->pValue = calloc(1, len);
-    if (!a->pValue) {
-        LOGE("oom");
-        goto out;
-    }
-
-    BN_bn2bin(bn, a->pValue);
-    a->ulValueLen = len;
-
-    rc = true;
-
-out:
-    BN_free(bn);
-
-    return rc;
-}
-
-static bool parse_attrs(const char *key, const char *value, size_t index, void *userdata) {
-
-    objattrs *tobj_attrs = (objattrs *)userdata;
-    CK_ATTRIBUTE_PTR a = &tobj_attrs->attrs[index];
-
-    size_t type;
-    int rc = str_to_ul(key, &type);
-    if (rc) {
-        LOGE("Could not convert key \"%s\" to CK_ULONG",
-                key);
-        return false;
-    }
-
-    a->type = type;
-    bool allow_empty_value = false;
-
-    switch(a->type) {
-    /* CK_BBOOLs */
-    case CKA_SENSITIVE:
-        /* falls-thru */
-    case CKA_ALWAYS_SENSITIVE:
-        /* falls-thru */
-    case CKA_EXTRACTABLE:
-        /* falls-thru */
-    case CKA_NEVER_EXTRACTABLE:
-        /* falls-thru */
-    case CKA_VERIFY:
-        /* falls-thru */
-    case CKA_SIGN:
-        /* falls-thru */
-    case CKA_ENCRYPT:
-        /* falls-thru */
-    case CKA_DECRYPT:
-        /* falls-thru */
-    case CKA_TOKEN:
-        /* falls-thru */
-    case CKA_ALWAYS_AUTHENTICATE:
-        /* falls-thru */
-    case CKA_VERIFY_RECOVER:
-        /* falls-thru */
-    case CKA_WRAP:
-        /* falls-thru */
-    case CKA_TRUSTED:
-        /* falls-thru */
-    case CKA_SIGN_RECOVER:
-        /* falls-thru */
-    case CKA_UNWRAP:
-        /* falls-thru */
-    case CKA_WRAP_WITH_TRUSTED:
-        /* falls-thru */
-    case CKA_DERIVE:
-        /* falls-thru */
-    case CKA_PRIVATE: {
-        bool is_true = !strcasecmp(value, "true");
-        bool is_false = !strcasecmp(value, "false");
-        if (!is_true && !is_false) {
-            /* not true or fAlse, try and coerce an int value */
-            size_t type;
-            int rc = str_to_ul(value, &type);
-            if (rc || (type != CK_TRUE && type != CK_FALSE)) {
-                LOGE("Could not convert CK_BBOOL for key \"%s\" value: \"%s\"",
-                        key, value);
-                return false;
-            }
-
-            is_true = type == CK_TRUE;
-        }
-
-        a->pValue = calloc(1, sizeof(CK_BBOOL));
-        if (!a->pValue) {
-            LOGE("oom");
-            return false;
-        }
-
-        a->ulValueLen = sizeof(CK_BBOOL);
-        *((CK_BBOOL *)a->pValue) = is_true ? CK_TRUE : CK_FALSE;
-
-    } break;
-
-    /* native endianess CK_ULONGs */
-    case CKA_NAME_HASH_ALGORITHM:
-        allow_empty_value = true;
-        /* falls through */
-    case CKA_JAVA_MIDP_SECURITY_DOMAIN:
-        /* falls through */
-    case CKA_CERTIFICATE_CATEGORY:
-        /* falls through */
-    case CKA_CERTIFICATE_TYPE:
-        /* falls through */
-    case CKA_MODULUS_BITS:
-        /* falls through */
-    case CKA_KEY_TYPE:
-        /* falls through */
-    case CKA_VALUE_LEN:
-        /* falls through */
-    case CKA_CLASS: {
-
-        if (!strlen(value)) {
-            if (allow_empty_value) {
-                LOGE("Value for key \"%s\" must be specified", key);
-                return false;
-            }
-            a->ulValueLen = 0;
-            break;
-        }
-
-        size_t val;
-        rc = str_to_ul(value, &val);
-        if (rc) {
-            LOGE("Could not convert key \"%s\" value \"%s\" to big integer",
-                    key, value);
-            return false;
-        }
-
-        a->pValue = calloc(1, sizeof(CK_ULONG));
-        if (!a->pValue) {
-            LOGE("oom");
-            return false;
-        }
-
-        memcpy(a->pValue, &val, sizeof(CK_ULONG));
-        a->ulValueLen = sizeof(CK_ULONG);
-    } break;
-    /* base10 encoded big integers */
-    case CKA_PUBLIC_EXPONENT: {
-
-        BIGNUM *bn = NULL;
-        rc = BN_dec2bn(&bn, value);
-        if (!rc) {
-            LOGE("Could not convert key \"%s\" value \"%s\" to big integer",
-                    key, value);
-            return false;
-        }
-
-        return bn2bin(bn, a);
-    } break;
-    /* base16 encoded big integers */
-    case CKA_EC_PARAMS: {
-
-        BIGNUM *bn = NULL;
-        rc = BN_hex2bn(&bn, value);
-        if (!rc) {
-            LOGE("Could not convert key \"%s\" value \"%s\" to big integer",
-                    key, value);
-            return false;
-        }
-
-        return bn2bin(bn, a);
-    } break;
-    case CKA_EC_POINT: {
-
-        BIGNUM *bn = NULL;
-        rc = BN_hex2bn(&bn, value);
-        if (!rc) {
-            LOGE("Could not convert key \"%s\" value \"%s\" to big integer",
-                    key, value);
-            return false;
-        }
-
-        return bn2bin(bn, a);
-    } break;
-    case CKA_MODULUS: {
-
-        BIGNUM *bn = NULL;
-        rc = BN_hex2bn(&bn, value);
-        if (!rc) {
-            LOGE("Could not convert key \"%s\" value \"%s\" to big integer",
-                    key, value);
-            return false;
-        }
-
-        return bn2bin(bn, a);
-    } break;
-
-    /* hex-strings */
-    case CKA_PUBLIC_KEY_INFO:
-        /* falls-thru */
-    case CKA_HASH_OF_ISSUER_PUBLIC_KEY:
-        /* falls-thru */
-    case CKA_HASH_OF_SUBJECT_PUBLIC_KEY:
-        /* falls-thru */
-    case CKA_CHECK_VALUE:
-        /* falls-thru */
-    case CKA_SERIAL_NUMBER:
-        /* falls-thru */
-    case CKA_ISSUER:
-        /* falls-thru */
-    case CKA_VALUE:
-        /* falls-thru */
-    case CKA_SUBJECT:
-        /* falls-thru */
-    case CKA_ID:
-        /* falls-thru */
-    case CKA_LABEL: {
-
-        twist t = twistbin_unhexlify(value);
-        if (!t) {
-            LOGE("Could not unhexlify: %s", value);
-            return false;
-        }
-        CK_ULONG len = twist_len(t);
-
-        CK_BYTE_PTR label = calloc(1, len);
-        if (!label) {
-            twist_free(t);
-            LOGE("oom");
-            return false;
-        }
-
-        memcpy(label, t, len);
-        twist_free(t);
-
-        a->ulValueLen = len;
-        a->pValue = label;
-    } break;
-
-    /* strings */
-    case CKA_URL: {
-        assert(value);
-        a->ulValueLen = strlen(value);
-        a->pValue = calloc(1, a->ulValueLen + 1);
-        if (!a->pValue) {
-            LOGE("oom");
-            return false;
-        }
-    } break;
-
-    /* CK_DATE's */
-    case CKA_START_DATE:
-        /* falls through */
-    case CKA_END_DATE:
-        /* falls through */
-        if (strlen(value)) {
-            LOGE("Cannot handle specified CK_DATE types");
-            return false;
-        }
-
-        a->ulValueLen = strlen(value);
-        a->pValue = calloc(1, a->ulValueLen + 1);
-        if (!a->pValue) {
-            LOGE("oom");
-            return false;
-        }
-        break;
-    default:
-        LOGE("Unknown key, got: \"%s\"", key);
-        return false;
-    }
-
-    return true;
-}
-
-static bool alloc_mech(CK_ULONG count, void *userdata) {
-
-    tobject *tobj = (tobject *)userdata;
-
-    tobj->mechanisms.count = count;
-    tobj->mechanisms.mech = calloc(count, sizeof(*tobj->mechanisms.mech));
-
-    if (!tobj->mechanisms.mech) {
-        LOGE("oom");
-        return false;
-    }
-
-    return true;
-}
-
-static bool on_CKM_RSA_PKCS_OAEP_mechs(const char *key, const char *value, size_t index, void *data) {
-
-    UNUSED(index);
-
-    assert(key);
-    assert(value);
-    assert(data);
-
-    CK_RSA_PKCS_OAEP_PARAMS_PTR params = (CK_RSA_PKCS_OAEP_PARAMS_PTR)data;
-
-    CK_ULONG_PTR p = NULL;
-    if (!strcmp(key, "mgf")) {
-         p = &params->mgf;
-    } else if (!strcmp(key, "hashalg")) {
-        p = &params->hashAlg;
-    } else {
-        LOGE("Unkown key: \"%s\"", key);
-        return false;
-    }
-
-    size_t val;
-    int rc = str_to_ul(value, &val);
-    if (rc) {
-        return false;
-    }
-
-    *p = val;
-
-    return true;
-}
-
-static bool handle_CKM_RSA_PKCS_OAEP_mechs(const char *value, CK_MECHANISM_PTR mech) {
-
-    bool result = false;
-
-    /* make a copy for strtok_r to modify */
-    char *copy = strdup(value);
-    if (!copy) {
-        LOGE("oom");
-        return false;
-    }
-
-    CK_RSA_PKCS_OAEP_PARAMS_PTR params = calloc(1, sizeof(*params));
-    if (!params) {
-        LOGE("oom");
-        goto out;
-    }
-
-    unsigned i = 0;
-    char *kvp;
-    char *saveptr = NULL;
-    char *tmp = copy;
-    while( (kvp=strtok_r(tmp, ",", &saveptr)) ) {
-        tmp = NULL;
-
-        bool result = generic_parse_kvp(kvp, i, params, on_CKM_RSA_PKCS_OAEP_mechs);
-        if (!result) {
-            free(params);
-            goto out;
-        }
-        i++;
-    }
-
-    mech->pParameter = params;
-    mech->ulParameterLen = sizeof(*params);
-
-    result = true;
-
-out:
-    free(copy);
-
-    return result;
-}
-
-static bool parse_mech(const char *key, const char *value, size_t index, void *userdata) {
-
-    tobject *tobj = (tobject *)userdata;
-    CK_MECHANISM_PTR m = &tobj->mechanisms.mech[index];
-
-    size_t mechanism;
-    int rc = str_to_ul(key, &mechanism);
-    if (rc) {
-        LOGE("Could not convert key \"%s\" to CK_ULONG",
-                key);
-        return false;
-    }
-
-    m->mechanism = mechanism;
-
-    switch (mechanism) {
-    case CKM_RSA_PKCS_OAEP:
-        return handle_CKM_RSA_PKCS_OAEP_mechs(value, m);
-    }
-
-    /* Mechanisms that don't have values should have empty values */
-    assert(value[0] == '\0');
-
-    return true;
-}
-
-static bool parse_token_config(const char *key, const char *value, size_t index, void *userdata) {
-
-    UNUSED(index);
-
-    token *t = (token *)userdata;
-
-    if (!strcmp(key, "token-init")) {
-        return !str_to_bool(value, &t->config.is_initialized);
-    } else if (!strcmp(key, "log-level")) {
-            log_set_level(value);
-            return true;
-    } else if (!strcmp(key, "tcti")) {
-            t->config.tcti = strdup(value);
-            if (!t->config.tcti) {
-                LOGE("oom");
-                return false;
-            }
-            return true;
-    } else {
-        LOGE("Unknown token config key: \"%s\"", key);
-    }
-
-    return false;
-}
-
-CK_RV parse_generic_kvp_line(const char *kvplines,
-        void *data, pfn_onkvp_allocator allocator, pfn_onkvp handler) {
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    /* PARSE
-     * type=0 value=4
-     * type=256 value=31
-     */
-
-    char *kvpstr = strdup(kvplines);
-    if (!kvpstr) {
-        return CKR_HOST_MEMORY;
-    }
-
-    /*
-     * Get the count of how many
-     */
-    char *line;
-    char *tmp = kvpstr;
-    char *saveptr = NULL;
-
-    CK_ULONG count = 0;
-    while ((line = strtok_r(tmp, "\r\n", &saveptr))) {
-        tmp = NULL;
-        count++;
-    }
-
-    free(kvpstr);
-
-    /*
-     * Call the allocator
-     */
-    if (allocator) {
-        bool result = allocator(count, data);
-        if (!result) {
-            return CKR_HOST_MEMORY;
-        }
-    }
-
-    if (!count) {
-        return CKR_OK;
-    }
-
-    /*
-     * Make a new copy for strtok to destroy
-     */
-    kvpstr = strdup(kvplines);
-    if (!kvpstr) {
-        return CKR_HOST_MEMORY;
-    }
-
-    saveptr = NULL;
-    tmp = kvpstr;
-    size_t i = 0;
-    while ((line = strtok_r(tmp, "\r\n", &saveptr))) {
-        tmp = NULL;
-
-        /*
-         * Call the parser handler, giving them the data and current
-         * offset.
-         */
-        bool result = generic_parse_kvp(line, i, data, handler);
-        if (!result) {
-            goto out;
-        }
-
-        i++;
-    }
-
-    rv = CKR_OK;
-
-out:
-
-    free(kvpstr);
-
-    return rv;
-}
-
 tobject *db_tobject_new(sqlite3_stmt *stmt) {
 
     tobject *tobj = tobject_new();
@@ -701,28 +131,17 @@ tobject *db_tobject_new(sqlite3_stmt *stmt) {
             }
         } else if (!strcmp(name, "attrs")) {
 
-            const char *attrs = (const char *)sqlite3_column_text(stmt, i);
-            if (!attrs) {
+            int bytes = sqlite3_column_bytes(stmt, i);
+            const unsigned char *attrs = sqlite3_column_text(stmt, i);
+            if (!attrs || !bytes) {
                 LOGE("tobject does not have attributes");
                 goto error;
             }
 
-            CK_RV rv = parse_generic_kvp_line(attrs, &tobj->attrs, alloc_attrs, parse_attrs);
-            if (rv != CKR_OK) {
-                if (rv == CKR_HOST_MEMORY) {
-                    goto_oom(NULL, error);
-                }
+            bool res = parse_attributes_from_string(attrs, bytes,
+                    &tobj->attrs);
+            if (!res) {
                 LOGE("Could not parse DB attrs, got: \"%s\"", attrs);
-                goto error;
-            }
-        } else if (!strcmp(name, "mech")) {
-            const char *mech = (const char *)sqlite3_column_text(stmt, i);
-            CK_RV rv = parse_generic_kvp_line(mech, tobj, alloc_mech, parse_mech);
-            if (rv != CKR_OK) {
-                if (rv == CKR_HOST_MEMORY) {
-                    goto_oom(NULL, error);
-                }
-                LOGE("Could not parse DB mech, got: \"%s\"", mech);
                 goto error;
             }
         } else {
@@ -730,6 +149,8 @@ tobject *db_tobject_new(sqlite3_stmt *stmt) {
             goto error;
         }
     }
+
+    assert(tobj->id);
 
     return tobj;
 
@@ -772,6 +193,7 @@ int init_tobjects(unsigned tokid, tobject **head) {
         }
 
         assert(cur);
+        assert(insert);
         cur->next = &insert->l;
         cur = cur->next;
     }
@@ -961,16 +383,17 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
                         sqlite3_column_text(stmt, i));
 
             } else if (!strcmp(name, "config")) {
-                char *config = strdup((const char *)sqlite3_column_text(stmt, i));
-                goto_oom(config, error);
-                bool result = generic_parse_kvp(config, 0, t, parse_token_config);
-                if (!result) {
-                    LOGE("Could not parse token config, got: \"%s\"", config);
-                    free(config);
+                int bytes = sqlite3_column_bytes(stmt, i);
+                const unsigned char *config = sqlite3_column_text(stmt, i);
+                if (!config || !i) {
+                    LOGE("Expected token config to contain config data");
                     goto error;
                 }
-                free(config);
-
+                bool result = parse_token_config_from_string(config, bytes, &t->config);
+                if (!result) {
+                    LOGE("Could not parse token config, got: \"%s\"", config);
+                    goto error;
+                }
             } else {
                 LOGE("Unknown key: %s", name);
                 goto error;
@@ -1203,248 +626,15 @@ CK_RV oaep_mech_type_handler(CK_MECHANISM_PTR mech, CK_ULONG index, void *userda
     return CKR_OK;
 }
 
-twist mech_to_kvp(CK_MECHANISM_PTR mechs, CK_ULONG count) {
-
-    static const mech_handler mech_to_kvp_handlers[] = {
-            { CKM_RSA_X_509,     generic_mech_type_handler },
-            { CKM_ECDSA,         generic_mech_type_handler },
-            { CKM_RSA_PKCS_OAEP, oaep_mech_type_handler    }
-    };
-
-    twist mech_kvp = NULL;
-
-    CK_RV rv = utils_handle_mechs(mech_to_kvp_handlers, ARRAY_LEN(mech_to_kvp_handlers), mechs, count, &mech_kvp);
-    if (rv != CKR_OK) {
-        twist_free(mech_kvp);
-        return NULL;
-    }
-
-    return mech_kvp;
-}
-
-static CK_RV attr_generic_bool_handler(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *userdat) {
-    UNUSED(index);
-    assert(userdat);
-
-    twist *t = (twist *)(userdat);
-
-    CK_BBOOL value;
-    if (attr->ulValueLen != sizeof(value)) {
-        return CKR_ATTRIBUTE_VALUE_INVALID;
-    }
-
-    value = *((CK_BBOOL *)attr->pValue);
-    if (value != CK_TRUE && value != CK_FALSE) {
-        return CKR_ATTRIBUTE_VALUE_INVALID;
-    }
-
-    char tmp[128];
-    int bytes = snprintf(tmp, sizeof(tmp), "%lu=%u\n", attr->type, value);
-    if (bytes < 0 || (size_t)bytes >= sizeof(tmp)) {
-        LOGE("snprintf concat, needed: %d had %zu", bytes, sizeof(tmp));
-        return CKR_GENERAL_ERROR;
-    }
-
-    twist x = twist_append(*t, tmp);
-    if (!x) {
-        return CKR_HOST_MEMORY;
-    }
-
-    *t = x;
-
-    return CKR_OK;
-}
-
-static CK_RV attr_generic_unsigned_handler(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *userdat) {
-    UNUSED(index);
-    assert(userdat);
-
-    twist *t = (twist *)(userdat);
-
-    CK_ULONG value;
-    if (attr->ulValueLen != sizeof(value)) {
-        return CKR_ATTRIBUTE_VALUE_INVALID;
-    }
-
-    value = *((CK_ULONG_PTR)attr->pValue);
-
-    char tmp[128];
-    int bytes = snprintf(tmp, sizeof(tmp), "%lu=%lu\n", attr->type, value);
-    if (bytes < 0 || (size_t)bytes >= sizeof(tmp)) {
-        LOGE("snprintf concat, needed: %d had %zu", bytes, sizeof(tmp));
-        return CKR_GENERAL_ERROR;
-    }
-
-    twist x = twist_append(*t, tmp);
-    if (!x) {
-        return CKR_HOST_MEMORY;
-    }
-
-    *t = x;
-
-    return CKR_OK;
-}
-
-static CK_RV attr_bn10_handler(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *userdat) {
-    UNUSED(index);
-    assert(userdat);
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    char *dec_bn = NULL;
-    BIGNUM *bn = NULL;
-
-    twist *t = (twist *)(userdat);
-
-    bn = BN_bin2bn(attr->pValue, attr->ulValueLen, NULL);
-    if (!bn) {
-       LOGE("oom");
-       return CKR_HOST_MEMORY;
-    }
-
-    dec_bn = BN_bn2dec(bn);
-    if (!dec_bn) {
-        LOGE("Error converting BN to decimal string");
-        goto out;
-    }
-
-    char tmp[128];
-    int bytes = snprintf(tmp, sizeof(tmp), "%lu=%s\n", attr->type, dec_bn);
-    if (bytes < 0 || (size_t)bytes >= sizeof(tmp)) {
-        LOGE("snprintf concat, needed: %d had %zu", bytes, sizeof(tmp));
-        goto out;
-    }
-
-    twist x = twist_append(*t, tmp);
-    if (!x) {
-        rv = CKR_HOST_MEMORY;
-        goto out;
-    }
-
-    *t = x;
-
-    rv = CKR_OK;
-
-out:
-    BN_free(bn);
-    OPENSSL_free(dec_bn);
-    return rv;
-}
-
-static CK_RV attr_generic_hex_handler(CK_ATTRIBUTE_PTR attr, CK_ULONG index, void *userdat) {
-    UNUSED(index);
-    assert(userdat);
-
-    twist hex = NULL;
-    char *formatted = NULL;
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    twist *t = (twist *)(userdat);
-
-    if (!attr->ulValueLen || !attr->pValue) {
-        return CKR_ATTRIBUTE_VALUE_INVALID;
-    }
-
-    hex = twist_hex_new(attr->pValue, attr->ulValueLen);
-    if (!hex) {
-        return CKR_HOST_MEMORY;
-    }
-
-    size_t len = twist_len(hex) + 32;
-    formatted = calloc(1, len);
-    if (!formatted) {
-        LOGE("oom");
-        rv = CKR_HOST_MEMORY;
-        goto out;
-    }
-
-    int bytes = snprintf(formatted, len, "%lu=%s\n", attr->type, hex);
-    if (bytes < 0 || (size_t)bytes >= len) {
-        LOGE("snprintf concat, needed: %d had %zu", bytes, len);
-        goto out;
-    }
-
-    twist x = twist_append(*t, formatted);
-    if (!x) {
-        LOGE("oom");
-        rv = CKR_HOST_MEMORY;
-        goto out;
-    }
-
-    *t = x;
-
-    rv = CKR_OK;
-
-out:
-    twist_free(hex);
-    free(formatted);
-
-    return rv;
-}
-
-twist attr_to_kvp(CK_ATTRIBUTE_PTR attrs, CK_ULONG count) {
-
-    static const attr_handler attr_to_kvp_handlers[] = {
-        { CKA_CLASS,             attr_generic_unsigned_handler },
-        { CKA_TOKEN,             attr_generic_bool_handler     },
-        { CKA_PRIVATE,           attr_generic_bool_handler     },
-        { CKA_ID,                attr_generic_hex_handler      },
-        { CKA_KEY_TYPE,          attr_generic_unsigned_handler },
-        { CKA_LABEL,             attr_generic_hex_handler      },
-        { CKA_VERIFY,            attr_generic_bool_handler     },
-        { CKA_ENCRYPT,           attr_generic_bool_handler     },
-        { CKA_DECRYPT,           attr_generic_bool_handler     },
-        { CKA_SIGN,              attr_generic_bool_handler     },
-        { CKA_MODULUS,           attr_generic_hex_handler      },
-        { CKA_MODULUS_BITS,      attr_generic_unsigned_handler },
-        { CKA_PUBLIC_EXPONENT,   attr_bn10_handler             },
-        { CKA_SENSITIVE,         attr_generic_bool_handler     },
-        { CKA_EXTRACTABLE,       attr_generic_bool_handler     },
-        { CKA_ALWAYS_SENSITIVE,  attr_generic_bool_handler     },
-        { CKA_NEVER_EXTRACTABLE, attr_generic_bool_handler     },
-        { CKA_EC_PARAMS,         attr_generic_hex_handler      },
-        { CKA_EC_POINT,          attr_generic_hex_handler      },
-        { CKA_ALWAYS_AUTHENTICATE, attr_generic_bool_handler   },
-        { CKA_TRUSTED, attr_generic_bool_handler               },
-        { CKA_PUBLIC_KEY_INFO, attr_generic_hex_handler        },
-        { CKA_WRAP, attr_generic_bool_handler                  },
-        { CKA_UNWRAP, attr_generic_bool_handler                },
-        { CKA_SIGN_RECOVER, attr_generic_bool_handler          },
-        { CKA_VERIFY_RECOVER, attr_generic_bool_handler        },
-        { CKA_WRAP_WITH_TRUSTED, attr_generic_bool_handler     },
-        { CKA_DERIVE, attr_generic_bool_handler },
-    };
-
-    twist attr_kvp = NULL;
-
-    CK_RV rv = utils_handle_attrs(attr_to_kvp_handlers, ARRAY_LEN(attr_to_kvp_handlers), attrs, count, &attr_kvp);
-    if (rv != CKR_OK) {
-        twist_free(attr_kvp);
-        return NULL;
-    }
-
-    return attr_kvp;
-}
-
 CK_RV db_add_new_object(token *tok, tobject *tobj) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    twist m = NULL;
-    twist attrs = NULL;
     sqlite3_stmt *stmt = NULL;
 
-    m = mech_to_kvp(tobj->mechanisms.mech, tobj->mechanisms.count);
-    if (!m) {
-        LOGE("Could not convert mechanism");
-        goto error;
-    }
-
-    attrs = attr_to_kvp(tobj->attrs.attrs, tobj->attrs.count);
+    char *attrs = emit_attributes_to_string(tobj->attrs);
     if (!attrs) {
-        LOGE("Could not retrieve attrs");
-        goto error;
+        return CKR_GENERAL_ERROR;
     }
 
     const char *sql =
@@ -1453,10 +643,9 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
             "pub, "       // index: 2 type: BLOB
             "priv, "      // index: 3 type: BLOB
             "objauth, "   // index: 4 type: TEXT
-            "mech,"       // index: 5 type: TEXT
-            "attrs"       // index: 6 type: TEXT
+            "attrs"       // index: 5 type: TEXT (JSON)
           ") VALUES ("
-            "?,?,?,?,?,?"
+            "?,?,?,?,?"
           ");";
 
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
@@ -1484,10 +673,7 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
     rc = sqlite3_bind_text(stmt, 4, tobj->objauth, -1, SQLITE_STATIC);
     gotobinderror(rc, "objauth");
 
-    rc = sqlite3_bind_text(stmt, 5, m, -1, SQLITE_STATIC);
-    gotobinderror(rc, "mech");
-
-    rc = sqlite3_bind_text(stmt, 6, attrs, -1, SQLITE_STATIC);
+    rc = sqlite3_bind_text(stmt, 5, attrs, -1, SQLITE_STATIC);
     gotobinderror(rc, "attrs");
 
     rc = sqlite3_step(stmt);
@@ -1518,8 +704,7 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
     rv = CKR_OK;
 
 out:
-    twist_free(attrs);
-    twist_free(m);
+    free(attrs);
     return rv;
 
 error:
@@ -1532,54 +717,6 @@ error:
 
     rv = CKR_GENERAL_ERROR;
     goto out;
-}
-
-CK_RV db_update_attrs(tobject *tobj) {
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    twist attrs = NULL;
-    sqlite3_stmt *stmt = NULL;
-
-    attrs = attr_to_kvp(tobj->attrs.attrs, tobj->attrs.count);
-    if (!attrs) {
-        LOGE("Could not retrieve attrs");
-        goto error;
-    }
-
-    const char *sql =
-          "UPDATE tobjects SET attrs=? WHERE id=?;";
-
-    int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("%s", sqlite3_errmsg(global.db));
-        goto out;
-    }
-
-    rc = sqlite3_bind_text(stmt, 1, attrs, -1, SQLITE_STATIC);
-    gotobinderror(rc, "attrs");
-
-    rc = sqlite3_bind_int(stmt, 2, tobj->id);
-    gotobinderror(rc, "id");
-
-    rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
-        LOGE("step error: %s", sqlite3_errmsg(global.db));
-        goto error;
-    }
-
-error:
-    rc = sqlite3_finalize(stmt);
-    if (rc != SQLITE_OK) {
-        LOGE("Could not finalize stmt: %d", rc);
-        goto out;
-    }
-
-    rv = CKR_OK;
-
-out:
-    twist_free(attrs);
-    return rv;
 }
 
 CK_RV db_delete_object(tobject *tobj) {
