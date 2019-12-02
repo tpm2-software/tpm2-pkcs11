@@ -54,6 +54,8 @@ struct tobject {
     uint32_t handle;     /** loaded tpm handle */
 
     bool is_authenticated; /** true if a context specific login has authenticated use of the object */
+
+    uint8_t policytype;
 };
 
 typedef struct sealobject sealobject;

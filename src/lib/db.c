@@ -725,6 +725,8 @@ tobject *db_tobject_new(sqlite3_stmt *stmt) {
                 LOGE("Could not parse DB mech, got: \"%s\"", mech);
                 goto error;
             }
+        } else if (!strcmp(name, "policytype")) {
+            tobj->policytype = sqlite3_column_int(stmt, i);
         } else {
             LOGE("Unknown row, got: %s", name);
             goto error;
@@ -1454,9 +1456,10 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
             "priv, "      // index: 3 type: BLOB
             "objauth, "   // index: 4 type: TEXT
             "mech,"       // index: 5 type: TEXT
-            "attrs"       // index: 6 type: TEXT
+            "attrs, "      // index: 6 type: TEXT
+            "policytype"  // index: 7 type: INT
           ") VALUES ("
-            "?,?,?,?,?,?"
+            "?,?,?,?,?,?,?"
           ");";
 
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
@@ -1489,6 +1492,9 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
 
     rc = sqlite3_bind_text(stmt, 6, attrs, -1, SQLITE_STATIC);
     gotobinderror(rc, "attrs");
+
+    rc = sqlite3_bind_int(stmt, 7, tobj->policytype);
+    gotobinderror(rc, "policytype");
 
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {

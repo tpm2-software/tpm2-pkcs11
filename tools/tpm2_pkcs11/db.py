@@ -2,6 +2,7 @@ import textwrap
 import os
 import sys
 import sqlite3
+import binascii
 
 from .utils import list_dict_to_kvp
 from .utils import dict_to_kvp
@@ -26,6 +27,17 @@ class Db(object):
         with open(path, 'rb') as f:
             ablob = f.read()
             return sqlite3.Binary(ablob)
+
+    @staticmethod
+    def _hexlify(path):
+        with open(path, 'rb') as f:
+            ablob = f.read()
+            return binascii.hexlify(ablob)
+
+    @staticmethod
+    def _unhexlify(strdata):
+        bindata = binascii.unhexlify(strdata)
+        return bindata
 
     def gettoken(self, label):
         c = self._conn.cursor()
@@ -146,10 +158,41 @@ class Db(object):
 
         return c.lastrowid
 
-    def addtertiary(self, tokid, priv, pub, objauth, mech, attrs):
+    def addpolicy(self, policytype, tokid, policydigest=None, parameters=None):
+
+        policy = {
+            'type': policytype,
+            'tokid': tokid,
+        }
+
+        if policydigest:
+            policy['digest'] = Db._hexlify(policydigest)
+
+        if parameters:
+            policy['parameters'] = parameters
+
+        columns = ', '.join(policy.keys())
+        placeholders = ', '.join('?' * len(policy))
+        sql = 'INSERT INTO policy ({}) VALUES ({})'.format(columns,
+                                                             placeholders)
+        c = self._conn.cursor()
+        c.execute(sql, list(policy.values()))
+        return c.lastrowid
+
+    def getpolicyfile_from_tokid_and_type(self, tokid, policytype, filepath):
+        c = self._conn.cursor()
+        c.execute("SELECT digest from policy WHERE (tokid=? AND type=?)", (tokid, policytype, ))
+        x = c.fetchone()
+        policy_digest = Db._unhexlify(x[0])
+        fp=open(filepath, 'wb')
+        fp.write(policy_digest)
+        fp.close()
+
+    def addtertiary(self, tokid, priv, pub, objauth, mech, attrs, policytype):
         tobject = {
             'tokid': tokid,
             'attrs': list_dict_to_kvp(attrs),
+            'policytype': policytype,
         }
 
         if priv != None:
@@ -271,6 +314,25 @@ class Db(object):
                 objauth TEXT,
                 mech TEXT NOT NULL,
                 attrs TEXT NOT NULL,
+                policytype INTEGER NOT NULL,
+                FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
+            );
+            '''),
+            #
+            # PRIMARY = Fixed for all tokens
+            # No Policy = Fixed for all tokens = 0
+            # SOPIN Object policy = Fixed for all tokens= PolicyPassword
+            # Type 1 --> USERPIN Object policy
+            # Type 2 --> Sealing Object policy = USER Object policy
+            # Type 3 --> PolicyPassword
+            #
+            textwrap.dedent('''
+            CREATE TABLE IF NOT EXISTS policy(
+                id INTEGER PRIMARY KEY,
+                tokid INTEGER NOT NULL,
+                type INTEGER NOT NULL,
+                digest TEXT,
+                parameters TEXT,
                 FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
             );
             '''),

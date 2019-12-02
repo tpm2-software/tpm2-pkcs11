@@ -39,6 +39,11 @@ class InitCommand(Command):
             '--primary-auth',
             help='Authorization value for existing primary key object, defaults to an empty auth value.'
         )
+        group_parser.add_argument(
+            '--nopolicy',
+            help='Disable adding policy to primary object authorization model\n',
+            default=False,
+            action='store_true')
 
     @staticmethod
     def str_to_handle(arg):
@@ -59,6 +64,15 @@ class InitCommand(Command):
                 setattr(args, self.dest, values)
 
         return customAction
+
+    @staticmethod
+    def generate_primary_policy(tpm2):
+
+        # PolicyPassword
+        session_context = tpm2.startauthsession(False)
+        policypassword, session_context = tpm2.createpolicypassword(session_context)
+        tpm2.flushsession(session_context)
+        return policypassword
 
     def __call__(self, args):
 
@@ -81,9 +95,13 @@ class InitCommand(Command):
                     tpm2 = Tpm2(d)
 
                     if not use_existing_primary:
-                        pobjauth = pobjauth if pobjauth != None else rand_hex_str(
-                        )
-                        ctx = tpm2.createprimary(ownerauth, pobjauth)
+                        policy = None
+                        if args['nopolicy'] == False:
+                        # Create policies upfront to use when creating objects
+                            policy = self.generate_primary_policy(tpm2)
+
+                        pobjauth = pobjauth if pobjauth != None else rand_hex_str()
+                        ctx = tpm2.createprimary(ownerauth, pobjauth, policy)
                         tr_handle = tpm2.evictcontrol(ownerauth, ctx)
                         shall_evict = True
                     else:

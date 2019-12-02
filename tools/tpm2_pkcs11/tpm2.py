@@ -12,7 +12,7 @@ class Tpm2(object):
     def __init__(self, tmp):
         self._tmp = tmp
 
-    def createprimary(self, ownerauth, objauth):
+    def createprimary(self, ownerauth, objauth, policy=None):
         ctx = os.path.join(self._tmp, "context.out")
         cmd = [
             'tpm2_createprimary', '-p', '%s' % objauth, '-c', ctx, '-g',
@@ -21,6 +21,9 @@ class Tpm2(object):
 
         if ownerauth and len(ownerauth) > 0:
             cmd.extend(['-P', ownerauth])
+
+        if policy:
+            cmd.extend(['-L', policy])
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         _, stderr = p.communicate()
@@ -128,7 +131,8 @@ class Tpm2(object):
                objauth,
                objattrs=None,
                seal=None,
-               alg=None):
+               alg=None,
+               policy=None):
         # tpm2_create -Q -C context.out -g $gAlg -G $GAlg -u key.pub -r key.priv
         _, priv = mkstemp(prefix='', suffix='.priv', dir=self._tmp)
         _, pub = mkstemp(prefix='', suffix='.pub', dir=self._tmp)
@@ -149,6 +153,9 @@ class Tpm2(object):
 
         if alg != None:
             cmd.extend(['-G', alg])
+
+        if policy:
+            cmd.extend(['-L', policy])
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, stdin=PIPE, env=os.environ)
         stdout, stderr = p.communicate(input=seal)
@@ -249,3 +256,44 @@ class Tpm2(object):
             raise RuntimeError("Could not execute tpm2_load: %s", stderr)
 
         return newpriv
+
+    def startauthsession(self, is_policy_session):
+
+        session_ctx = os.path.join(self._tmp, uuid.uuid4().hex + '.sessionctx')
+        cmd = ['tpm2_startauthsession', '-S', session_ctx]
+
+        if is_policy_session:
+            cmd.extend(['--policy-session'])
+
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+        _, stderr = p.communicate()
+        rc = p.wait()
+        if rc:
+            raise RuntimeError("Could not execute tpm2_startauthsession: %s", stderr)
+
+        return session_ctx
+
+    def flushsession(self, session_ctx):
+
+        cmd = ['tpm2_flushcontext', session_ctx]
+
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+        _, stderr = p.communicate()
+        rc = p.wait()
+        if rc:
+            raise RuntimeError("Could not execute tpm2_startauthsession: %s", stderr)
+
+        return session_ctx
+
+    def createpolicypassword(self, session_ctx):
+
+        policypassword = os.path.join(self._tmp, uuid.uuid4().hex + '.policypassword')
+        cmd = ['tpm2_policypassword', '-S', session_ctx, '-L', policypassword]
+
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+        _, stderr = p.communicate()
+        rc = p.wait()
+        if rc:
+            raise RuntimeError("Could not execute tpm2_startauthsession: %s", stderr)
+
+        return policypassword, session_ctx

@@ -14,7 +14,7 @@ from .utils import AESAuthUnwrapper
 from .utils import load_sealobject
 from .utils import str2bool
 from .tpm2 import Tpm2
-
+from .policies import * # noqa
 
 @commandlet("rmtoken")
 class RmTokenCommand(Command):
@@ -165,6 +165,31 @@ class AddTokenCommand(Command):
             required=True)
 
     @staticmethod
+    def generate_token_policies(db, tpm2, tokid):
+
+        # PolicyPassword
+        session_context = tpm2.startauthsession(False)
+        policypassword, session_context = tpm2.createpolicypassword(session_context)
+        tpm2.flushsession(session_context)
+        db.addpolicy(POLICY_PASSWORD_TYPE, tokid, policypassword)
+
+        #
+        # Assign the USERPIN object policy as policypassword
+        # OR
+        # As function(policypassword + other policies)
+        #
+        db.addpolicy(USER_PIN_POLICY_TYPE, tokid, policypassword)
+
+        #
+        # Assign the USER object (tobject) policy as policypassword
+        # OR
+        # As function(policypassword + other policies)
+        #
+        # The same is the policy for the SEAL object (sobject)
+        #
+        db.addpolicy(USER_OBJECT_POLICY_TYPE , tokid, policypassword)
+
+    @staticmethod
     def do_token_init(db, path, args):
 
         userpin = args['userpin']
@@ -207,6 +232,8 @@ class AddTokenCommand(Command):
             # If this succeeds, we update the token table
             config = {'token-init': True}
             tokid = db.addtoken(pobject['id'], config, label=label)
+
+            AddTokenCommand.generate_token_policies(db, tpm2, tokid)
 
             # now we update the sealobject table with the tokid to seal objects mapping
             db.addsealobjects(tokid, usersealauth, usersealpriv, usersealpub,

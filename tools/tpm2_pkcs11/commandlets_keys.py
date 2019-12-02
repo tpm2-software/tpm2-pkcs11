@@ -28,6 +28,8 @@ from .tpm2 import Tpm2
 
 from .pkcs11t import *  # noqa
 
+from .policies import * # noqa
+
 class NewKeyCommandBase(Command):
     '''
     creates a key to a token within a tpm2-pkcs11 store.
@@ -47,7 +49,7 @@ class NewKeyCommandBase(Command):
         pinopts.add_argument('--userpin', help='The User pin.\n'),
 
     # Implemented by derived class
-    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey, d):
+    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey, d, nopolicy, tokid):
         raise NotImplementedError('Implement: new_key')
 
     @staticmethod
@@ -85,7 +87,7 @@ class NewKeyCommandBase(Command):
 
     @staticmethod
     def new_key_save(alg, keylabel, tid, label, tertiarypriv, tertiarypub,
-                     tertiarypubdata, encobjauth, objauth, db, tpm2, extra_privattrs=None, extra_pubattrs=None):
+                     tertiarypubdata, encobjauth, objauth, db, tpm2, policytype, extra_privattrs=None, extra_pubattrs=None):
         token = db.gettoken(label)
 
         #
@@ -326,12 +328,12 @@ class NewKeyCommandBase(Command):
 
         # Store private to database
         privrowid = db.addtertiary(token['id'], tertiarypriv, tertiarypub,
-                                   encobjauth, privmech, privattrs)
+                                   encobjauth, privmech, privattrs, policytype)
 
         # if it's asymmetric, add a public object too
         if pubattrs:
             pubrowid = db.addtertiary(token['id'], None, tertiarypub,
-                                      encobjauth, pubmech, pubattrs)
+                                      encobjauth, pubmech, pubattrs, policytype)
 
         # if the keylabel is not set, use the tertiary object tid as the keylabel
         # Normally we would use a transaction to make this atomic, but Pythons
@@ -389,8 +391,8 @@ class NewKeyCommandBase(Command):
                 encobjauth, objauth = NewKeyCommandBase.new_key_init(
                     label, sopin, userpin, pobj, sealobjects, tpm2, d)
 
-                tertiarypriv, tertiarypub, tertiarypubdata = self.new_key_create(
-                    pobj, objauth, tpm2, path, alg, privkey, d)
+                tertiarypriv, tertiarypub, tertiarypubdata, policytype = self.new_key_create(
+                    pobj, objauth, tpm2, path, alg, privkey, d, args['nopolicy'], token['id'])
 
                 # handle options that can add additional attributes
                 priv_attrs = None
@@ -399,7 +401,7 @@ class NewKeyCommandBase(Command):
 
                 final_key_label = NewKeyCommandBase.new_key_save(
                     alg, key_label, tid, label, tertiarypriv, tertiarypub,
-                    tertiarypubdata, encobjauth, objauth, db, tpm2, extra_privattrs=priv_attrs)
+                    tertiarypubdata, encobjauth, objauth, db, tpm2, policytype, extra_privattrs=priv_attrs)
 
                 return final_key_label
 
@@ -431,9 +433,14 @@ class ImportCommand(NewKeyCommandBase):
             help='The type of the key.\n',
             choices=['rsa'],
             required=True)
+        group_parser.add_argument(
+            '--nopolicy',
+            help='Disable adding policy to object authorization model\n',
+            action='store_true'
+        )
 
     # Imports a new key
-    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey, d):
+    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey, d, nopolicy, tokid):
         if alg != 'rsa':
             sys.exit('Unknown algorithm or algorithm not supported, got "%s"' %
                      alg)
@@ -446,7 +453,7 @@ class ImportCommand(NewKeyCommandBase):
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.importkey(
             tr_handle, pobj['objauth'], objauth, privkey=privkey, alg=alg)
 
-        return (tertiarypriv, tertiarypub, tertiarypubdata)
+        return (tertiarypriv, tertiarypub, tertiarypubdata, 0)
 
     def __call__(self, args):
         keylabel = super(ImportCommand, self).__call__(args)
@@ -479,16 +486,29 @@ class AddKeyCommand(NewKeyCommandBase):
             '--key-label',
             help='The key label to identify the key. Defaults to an integer value.\n'
         )
+        group_parser.add_argument(
+            '--nopolicy',
+            help='Disable adding policy to object authorization model\n',
+            action='store_true'
+        )
 
     # Creates a new key
-    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey, d):
+    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey, d, nopolicy, tokid):
 
         tr_handle = bytes_to_file(pobj['handle'], d)
 
-        tertiarypriv, tertiarypub, tertiarypubdata = tpm2.create(
-            tr_handle, pobj['objauth'], objauth, alg=alg)
+        tertiary_object_policy_type = NO_POLICY_TYPE
+        policy = None
+        if nopolicy == False:
+            tertiary_object_policy_type = USER_OBJECT_POLICY_TYPE
+            with Db(path) as db:
+                policy = "policy"
+                db.getpolicyfile_from_tokid_and_type(tokid, tertiary_object_policy_type, policy)
 
-        return (tertiarypriv, tertiarypub, tertiarypubdata)
+        tertiarypriv, tertiarypub, tertiarypubdata = tpm2.create(
+            tr_handle, pobj['objauth'], objauth, alg=alg, policy=policy)
+
+        return (tertiarypriv, tertiarypub, tertiarypubdata, tertiary_object_policy_type)
 
     def __call__(self, args):
         keylabel = super(AddKeyCommand, self).__call__(args)
@@ -611,7 +631,7 @@ class AddCert(Command):
              # TODO verify that cert is cryptographically bound to key found
 
              # add the cert
-             db.addtertiary(token['id'], None, None, None, None, attrs)
+             db.addtertiary(token['id'], None, None, None, None, attrs, NO_POLICY_TYPE)
 
         print('Added cert as label: "{keylabel}"'.format(keylabel=keylabel))
 
