@@ -264,7 +264,12 @@ class NewKeyCommandBase(Command):
                 CKA_CLASS: CKO_SECRET_KEY
             }, {
                 CKA_KEY_TYPE: CKK_AES
-            }, {
+            },
+            # placate pkcs11 tool asking for CKA_VALUE
+            {
+                CKA_VALUE: ""
+            },
+            {
                 CKA_VALUE_LEN: y['sym-keybits'] / 8
             },
             {
