@@ -94,11 +94,13 @@ class InitCommand(Command):
                 try:
                     tpm2 = Tpm2(d)
 
+                    policyenable = 0
                     if not use_existing_primary:
                         policy = None
                         if args['nopolicy'] == False:
                         # Create policies upfront to use when creating objects
                             policy = self.generate_primary_policy(tpm2)
+                            policyenable = 1
 
                         pobjauth = pobjauth if pobjauth != None else rand_hex_str()
                         ctx = tpm2.createprimary(ownerauth, pobjauth, policy)
@@ -130,7 +132,7 @@ class InitCommand(Command):
                             tr_handle = handle
 
 
-                    pid = db.addprimary(tr_handle, pobjauth)
+                    pid = db.addprimary(tr_handle, pobjauth, policyenable)
 
                     action_word = "Added" if use_existing_primary else "Created"
                     print("%s a primary object of id: %d" % (action_word, pid))

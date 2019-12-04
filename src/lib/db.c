@@ -973,6 +973,20 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
                 }
                 free(config);
 
+            } else if (!strcmp(name, "sopinnvindex")) {
+                snprintf((char *)t->sopinnvindex, sizeof(t->sopinnvindex), "%s",
+                    sqlite3_column_text(stmt,i));
+
+            } else if (!strcmp(name, "userpinnvindex")) {
+                snprintf((char *)t->userpinnvindex, sizeof(t->userpinnvindex), "%s",
+                    sqlite3_column_text(stmt,i));
+
+            } else if (!strcmp(name, "sealingobjpriv")) {
+                goto_error(get_blob_null(stmt, i, &t->sealingobjpriv), error);
+
+            } else if (!strcmp(name, "sealingobjpub")) {
+                goto_error(get_blob_null(stmt, i, &t->sealingobjpub), error);
+
             } else {
                 LOGE("Unknown key: %s", name);
                 goto error;

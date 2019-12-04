@@ -39,6 +39,11 @@ struct token {
 
     tobject *tobjects;
 
+    unsigned char sopinnvindex[11];
+    unsigned char userpinnvindex[11];
+    twist sealingobjpriv;
+    twist sealingobjpub;
+
     struct {
         bool is_initialized;  /* token initialization state */
         char *tcti;           /* token specific tcti config */

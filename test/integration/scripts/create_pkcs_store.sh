@@ -74,7 +74,7 @@ fi
 set -e
 
 # init
-tpm2_ptool init --primary-auth=mypobjpin --path=$TPM2_PKCS11_STORE
+tpm2_ptool init --primary-auth=mypobjpin --path=$TPM2_PKCS11_STORE --nopolicy
 
 echo one
 
@@ -85,7 +85,7 @@ handle=`tpm2_evictcontrol -C o -c $TPM2_PKCS11_STORE/primary.ctx | grep -Po '(?<
 echo 2
 
 echo "tpm2_ptool init --primary-auth=anotherpobjpin --primary-handle=$handle --primary-auth=foopass --path=$TPM2_PKCS11_STORE"
-tpm2_ptool init --primary-auth=anotherpobjpin --primary-handle=$handle --primary-auth=foopass --path=$TPM2_PKCS11_STORE
+tpm2_ptool init --primary-auth=anotherpobjpin --primary-handle=$handle --primary-auth=foopass --path=$TPM2_PKCS11_STORE --nopolicy
 
 echo 3
 
@@ -95,12 +95,12 @@ esys_tr_file="$TPM2_PKCS11_STORE/primary3.handle"
 tpm2_evictcontrol -C o -c $TPM2_PKCS11_STORE/primary.ctx -o "$esys_tr_file"
 
 echo "tpm2_ptool init --primary-handle="$esys_tr_file" --path=$TPM2_PKCS11_STORE"
-tpm2_ptool init --primary-handle="$esys_tr_file" --path=$TPM2_PKCS11_STORE
+tpm2_ptool init --primary-handle="$esys_tr_file" --path=$TPM2_PKCS11_STORE --nopolicy
 
 # add 3 tokens
-tpm2_ptool addtoken --pid=1 --sopin=myBADsopin --userpin=myBADuserpin --label=label --path $TPM2_PKCS11_STORE
-tpm2_ptool addtoken --pid=2 --sopin=anothersopin --userpin=anotheruserpin --label=import-keys --path $TPM2_PKCS11_STORE
-tpm2_ptool addtoken --pid=3 --sopin=sopin3 --userpin=userpin3 --label=esys-tr --path $TPM2_PKCS11_STORE
+tpm2_ptool addtoken --pid=1 --sopin=myBADsopin --userpin=myBADuserpin --label=label --path $TPM2_PKCS11_STORE --nopolicy
+tpm2_ptool addtoken --pid=2 --sopin=anothersopin --userpin=anotheruserpin --label=import-keys --path $TPM2_PKCS11_STORE --nopolicy
+tpm2_ptool addtoken --pid=3 --sopin=sopin3 --userpin=userpin3 --label=esys-tr --path $TPM2_PKCS11_STORE --nopolicy
 
 # Change the bad pins to something good (test tpm2_ptool changepin commandlet)
 tpm2_ptool changepin --label=label --user=user --old=myBADuserpin --new=myuserpin --path=$TPM2_PKCS11_STORE
@@ -120,20 +120,20 @@ tpm2_ptool initpin --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM
 
 echo "Adding 3 AES 256 keys under token \"label\""
 tpm2_ptool addkey --algorithm=aes256 --label="label" --userpin=myuserpin --path=$TPM2_PKCS11_STORE --nopolicy
-tpm2_ptool addkey --algorithm=aes256 --label="label" --key-label=mykeylabel --userpin=myuserpin --path=$TPM2_PKCS11_STORE
-tpm2_ptool addkey --algorithm=aes256 --label="label" --userpin=myuserpin --attr-always-authenticate --path=$TPM2_PKCS11_STORE
+tpm2_ptool addkey --algorithm=aes256 --label="label" --key-label=mykeylabel --userpin=myuserpin --path=$TPM2_PKCS11_STORE --nopolicy
+tpm2_ptool addkey --algorithm=aes256 --label="label" --userpin=myuserpin --attr-always-authenticate --path=$TPM2_PKCS11_STORE --nopolicy
 echo "Added AES Keys"
 
 echo "Adding 3 RSA 2048 keys under token \"label\""
 for i in `seq 0 1`; do
-  tpm2_ptool addkey --algorithm=rsa2048 --label="label" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+  tpm2_ptool addkey --algorithm=rsa2048 --label="label" --userpin=myuserpin --path=$TPM2_PKCS11_STORE --nopolicy
 done;
-tpm2_ptool addkey --algorithm=rsa2048 --label="label" --userpin=myuserpin --attr-always-authenticate --path=$TPM2_PKCS11_STORE
+tpm2_ptool addkey --algorithm=rsa2048 --label="label" --userpin=myuserpin --attr-always-authenticate --path=$TPM2_PKCS11_STORE --nopolicy
 echo "Added RSA Keys"
 
 echo "Adding 2 EC p256 keys under token \"label\""
 for i in `seq 0 1`; do
-  tpm2_ptool addkey --algorithm=ecc256 --label="label" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+  tpm2_ptool addkey --algorithm=ecc256 --label="label" --userpin=myuserpin --path=$TPM2_PKCS11_STORE --nopolicy
 done;
 echo "Added EC Keys"
 
@@ -191,7 +191,7 @@ tpm2_ptool addcert --label=label --key-label=12 --path=$TPM2_PKCS11_STORE "$cert
 echo "added x509 Certificate"
 
 # add 1 aes key under label "import-keys"
-tpm2_ptool addkey --algorithm=aes128 --label="import-keys" --userpin=anotheruserpin --path=$TPM2_PKCS11_STORE
+tpm2_ptool addkey --algorithm=aes128 --label="import-keys" --userpin=anotheruserpin --path=$TPM2_PKCS11_STORE --nopolicy
 
 # import 1 rsa2048 key under label "import-keys"
 echo "importing rsa2048 key under token 'import-keys'"

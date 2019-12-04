@@ -128,7 +128,7 @@ class Tpm2(object):
     def create(self,
                phandle,
                pauth,
-               objauth,
+               objauth=None,
                objattrs=None,
                seal=None,
                alg=None,
@@ -232,30 +232,24 @@ class Tpm2(object):
 
         return priv, pub, stdout
 
-    def changeauth(self, pctx, objctx, oldobjauth, newobjauth):
+    def changeauth(self, is_not_nv, pctx, objctx, oldobjauth, newobjauth):
 
         newpriv = os.path.join(self._tmp, uuid.uuid4().hex + '.priv')
 
         #tpm2_load -C $file_primary_key_ctx  -u $file_load_key_pub  -r $file_load_key_priv -n $file_load_key_name -o $file_load_key_ctx
-        cmd = [
-            'tpm2_changeauth',
-            '-C',
-            str(pctx),
-            '-c',
-            str(objctx),
-            '-p',
-            oldobjauth,
-            '-r',
-            newpriv,
-            newobjauth,
-        ]
+        cmd = ['tpm2_changeauth', '-c', str(objctx), '-p', oldobjauth, newobjauth]
+
+        if is_not_nv:
+            cmd.extend(['-C', str(pctx), '-r', newpriv])
+
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         _, stderr = p.communicate()
         rc = p.wait()
         if rc:
             raise RuntimeError("Could not execute tpm2_load: %s", stderr)
 
-        return newpriv
+        if is_not_nv:
+            return newpriv
 
     def startauthsession(self, is_policy_session):
 
@@ -297,3 +291,86 @@ class Tpm2(object):
             raise RuntimeError("Could not execute tpm2_startauthsession: %s", stderr)
 
         return policypassword, session_ctx
+
+    def nvindexdefine(self, ownerauth, nvindexauth, policyfile):
+
+        # tpm2_nvdefine -C o -P ownerauth -p defaultsonvpin $NV_INDEX \
+        # -a "authread|authwrite" -s 0 -L policy.pass_AND_ccnvobjch
+        cmd = [
+            'tpm2_nvdefine', '-C', 'o', '-s', '0', '-L', policyfile,
+            '-a', 'authread|authwrite'
+        ]
+
+        if ownerauth and len(ownerauth) > 0:
+            cmd.extend(['-P', ownerauth])
+
+        if nvindexauth and len(nvindexauth) > 0:
+            cmd.extend(['-p', '%s' % nvindexauth])
+
+
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+        outputnvindexstr, stderr = p.communicate()
+        rc = p.wait()
+        if rc:
+            raise RuntimeError("Could not execute tpm2_nvdefine: %s", stderr)
+            return 0
+
+        return outputnvindexstr
+
+    def nvindexundefine(self, ownerauth, nvindex):
+
+        #tpm2_nvundefine -C o -P ownerauth $NV_INDEX
+        cmd = ['tpm2_nvundefine', '-C', 'o', nvindex]
+
+        if ownerauth and len(ownerauth) > 0:
+            cmd.extend(['-P', ownerauth])
+
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+        _, stderr = p.communicate()
+        rc = p.wait()
+        if rc:
+            raise RuntimeError("Could not execute tpm2_nvundefine: %s", stderr)
+
+
+    def policycommandcode(self, commandcode, session_ctx):
+
+        policycommandcode = os.path.join(self._tmp, uuid.uuid4().hex + '.policycommandcode')
+        #tpm2_policycommandcode -S session.ctx -L policy_output
+        cmd = ['tpm2_policycommandcode', '-S', session_ctx, '-L', policycommandcode, commandcode]
+
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+        _, stderr = p.communicate()
+        rc = p.wait()
+        if rc:
+            raise RuntimeError("Could not execute tpm2_policycommandcode: %s", stderr)
+
+        return policycommandcode, session_ctx
+
+    def policysecret(self, tpm2object, tpm2objectauth, session_ctx):
+
+        #tpm2_policysecret -S session_ctx -c tpm2object tpm2objectauth
+        policysecret = os.path.join(self._tmp, uuid.uuid4().hex + '.policysecret')
+        cmd = ['tpm2_policysecret', '-S', session_ctx, '-L', policysecret,
+                '-c', tpm2object, tpm2objectauth]
+
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+        _, stderr = p.communicate()
+        rc = p.wait()
+        if rc:
+            raise RuntimeError("Could not execute tpm2_policysecret: %s", stderr)
+
+        return policysecret, session_ctx
+
+    def policyor(self, policy_truth_value1, policy_truth_value2, session_ctx):
+        policyor = os.path.join(self._tmp, uuid.uuid4().hex + '.policyor')
+        #tpm2_policyor -S session.ctx -L policy_output -l sha256:t1,t2
+        cmd = ['tpm2_policyor', '-S', session_ctx, '-L', policyor,
+               '-l', 'sha256:'+policy_truth_value1+','+policy_truth_value2]
+
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+        _, stderr = p.communicate()
+        rc = p.wait()
+        if rc:
+            raise RuntimeError("Could not execute tpm2_policyor: %s", stderr)
+
+        return policyor, session_ctx

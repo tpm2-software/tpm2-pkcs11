@@ -502,8 +502,7 @@ class AddKeyCommand(NewKeyCommandBase):
         if nopolicy == False:
             tertiary_object_policy_type = USER_OBJECT_POLICY_TYPE
             with Db(path) as db:
-                policy = "policy"
-                db.getpolicyfile_from_tokid_and_type(tokid, tertiary_object_policy_type, policy)
+                policy = db.getpolicyfile_from_tokid_and_type(tokid, tertiary_object_policy_type)
 
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.create(
             tr_handle, pobj['objauth'], objauth, alg=alg, policy=policy)

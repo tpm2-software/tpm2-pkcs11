@@ -115,6 +115,28 @@ class Db(object):
         c = self._conn.cursor()
         c.execute(sql, values)
 
+
+    def update_token_sopin_nv_index(self, tokid, sopinnvindex):
+
+        sql = 'UPDATE tokens SET sopinnvindex=? WHERE id=?'
+        values = (sopinnvindex, tokid)
+        c = self._conn.cursor()
+        c.execute(sql, values)
+
+    def update_token_userpin_nv_index(self, tokid, userpinnvindex):
+
+        sql = 'UPDATE tokens SET userpinnvindex=? WHERE id=?'
+        values = (userpinnvindex, tokid)
+        c = self._conn.cursor()
+        c.execute(sql, values)
+
+    def update_token_sealobject(self, tokid, sealingobjpub, sealingobjpriv):
+
+        sql = 'UPDATE tokens SET sealingobjpub=?, sealingobjpriv=? WHERE id=?'
+        values = (Db._blobify(sealingobjpub), Db._blobify(sealingobjpriv), tokid)
+        c = self._conn.cursor()
+        c.execute(sql, values)
+
     def addsealobjects(self, tokid, usersealauth, usersealpriv, usersealpub,
                        sosealauth, sosealpriv, sosealpub):
 
@@ -138,7 +160,7 @@ class Db(object):
 
         return c.lastrowid
 
-    def addprimary(self, tr_handle, objauth, hierarchy='o'):
+    def addprimary(self, tr_handle, objauth, policyenable, hierarchy='o'):
 
         # Subordiante commands will need some of this data
         # when deriving subordinate objects, so pass it back
@@ -147,6 +169,7 @@ class Db(object):
             'hierarchy': hierarchy,
             'handle': Db._blobify(tr_handle),
             'objauth': objauth,
+            'policyenable': policyenable,
         }
 
         columns = ', '.join(pobject.keys())
@@ -179,14 +202,19 @@ class Db(object):
         c.execute(sql, list(policy.values()))
         return c.lastrowid
 
-    def getpolicyfile_from_tokid_and_type(self, tokid, policytype, filepath):
+    def generate_file_from_binary(self, filepath, binary_string_data):
+        binary_data = self._unhexlify(binary_string_data)
+        fp=open(filepath, 'wb')
+        fp.write(binary_data)
+        fp.close()
+
+    def getpolicyfile_from_tokid_and_type(self, tokid, policytype):
         c = self._conn.cursor()
         c.execute("SELECT digest from policy WHERE (tokid=? AND type=?)", (tokid, policytype, ))
         x = c.fetchone()
-        policy_digest = Db._unhexlify(x[0])
-        fp=open(filepath, 'wb')
-        fp.write(policy_digest)
-        fp.close()
+        filepath = "/tmp/policy.file"
+        self.generate_file_from_binary(filepath, x[0])
+        return filepath
 
     def addtertiary(self, tokid, priv, pub, objauth, mech, attrs, policytype):
         tobject = {
@@ -281,6 +309,10 @@ class Db(object):
                 pid INTEGER NOT NULL,
                 label TEXT UNIQUE,
                 config TEXT NOT NULL,
+                sopinnvindex TEXT,
+                userpinnvindex TEXT,
+                sealingobjpriv BLOB,
+                sealingobjpub BLOB,
                 FOREIGN KEY (pid) REFERENCES pobjects(id) ON DELETE CASCADE
             );
             '''),
@@ -302,7 +334,8 @@ class Db(object):
                 id INTEGER PRIMARY KEY,
                 hierarchy TEXT NOT NULL,
                 handle BLOB NOT NULL,
-                objauth TEXT NOT NULL
+                objauth TEXT NOT NULL,
+                policyenable INTEGER NOT NULL
             );
             '''),
             textwrap.dedent('''
@@ -323,8 +356,8 @@ class Db(object):
             # No Policy = Fixed for all tokens = 0
             # SOPIN Object policy = Fixed for all tokens= PolicyPassword
             # Type 1 --> USERPIN Object policy
-            # Type 2 --> Sealing Object policy = USER Object policy
-            # Type 3 --> PolicyPassword
+            # Type 2 --> Sealing Object policy = USER Object policy --> PolicySecret(=USERPIN)
+            # Type 3 --> PolicySecret(=SOPIN)
             #
             textwrap.dedent('''
             CREATE TABLE IF NOT EXISTS policy(
