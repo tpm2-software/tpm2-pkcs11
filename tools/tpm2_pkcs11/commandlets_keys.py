@@ -17,6 +17,7 @@ from .utils import TemporaryDirectory
 from .utils import hash_pass
 from .utils import rand_hex_str
 from .utils import pemcert_to_attrs
+from .utils import str2bytes
 
 from .tpm2 import Tpm2
 
@@ -282,21 +283,31 @@ class AddCert(Command):
             '--label', help='The profile label to remove.\n', required=True)
 
         group_parser.add_argument(
+            'cert', help='The x509 PEM certificate to add.\n')
+
+        sub_group = group_parser.add_mutually_exclusive_group()
+
+        sub_group.add_argument(
             '--key-label',
-            help='The associated private key label.\n',
-            required=True)
+            help='The associated private key label.\n')
 
         group_parser.add_argument(
-            'cert', help='The x509 PEM certificate to add.\n')
+            '--key-id',
+            help='The associated private key id in hex.\n')
+
 
     def __call__(self, args):
 
         path = args['path']
         label = args['label']
         keylabel = args['key_label']
+        keyid = args['key_id']
         certpath = args['cert']
 
-        attrs = pemcert_to_attrs(certpath, keylabel)
+        if (keylabel is None) == (keyid is None):
+            sys.exit('Expected --key-label or --key-id to be specified')
+
+        attrs = pemcert_to_attrs(certpath)
 
         pkcs11_object = PKCS11X509(attrs)
 
@@ -310,17 +321,28 @@ class AddCert(Command):
             # not associated with a key.
             tobjs = db.gettertiary(token['id'])
 
-            # look up the id by object label
-            tid = None
+            # look up the private key
+            missing_id_or_label = None
             for t in tobjs:
-                tid = AddCert.get_id_by_label(t, keylabel)
-                if tid is not None:
+                if keylabel is not None:
+                    missing_id_or_label = AddCert.get_id_by_label(t, keylabel)
+                else:
+                    missing_id_or_label = AddCert.get_label_by_id(t, keyid)
+                if missing_id_or_label is not None:
                     break
 
-            if tid is None:
+            if missing_id_or_label is None:
                 raise RuntimeError('Cannot find key with id "%s"' % keylabel)
 
-            pkcs11_object.update({CKA_ID: tid})
+            # have valid keylabel needed id
+            if keylabel:
+                pkcs11_object.update({CKA_ID: missing_id_or_label})
+                pkcs11_object.update({CKA_LABEL: missing_id_or_label})
+            # have valid id needed keylabel
+            else:
+                pkcs11_object.update({CKA_LABEL: missing_id_or_label})
+                pkcs11_object.update({CKA_ID: keyid})
+
             # TODO verify that cert is cryptographically bound to key found
 
             # add the cert
@@ -338,5 +360,17 @@ class AddCert(Command):
             x = binascii.unhexlify(x).decode()
             if x == keylabel:
                 return attrs[CKA_ID]
+
+        return None
+
+    @staticmethod
+    def get_label_by_id(tobj, keyid):
+
+        attrs = yaml.safe_load(io.StringIO(tobj['attrs']))
+
+        if CKA_ID in attrs:
+            x = attrs[CKA_ID]
+            if x == keyid:
+                return attrs[CKA_LABEL] if CKA_LABEL in attrs else ''
 
         return None
