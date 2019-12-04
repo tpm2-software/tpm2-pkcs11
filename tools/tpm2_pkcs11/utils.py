@@ -243,7 +243,7 @@ def asn1_format_ec_point_uncompressed(x, y):
 
     return s
 
-def pemcert_to_attrs(certpath, keylabel):
+def pemcert_to_attrs(certpath):
             # rather than use pycryptography x509 parser, which gives native type access to certficiate
         # fields use pyASN1 to get raw ASN1 encoded values for the fields as the spec requires them
         with open(certpath, "r") as f:
@@ -270,8 +270,6 @@ def pemcert_to_attrs(certpath, keylabel):
         subj = c['subject']
         hexsubj=h(d(str2bytes(subj))).decode()
 
-        hexkeylabel = h(str2bytes(keylabel)).decode()
-
         return {
             # The attrs of this attribute is derived by taking the first 3 bytes of the CKA_VALUE
             # field.
@@ -285,8 +283,6 @@ def pemcert_to_attrs(certpath, keylabel):
             CKA_PUBLIC_KEY_INFO : "",
             # DER encoded subject
             CKA_SUBJECT : hexsubj,
-            # "label of keypair associated, default empty
-            CKA_LABEL : hexkeylabel,
             # der encoding of issuer, default empty
             CKA_ISSUER : '',
             # der encoding of the cert serial, default empty
