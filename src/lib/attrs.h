@@ -7,6 +7,14 @@
 
 #include "pkcs11.h"
 
+/*
+ * We will allow these to be accessed, but the values are not stable
+ */
+#define CKA_VENDOR_TPM2_DEFINED 0x0F000000UL
+#define CKA_TPM2_OBJAUTH_ENC (CKA_VENDOR_DEFINED|CKA_VENDOR_TPM2_DEFINED|0x1UL)
+#define CKA_TPM2_PUB_BLOB    (CKA_VENDOR_DEFINED|CKA_VENDOR_TPM2_DEFINED|0x2UL)
+#define CKA_TPM2_PRIV_BLOB   (CKA_VENDOR_DEFINED|CKA_VENDOR_TPM2_DEFINED|0x3UL)
+
 /**
  * The heart of any PKCS11 object is it's attribute list. This list
  * attempts to make dealing with list attributes simple. It allows you

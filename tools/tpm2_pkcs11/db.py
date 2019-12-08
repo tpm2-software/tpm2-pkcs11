@@ -93,7 +93,7 @@ class Db(object):
 
     def updateconfig(self, token, config):
 
-        new_config = yaml.safe_load(io.StringIO(config))
+        new_config = yaml.dump(config, canonical=True)
 
         sql = 'UPDATE tokens SET config=? WHERE id=?'
 
@@ -150,15 +150,6 @@ class Db(object):
             'tokid': tokid,
             'attrs': yaml.safe_dump(dict(pkcs11_object), canonical=True),
         }
-
-        if pkcs11_object.tpm_priv != None:
-            tobject['priv'] = Db._blobify(pkcs11_object.tpm_priv)
-
-        if pkcs11_object.tpm_pub != None:
-            tobject['pub'] = Db._blobify(pkcs11_object.tpm_pub)
-
-        if pkcs11_object.auth != None:
-            tobject['objauth'] = pkcs11_object.auth
 
         columns = ', '.join(tobject.keys())
         placeholders = ', '.join('?' * len(tobject))
@@ -260,9 +251,6 @@ class Db(object):
             CREATE TABLE IF NOT EXISTS tobjects(
                 id INTEGER PRIMARY KEY,
                 tokid INTEGER NOT NULL,
-                pub BLOB,
-                priv BLOB,
-                objauth TEXT,
                 attrs TEXT NOT NULL,
                 FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
             );

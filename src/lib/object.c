@@ -35,9 +35,10 @@ void tobject_free(tobject *tobj) {
         return;
     }
 
+    twist_free(tobj->objauth);
     twist_free(tobj->priv);
     twist_free(tobj->pub);
-    twist_free(tobj->objauth);
+
     twist_free(tobj->unsealed_auth);
 
     attr_list *a = tobject_get_attrs(tobj);
@@ -421,6 +422,7 @@ tobject *tobject_new(void) {
 
 CK_RV tobject_set_blob_data(tobject *tobj, twist pub, twist priv) {
     assert(pub);
+    assert(tobj);
 
     tobj->priv = twist_dup(priv);
     if (priv && !tobj->priv) {
@@ -435,7 +437,18 @@ CK_RV tobject_set_blob_data(tobject *tobj, twist pub, twist priv) {
         return CKR_HOST_MEMORY;
     }
 
-    return CKR_OK;
+    if (priv) {
+        bool r = attr_list_add_buf(tobj->attrs, CKA_TPM2_PRIV_BLOB,
+                (CK_BYTE_PTR)priv, twist_len(priv));
+        if (!r) {
+            return CKR_GENERAL_ERROR;
+        }
+    }
+
+    bool r = attr_list_add_buf(tobj->attrs, CKA_TPM2_PUB_BLOB,
+            (CK_BYTE_PTR)pub, pub ? twist_len(pub) : 0);
+
+    return r ? CKR_OK : CKR_GENERAL_ERROR;
 }
 
 CK_RV tobject_set_auth(tobject *tobj, twist authbin, twist wrappedauthhex) {
@@ -456,7 +469,9 @@ CK_RV tobject_set_auth(tobject *tobj, twist authbin, twist wrappedauthhex) {
         return CKR_HOST_MEMORY;
     }
 
-    return CKR_OK;
+    bool r = attr_list_add_buf(tobj->attrs, CKA_TPM2_OBJAUTH_ENC,
+            (CK_BYTE_PTR)wrappedauthhex, twist_len(wrappedauthhex));
+    return r ? CKR_OK : CKR_GENERAL_ERROR;
 }
 
 void tobject_set_handle(tobject *tobj, uint32_t handle) {

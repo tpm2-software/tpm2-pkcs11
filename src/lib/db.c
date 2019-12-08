@@ -82,11 +82,6 @@ static int _get_blob(sqlite3_stmt *stmt, int i, bool can_be_null, twist *blob) {
     return 0;
 }
 
-static int get_blob_null(sqlite3_stmt *stmt, int i, twist *blob) {
-
-    return _get_blob(stmt, i, true, blob);
-}
-
 static int get_blob(sqlite3_stmt *stmt, int i, twist *blob) {
 
     return _get_blob(stmt, i, false, blob);
@@ -117,18 +112,6 @@ tobject *db_tobject_new(sqlite3_stmt *stmt) {
 
         } else if (!strcmp(name, "tokid")) {
             // Ignore sid we don't need it as token has that data.
-        } else if (!strcmp(name, "priv")) {
-            goto_error(get_blob_null(stmt, i, &tobj->priv), error);
-
-        } else if (!strcmp(name, "pub")) {
-            goto_error(get_blob_null(stmt, i, &tobj->pub), error);
-
-        } else if (!strcmp(name, "objauth")) {
-            char *x = (char *)sqlite3_column_text(stmt, i);
-            if (x) {
-                tobj->objauth = twist_new(x);
-                goto_oom(tobj->objauth, error);
-            }
         } else if (!strcmp(name, "attrs")) {
 
             int bytes = sqlite3_column_bytes(stmt, i);
@@ -151,6 +134,44 @@ tobject *db_tobject_new(sqlite3_stmt *stmt) {
     }
 
     assert(tobj->id);
+
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_OBJAUTH_ENC);
+    if (a && a->pValue && a->ulValueLen) {
+        tobj->objauth = twistbin_new(a->pValue, a->ulValueLen);
+        if (!tobj->objauth) {
+            LOGE("oom");
+            goto error;
+        }
+    }
+
+    a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_PUB_BLOB);
+    if (a && a->pValue && a->ulValueLen) {
+        if (!tobj->objauth) {
+            LOGE("objects with CKA_TPM2_OBJAUTH_ENC should have CKA_TPM2_PUB_BLOB");
+            goto error;
+        }
+
+        tobj->pub = twistbin_new(a->pValue, a->ulValueLen);
+        if (!tobj->pub) {
+            LOGE("oom");
+            goto error;
+        }
+    }
+
+    a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_PRIV_BLOB);
+    if (a && a->pValue && a->ulValueLen) {
+
+        if (!tobj->pub) {
+            LOGE("objects with CKA_TPM2_PUB_BLOB should have CKA_TPM2_PRIV_BLOB");
+            goto error;
+        }
+
+        tobj->priv = twistbin_new(a->pValue, a->ulValueLen);
+        if (!tobj->priv) {
+            LOGE("oom");
+            goto error;
+        }
+    }
 
     return tobj;
 
@@ -640,12 +661,9 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
     const char *sql =
           "INSERT INTO tobjects ("
             "tokid, "     // index: 1 type: INT
-            "pub, "       // index: 2 type: BLOB
-            "priv, "      // index: 3 type: BLOB
-            "objauth, "   // index: 4 type: TEXT
-            "attrs"       // index: 5 type: TEXT (JSON)
+            "attrs"       // index: 2 type: TEXT (JSON)
           ") VALUES ("
-            "?,?,?,?,?"
+            "?,?"
           ");";
 
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
@@ -662,18 +680,7 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
     rc = sqlite3_bind_int(stmt, 1, tok->id);
     gotobinderror(rc, "tokid");
 
-    rc = sqlite3_bind_blob(stmt, 2, tobj->pub,
-            tobj->pub ? twist_len(tobj->pub) : 0, SQLITE_STATIC);
-    gotobinderror(rc, "pub");
-
-    rc = sqlite3_bind_blob(stmt, 3, tobj->priv,
-            tobj->priv ? twist_len(tobj->priv) : 0, SQLITE_STATIC);
-    gotobinderror(rc, "priv");
-
-    rc = sqlite3_bind_text(stmt, 4, tobj->objauth, -1, SQLITE_STATIC);
-    gotobinderror(rc, "objauth");
-
-    rc = sqlite3_bind_text(stmt, 5, attrs, -1, SQLITE_STATIC);
+    rc = sqlite3_bind_text(stmt, 2, attrs, -1, SQLITE_STATIC);
     gotobinderror(rc, "attrs");
 
     rc = sqlite3_step(stmt);
