@@ -1,8 +1,10 @@
+import binascii
 import yaml
 
 # local imports
 from .utils import get_ec_params
 from .utils import asn1_format_ec_point_uncompressed
+from .utils import str2bytes
 
 from .pkcs11t import *  # noqa
 
@@ -13,11 +15,32 @@ class PKCS11Object(dict):
 
         attrs[CKA_CLASS] = objclass
 
+        if auth is not None:
+            # hexencode the ENC obj auth string because str are hex encoded
+            attrs[CKA_TPM2_OBJAUTH_ENC] = binascii.hexlify(str2bytes(auth)).decode()
+
+        #
+        # the priv/pub tpm objects are paths to where they are stored, so
+        # read them and convert to hex
+        #
+        privhex=None
+        if tpm_priv is not None:
+            with open(tpm_priv, "rb") as f:
+                privhex = binascii.hexlify(f.read()).decode()
+
+        pubhex=None
+        if tpm_pub is not None:
+            with open(tpm_pub, "rb") as f:
+                pubhex = binascii.hexlify(f.read()).decode()
+
+        if pubhex is not None:
+            attrs[CKA_TPM2_PUB_BLOB] = pubhex
+
+        if privhex is not None:
+            attrs[CKA_TPM2_PRIV_BLOB] = privhex
+
         self.update(attrs)
 
-        self.tpm_priv=tpm_priv
-        self.tpm_pub=tpm_pub
-        self.auth = auth
 
     def genmechs(self, tpm2):
         raise NotImplementedError()

@@ -31,6 +31,10 @@ struct tobject {
 
     CK_OBJECT_HANDLE id; /** external handle */
 
+    /*
+     * these all exist in the attribute array, but we'll keep some
+     * twist copies of them handy for convenience.
+     */
     twist pub;           /** public tpm data */
     twist priv;          /** private tpm data */
     twist objauth;       /** wrapped object auth value */

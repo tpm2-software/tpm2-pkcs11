@@ -17,7 +17,6 @@ from .utils import TemporaryDirectory
 from .utils import hash_pass
 from .utils import rand_hex_str
 from .utils import pemcert_to_attrs
-from .utils import str2bytes
 
 from .tpm2 import Tpm2
 

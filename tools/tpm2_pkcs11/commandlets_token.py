@@ -18,6 +18,7 @@ from .utils import load_sealobject
 from .utils import str2bool
 from .tpm2 import Tpm2
 
+from .pkcs11t import *  # noqa
 
 @commandlet("rmtoken")
 class RmTokenCommand(Command):
@@ -78,7 +79,6 @@ class VerifyCommand(Command):
         pobj = db.getprimary(token['pid'])
         sealobj = db.getsealobject(token['id'])
 
-        pobjauth = None
         wrappingkeyauth = None
 
         with TemporaryDirectory() as d:
@@ -128,8 +128,15 @@ class VerifyCommand(Command):
             tobjs = db.gettertiary(token['id'])
 
             for tobj in tobjs:
-                tpm2.load(tr_handle, pobjauth, tobj['priv'], tobj['pub'])
-                tobjauth = wrapper.unwrap(tobj['objauth'])
+
+                attrs = yaml.safe_load(tobj['attrs'])
+
+                priv= attrs[CKA_TPM2_PRIV_BLOB]
+                pub= attrs[CKA_TPM2_PUB_BLOB]
+                encauth = attrs[CKA_TPM2_OBJAUTH_ENC]
+
+                tpm2.load(tr_handle, pobjauth, priv, pub)
+                tobjauth = wrapper.unwrap(encauth)
 
                 print("Tertiary object verified(%d), auth: %s" %
                       (tobj['id'], tobjauth))
@@ -460,8 +467,10 @@ class ConfigCommand(Command):
 
         token = db.gettoken(label)
 
+        token_config = yaml.safe_load(io.StringIO(token['config']))
         if not key and not value:
-            print(str(token['config']))
+            yaml_tok_cconf = yaml.safe_dump(token_config, default_flow_style=False)
+            print(yaml_tok_cconf)
             sys.exit(0)
 
         if not key and value:
@@ -471,18 +480,16 @@ class ConfigCommand(Command):
         # throws an error if the key isn't known to the system
         validator = cls.get_validator_for_key(key)
 
-        config = dict_from_kvp(token['config'])
-
         # no value, just key. Print the current value for key is set or empty if not set
         if not value:
-            print("%s=%s" % (key, str(config[key] if key in config else "")))
+            print("%s=%s" % (key, str(token_config[key] if key in token_config else "")))
             sys.exit(0)
 
         v = validator(value)
-        config[key] = v
+        token_config[key] = v
 
         # update the database
-        db.updateconfig(token, config)
+        db.updateconfig(token, token_config)
 
     def __call__(self, args):
 
