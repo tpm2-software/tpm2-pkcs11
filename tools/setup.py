@@ -31,6 +31,8 @@ setup(
     install_requires=[
         'cryptography',
         'pyyaml',
+        'pyasn1',
+        'pyasn1_modules',
     ],
     tests_require=[],
     entry_points={
