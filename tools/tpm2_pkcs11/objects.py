@@ -187,6 +187,7 @@ class PKCS11PrivateKey(PKCS11Key):
     def __init__(self, objtype, attrs, auth=None, tpm_priv=None, tpm_pub=None):
 
         add = {
+            CKA_SENSITIVE: True,
             CKA_SUBJECT: attrs[CKA_SUBJECT] if CKA_SUBJECT in attrs else '',
             CKA_DECRYPT: attrs[CKA_DECRYPT],
             CKA_SIGN: attrs[CKA_SIGN],
