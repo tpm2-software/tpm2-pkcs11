@@ -298,6 +298,8 @@ CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
     twist newpubblob = NULL;
     twist newprivblob = NULL;
 
+    twist sealdata = NULL;
+
     tnewpin = twistbin_new(newpin, newlen);
     if (!tnewpin) {
         rv = CKR_HOST_MEMORY;
@@ -314,7 +316,11 @@ CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
 
 
     /* we store the seal data in hex form, but it's in binary form in memory, so convert it */
-    twist sealdata = tok->wappingkey;
+    sealdata = twist_hexlify(tok->wappingkey);
+    if (!sealdata) {
+        LOGE("oom");
+        goto out;
+    }
 
     /* create a new seal object and seal the data */
     uint32_t new_seal_handle = 0;
@@ -361,6 +367,7 @@ out:
         twist_free(newpubblob);
     }
 
+    twist_free(sealdata);
     twist_free(newauthhex);
 
     twist_free(tnewpin);
