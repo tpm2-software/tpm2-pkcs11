@@ -95,14 +95,13 @@ AM_TESTS_ENVIRONMENT = \
     PYTHONPATH=$(abs_top_srcdir)/tools \
     dbus-run-session
 
-INT_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
-
 TESTS_LDADD = $(noinst_LTLIBRARIES) $(lib_LTLIBRARIES) $(p11lib_LTLIBRARIES) $(AM_LDFLAGS) $(CMOCKA_LIBS) $(CRYPTO_LIBS)
 
 TESTS_CFLAGS = $(CMOCKA_CFLAGS)
 
 # Intentionally empty so INTEGRATION and UNIT tests can append to it.
 check_PROGRAMS =
+check_SCRIPTS =
 
 ### Integration Tests ###
 if ENABLE_INTEGRATION
@@ -116,7 +115,6 @@ test_integration_libtest_a_SOURCES = $(LIB_SRC)
 test_integration_libtest_a_CFLAGS = -fPIC $(AM_CFLAGS)
 TESTS_LDADD += $(LIB_TEST)
 
-TESTS = $(check_PROGRAMS)
 check_PROGRAMS += \
     test/integration/pkcs-find-objects.int \
     test/integration/pkcs-get-mechanism.int \
@@ -129,9 +127,16 @@ check_PROGRAMS += \
     test/integration/pkcs-keygen.int \
     test/integration/pkcs-session-state.int
 
-XFAIL_TESTS=test/unit/test_pkcs11
+# add test scripts
+check_SCRIPTS += \
+    test/integration/pkcs11-tool.sh
 
-INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
+AM_INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
+INT_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
+
+TEST_EXTENSIONS = .sh
+AM_SH_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
+SH_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
 
 test_integration_pkcs_find_objects_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_find_objects_int_LDADD   = $(TESTS_LDADD)
@@ -198,7 +203,6 @@ noinst_LTLIBRARIES = $(libtpm2_test_pkcs11) $(libtpm2_test_internal)
 
 ## End of test libraries, start tests ##
 
-TESTS = $(check_PROGRAMS)
 check_PROGRAMS += \
     test/unit/test_twist\
     test/unit/test_log \
@@ -216,6 +220,10 @@ test_unit_test_attr_LDADD    = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2
 
 endif
 # END UNIT
+
+TESTS= \
+    $(check_PROGRAMS) \
+    $(check_SCRIPTS)
 
 ### Helper Functions ###
 define make_parent_dir
