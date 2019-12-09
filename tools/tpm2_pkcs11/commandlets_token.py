@@ -1,4 +1,5 @@
 # python stdlib dependencies
+import binascii
 import io
 import sys
 
@@ -131,12 +132,23 @@ class VerifyCommand(Command):
 
                 attrs = yaml.safe_load(tobj['attrs'])
 
-                priv= attrs[CKA_TPM2_PRIV_BLOB]
-                pub= attrs[CKA_TPM2_PUB_BLOB]
-                encauth = attrs[CKA_TPM2_OBJAUTH_ENC]
+                priv=None
+                if CKA_TPM2_PRIV_BLOB in attrs:
+                    priv = binascii.unhexlify(attrs[CKA_TPM2_PRIV_BLOB])
 
-                tpm2.load(tr_handle, pobjauth, priv, pub)
-                tobjauth = wrapper.unwrap(encauth)
+                pub = None
+                if CKA_TPM2_PUB_BLOB in attrs:
+                    pub = binascii.unhexlify(attrs[CKA_TPM2_PUB_BLOB])
+
+                encauth = None
+                if CKA_TPM2_OBJAUTH_ENC in attrs:
+                    encauth = binascii.unhexlify(attrs[CKA_TPM2_OBJAUTH_ENC])
+
+                tobjauth=None
+                if encauth:
+                    encauth=encauth.decode()
+                    tpm2.load(tr_handle, pobjauth, priv, pub)
+                    tobjauth = wrapper.unwrap(encauth).decode()
 
                 print("Tertiary object verified(%d), auth: %s" %
                       (tobj['id'], tobjauth))
