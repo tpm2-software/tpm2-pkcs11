@@ -75,12 +75,17 @@ class VerifyCommand(Command):
         sopin = args['sopin']
         userpin = args['userpin']
 
-        print('Verifying label: "%s"' % label)
+        verify_output = {}
+        verify_output['label'] = label
 
         pobj = db.getprimary(token['pid'])
         sealobj = db.getsealobject(token['id'])
 
         wrappingkeyauth = None
+
+        verify_output['config'] = yaml.safe_load(io.StringIO(token['config']))
+
+        verify_output['pin'] = {}
 
         with TemporaryDirectory() as d:
             tpm2 = Tpm2(d)
@@ -100,7 +105,7 @@ class VerifyCommand(Command):
 
                 wrappingkeyauth = tpm2.unseal(sosealctx, sosealauth['hash'])
 
-                print("SO pin valid, seal auth: %s" % sosealauth['hash'])
+                verify_output['pin']['so'] = {'seal-auth' : sosealauth['hash'] }
 
             if userpin != None:
 
@@ -116,17 +121,13 @@ class VerifyCommand(Command):
                 wrappingkeyauth = tpm2.unseal(usersealctx,
                                               usersealauth['hash'])
 
-                print("USER pin valid, seal auth: %s" % usersealauth['hash'])
-
-            token_config = { 'token-config' : yaml.safe_load(io.StringIO(token['config'])) }
-
-            yaml_tok_cconf = yaml.safe_dump(token_config, default_flow_style=False)
-
-            print(yaml_tok_cconf)
+                verify_output['pin']['user'] = {'seal-auth' : usersealauth['hash'] }
 
             wrapper = AESAuthUnwrapper(wrappingkeyauth)
 
             tobjs = db.gettertiary(token['id'])
+
+            verify_output['objects'] = []
 
             for tobj in tobjs:
 
@@ -150,8 +151,13 @@ class VerifyCommand(Command):
                     tpm2.load(tr_handle, pobjauth, priv, pub)
                     tobjauth = wrapper.unwrap(encauth).decode()
 
-                print("Tertiary object verified(%d), auth: %s" %
-                      (tobj['id'], tobjauth))
+                verify_output['objects'].append({
+                    'id: ' : tobj['id'],
+                    'auth: ' : tobjauth 
+                })
+
+        yaml_dump = yaml.safe_dump(verify_output, default_flow_style=False)
+        print(yaml_dump)
 
     def __call__(self, args):
         if args['userpin'] is None and args['sopin'] is None:
