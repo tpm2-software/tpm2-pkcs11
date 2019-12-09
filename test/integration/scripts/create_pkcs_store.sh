@@ -106,7 +106,7 @@ tpm2_ptool addtoken --pid=3 --sopin=sopin3 --userpin=userpin3 --label=esys-tr --
 tpm2_ptool changepin --label=label --user=user --old=myBADuserpin --new=myuserpin --path=$TPM2_PKCS11_STORE
 tpm2_ptool changepin --label=label --user=so --old=myBADsopin --new=mysopin --path=$TPM2_PKCS11_STORE
 
-# verify the token
+# verify the token w/o objects
 tpm2_ptool verify --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 
 # Use initpin to change the user pin
@@ -138,6 +138,9 @@ done;
 echo "Added EC Keys"
 
 echo "Adding 1 x509 Certificate under token \"label\""
+
+# verify the token and all the objects
+tpm2_ptool verify --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 
 #
 # Build an OpenSSL config file
