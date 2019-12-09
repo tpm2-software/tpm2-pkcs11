@@ -686,6 +686,10 @@ static CK_RV attr_common_add_privatekey(attr_list **private_attrs) {
     bool r = attr_list_add_bool(new_attrs, CKA_SIGN_RECOVER, CK_FALSE);
     goto_error_false(r);
 
+    r = attr_list_add_bool(new_attrs, CKA_SENSITIVE, CK_FALSE);
+    goto_error_false(r);
+
+
     r = attr_list_add_bool(new_attrs, CKA_UNWRAP, CK_FALSE);
     goto_error_false(r);
 
