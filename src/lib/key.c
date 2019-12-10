@@ -294,13 +294,8 @@ CK_RV key_gen (
         goto out;
     }
 
-    /* populate auth data */
-    rv = tobject_set_auth(new_public_tobj, newauthbin, newwrapped_auth);
-    if (rv != CKR_OK) {
-        goto out;
-    }
-
-    rv = tobject_set_auth(new_private_tobj, newauthbin, newwrapped_auth);
+    /* populate auth data, public objects do not need an auth */
+    rv = tobject_set_auth(new_private_tobj, newauthhex, newwrapped_auth);
     if (rv != CKR_OK) {
         goto out;
     }

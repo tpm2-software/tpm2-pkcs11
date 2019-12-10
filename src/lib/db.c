@@ -146,10 +146,6 @@ tobject *db_tobject_new(sqlite3_stmt *stmt) {
 
     a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_PUB_BLOB);
     if (a && a->pValue && a->ulValueLen) {
-        if (!tobj->objauth) {
-            LOGE("objects with CKA_TPM2_OBJAUTH_ENC should have CKA_TPM2_PUB_BLOB");
-            goto error;
-        }
 
         tobj->pub = twistbin_new(a->pValue, a->ulValueLen);
         if (!tobj->pub) {

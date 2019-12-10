@@ -417,10 +417,14 @@ twist utils_get_rand_hex_str(size_t size) {
 
 CK_RV utils_ctx_unwrap_objauth(token *tok, twist objauth, twist *unwrapped_auth) {
     assert(tok);
-    assert(objauth);
     assert(unwrapped_auth);
 
-     twist tmp = aes256_gcm_decrypt(tok->wappingkey, objauth);
+    if (!objauth) {
+        *unwrapped_auth = NULL;
+        return CKR_OK;
+    }
+
+    twist tmp = aes256_gcm_decrypt(tok->wappingkey, objauth);
     if (!tmp) {
         return CKR_GENERAL_ERROR;
     }
