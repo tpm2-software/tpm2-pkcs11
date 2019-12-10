@@ -153,7 +153,7 @@ class VerifyCommand(Command):
 
                 verify_output['objects'].append({
                     'id: ' : tobj['id'],
-                    'auth: ' : tobjauth 
+                    'auth: ' : tobjauth
                 })
 
         yaml_dump = yaml.safe_dump(verify_output, default_flow_style=False)
@@ -515,3 +515,31 @@ class ConfigCommand(Command):
 
         with Db(path) as db:
             ConfigCommand.config(db, args)
+
+@commandlet("listprimaries")
+class ListPrimaryCommand(Command):
+    '''
+    Lists primary objects in  a specified store.
+    '''
+
+    # adhere to an interface
+    # pylint: disable=no-self-use
+    def generate_options(self, group_parser):
+        pass
+
+    @staticmethod
+    def list(db):
+        output=[]
+        primaries = db.getprimaries()
+        for p in primaries:
+            output.append({'id': p['id']})
+
+        if len(output):
+            print(yaml.dump(output, default_flow_style=False))
+
+    def __call__(self, args):
+
+        path = args['path']
+
+        with Db(path) as db:
+            ListPrimaryCommand.list(db)
