@@ -167,7 +167,6 @@ CK_RV key_gen (
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    twist newauthbin = NULL;
     twist newauthhex = NULL;
     twist newwrapped_auth = NULL;
 
@@ -238,7 +237,7 @@ CK_RV key_gen (
         goto out;
     }
 
-    rv = utils_new_random_object_auth(&newauthbin, &newauthhex);
+    rv = utils_new_random_object_auth(&newauthhex);
     if (rv != CKR_OK) {
         LOGE("Failed to create new object auth");
         goto out;
@@ -254,7 +253,7 @@ CK_RV key_gen (
             tok->tctx,
             tok->pobject.handle,
             tok->pobject.objauth,
-            newauthbin,
+            newauthhex,
             mechanism,
             pubkey_templ_w_types,
             privkey_templ_w_types,
@@ -337,7 +336,6 @@ CK_RV key_gen (
 out:
     tpm_objdata_free(&objdata);
     twist_free(newauthhex);
-    twist_free(newauthbin);
     twist_free(newwrapped_auth);
     attr_list_free(pubkey_templ_w_types);
     attr_list_free(privkey_templ_w_types);
