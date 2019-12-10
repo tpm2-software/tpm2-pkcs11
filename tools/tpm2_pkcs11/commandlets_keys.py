@@ -336,7 +336,7 @@ class AddCert(Command):
             # have valid keylabel needed id
             if keylabel:
                 pkcs11_object.update({CKA_ID: missing_id_or_label})
-                pkcs11_object.update({CKA_LABEL: missing_id_or_label})
+                pkcs11_object.update({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
             # have valid id needed keylabel
             else:
                 pkcs11_object.update({CKA_LABEL: missing_id_or_label})
