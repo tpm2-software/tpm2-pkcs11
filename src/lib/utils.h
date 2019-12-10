@@ -14,7 +14,8 @@
 #include "pkcs11.h"
 #include "twist.h"
 
-#define SALT_HEX_STR_SIZE 64 /* 64 hex chars is 32 bits entropy */
+#define SALT_HEX_STR_SIZE 64
+#define AUTH_HEX_STR_SIZE 32
 
 #define xstr(s) str(s)
 #define str(s) #s
@@ -87,8 +88,8 @@ twist utils_get_rand_hex_str(size_t size);
 
 CK_RV utils_setup_new_object_auth(twist newpin, twist *newauthhex, twist *newsalthex);
 
-static inline CK_RV utils_new_random_object_auth(twist *newauthbin, twist *newauthhex) {
-    return utils_setup_new_object_auth(NULL, newauthbin, newauthhex);
+static inline CK_RV utils_new_random_object_auth(twist *newauthhex) {
+    return utils_setup_new_object_auth(NULL, newauthhex, NULL);
 }
 
 typedef struct tpm_ctx tpm_ctx;

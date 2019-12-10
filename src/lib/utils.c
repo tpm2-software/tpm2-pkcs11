@@ -31,17 +31,16 @@ CK_RV utils_setup_new_object_auth(twist newpin, twist *newauthhex, twist *newsal
 
     bool allocated_pin_to_use = false;
     twist pin_to_use = NULL;
+    twist salt_to_use = NULL;
 
-    assert(newsalthex);
-
-    *newsalthex = utils_get_rand_hex_str(SALT_HEX_STR_SIZE);
-    if (!*newsalthex) {
+    salt_to_use = utils_get_rand_hex_str(SALT_HEX_STR_SIZE);
+    if (!salt_to_use) {
         goto out;
     }
 
     if (!newpin) {
         allocated_pin_to_use = true;
-        pin_to_use = utils_get_rand_hex_str(32);
+        pin_to_use = utils_get_rand_hex_str(AUTH_HEX_STR_SIZE);
         if (!pin_to_use) {
             goto out;
         }
@@ -49,9 +48,14 @@ CK_RV utils_setup_new_object_auth(twist newpin, twist *newauthhex, twist *newsal
         pin_to_use = newpin;
     }
 
-    *newauthhex = utils_hash_pass(pin_to_use, *newsalthex);
+    *newauthhex = utils_hash_pass(pin_to_use, salt_to_use);
     if (!*newauthhex) {
         goto out;
+    }
+
+    if (newsalthex) {
+        *newsalthex = salt_to_use;
+        salt_to_use = NULL;
     }
 
     rv = CKR_OK;
@@ -67,6 +71,8 @@ out:
     if (allocated_pin_to_use) {
         twist_free(pin_to_use);
     }
+
+    twist_free(salt_to_use);
 
     return rv;
 }
