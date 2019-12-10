@@ -357,7 +357,7 @@ class AddCert(Command):
         if CKA_LABEL in attrs:
             x = attrs[CKA_LABEL]
             x = binascii.unhexlify(x).decode()
-            if x == keylabel:
+            if x == keylabel and attrs[CKA_CLASS] == CKO_PRIVATE_KEY:
                 return attrs[CKA_ID]
 
         return None
@@ -369,7 +369,7 @@ class AddCert(Command):
 
         if CKA_ID in attrs:
             x = attrs[CKA_ID]
-            if x == keyid:
+            if x == keyid and attrs[CKA_CLASS] == CKO_PRIVATE_KEY:
                 return attrs[CKA_LABEL] if CKA_LABEL in attrs else ''
 
         return None
