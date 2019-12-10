@@ -17,6 +17,7 @@ from .utils import TemporaryDirectory
 from .utils import hash_pass
 from .utils import rand_hex_str
 from .utils import pemcert_to_attrs
+from .utils import str2bool
 
 from .tpm2 import Tpm2
 
@@ -373,3 +374,111 @@ class AddCert(Command):
                 return attrs[CKA_LABEL] if CKA_LABEL in attrs else ''
 
         return None
+
+@commandlet("objmod")
+class ObjMod(Command):
+    '''
+    Dumps and modifies objects.
+    '''
+
+    _type_map = {
+        'int' : 'do_int',
+        'str' : 'do_str',
+        'bool': 'do_bool',
+        'raw' : 'do_raw',
+    }
+
+    @staticmethod
+    def do_int(value):
+        return int(value, 0)
+
+    @staticmethod
+    def do_bool(value):
+        return str2bool(value)
+
+    @staticmethod
+    def do_str(value):
+        return binascii.hexlify(value.encode()).decode()
+
+    @staticmethod
+    def do_raw(value):
+        return value
+
+    @classmethod
+    def mod(cls, path, id, key, value, vtype):
+
+        with Db(path) as db:
+            obj = db.getobject(id)
+
+        s = obj['attrs']
+        attrs = yaml.safe_load(s)
+
+        if not key:
+            print(yaml.safe_dump(attrs, default_flow_style=False))
+            sys.exit()
+
+        # look in the CKA_ globals from pkcs11t.py file for
+        # a mapping string or raw value map.
+        # filter(lambda x: x.startswith('CKA_'), globals().keys())
+        keys = []
+        for k in globals().keys():
+            if k.startswith('CKA_'):
+                keys.append(k)
+
+        keynames = {}
+        for k in keys:
+            keynames[globals()[k]] = k
+
+        keyname=None
+        if key in keys:
+            keyname=key
+            key=globals()[key]
+        else:
+            key = int(key, 0)
+            if key not in keynames:
+                sys.exit('Unknown key: %d', key)
+            keyname = keynames[key]
+
+        if key and not key in attrs:
+            sys.exit("Key not found")
+
+        if not value:
+            print(yaml.safe_dump({keyname : attrs[key]}))
+            sys.exit()
+
+        if not type:
+            sys.exit("When specifying a value, type is required")
+
+        value = getattr(cls, ObjMod._type_map[vtype])(value)
+        attrs[key] = value
+        with Db(path) as db:
+            db.updatetertiary(obj['id'], attrs)
+
+    # adhere to an interface
+    def generate_options(self, group_parser):
+        group_parser.add_argument(
+            '--id', help='The object id.\n', required=True)
+        group_parser.add_argument(
+            '--key',
+            help='The key to dump.\n')
+        group_parser.add_argument(
+            '--value',
+            help='The value to set.\n')
+        group_parser.add_argument(
+            '--type',
+            choices=self._type_map.keys(),
+            help='Specify the type.\n')
+    def __call__(self, args):
+
+        path = args['path']
+
+        key = args['key'] if 'key' in args else None
+        value = args['value'] if 'value' in args else None
+
+        if value and not key:
+            sys.exit('require --key when specifying --value')
+
+        if value and not args['type']:
+            sys.exit('require --type when specifying --value')
+
+        ObjMod.mod(path, args['id'], key, value, args['type'])
