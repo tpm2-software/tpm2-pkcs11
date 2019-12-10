@@ -543,3 +543,40 @@ class ListPrimaryCommand(Command):
 
         with Db(path) as db:
             ListPrimaryCommand.list(db)
+
+@commandlet("listtokens")
+class ListTokenCommand(Command):
+    '''
+    Lists tokens in  a specified store.
+    '''
+
+    # adhere to an interface
+    # pylint: disable=no-self-use
+    def generate_options(self, group_parser):
+        group_parser.add_argument(
+            '--pid',
+            type=int,
+            help='The primary object id to associate with this token.\n',
+            required=True),
+
+    @staticmethod
+    def list(db, args):
+        output = []
+        tokens = db.gettokens(args['pid'])
+
+        for t in tokens:
+            output.append({
+                'id': t['id'],
+                'label': t['label']
+            })
+
+        if len(output):
+            print(yaml.dump(output, default_flow_style=False))
+
+    def __call__(self, args):
+
+        path = args['path']
+
+        with Db(path) as db:
+            ListTokenCommand.list(db, args)
+            ListObjectsCommand.list(db, args)
