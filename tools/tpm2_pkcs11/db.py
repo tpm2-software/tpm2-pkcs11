@@ -40,9 +40,21 @@ class Db(object):
         x = c.fetchone()
         return x
 
+    def getprimaries(self):
+        c = self._conn.cursor()
+        c.execute("SELECT * from pobjects")
+        x = c.fetchall()
+        return x
+
     def gettokens(self, pid):
         c = self._conn.cursor()
         c.execute("SELECT * from tokens WHERE pid=?", (pid, ))
+        x = c.fetchall()
+        return x
+
+    def getobjects(self, tokid):
+        c = self._conn.cursor()
+        c.execute("SELECT * from tobjects WHERE tokid=?", (tokid, ))
         x = c.fetchall()
         return x
 
