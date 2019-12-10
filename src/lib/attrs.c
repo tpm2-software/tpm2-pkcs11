@@ -937,6 +937,8 @@ static CK_RV attr_conditional_add(
 
     assert(filtered_attrs);
 
+    attr_handler2 *h;
+
     attr_list *d = attr_list_new();
     if (!d) {
         return CKR_HOST_MEMORY;
@@ -982,7 +984,9 @@ static CK_RV attr_conditional_add(
         }
 add_item:
         /* no - add it, shallow copy ok */
-        r = attr_list_add_buf(d, cur->type, cur->pValue, cur->ulValueLen);
+        h = attr_lookup(cur->type);
+        assert(h);
+        r = h->tfn(cur, h->memtype, d);
         if (!r) {
             attr_list_free(d);
         }
