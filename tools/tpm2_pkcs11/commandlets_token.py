@@ -579,4 +579,41 @@ class ListTokenCommand(Command):
 
         with Db(path) as db:
             ListTokenCommand.list(db, args)
+
+@commandlet("listobjects")
+class ListObjectsCommand(Command):
+    '''
+    Lists Objects (keys, certificates, etc.) associated with a token.
+    '''
+
+    # adhere to an interface
+    # pylint: disable=no-self-use
+    def generate_options(self, group_parser):
+        group_parser.add_argument(
+            '--label',
+            type=str,
+            help='The label of the token.\n',
+            required=True)
+
+    @staticmethod
+    def list(db, args):
+        output = []
+        token = db.gettoken(args['label'])
+        objects = db.getobjects(token['id'])
+        for o in objects:
+            y = yaml.safe_load(o['attrs'])
+            output.append({
+                'id': o['id'],
+                'CKA_ID' : y[CKA_ID],
+                'CKA_LABEL' : binascii.unhexlify(y[CKA_LABEL]).decode()
+            })
+
+        if len(output):
+            print(yaml.dump(output, default_flow_style=False))
+
+    def __call__(self, args):
+
+        path = args['path']
+
+        with Db(path) as db:
             ListObjectsCommand.list(db, args)
