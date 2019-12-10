@@ -15,7 +15,7 @@ class PKCS11Object(dict):
 
         attrs[CKA_CLASS] = objclass
 
-        if auth is not None:
+        if auth is not None and tpm_priv:
             # hexencode the ENC obj auth string because str are hex encoded
             attrs[CKA_TPM2_OBJAUTH_ENC] = binascii.hexlify(str2bytes(auth)).decode()
 
