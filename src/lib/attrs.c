@@ -8,8 +8,6 @@
 #include "typed_memory.h"
 #include "utils.h"
 
-#define DEFAULT_CKA_ID_SIZE_BYTES 8
-
 struct attr_list {
     CK_ULONG max;
     CK_ULONG count;
@@ -439,8 +437,6 @@ static CK_RV attr_common_add_key(attr_list **key_attrs) {
 
     CK_RV rv = CKR_HOST_MEMORY;
 
-    twist rand_hex_str = NULL;
-
     /* expected */
     CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(*key_attrs, CKA_KEY_TYPE);
     if (!a) {
@@ -475,14 +471,7 @@ static CK_RV attr_common_add_key(attr_list **key_attrs) {
     /* defaults */
     a = attr_get_attribute_by_type(*key_attrs, CKA_ID);
     if (!a) {
-        /* set CKA_ID if not present based on random hex string */
-        rand_hex_str = utils_get_rand_hex_str(DEFAULT_CKA_ID_SIZE_BYTES);
-        if (!rand_hex_str) {
-            rv = CKR_HOST_MEMORY;
-            goto error;
-        }
-        bool r = attr_list_add_buf(new_attrs, CKA_ID,
-                (CK_BYTE_PTR)rand_hex_str, twist_len(rand_hex_str));
+        bool r = attr_list_add_buf(new_attrs, CKA_ID, NULL, 0);
         goto_error_false(r);
     }
 
@@ -505,12 +494,9 @@ static CK_RV attr_common_add_key(attr_list **key_attrs) {
     *key_attrs = attr_list_append_attrs(*key_attrs, &new_attrs);
     goto_error_false(*key_attrs);
 
-    twist_free(rand_hex_str);
-
     return attr_common_add_storage(key_attrs);
 
 error:
-    twist_free(rand_hex_str);
     attr_list_free(new_attrs);
 
     return rv;
@@ -1047,7 +1033,7 @@ CK_RV attr_add_missing_attrs(attr_list **public_attrs, attr_list **private_attrs
         CKA_DECRYPT,
         CKA_VERIFY,
         CKA_SIGN,
-        CKA_ENCRYPT
+        CKA_ENCRYPT,
     };
 
     rv = attr_conditional_add(
