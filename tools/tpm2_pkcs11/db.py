@@ -80,6 +80,12 @@ class Db(object):
         x = c.fetchall()
         return x
 
+    def getobject(self, tid):
+        c = self._conn.cursor()
+        c.execute("SELECT * from tobjects WHERE id=?", (tid, ))
+        x = c.fetchone()
+        return x
+
     def addtoken(self, pid, config, label=None):
 
         token = {
@@ -171,14 +177,13 @@ class Db(object):
         c.execute(sql, list(tobject.values()))
         return c.lastrowid
 
-    def updatetertiaryattrs(self, tid, attrs):
+    def updatetertiary(self, tid, attrs):
 
         c = self._conn.cursor()
-        attrs = yaml.safe_load(io.StringIO(attrs))
+        attrs = yaml.safe_dump(attrs, canonical=True)
         values = [attrs, tid]
 
         sql = 'UPDATE tobjects SET attrs=? WHERE id=?'
-
         c.execute(sql, values)
 
     def updatepin(self, is_so, token, sealauth, sealpriv, sealpub=None):
