@@ -1,10 +1,4 @@
-/*
- * typed_memory.h
- *
- *  Created on: Dec 4, 2019
- *      Author: wcrobert
- */
-
+/* SPDX-License-Identifier: BSD-2-Clause */
 #ifndef SRC_LIB_TYPED_MEMORY_H_
 #define SRC_LIB_TYPED_MEMORY_H_
 

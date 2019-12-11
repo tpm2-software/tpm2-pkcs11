@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-2-Clause
 from setuptools import setup
 
 # read the contents of your README file

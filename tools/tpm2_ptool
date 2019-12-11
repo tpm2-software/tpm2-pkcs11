@@ -1,2 +1,3 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: BSD-2-Clause
 "${PYTHON_INTERPRETER:-python}" -m tpm2_pkcs11.tpm2_ptool "$@"

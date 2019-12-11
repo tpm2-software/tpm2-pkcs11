@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 #ifndef SRC_LIB_PARSER_H_
 #define SRC_LIB_PARSER_H_
 
