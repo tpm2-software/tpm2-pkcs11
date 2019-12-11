@@ -1,4 +1,3 @@
-import io
 import os
 import sys
 import sqlite3
