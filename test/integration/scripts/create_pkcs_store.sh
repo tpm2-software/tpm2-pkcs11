@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-2-Clause
 #!/usr/bin/env bash
 
 echo "SETUP SCRIPT - DBUS_SESSION_BUS_ADDRESS: $DBUS_SESSION_BUS_ADDRESS"

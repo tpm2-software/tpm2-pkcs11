@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: BSD-2-Clause */
 #include <openssl/bn.h>
 #include <openssl/ec.h>
 

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 #include <errno.h>
 #include <stdarg.h>
 #include <stdbool.h>

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-2-Clause
 # These CK* values come from the PKCS#11 spec
 CKO_CERTIFICATE = 0x1
 CKO_PUBLIC_KEY = 0x2

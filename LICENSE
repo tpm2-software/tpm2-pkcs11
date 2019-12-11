@@ -33,3 +33,4 @@ Those files respect the license as documented in the respective file:
 - src/pkcs11.h
 - src/lib/pkcs11f.h
 - src/lib/pkcs11t.h
+- .gitignore

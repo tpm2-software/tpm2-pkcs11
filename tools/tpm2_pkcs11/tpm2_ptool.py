@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-2-Clause
 from .command import commandlet
 
 # These imports are required to add the commandlet even though they appear unused
