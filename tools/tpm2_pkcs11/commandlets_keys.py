@@ -498,3 +498,28 @@ class ObjMod(Command):
             sys.exit('require --type when specifying --value')
 
         ObjMod.mod(path, args['id'], key, value, attrs, args['type'])
+
+
+@commandlet("objdel")
+class ObjDel(Command):
+    '''
+    Deletes an object from a token.
+    '''
+
+    @classmethod
+    def delete(cls, path, tid):
+
+        with Db(path) as db:
+            obj = db.getobject(tid)
+            db.rmobject(obj['id'])
+
+    # adhere to an interface
+    def generate_options(self, group_parser):
+        group_parser.add_argument(
+            'id', help='The id of the object to delete.\n')
+
+    def __call__(self, args):
+
+        path = args['path']
+
+        ObjDel.delete(path, args['id'])

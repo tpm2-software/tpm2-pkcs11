@@ -85,6 +85,10 @@ class Db(object):
         x = c.fetchone()
         return x
 
+    def rmobject(self, tid):
+        c = self._conn.cursor()
+        c.execute("DELETE FROM tobjects WHERE id=?", (tid, ))
+
     def addtoken(self, pid, config, label=None):
 
         token = {
