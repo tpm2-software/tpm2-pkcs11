@@ -405,18 +405,28 @@ class ObjMod(Command):
         return value
 
     @classmethod
-    def mod(cls, path, id, key, value, vtype):
+    def mod(cls, path, tid, key, value, inattrs, vtype):
 
         with Db(path) as db:
-            obj = db.getobject(id)
+            obj = db.getobject(tid)
 
         s = obj['attrs']
-        attrs = yaml.safe_load(s)
+        obj_attrs = yaml.safe_load(s)
 
-        if not key:
-            print(yaml.safe_dump(attrs, default_flow_style=False))
+        # if we don't have any update data, just dump the attributes
+        if not key and not inattrs:
+            print(yaml.safe_dump(obj_attrs, default_flow_style=False))
             sys.exit()
 
+        # if we have attributes YAML file, then we want to update all attributes
+        if inattrs:
+            with Db(path) as db:
+                y = yaml.safe_load(open(inattrs, "r"))
+                db.updatetertiary(obj['id'], y)
+            sys.exit()
+
+        # else we have --key and possibly --value
+        #
         # look in the CKA_ globals from pkcs11t.py file for
         # a mapping string or raw value map.
         # filter(lambda x: x.startswith('CKA_'), globals().keys())
@@ -439,20 +449,20 @@ class ObjMod(Command):
                 sys.exit('Unknown key: %d', key)
             keyname = keynames[key]
 
-        if key and not key in attrs:
+        if key and not key in obj_attrs:
             sys.exit("Key not found")
 
         if not value:
-            print(yaml.safe_dump({keyname : attrs[key]}))
+            print(yaml.safe_dump({keyname : obj_attrs[key]}))
             sys.exit()
 
         if not type:
             sys.exit("When specifying a value, type is required")
 
         value = getattr(cls, ObjMod._type_map[vtype])(value)
-        attrs[key] = value
+        obj_attrs[key] = value
         with Db(path) as db:
-            db.updatetertiary(obj['id'], attrs)
+            db.updatetertiary(obj['id'], obj_attrs)
 
     # adhere to an interface
     def generate_options(self, group_parser):
@@ -468,17 +478,23 @@ class ObjMod(Command):
             '--type',
             choices=self._type_map.keys(),
             help='Specify the type.\n')
+        group_parser.add_argument(
+            'attrs', nargs='?', help='The YAML attribute file.\n')
     def __call__(self, args):
 
         path = args['path']
 
         key = args['key'] if 'key' in args else None
         value = args['value'] if 'value' in args else None
+        attrs = args['attrs'] if 'attrs' in args else None
 
-        if value and not key:
-            sys.exit('require --key when specifying --value')
+        if attrs and key:
+            sys.exit('Cannot specify --key when specifying the attributes')
+
+        if attrs and value:
+            sys.exit('Cannot specify --value when specifying the attributes')
 
         if value and not args['type']:
             sys.exit('require --type when specifying --value')
 
-        ObjMod.mod(path, args['id'], key, value, args['type'])
+        ObjMod.mod(path, args['id'], key, value, attrs, args['type'])
