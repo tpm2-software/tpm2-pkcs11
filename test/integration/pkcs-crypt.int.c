@@ -633,6 +633,55 @@ static void test_cert_no_good(void **state) {
     assert_int_equal(rv, CKR_KEY_HANDLE_INVALID);
 }
 
+
+static void test_rsa_x509_encrypt_decrypt_oneshot_good(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_MECHANISM mechanism = {
+            CKM_RSA_X_509, NULL, 0
+    };
+
+    /* size of RSA 2048 modulus length */
+    CK_BYTE ciphertext[256] = { 0 };
+    CK_BYTE plaintext[256] = { 0 };
+
+    const char *secret= "my secret is cool";
+
+    /*
+     * PKCS11 guidance for ra wRSA is to prepend message with 0's
+     */
+    size_t len = strlen(secret);
+    memcpy(&plaintext[sizeof(plaintext) - len], secret, len);
+
+
+    /* init */
+    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.rsa);
+    assert_int_equal(rv, CKR_OK);
+
+    /* part 1 */
+    CK_ULONG ciphertext_len = sizeof(ciphertext);
+    rv = C_Encrypt(session, plaintext, sizeof(plaintext),
+            ciphertext, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, sizeof(ciphertext));
+
+    rv = C_DecryptInit (session, &mechanism, ti->objects.rsa);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE plaintext2[sizeof(ciphertext)];
+    CK_ULONG plaintext2_len = sizeof(plaintext2);
+
+    rv = C_Decrypt (session, ciphertext, ciphertext_len,
+            plaintext2, &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(plaintext2_len, sizeof(plaintext));
+
+    /* after decrypt we need to undo the padding */
+    assert_memory_equal(&plaintext2[plaintext2_len - len], secret, len);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
@@ -649,6 +698,8 @@ int main() {
         cmocka_unit_test_setup_teardown(test_rsa_oaep_encrypt_decrypt_oneshot_good,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_cert_no_good,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_rsa_x509_encrypt_decrypt_oneshot_good,
                 test_setup, test_teardown),
     };
 
