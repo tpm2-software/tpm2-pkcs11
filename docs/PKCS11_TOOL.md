@@ -14,10 +14,10 @@ will be provided here, so a a basic understanding of the initialization process 
 
 We start by creating a tpm2-pkcs11 *store* and set up an empty token.
 
-```sh
-tpm2_ptool.py init --pobj-pin=mypobjpin --path=~/tmp
+```bash
+tpm2_ptool.py init --path=~/tmp
 
-tpm2_ptool.py addtoken --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=myuserpin --label=label --path ~/tmp
+tpm2_ptool.py addtoken --pid=1 --sopin=mysopin --userpin=myuserpin --label=label --path ~/tmp
 
 ```
 
@@ -25,7 +25,7 @@ tpm2_ptool.py addtoken --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=my
 
 Since we didn't use the default store location by setting `--path` in the `tpm2-ptool` tool, we must export the
 store so the library can find it. We do this via:
-```sh
+```bash
 export TPM2_PKCS11_STORE=$HOME/tmp
 ```
 
@@ -40,12 +40,18 @@ a few commands for users wishing to use this tool with tpm2-pkcs11 project.
 **For each example below, --module is the path to the pkcs11.so library and will be machine dependent. Note that default builds
 will provide the library under src/.libs**
 
+It makes life simpler to set p an alias, so lets do that, making sure to update`--module`:
+
+```bash
+alias tpm2pkcs11-tool='pkcs11-tool --module /path/to/libtpm2_pkcs11.so
+```
+
 ## Changing USER pin
 
 How to change the user pin from *myuserpin* to *mynewpin*
 
 ```sh
-pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --label="label" --login --pin myuserpin --change-pin --new-pin mynewpin
+tpm2pkcs11-tool --label="label" --login --pin myuserpin --change-pin --new-pin mynewpin
 Using slot 0 with a present token (0x1)
 PIN successfully changed
 ```
@@ -56,14 +62,14 @@ You can see [Checking USER pin](#checking-user-pin) for example of checking the 
 How to check that the pin is valid. The pin value shown is based off of section [Changing USER pin](#changing-user-pin)
 
 ```sh
-pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --label="label" --test --pin mynewpin
+tpm2pkcs11-tool --label="label" --test --pin mynewpin
 ```
 
 ## Initializing USER pin
 
 How to reset or initialize the user pin given the so pin.
 ```sh
-pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --label="label" --init-pin --so-pin mysopin --pin mynewpin
+tpm2pkcs11-tool --label="label" --init-pin --so-pin mysopin --pin mynewpin
 ```
 
 ## Generating Random Data
@@ -71,8 +77,8 @@ pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --label="label" --init-pin --
 The below example will generate 4 bytes of random data and assumes the pin has been changed as in section
 [Checking USER pin](#checking-user-pin) for example of checking the pin.
 
-```sh
-$ pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --label="label" --pin mynewpin --generate-random 4 | xxd
+```bash
+tpm2pkcs11-tool --label="label" --pin mynewpin --generate-random 4 | xxd
 Using slot 0 with a present token (0x1)
 00000000: 2e50 bc47                                .P.G
 ```
@@ -80,8 +86,8 @@ Using slot 0 with a present token (0x1)
 ## Listing Objects
 
 To list objects, we simply use the `--list-objects` option:
-```
-pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --list-objects
+```bash
+tpm2pkcs11-tool --list-objects
 Private Key Object; EC
   label:      p11-templ-key-label-ecc
   ID:         7031312d74656d706c2d6b65792d69642d65636300
@@ -92,7 +98,6 @@ Public Key Object; EC  EC_POINT 256 bits
   label:      p11-templ-key-label-ecc
   ID:         7031312d74656d706c2d6b65792d69642d65636300
   Usage:      verify
-...
 ```
 
 **Note**: Your output will likely differ, but the tool should output a list of objects and some attributes.
@@ -105,8 +110,8 @@ through the PKCS#11 interface.
 ### Generating RSA Keypair
 
 This will generate an RSA keypair using pkcs11-tool:
-```
-pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --label="label" --login --pin=myuserpin --keypairgen
+```bash
+tpm2pkcs11-tool --label="label" --login --pin=myuserpin --keypairgen
 Using slot 0 with a present token (0x1)
 Key pair generated:
 Private Key Object; RSA
@@ -122,8 +127,8 @@ Public Key Object; RSA 2048 bits
 ### Generating ECC Keypair
 
 This will generate an EC keypair using pkcs11-tool:
-```
-pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --label="my-ecc-keypair" --login --pin=myuserpin --keypairgen --usage-sign --key-type EC:prime256v1
+```bash
+tpm2pkcs11-tool --label="my-ecc-keypair" --login --pin=myuserpin --keypairgen --usage-sign --key-type EC:prime256v1
 Using slot 0 with a present token (0x1)
 Key pair generated:
 Private Key Object; EC
@@ -144,13 +149,13 @@ Let's destroy the key we created in the *Generating ECC Keypair* segment, IDs 34
 respectively.
 
 ### Private Key
-```
-pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --login --pin=myuserpin --delete-object --type=privkey --id 3436
+```bash
+tpm2pkcs11-tool --login --pin=myuserpin --delete-object --type=privkey --id 3436
 Using slot 0 with a present token (0x1)
 ```
 ### Public Key
-```
-pkcs11-tool --module ./src/.libs/libtpm2_pkcs11.so --login --pin=myuserpin --delete-object --type=pubkey --id 3437
+```bash
+tpm2pkcs11-tool --login --pin=myuserpin --delete-object --type=pubkey --id 3437
 Using slot 0 with a present token (0x1)
 ```
 
