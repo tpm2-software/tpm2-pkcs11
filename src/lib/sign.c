@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
@@ -10,6 +10,7 @@
 #include <openssl/rand.h>
 #include <openssl/rsa.h>
 
+#include "attrs.h"
 #include "checks.h"
 #include "digest.h"
 #include "encrypt.h"
@@ -125,7 +126,7 @@ static CK_RV ec_fixup_size(CK_MECHANISM_TYPE mech, tobject *tobj, CK_ULONG_PTR s
         return CKR_OK;
     }
 
-    CK_ATTRIBUTE_PTR a = tobject_get_attribute_by_type(tobj, CKA_EC_PARAMS);
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_EC_PARAMS);
     assert(a);
 
     int nid = 0;
@@ -377,9 +378,9 @@ static CK_RV pkcs1_5_build_struct(CK_MECHANISM_TYPE mech,
 
 static CK_RV apply_pkcs_1_5_pad(tobject *tobj, char *built, size_t built_len, char **padded, size_t *padded_len) {
 
-    CK_ATTRIBUTE_PTR a = tobject_get_attribute_by_type(tobj, CKA_MODULUS_BITS);
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_MODULUS_BITS);
     if (!a) {
-        LOGE("Signing key has no modulus");
+        LOGE("Signing key has no CKA_MODULUS_BITS");
         return CKR_GENERAL_ERROR;
     }
 

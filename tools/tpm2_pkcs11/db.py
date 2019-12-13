@@ -1,10 +1,9 @@
-import textwrap
+# SPDX-License-Identifier: BSD-2-Clause
 import os
 import sys
 import sqlite3
-
-from .utils import list_dict_to_kvp
-from .utils import dict_to_kvp
+import textwrap
+import yaml
 
 #
 # With Db() as db:
@@ -41,9 +40,21 @@ class Db(object):
         x = c.fetchone()
         return x
 
+    def getprimaries(self):
+        c = self._conn.cursor()
+        c.execute("SELECT * from pobjects")
+        x = c.fetchall()
+        return x
+
     def gettokens(self, pid):
         c = self._conn.cursor()
         c.execute("SELECT * from tokens WHERE pid=?", (pid, ))
+        x = c.fetchall()
+        return x
+
+    def getobjects(self, tokid):
+        c = self._conn.cursor()
+        c.execute("SELECT * from tobjects WHERE tokid=?", (tokid, ))
         x = c.fetchall()
         return x
 
@@ -69,12 +80,22 @@ class Db(object):
         x = c.fetchall()
         return x
 
+    def getobject(self, tid):
+        c = self._conn.cursor()
+        c.execute("SELECT * from tobjects WHERE id=?", (tid, ))
+        x = c.fetchone()
+        return x
+
+    def rmobject(self, tid):
+        c = self._conn.cursor()
+        c.execute("DELETE FROM tobjects WHERE id=?", (tid, ))
+
     def addtoken(self, pid, config, label=None):
 
         token = {
             # General Metadata
             'pid': pid,
-            'config': dict_to_kvp(config)
+            'config': yaml.dump(config, canonical=True)
         }
 
         if 'token-init=True' in token['config'] and label is None:
@@ -94,7 +115,7 @@ class Db(object):
 
     def updateconfig(self, token, config):
 
-        new_config = dict_to_kvp(config)
+        new_config = yaml.dump(config, canonical=True)
 
         sql = 'UPDATE tokens SET config=? WHERE id=?'
 
@@ -146,25 +167,11 @@ class Db(object):
 
         return c.lastrowid
 
-    def addtertiary(self, tokid, priv, pub, objauth, mech, attrs):
+    def addtertiary(self, tokid, pkcs11_object):
         tobject = {
             'tokid': tokid,
-            'attrs': list_dict_to_kvp(attrs),
+            'attrs': yaml.safe_dump(dict(pkcs11_object), canonical=True),
         }
-
-        if priv != None:
-            tobject['priv'] = Db._blobify(priv)
-
-        if pub != None:
-            tobject['pub'] = Db._blobify(pub)
-
-        if objauth != None:
-            tobject['objauth'] = objauth
-
-        if mech is None:
-            mech = []
-
-        tobject['mech'] = list_dict_to_kvp(mech)
 
         columns = ', '.join(tobject.keys())
         placeholders = ', '.join('?' * len(tobject))
@@ -174,14 +181,13 @@ class Db(object):
         c.execute(sql, list(tobject.values()))
         return c.lastrowid
 
-    def updatetertiaryattrs(self, tid, attrs):
+    def updatetertiary(self, tid, attrs):
 
         c = self._conn.cursor()
-        attrs = list_dict_to_kvp(attrs)
+        attrs = yaml.safe_dump(attrs, canonical=True)
         values = [attrs, tid]
 
         sql = 'UPDATE tobjects SET attrs=? WHERE id=?'
-
         c.execute(sql, values)
 
     def updatepin(self, is_so, token, sealauth, sealpriv, sealpub=None):
@@ -266,10 +272,6 @@ class Db(object):
             CREATE TABLE IF NOT EXISTS tobjects(
                 id INTEGER PRIMARY KEY,
                 tokid INTEGER NOT NULL,
-                pub BLOB,
-                priv BLOB,
-                objauth TEXT,
-                mech TEXT NOT NULL,
                 attrs TEXT NOT NULL,
                 FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
             );

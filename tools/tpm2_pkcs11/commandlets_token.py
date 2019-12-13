@@ -1,5 +1,11 @@
+# SPDX-License-Identifier: BSD-2-Clause
 # python stdlib dependencies
+import binascii
+import io
 import sys
+
+# External dependencies
+import yaml
 
 # local imports
 from .command import Command
@@ -8,13 +14,13 @@ from .db import Db
 from .utils import bytes_to_file
 from .utils import TemporaryDirectory
 from .utils import hash_pass
-from .utils import dict_from_kvp
 from .utils import rand_hex_str
 from .utils import AESAuthUnwrapper
 from .utils import load_sealobject
 from .utils import str2bool
 from .tpm2 import Tpm2
 
+from .pkcs11t import *  # noqa
 
 @commandlet("rmtoken")
 class RmTokenCommand(Command):
@@ -70,13 +76,17 @@ class VerifyCommand(Command):
         sopin = args['sopin']
         userpin = args['userpin']
 
-        print('Verifying label: "%s"' % label)
+        verify_output = {}
+        verify_output['label'] = label
 
         pobj = db.getprimary(token['pid'])
         sealobj = db.getsealobject(token['id'])
 
-        pobjauth = None
         wrappingkeyauth = None
+
+        verify_output['config'] = yaml.safe_load(io.StringIO(token['config']))
+
+        verify_output['pin'] = {}
 
         with TemporaryDirectory() as d:
             tpm2 = Tpm2(d)
@@ -96,7 +106,7 @@ class VerifyCommand(Command):
 
                 wrappingkeyauth = tpm2.unseal(sosealctx, sosealauth['hash'])
 
-                print("SO pin valid, seal auth: %s" % sosealauth['hash'])
+                verify_output['pin']['so'] = {'seal-auth' : sosealauth['hash'] }
 
             if userpin != None:
 
@@ -112,22 +122,43 @@ class VerifyCommand(Command):
                 wrappingkeyauth = tpm2.unseal(usersealctx,
                                               usersealauth['hash'])
 
-                print("USER pin valid, seal auth: %s" % usersealauth['hash'])
-
-            token_config = dict_from_kvp(token['config'])
-
-            print('TOKEN CONFIG: {}'.format(token_config))
+                verify_output['pin']['user'] = {'seal-auth' : usersealauth['hash'] }
 
             wrapper = AESAuthUnwrapper(wrappingkeyauth)
 
             tobjs = db.gettertiary(token['id'])
 
-            for tobj in tobjs:
-                tpm2.load(tr_handle, pobjauth, tobj['priv'], tobj['pub'])
-                tobjauth = wrapper.unwrap(tobj['objauth'])
+            verify_output['objects'] = []
 
-                print("Tertiary object verified(%d), auth: %s" %
-                      (tobj['id'], tobjauth))
+            for tobj in tobjs:
+
+                attrs = yaml.safe_load(tobj['attrs'])
+
+                priv=None
+                if CKA_TPM2_PRIV_BLOB in attrs:
+                    priv = binascii.unhexlify(attrs[CKA_TPM2_PRIV_BLOB])
+
+                pub = None
+                if CKA_TPM2_PUB_BLOB in attrs:
+                    pub = binascii.unhexlify(attrs[CKA_TPM2_PUB_BLOB])
+
+                encauth = None
+                if CKA_TPM2_OBJAUTH_ENC in attrs:
+                    encauth = binascii.unhexlify(attrs[CKA_TPM2_OBJAUTH_ENC])
+
+                tobjauth=None
+                if encauth:
+                    encauth=encauth.decode()
+                    tpm2.load(tr_handle, pobjauth, priv, pub)
+                    tobjauth = wrapper.unwrap(encauth).decode()
+
+                verify_output['objects'].append({
+                    'id: ' : tobj['id'],
+                    'auth: ' : tobjauth
+                })
+
+        yaml_dump = yaml.safe_dump(verify_output, default_flow_style=False)
+        print(yaml_dump)
 
     def __call__(self, args):
         if args['userpin'] is None and args['sopin'] is None:
@@ -455,8 +486,10 @@ class ConfigCommand(Command):
 
         token = db.gettoken(label)
 
+        token_config = yaml.safe_load(io.StringIO(token['config']))
         if not key and not value:
-            print(str(token['config']))
+            yaml_tok_cconf = yaml.safe_dump(token_config, default_flow_style=False)
+            print(yaml_tok_cconf)
             sys.exit(0)
 
         if not key and value:
@@ -466,18 +499,16 @@ class ConfigCommand(Command):
         # throws an error if the key isn't known to the system
         validator = cls.get_validator_for_key(key)
 
-        config = dict_from_kvp(token['config'])
-
         # no value, just key. Print the current value for key is set or empty if not set
         if not value:
-            print("%s=%s" % (key, str(config[key] if key in config else "")))
+            print("%s=%s" % (key, str(token_config[key] if key in token_config else "")))
             sys.exit(0)
 
         v = validator(value)
-        config[key] = v
+        token_config[key] = v
 
         # update the database
-        db.updateconfig(token, config)
+        db.updateconfig(token, token_config)
 
     def __call__(self, args):
 
@@ -485,3 +516,105 @@ class ConfigCommand(Command):
 
         with Db(path) as db:
             ConfigCommand.config(db, args)
+
+@commandlet("listprimaries")
+class ListPrimaryCommand(Command):
+    '''
+    Lists primary objects in  a specified store.
+    '''
+
+    # adhere to an interface
+    # pylint: disable=no-self-use
+    def generate_options(self, group_parser):
+        pass
+
+    @staticmethod
+    def list(db):
+        output=[]
+        primaries = db.getprimaries()
+        for p in primaries:
+            output.append({'id': p['id']})
+
+        if len(output):
+            print(yaml.dump(output, default_flow_style=False))
+
+    def __call__(self, args):
+
+        path = args['path']
+
+        with Db(path) as db:
+            ListPrimaryCommand.list(db)
+
+@commandlet("listtokens")
+class ListTokenCommand(Command):
+    '''
+    Lists tokens in  a specified store.
+    '''
+
+    # adhere to an interface
+    # pylint: disable=no-self-use
+    def generate_options(self, group_parser):
+        group_parser.add_argument(
+            '--pid',
+            type=int,
+            help='The primary object id to associate with this token.\n',
+            required=True),
+
+    @staticmethod
+    def list(db, args):
+        output = []
+        tokens = db.gettokens(args['pid'])
+
+        for t in tokens:
+            output.append({
+                'id': t['id'],
+                'label': t['label']
+            })
+
+        if len(output):
+            print(yaml.dump(output, default_flow_style=False))
+
+    def __call__(self, args):
+
+        path = args['path']
+
+        with Db(path) as db:
+            ListTokenCommand.list(db, args)
+
+@commandlet("listobjects")
+class ListObjectsCommand(Command):
+    '''
+    Lists Objects (keys, certificates, etc.) associated with a token.
+    '''
+
+    # adhere to an interface
+    # pylint: disable=no-self-use
+    def generate_options(self, group_parser):
+        group_parser.add_argument(
+            '--label',
+            type=str,
+            help='The label of the token.\n',
+            required=True)
+
+    @staticmethod
+    def list(db, args):
+        output = []
+        token = db.gettoken(args['label'])
+        objects = db.getobjects(token['id'])
+        for o in objects:
+            y = yaml.safe_load(o['attrs'])
+            output.append({
+                'id': o['id'],
+                'CKA_ID' : y[CKA_ID],
+                'CKA_LABEL' : binascii.unhexlify(y[CKA_LABEL]).decode()
+            })
+
+        if len(output):
+            print(yaml.dump(output, default_flow_style=False))
+
+    def __call__(self, args):
+
+        path = args['path']
+
+        with Db(path) as db:
+            ListObjectsCommand.list(db, args)

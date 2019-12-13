@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
@@ -14,6 +14,7 @@
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 
+#include "attrs.h"
 #include "checks.h"
 #include "db.h"
 #include "list.h"
@@ -297,6 +298,8 @@ CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
     twist newpubblob = NULL;
     twist newprivblob = NULL;
 
+    twist sealdata = NULL;
+
     tnewpin = twistbin_new(newpin, newlen);
     if (!tnewpin) {
         rv = CKR_HOST_MEMORY;
@@ -313,7 +316,11 @@ CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
 
 
     /* we store the seal data in hex form, but it's in binary form in memory, so convert it */
-    twist sealdata = tok->wappingkey;
+    sealdata = twist_hexlify(tok->wappingkey);
+    if (!sealdata) {
+        LOGE("oom");
+        goto out;
+    }
 
     /* create a new seal object and seal the data */
     uint32_t new_seal_handle = 0;
@@ -360,14 +367,13 @@ out:
         twist_free(newpubblob);
     }
 
+    twist_free(sealdata);
     twist_free(newauthhex);
 
     twist_free(tnewpin);
 
     return rv;
 }
-
-UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_OBJECT_CLASS);
 
 CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj) {
 
@@ -391,16 +397,15 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
         }
 
         /* this might not be the best place for this check */
-        CK_ATTRIBUTE_PTR a = util_get_attribute_by_type(CKA_CLASS,
-                tobj->attrs.attrs, tobj->attrs.count);
+        CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_CLASS);
         if (!a) {
-            LOGE("All objects expected to have CKO_CERTIFICATE, missing"
+            LOGE("All objects expected to have CKA_CLASS, missing"
                     " for tobj id: %u", tobj->id);
             return CKR_GENERAL_ERROR;
         }
 
         CK_OBJECT_CLASS v;
-        rv = generic_CK_OBJECT_CLASS(a, &v);
+        rv = attr_CK_OBJECT_CLASS(a, &v);
         if (rv != CKR_OK) {
             return rv;
         }

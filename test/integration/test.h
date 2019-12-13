@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2018, Intel Corporation
  *
@@ -37,18 +37,6 @@
 #define IMPORT_LABEL_USERPIN "anotheruserpin"
 
 typedef struct test_info test_info;
-
-#define GENERIC_ATTR_TYPE_CONVERT(T) \
-    static CK_RV generic_##T(CK_ATTRIBUTE_PTR attr, T *x) { \
-    \
-        if (attr->ulValueLen != sizeof(*x)) { \
-            return CKR_ATTRIBUTE_VALUE_INVALID; \
-        } \
-    \
-        *x = *(T *)attr->pValue; \
-    \
-        return CKR_OK; \
-    }
 
 #define ADD_ATTR_BASE(t, x)  { .type = t,   .ulValueLen = sizeof(x),     .pValue = &x }
 #define ADD_ATTR_ARRAY(t, x) { .type = t,   .ulValueLen = ARRAY_LEN(x),  .pValue = x }

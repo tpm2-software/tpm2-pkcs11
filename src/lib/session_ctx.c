@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "attrs.h"
 #include "log.h"
 #include "mutex.h"
 #include "pkcs11.h"
@@ -427,8 +428,7 @@ CK_RV session_ctx_tobject_authenticated(session_ctx *ctx) {
     tobject *tobj = session_ctx_opdata_get_tobject(ctx);
     assert(tobj);
 
-    CK_ATTRIBUTE_PTR p = util_get_attribute_by_type(CKA_ALWAYS_AUTHENTICATE,
-            tobj->attrs.attrs, tobj->attrs.count);
+    CK_ATTRIBUTE_PTR p = attr_get_attribute_by_type(tobj->attrs, CKA_ALWAYS_AUTHENTICATE);
     bool has_always_auth = false;
     if (p) {
         assert(p->ulValueLen == sizeof(CK_BBOOL));

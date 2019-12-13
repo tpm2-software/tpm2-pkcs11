@@ -1,28 +1,24 @@
+# SPDX-License-Identifier: BSD-2-Clause
 # python stdlib dependencies
 import binascii
-import hashlib
+import io
 import os
 import sys
 import yaml
-
-from pyasn1_modules import pem, rfc2459
-from pyasn1.codec.der import decoder
-from pyasn1.codec.ber import encoder as berenc
-from pyasn1.codec.der import encoder as derenc
 
 # local imports
 from .command import Command
 from .command import commandlet
 from .db import Db
+from .objects import PKCS11ObjectFactory as PKCS11ObjectFactory
+from .objects import PKCS11X509
 from .utils import bytes_to_file
 from .utils import AESAuthUnwrapper
 from .utils import TemporaryDirectory
 from .utils import hash_pass
 from .utils import rand_hex_str
-from .utils import get_ec_params
-from .utils import asn1_format_ec_point_uncompressed
-from .utils import list_dict_from_kvp
-from .utils import str2bytes
+from .utils import pemcert_to_attrs
+from .utils import str2bool
 
 from .tpm2 import Tpm2
 
@@ -84,8 +80,8 @@ class NewKeyCommandBase(Command):
         return (encobjauth, objauth)
 
     @staticmethod
-    def new_key_save(alg, keylabel, tid, label, tertiarypriv, tertiarypub,
-                     tertiarypubdata, encobjauth, objauth, db, tpm2, extra_privattrs=None, extra_pubattrs=None):
+    def new_key_save(alg, keylabel, tid, label, privblob, pubblob,
+                     tertiarypubdata, encobjauth, db, tpm2, extra_privattrs=None, extra_pubattrs=None):
         token = db.gettoken(label)
 
         #
@@ -95,267 +91,51 @@ class NewKeyCommandBase(Command):
         #
         y = yaml.safe_load(tertiarypubdata)
 
-        pubattrs = None
-        privattrs = None
-
-        if alg.startswith('rsa'):
-            pubattrs = [
-                {
-                    CKA_KEY_TYPE: CKK_RSA
-                },
-                {
-                    CKA_CLASS: CKO_PUBLIC_KEY
-                },
-                {
-                    CKA_VERIFY: True
-                },
-                {
-                    CKA_ENCRYPT: True
-                },
-                {
-                    CKA_VERIFY_RECOVER: False
-                },
-                {
-                    CKA_WRAP: False
-                },
-                {
-                    CKA_TRUSTED: False
-                },
-            ]
-
-            privattrs = [
-                {
-                    CKA_KEY_TYPE: CKK_RSA
-                },
-                {
-                    CKA_CLASS: CKO_PRIVATE_KEY
-                },
-                {
-                    CKA_MODULUS_BITS: y['bits']
-                },
-                {
-                    CKA_SIGN: True
-                },
-                {
-                    CKA_DECRYPT: True
-                },
-                {
-                    CKA_SIGN_RECOVER : False
-                },
-                {
-                    CKA_UNWRAP : False
-                },
-                {
-                    CKA_WRAP_WITH_TRUSTED : False
-                },
-            ]
-
-            moddetails = [{
-                CKA_MODULUS: y['rsa']
-            }, {
-                CKA_MODULUS_BITS: y['bits']
-            }, {
-                CKA_PUBLIC_EXPONENT: 65537
-            }]
-
-            pubattrs.extend(moddetails)
-            privattrs.extend(moddetails)
-
-            pubmech = [{
-                CKM_RSA_X_509: ""
-            }, {
-                CKM_RSA_PKCS_OAEP: {
-                    "hashalg": CKM_SHA_1,
-                    "mgf": CKG_MGF1_SHA1
-                }
-            }, {
-                CKM_RSA_PKCS_OAEP: {
-                    "hashalg": CKM_SHA256,
-                    "mgf": CKG_MGF1_SHA256
-                }
-            }, {
-                CKM_RSA_PKCS: ""
-            }]
-
-            privmech = [{
-                CKM_RSA_X_509: ""
-            }, {
-                CKM_RSA_PKCS_OAEP: {
-                    "hashalg": CKM_SHA_1,
-                    "mgf": CKG_MGF1_SHA1
-                }
-            }, {
-                CKM_RSA_PKCS_OAEP: {
-                    "hashalg": CKM_SHA256,
-                    "mgf": CKG_MGF1_SHA256
-                }
-            }, {
-                CKM_RSA_PKCS: ""
-            }]
-        elif alg.startswith('ecc'):
-
-            ecparams = get_ec_params(alg)
-            ecpoint = asn1_format_ec_point_uncompressed(y['x'], y['y'])
-
-            pubattrs = [
-                {
-                    CKA_KEY_TYPE: CKK_EC
-                },
-                {
-                    CKA_CLASS: CKO_PUBLIC_KEY
-                },
-                {
-                    CKA_EC_PARAMS: ecparams
-                },
-                {
-                    CKA_EC_POINT: ecpoint
-                },
-                {
-                    CKA_VERIFY: True
-                },
-                {
-                    CKA_ENCRYPT: True
-                },
-                {
-                    CKA_VERIFY_RECOVER: False
-                },
-                {
-                    CKA_WRAP: False
-                },
-                {
-                    CKA_TRUSTED: False
-                },
-            ]
-
-            privattrs = [
-                {
-                    CKA_KEY_TYPE: CKK_EC
-                },
-                {
-                    CKA_CLASS: CKO_PRIVATE_KEY
-                },
-                {
-                    CKA_EC_PARAMS: ecparams
-                },
-                {
-                    CKA_EC_POINT: ecpoint
-                },
-                {
-                    CKA_SIGN: True
-                },
-                {
-                    CKA_DECRYPT: True
-                },
-                {
-                    CKA_SIGN_RECOVER : False
-                },
-                {
-                    CKA_UNWRAP : False
-                },
-                {
-                    CKA_WRAP_WITH_TRUSTED : False
-                },
-            ]
-
-            pubmech = [{CKM_ECDSA: ""}]
-            privmech = pubmech
-        elif alg.startswith('aes'):
-            privattrs = [{
-                CKA_CLASS: CKO_SECRET_KEY
-            }, {
-                CKA_KEY_TYPE: CKK_AES
-            }, {
-                CKA_VALUE_LEN: y['sym-keybits'] / 8
-            },
-            {
-                CKA_ENCRYPT: True
-            },
-            {
-                CKA_DECRYPT: True
-            },
-            {
-                CKA_SIGN: False
-            },
-            {
-                CKA_VERIFY: False
-            },
-            {
-                CKA_WRAP: False
-            },
-            {
-                CKA_UNWRAP: False
-            },
-            {
-                CKA_WRAP_WITH_TRUSTED: False
-            },
-            ]
-
-            privmech = [{CKM_AES_CBC: ""}, ]
-        else:
-            sys.exit('Cannot handle algorithm: "{}"'.format(alg))
+        initial_pubattrs = {}
+        initial_privattrs = {}
 
         # add the id
-        privattrs.append({CKA_ID: binascii.hexlify(tid.encode()).decode()})
-        if pubattrs:
-            pubattrs.append({CKA_ID: binascii.hexlify(tid.encode()).decode()})
-            pubattrs.append({CKA_DERIVE: False})
-
-        privattrs.append({CKA_TOKEN: True})
-        privattrs.append({CKA_SENSITIVE: True})
-        privattrs.append({CKA_ALWAYS_SENSITIVE: True})
-        privattrs.append({CKA_EXTRACTABLE: False})
-        privattrs.append({CKA_NEVER_EXTRACTABLE: True})
-        privattrs.append({CKA_DERIVE: False})
+        initial_privattrs.update({CKA_ID: binascii.hexlify(tid.encode()).decode()})
+        initial_pubattrs.update({CKA_ID: binascii.hexlify(tid.encode()).decode()})
 
         # Add keylabel for ALL objects if set
         if keylabel is not None:
-            privattrs.append({
+            initial_privattrs.update({
                 CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()
             })
-            if pubattrs:
-                pubattrs.append({
-                    CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()
-                })
+            initial_pubattrs.update({
+                CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()
+            })
 
         # add additional attrs
         if extra_privattrs:
-            privattrs.extend(extra_privattrs)
+            initial_privattrs.update(extra_privattrs)
 
-        if pubattrs and extra_pubattrs:
-            pubattrs.extend(extra_pubattrs)
+        if initial_pubattrs and extra_pubattrs:
+            initial_pubattrs.update(extra_pubattrs)
+
+        objects = PKCS11ObjectFactory(y, tpm2, encobjauth, initial_pubattrs, initial_privattrs, tpm_pub=pubblob, tpm_priv=privblob)
 
         # Store private to database
-        privrowid = db.addtertiary(token['id'], tertiarypriv, tertiarypub,
-                                   encobjauth, privmech, privattrs)
+        db.addtertiary(token['id'], objects['private'])
 
         # if it's asymmetric, add a public object too
-        if pubattrs:
-            pubrowid = db.addtertiary(token['id'], None, tertiarypub,
-                                      encobjauth, pubmech, pubattrs)
+        if 'public' in objects and objects['public'] is not None:
+            db.addtertiary(token['id'], objects['public'])
 
-        # if the keylabel is not set, use the tertiary object tid as the keylabel
-        # Normally we would use a transaction to make this atomic, but Pythons
-        # sqlite3 transaction handling is quite odd. So when the keylabel is None, just insert
-        # into the db without that attribute, retrieve the primary key, and then issue an
-        # update. A possible race exists if someone is looking for the key by label between
-        # these operations.
-        # See:
-        #   - https://stackoverflow.com/questions/107005/predict-next-auto-inserted-row-tid-sqlite
-        if keylabel is None:
-            keylabel = str(privrowid)
-            privattrs.append({
-                CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()
-            })
-            db.updatetertiaryattrs(privrowid, privattrs)
-            if pubattrs:
-                pubattrs.append({
-                    CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()
-                })
-                db.updatetertiaryattrs(pubrowid, pubattrs)
+        return objects
 
-        db.commit()
+    @staticmethod
+    def output(objects, action):
+        d = {
+            'action' : action,
+        }
 
-        return keylabel
+        for k, v in objects.items():
+            if v is not None:
+                d[k] = { 'CKA_ID' : objects[k][CKA_ID] }
+
+        yaml.safe_dump(d, sys.stdout, default_flow_style=False)
 
     def __call__(self, args):
         path = args['path']
@@ -393,15 +173,12 @@ class NewKeyCommandBase(Command):
                     pobj, objauth, tpm2, path, alg, privkey, d)
 
                 # handle options that can add additional attributes
-                priv_attrs = None
                 always_auth = args['attr_always_authenticate']
-                priv_attrs = [{CKA_ALWAYS_AUTHENTICATE : always_auth}]
+                priv_attrs = {CKA_ALWAYS_AUTHENTICATE : always_auth}
 
-                final_key_label = NewKeyCommandBase.new_key_save(
+                return NewKeyCommandBase.new_key_save(
                     alg, key_label, tid, label, tertiarypriv, tertiarypub,
-                    tertiarypubdata, encobjauth, objauth, db, tpm2, extra_privattrs=priv_attrs)
-
-                return final_key_label
+                    tertiarypubdata, encobjauth, db, tpm2, extra_privattrs=priv_attrs)
 
 
 @commandlet("import")
@@ -449,9 +226,8 @@ class ImportCommand(NewKeyCommandBase):
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 
     def __call__(self, args):
-        keylabel = super(ImportCommand, self).__call__(args)
-        print('Imported key as label: "{keylabel}"'.format(keylabel=keylabel))
-
+        objects = super(ImportCommand, self).__call__(args)
+        NewKeyCommandBase.output(objects, 'import')
 
 @commandlet("addkey")
 class AddKeyCommand(NewKeyCommandBase):
@@ -491,8 +267,8 @@ class AddKeyCommand(NewKeyCommandBase):
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 
     def __call__(self, args):
-        keylabel = super(AddKeyCommand, self).__call__(args)
-        print('Added key as label: "{keylabel}"'.format(keylabel=keylabel))
+        objects = super(AddKeyCommand, self).__call__(args)
+        NewKeyCommandBase.output(objects, 'add')
 
 
 @commandlet("addcert")
@@ -508,123 +284,243 @@ class AddCert(Command):
             '--label', help='The profile label to remove.\n', required=True)
 
         group_parser.add_argument(
+            'cert', help='The x509 PEM certificate to add.\n')
+
+        sub_group = group_parser.add_mutually_exclusive_group()
+
+        sub_group.add_argument(
             '--key-label',
-            help='The associated private key label.\n',
-            required=True)
+            help='The associated private key label.\n')
 
         group_parser.add_argument(
-            'cert', help='The x509 PEM certificate to add.\n')
+            '--key-id',
+            help='The associated private key id in hex.\n')
+
 
     def __call__(self, args):
 
         path = args['path']
         label = args['label']
         keylabel = args['key_label']
+        keyid = args['key_id']
         certpath = args['cert']
 
-        # rather than use pycryptography x509 parser, which gives native type access to certficiate
-        # fields use pyASN1 to get raw ASN1 encoded values for the fields as the spec requires them
-        with open(certpath, "r") as f:
-            substrate = pem.readPemFromFile(f)
-            cert = decoder.decode(substrate, asn1Spec=rfc2459.Certificate())[0]
+        if (keylabel is None) == (keyid is None):
+            sys.exit('Expected --key-label or --key-id to be specified')
 
-        c = cert['tbsCertificate']
+        attrs = pemcert_to_attrs(certpath)
 
-        # print(cert.prettyPrint())
-
-        h = binascii.hexlify
-        b = berenc.encode
-        d = derenc.encode
-
-        bercert = b(cert)
-        hexbercert = h(bercert).decode()
-
-        # the CKA_CHECKSUM value is the first 3 bytes of a sha1hash
-        m = hashlib.sha1()
-        m.update(bercert)
-        bercertchecksum = m.digest()[0:3]
-        hexbercertchecksum = h(bercertchecksum).decode()
-
-        subj = c['subject']
-        hexsubj=h(d(str2bytes(subj))).decode()
-
-        hexkeylabel = h(str2bytes(keylabel)).decode()
-
-        attrs = [
-            { CKA_CLASS : CKO_CERTIFICATE },
-            { CKA_CERTIFICATE_TYPE : CKC_X_509 },
-            { CKA_TRUSTED : False },
-            { CKA_CERTIFICATE_CATEGORY: CK_CERTIFICATE_CATEGORY_UNSPECIFIED },
-            # The value of this attribute is derived by taking the first 3 bytes of the CKA_VALUE
-            # field.
-            { CKA_CHECK_VALUE: hexbercertchecksum },
-            # Start date for the certificate (default empty)
-            { CKA_START_DATE : "" },
-            # End date for the certificate (default empty)
-            { CKA_END_DATE : "" },
-            # DER-encoding of the SubjectPublicKeyInfo for the public key
-            # contained in this certificate (default empty)
-            { CKA_PUBLIC_KEY_INFO : "" },
-            # DER encoded subject
-            { CKA_SUBJECT : hexsubj },
-            # "label of keypair associated, default empty
-            { CKA_LABEL : hexkeylabel },
-            # der encoding of issuer, default empty
-            { CKA_ISSUER : '' },
-            # der encoding of the cert serial, default empty
-            { CKA_SERIAL_NUMBER : '' },
-            # BER encoding of the certificate
-            { CKA_VALUE : hexbercert },
-            # RFC2279 string to URL where cert can be found, default empty
-            { CKA_URL : '' },
-            # hash of pub key subj, default empty
-            { CKA_HASH_OF_SUBJECT_PUBLIC_KEY : '' },
-            # Hash of pub key, default empty
-            { CKA_HASH_OF_ISSUER_PUBLIC_KEY : '' },
-            # Java security domain, default CK_SECURITY_DOMAIN_UNSPECIFIED
-            { CKA_JAVA_MIDP_SECURITY_DOMAIN : CK_SECURITY_DOMAIN_UNSPECIFIED },
-            # Name hash algorithm, defaults to SHA1
-            { CKA_NAME_HASH_ALGORITHM : CKM_SHA_1 }
-        ]
+        pkcs11_object = PKCS11X509(attrs)
 
         with Db(path) as db:
 
-             # get token to add to
-             token = db.gettoken(label)
+            # get token to add to
+            token = db.gettoken(label)
 
-             # verify that key is existing
-             # XXX we should be verifying that it's expected, but I guess one could always load up a cert
-             # not associated with a key.
-             tobjs = db.gettertiary(token['id'])
+            # verify that key is existing
+            # XXX we should be verifying that it's expected, but I guess one could always load up a cert
+            # not associated with a key.
+            tobjs = db.gettertiary(token['id'])
 
-             # look up the id by object label
-             id = None
-             for t in tobjs:
-                 id = AddCert.get_id_by_label(t, keylabel)
-                 if id is not None:
-                     break
+            # look up the private key
+            missing_id_or_label = None
+            for t in tobjs:
+                if keylabel is not None:
+                    missing_id_or_label = AddCert.get_id_by_label(t, keylabel)
+                else:
+                    missing_id_or_label = AddCert.get_label_by_id(t, keyid)
+                if missing_id_or_label is not None:
+                    break
 
-             if id is None:
-                 raise RuntimeError('Cannot find key with id "%s"' % keylabel)
+            if missing_id_or_label is None:
+                raise RuntimeError('Cannot find key with id "%s"' % keylabel)
 
-             attrs.append({CKA_ID: id})
-             # TODO verify that cert is cryptographically bound to key found
+            # have valid keylabel needed id
+            if keylabel:
+                pkcs11_object.update({CKA_ID: missing_id_or_label})
+                pkcs11_object.update({CKA_LABEL: binascii.hexlify(keylabel.encode()).decode()})
+            # have valid id needed keylabel
+            else:
+                pkcs11_object.update({CKA_LABEL: missing_id_or_label})
+                pkcs11_object.update({CKA_ID: keyid})
 
-             # add the cert
-             db.addtertiary(token['id'], None, None, None, None, attrs)
+            # TODO verify that cert is cryptographically bound to key found
 
-        print('Added cert as label: "{keylabel}"'.format(keylabel=keylabel))
+            # add the cert
+            db.addtertiary(token['id'], pkcs11_object)
 
+        NewKeyCommandBase.output({'cert' : pkcs11_object}, 'add')
 
     @staticmethod
     def get_id_by_label(tobj, keylabel):
 
-        attrs = list_dict_from_kvp(tobj['attrs'])
+        attrs = yaml.safe_load(io.StringIO(tobj['attrs']))
 
-        for a in attrs:
-            if str(CKA_LABEL) in a:
-                x = binascii.unhexlify(a[str(CKA_LABEL)]).decode()
-                if x == keylabel:
-                    return a[str(CKA_LABEL)]
+        if CKA_LABEL in attrs:
+            x = attrs[CKA_LABEL]
+            x = binascii.unhexlify(x).decode()
+            if x == keylabel and attrs[CKA_CLASS] == CKO_PRIVATE_KEY:
+                return attrs[CKA_ID]
 
         return None
+
+    @staticmethod
+    def get_label_by_id(tobj, keyid):
+
+        attrs = yaml.safe_load(io.StringIO(tobj['attrs']))
+
+        if CKA_ID in attrs:
+            x = attrs[CKA_ID]
+            if x == keyid and attrs[CKA_CLASS] == CKO_PRIVATE_KEY:
+                return attrs[CKA_LABEL] if CKA_LABEL in attrs else ''
+
+        return None
+
+@commandlet("objmod")
+class ObjMod(Command):
+    '''
+    Dumps and modifies objects.
+    '''
+
+    _type_map = {
+        'int' : 'do_int',
+        'str' : 'do_str',
+        'bool': 'do_bool',
+        'raw' : 'do_raw',
+    }
+
+    @staticmethod
+    def do_int(value):
+        return int(value, 0)
+
+    @staticmethod
+    def do_bool(value):
+        return str2bool(value)
+
+    @staticmethod
+    def do_str(value):
+        return binascii.hexlify(value.encode()).decode()
+
+    @staticmethod
+    def do_raw(value):
+        return value
+
+    @classmethod
+    def mod(cls, path, tid, key, value, inattrs, vtype):
+
+        with Db(path) as db:
+            obj = db.getobject(tid)
+
+        s = obj['attrs']
+        obj_attrs = yaml.safe_load(s)
+
+        # if we don't have any update data, just dump the attributes
+        if not key and not inattrs:
+            print(yaml.safe_dump(obj_attrs, default_flow_style=False))
+            sys.exit()
+
+        # if we have attributes YAML file, then we want to update all attributes
+        if inattrs:
+            with Db(path) as db:
+                y = yaml.safe_load(open(inattrs, "r"))
+                db.updatetertiary(obj['id'], y)
+            sys.exit()
+
+        # else we have --key and possibly --value
+        #
+        # look in the CKA_ globals from pkcs11t.py file for
+        # a mapping string or raw value map.
+        # filter(lambda x: x.startswith('CKA_'), globals().keys())
+        keys = []
+        for k in globals().keys():
+            if k.startswith('CKA_'):
+                keys.append(k)
+
+        keynames = {}
+        for k in keys:
+            keynames[globals()[k]] = k
+
+        keyname=None
+        if key in keys:
+            keyname=key
+            key=globals()[key]
+        else:
+            key = int(key, 0)
+            if key not in keynames:
+                sys.exit('Unknown key: %d', key)
+            keyname = keynames[key]
+
+        if key and not key in obj_attrs:
+            sys.exit("Key not found")
+
+        if not value:
+            print(yaml.safe_dump({keyname : obj_attrs[key]}))
+            sys.exit()
+
+        if not type:
+            sys.exit("When specifying a value, type is required")
+
+        value = getattr(cls, ObjMod._type_map[vtype])(value)
+        obj_attrs[key] = value
+        with Db(path) as db:
+            db.updatetertiary(obj['id'], obj_attrs)
+
+    # adhere to an interface
+    def generate_options(self, group_parser):
+        group_parser.add_argument(
+            '--id', help='The object id.\n', required=True)
+        group_parser.add_argument(
+            '--key',
+            help='The key to dump.\n')
+        group_parser.add_argument(
+            '--value',
+            help='The value to set.\n')
+        group_parser.add_argument(
+            '--type',
+            choices=self._type_map.keys(),
+            help='Specify the type.\n')
+        group_parser.add_argument(
+            'attrs', nargs='?', help='The YAML attribute file.\n')
+    def __call__(self, args):
+
+        path = args['path']
+
+        key = args['key'] if 'key' in args else None
+        value = args['value'] if 'value' in args else None
+        attrs = args['attrs'] if 'attrs' in args else None
+
+        if attrs and key:
+            sys.exit('Cannot specify --key when specifying the attributes')
+
+        if attrs and value:
+            sys.exit('Cannot specify --value when specifying the attributes')
+
+        if value and not args['type']:
+            sys.exit('require --type when specifying --value')
+
+        ObjMod.mod(path, args['id'], key, value, attrs, args['type'])
+
+
+@commandlet("objdel")
+class ObjDel(Command):
+    '''
+    Deletes an object from a token.
+    '''
+
+    @classmethod
+    def delete(cls, path, tid):
+
+        with Db(path) as db:
+            obj = db.getobject(tid)
+            db.rmobject(obj['id'])
+
+    # adhere to an interface
+    def generate_options(self, group_parser):
+        group_parser.add_argument(
+            'id', help='The id of the object to delete.\n')
+
+    def __call__(self, args):
+
+        path = args['path']
+
+        ObjDel.delete(path, args['id'])

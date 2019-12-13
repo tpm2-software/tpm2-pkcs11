@@ -1,5 +1,5 @@
+# SPDX-License-Identifier: BSD-2-Clause
 from __future__ import print_function
-
 import os
 import sys
 from tempfile import mkstemp, NamedTemporaryFile
@@ -60,20 +60,21 @@ class Tpm2(object):
 
     def load(self, pctx, pauth, priv, pub):
 
-        if priv != None and not isinstance(priv, str):
+        t = unicode if sys.version_info.major < 3 else str
+
+        if priv != None and not isinstance(priv, t):
             sealprivf = NamedTemporaryFile()
             sealprivf.write(priv)
             sealprivf.flush()
             priv = sealprivf.name
 
-        if not isinstance(pub, str):
+        if not isinstance(pub, t):
             sealpubf = NamedTemporaryFile()
             sealpubf.write(pub)
             sealpubf.flush()
             pub = sealpubf.name
 
         ctx = os.path.join(self._tmp, uuid.uuid4().hex + '.out')
-
         #tpm2_load -C $file_primary_key_ctx  -u $file_load_key_pub  -r $file_load_key_priv -n $file_load_key_name -c $file_load_key_ctx
         if priv != None:
             cmd = [

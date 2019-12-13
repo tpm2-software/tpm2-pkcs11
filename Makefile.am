@@ -1,39 +1,14 @@
-#;**********************************************************************;
-# Copyright (c) 2018 Intel Corporation
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#
-# 1. Redistributions of source code must retain the above copyright notice,
-# this list of conditions and the following disclaimer.
-#
-# 2. Redistributions in binary form must reproduce the above copyright notice,
-# this list of conditions and the following disclaimer in the documentation
-# and/or other materials provided with the distribution.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
-# THE POSSIBILITY OF SUCH DAMAGE.
-#;**********************************************************************;
+# SPDX-License-Identifier: BSD-2-Clause
 
 INCLUDE_DIRS    = -I$(srcdir)/src -I$(top_srcdir)/src/lib
 ACLOCAL_AMFLAGS = -I m4 --install
 AM_CFLAGS       = $(INCLUDE_DIRS) $(EXTRA_CFLAGS) $(CODE_COVERAGE_CFLAGS) \
                   $(TSS2_ESYS_CFLAGS) $(TSS2_MU_CFLAGS) $(TSS2_TCTILDR_CFLAGS) \
-		  $(SQLITE3_CFLAGS) $(PTHREAD_CFLAGS) $(CRYPTO_CFLAGS)
+		  $(SQLITE3_CFLAGS) $(PTHREAD_CFLAGS) $(CRYPTO_CFLAGS) $(YAML_CFLAGS)
 
 AM_LDFLAGS      = $(EXTRA_LDFLAGS) $(CODE_COVERAGE_LIBS) $(TSS2_ESYS_LIBS) \
                   $(TSS2_MU_LIBS) $(TSS2_TCTILDR_LIBS) $(SQLITE3_LIBS) \
-		  $(PTHREAD_LIBS) $(CRYPTO_LIBS)
+		  $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(YAML_LIBS)
 
 # ax_code_coverage
 if AUTOCONF_CODE_COVERAGE_2019_01_06
@@ -95,14 +70,13 @@ AM_TESTS_ENVIRONMENT = \
     PYTHONPATH=$(abs_top_srcdir)/tools \
     dbus-run-session
 
-INT_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
-
 TESTS_LDADD = $(noinst_LTLIBRARIES) $(lib_LTLIBRARIES) $(p11lib_LTLIBRARIES) $(AM_LDFLAGS) $(CMOCKA_LIBS) $(CRYPTO_LIBS)
 
 TESTS_CFLAGS = $(CMOCKA_CFLAGS)
 
 # Intentionally empty so INTEGRATION and UNIT tests can append to it.
 check_PROGRAMS =
+check_SCRIPTS =
 
 ### Integration Tests ###
 if ENABLE_INTEGRATION
@@ -116,7 +90,6 @@ test_integration_libtest_a_SOURCES = $(LIB_SRC)
 test_integration_libtest_a_CFLAGS = -fPIC $(AM_CFLAGS)
 TESTS_LDADD += $(LIB_TEST)
 
-TESTS = $(check_PROGRAMS)
 check_PROGRAMS += \
     test/integration/pkcs-find-objects.int \
     test/integration/pkcs-get-mechanism.int \
@@ -129,9 +102,16 @@ check_PROGRAMS += \
     test/integration/pkcs-keygen.int \
     test/integration/pkcs-session-state.int
 
-XFAIL_TESTS=test/unit/test_pkcs11
+# add test scripts
+check_SCRIPTS += \
+    test/integration/pkcs11-tool.sh
 
-INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
+AM_INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
+INT_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
+
+TEST_EXTENSIONS = .sh
+AM_SH_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
+SH_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
 
 test_integration_pkcs_find_objects_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_find_objects_int_LDADD   = $(TESTS_LDADD)
@@ -198,18 +178,27 @@ noinst_LTLIBRARIES = $(libtpm2_test_pkcs11) $(libtpm2_test_internal)
 
 ## End of test libraries, start tests ##
 
-TESTS = $(check_PROGRAMS)
 check_PROGRAMS += \
     test/unit/test_twist\
-    test/unit/test_log
+    test/unit/test_log \
+    test/unit/test_parser \
+    test/unit/test_attr
 
 test_unit_test_twist_CFLAGS    = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
 test_unit_test_twist_LDADD     = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
 test_unit_test_log_CFLAGS      = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
 test_unit_test_log_LDADD       = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
+test_unit_test_parser_CFLAGS   = $(AM_CFLAGS) $(YAML_CFLAGS) $(CMOCKA_CFLAGS)
+test_unit_test_parser_LDADD    = $(CMOCKA_LIBS) $(YAML_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
+test_unit_test_attr_CFLAGS   = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
+test_unit_test_attr_LDADD    = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
 
 endif
 # END UNIT
+
+TESTS= \
+    $(check_PROGRAMS) \
+    $(check_SCRIPTS)
 
 ### Helper Functions ###
 define make_parent_dir

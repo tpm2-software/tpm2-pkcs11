@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-2-Clause
 from setuptools import setup
 
 # read the contents of your README file
@@ -31,6 +32,8 @@ setup(
     install_requires=[
         'cryptography',
         'pyyaml',
+        'pyasn1',
+        'pyasn1_modules',
     ],
     tests_require=[],
     entry_points={

@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
 set -e
 
 # generate list of source files for use in Makefile.am

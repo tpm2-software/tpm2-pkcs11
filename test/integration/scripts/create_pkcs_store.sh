@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-2-Clause
 #!/usr/bin/env bash
 
 echo "SETUP SCRIPT - DBUS_SESSION_BUS_ADDRESS: $DBUS_SESSION_BUS_ADDRESS"
@@ -106,7 +107,7 @@ tpm2_ptool addtoken --pid=3 --sopin=sopin3 --userpin=userpin3 --label=esys-tr --
 tpm2_ptool changepin --label=label --user=user --old=myBADuserpin --new=myuserpin --path=$TPM2_PKCS11_STORE
 tpm2_ptool changepin --label=label --user=so --old=myBADsopin --new=mysopin --path=$TPM2_PKCS11_STORE
 
-# verify the token
+# verify the token w/o objects
 tpm2_ptool verify --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 
 # Use initpin to change the user pin
@@ -133,11 +134,14 @@ echo "Added RSA Keys"
 
 echo "Adding 2 EC p256 keys under token \"label\""
 for i in `seq 0 1`; do
-  tpm2_ptool addkey --algorithm=ecc256 --label="label" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+  tpm2_ptool addkey --algorithm=ecc256 --label="label" --key-label=$i --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 done;
 echo "Added EC Keys"
 
 echo "Adding 1 x509 Certificate under token \"label\""
+
+# verify the token and all the objects
+tpm2_ptool verify --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 
 #
 # Build an OpenSSL config file
@@ -180,13 +184,13 @@ cert="$TPM2_PKCS11_STORE/cert.pem"
 # often silly and leak.
 setup_asan
 TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
-    req -new -x509 -days 365 -subj '/CN=my key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_12 -out "$cert"
+    req -new -x509 -days 365 -subj '/CN=my key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_1 -out "$cert"
 clear_asan
 
 #
 # insert cert to token
 #
-tpm2_ptool addcert --label=label --key-label=12 --path=$TPM2_PKCS11_STORE "$cert"
+tpm2_ptool addcert --label=label --key-label=1 --path=$TPM2_PKCS11_STORE "$cert"
 
 echo "added x509 Certificate"
 

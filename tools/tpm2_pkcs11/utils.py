@@ -1,14 +1,22 @@
+# SPDX-License-Identifier: BSD-2-Clause
 import binascii
 import hashlib
 import os
 import argparse
 import sys
 import shutil
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.ciphers import (Cipher, algorithms, modes)
 from tempfile import mkdtemp
 
-import sys
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.ciphers import (Cipher, algorithms, modes)
+
+from pyasn1_modules import pem, rfc2459
+from pyasn1.codec.der import decoder
+from pyasn1.codec.ber import encoder as berenc
+from pyasn1.codec.der import encoder as derenc
+
+from .pkcs11t import *  # noqa
+
 if sys.version_info.major < 3:
     input = raw_input
 
@@ -17,36 +25,10 @@ def str2bytes(s):
         return s.encode()
     return s
 
-# The delimiter changes based on nesting level to make parsing easier. We assume one key-value entry per line
-# where a key can have N KVPs as a CSV.
-# For instance:
-#   9=hashalg=43,mgf=67\n
-#
-def kvp_row(d, delim=" "):
-    x = delim.join([
-        "=".join([
-            str(key), kvp_row(val, ",") if isinstance(val, dict) else str(val)
-        ]) for key, val in d.items()
-    ])
-    return x
-
-def dict_to_kvp(d):
-    return kvp_row(d)
-
-def list_dict_to_kvp(l):
-    x = "\n".join(kvp_row(d) for d in l)
-    return x
-
 def bytes_to_file(bites, tmpdir):
     path = os.path.join(tmpdir, "primary.handle")
     open(path, 'w+b').write(bites)
     return path
-
-def dict_from_kvp(kvp):
-    return dict(x.split('=') for x in kvp.split('\t '))
-
-def list_dict_from_kvp(lines):
-    return [ dict_from_kvp(x) for x in lines.split("\n") ]
 
 def rand_hex_str(num=32):
     if num % 2:
@@ -63,20 +45,20 @@ def hash_pass(password, salt=None):
 
     # python 3.5.2 (doesn't seem to affect >= 3.5.6) is dumb...
     if isinstance(password, str):
-         password = password.encode()
+        password = password.encode()
 
     if isinstance(salt, str):
-         salt = salt.encode()
+        salt = salt.encode()
 
     m = hashlib.sha256(password)
     m.update(salt)
 
     # the TPM auth size is limited to 32 bytes in most cases
-    hash = m.hexdigest()[:32]
+    digest = m.hexdigest()[:32]
 
     return {
         'salt': salt,
-        'hash': hash,
+        'hash': digest,
     }
 
 
@@ -213,13 +195,13 @@ def get_ec_params(alg):
     This function will return a hex string without the leading 0x representing this encoding.
     """
 
-    if alg == "ecc256":
+    if alg == "NIST p256":
         obj = "2A8648CE3D030107"
-    elif alg == "ecc224":
+    elif alg == "NIST p224":
         obj = "2B81040021"
-    elif alg == "ecc384":
+    elif alg == "NIST p384":
         obj = "2B81040022"
-    elif alg == "ecc521":
+    elif alg == "NIST p521":
         obj = "2B81040023"
     else:
         raise RuntimeError("alg %s has no EC params mapping" % alg)
@@ -261,3 +243,61 @@ def asn1_format_ec_point_uncompressed(x, y):
     s = "04{len:02x}04{X}{Y}".format(len=total_len, X=x, Y=y)
 
     return s
+
+def pemcert_to_attrs(certpath):
+            # rather than use pycryptography x509 parser, which gives native type access to certficiate
+        # fields use pyASN1 to get raw ASN1 encoded values for the fields as the spec requires them
+        with open(certpath, "r") as f:
+            substrate = pem.readPemFromFile(f)
+            cert = decoder.decode(substrate, asn1Spec=rfc2459.Certificate())[0]
+
+        c = cert['tbsCertificate']
+
+        # print(cert.prettyPrint())
+
+        h = binascii.hexlify
+        b = berenc.encode
+        d = derenc.encode
+
+        bercert = b(cert)
+        hexbercert = h(bercert).decode()
+
+        # the CKA_CHECKSUM attrs is the first 3 bytes of a sha1hash
+        m = hashlib.sha1()
+        m.update(bercert)
+        bercertchecksum = m.digest()[0:3]
+        hexbercertchecksum = h(bercertchecksum).decode()
+
+        subj = c['subject']
+        hexsubj=h(d(str2bytes(subj))).decode()
+
+        return {
+            # The attrs of this attribute is derived by taking the first 3 bytes of the CKA_VALUE
+            # field.
+            CKA_CHECK_VALUE: hexbercertchecksum,
+            # Start date for the certificate (default empty)
+            CKA_START_DATE : "",
+            # End date for the certificate (default empty)
+            CKA_END_DATE : "",
+            # DER-encoding of the SubjectPublicKeyInfo for the public key
+            # contained in this certificate (default empty)
+            CKA_PUBLIC_KEY_INFO : "",
+            # DER encoded subject
+            CKA_SUBJECT : hexsubj,
+            # der encoding of issuer, default empty
+            CKA_ISSUER : '',
+            # der encoding of the cert serial, default empty
+            CKA_SERIAL_NUMBER : '',
+            # BER encoding of the certificate
+            CKA_VALUE : hexbercert,
+            # RFC2279 string to URL where cert can be found, default empty
+            CKA_URL : '',
+            # hash of pub key subj, default empty
+            CKA_HASH_OF_SUBJECT_PUBLIC_KEY : '',
+            # Hash of pub key, default empty
+            CKA_HASH_OF_ISSUER_PUBLIC_KEY : '',
+            # Java security domain, default CK_SECURITY_DOMAIN_UNSPECIFIED
+            CKA_JAVA_MIDP_SECURITY_DOMAIN : CK_SECURITY_DOMAIN_UNSPECIFIED,
+            # Name hash algorithm, defaults to SHA1
+            CKA_NAME_HASH_ALGORITHM : CKM_SHA_1
+        }

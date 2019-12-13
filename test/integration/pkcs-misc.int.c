@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2018, Intel Corporation
  *
@@ -122,18 +122,16 @@ static void parse_lib_version(CK_BYTE *major, CK_BYTE *minor) {
 
     char buf[] = PACKAGE_VERSION;
 
-    char *minor_str = NULL;
-    char *major_str = &buf[0];
+    char *minor_str = "0";
+    const char *major_str = &buf[0];
 
     char *split = strchr(buf, '.');
     if (split) {
         split[0] = '\0';
         minor_str = split + 1;
-    } else {
-        minor_str = "0";
     }
 
-    if (!major_str || !major_str[0] || !minor_str[0]) {
+    if (!major_str[0] || !minor_str[0]) {
         *major = *minor = 0;
         return;
     }

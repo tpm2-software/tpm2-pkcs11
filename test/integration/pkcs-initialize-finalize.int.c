@@ -1,9 +1,9 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
  */
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2017-2018, Intel Corporation
  *
