@@ -243,8 +243,6 @@ class AddTokenCommand(Command):
             db.addsealobjects(tokid, usersealauth, usersealpriv, usersealpub,
                               sosealauth, sosealpriv, sosealpub)
 
-            print("Created token label: %s" % label)
-
     @staticmethod
     def do_token_noninit(db, args):
 
@@ -254,9 +252,7 @@ class AddTokenCommand(Command):
 
         config = [{'token-init': False}]
 
-        tokid = db.addtoken(pobject['id'], config)
-
-        print('Created token id: {tokid}'.format(tokid=tokid))
+        db.addtoken(pobject['id'], config)
 
     def __call__(self, args):
 
@@ -269,7 +265,6 @@ class AddTokenCommand(Command):
                 AddTokenCommand.do_token_init(db, path, args)
             else:
                 AddTokenCommand.do_token_noninit(db, args)
-
 
 @commandlet("addemptytoken")
 class AddEmptyTokenCommand(AddTokenCommand):
