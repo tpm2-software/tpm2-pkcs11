@@ -339,6 +339,7 @@ attr_list *attr_list_append_attrs(
 
     if (!new_len) {
         attr_list_free(*new_attrs);
+        *new_attrs = NULL;
         return old_attrs;
     }
 
