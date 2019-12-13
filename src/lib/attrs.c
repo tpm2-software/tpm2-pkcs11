@@ -257,7 +257,7 @@ CK_RV attr_list_raw_invoke_handlers(const CK_ATTRIBUTE_PTR attrs, CK_ULONG count
                 }
             }
         }
-        LOGV("ignoring attribute: 0x%x", a->type);
+        LOGV("ignoring attribute: 0x%lx", a->type);
     }
 
     return CKR_OK;
@@ -970,7 +970,7 @@ static CK_RV attr_conditional_add(
                 } else if (a->ulValueLen != cur->ulValueLen
                         || memcmp(a->pValue, cur->pValue, cur->ulValueLen)) {
                     /* yes - better match */
-                    LOGE("User specified and TPM specified attr mismatch: 0x%x",
+                    LOGE("User specified and TPM specified attr mismatch: 0x%lx",
                             cur->type);
                     attr_list_free(d);
                     return CKR_GENERAL_ERROR;
