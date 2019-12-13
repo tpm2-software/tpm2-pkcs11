@@ -33,8 +33,10 @@ to a slot, and multiple initializations can occur for generating more than one s
 
 **Example**:
 ```sh
-tpm2_ptool.py init --pobj-pin=mypobjpin --path=~/tmp
-Created a primary object of id: 1
+mkdir ~/tmp
+tpm2_ptool.py init --path=~/tmp
+action: Created
+id: 1
 ```
 
 The output of the command to *stdout* is important. It describes the id of the primary object
@@ -50,7 +52,6 @@ name called a *label* is provided. The *label* is used in subsequent commands to
 **Example**:
 ```sh
 tpm2_ptool.py addtoken --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=myuserpin --label=label --path ~/tmp
-Created token: label
 ```
 
 To create N tokens under a given `--pid` or primary object id, just run the command N times. Thus it is possible to have
@@ -63,12 +64,13 @@ to create the object under by using the `--label` option.
 
 **Example**:
 ```sh
-tpm2_ptool.py addkey --algorithm=aes256 --label=label --userpin=myuserpin --path=~/tmp
-Added key: 1
+action: add
+private:
+  CKA_ID: '62663630653733656336316363386535'
 ```
 
 This command can be run N times to create N objects within a token. Tokens can have an arbitrary number of tokens. The tool
-outputs to *stdout* the objects id. This is the object handle used later.
+outputs to *stdout* the objects CKA_ID hex encoded.
 
 **Note**: To view all the types of objects one can create run command:
 ```sh
