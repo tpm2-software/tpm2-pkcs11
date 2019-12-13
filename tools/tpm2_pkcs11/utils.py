@@ -21,7 +21,8 @@ if sys.version_info.major < 3:
     input = raw_input
 
 def str2bytes(s):
-    if isinstance(s, str):
+    if isinstance(s, str) or \
+        (sys.version_info.major < 3 and isinstance(s, unicode)):
         return s.encode()
     return s
 
@@ -34,7 +35,7 @@ def rand_hex_str(num=32):
     if num % 2:
         raise RuntimeError("Expected even number of bytes, got: %u", num)
 
-    return binascii.hexlify(os.urandom(num // 2))
+    return binascii.hexlify(os.urandom(num // 2)).decode()
 
 
 def hash_pass(password, salt=None):
