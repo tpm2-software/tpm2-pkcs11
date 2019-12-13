@@ -519,7 +519,7 @@ static TPM2_ALG_ID mech_to_alg(CK_MECHANISM_TYPE mech) {
         case CKM_ECDSA_SHA1:
             return TPM2_ALG_ECDSA;
         default:
-            LOGE("Cannot map mechanism 0x%x onto TPM2 algorithm", mech);
+            LOGE("Cannot map mechanism 0x%lx onto TPM2 algorithm", mech);
             return TPM2_ALG_ERROR;
     }
 }
@@ -2094,7 +2094,7 @@ static CK_RV generic_bbool_check(CK_ATTRIBUTE_PTR attr, CK_BBOOL check) {
     }
 
     if (value != check) {
-        LOGE("Expected attr 0x%x to be %u, got %u", attr->type, value, check);
+        LOGE("Expected attr 0x%lx to be %u, got %u", attr->type, value, check);
         return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 

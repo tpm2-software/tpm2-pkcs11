@@ -400,7 +400,7 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
         CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_CLASS);
         if (!a) {
             LOGE("All objects expected to have CKA_CLASS, missing"
-                    " for tobj id: %u", tobj->id);
+                    " for tobj id: %lu", tobj->id);
             return CKR_GENERAL_ERROR;
         }
 
@@ -413,7 +413,7 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
         if (v != CKO_PRIVATE_KEY
                 && v != CKO_PUBLIC_KEY
                 && v != CKO_SECRET_KEY) {
-            LOGE("Cannot use tobj id %u in a crypto operation", tobj->id);
+            LOGE("Cannot use tobj id %lu in a crypto operation", tobj->id);
             return CKR_KEY_HANDLE_INVALID;
         }
 
