@@ -990,6 +990,7 @@ add_item:
         r = h->tfn(cur, h->memtype, d);
         if (!r) {
             attr_list_free(d);
+            return CKR_GENERAL_ERROR;
         }
     }
 
