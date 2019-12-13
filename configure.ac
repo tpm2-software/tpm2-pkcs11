@@ -160,20 +160,36 @@ AS_IF([test "x$enable_pack" = "xyes"],
 # the module config file and change the library install location.
 AC_DEFUN([do_p11kit_config], [
 
-  PKG_CHECK_VAR([P11_MODULE_PATH], [p11-kit-1], [p11_module_path])
-  AC_MSG_CHECKING([p11 module path])
-  AS_IF([test "x$P11_MODULE_PATH" = "x"], [
-    AC_MSG_FAILURE([Unable to identify p11 module path.])
+  AS_IF([test -z "$1"], [
+    PKG_CHECK_VAR([P11_MODULE_PATH], [p11-kit-1], [p11_module_path])
+    AC_MSG_CHECKING([p11 module path])
+    AS_IF([test "x$P11_MODULE_PATH" = "x"], [
+      AC_MSG_FAILURE([Unable to identify p11 module path.])
+    ])
+    AC_MSG_RESULT([$P11_MODULE_PATH])
+  ], [
+    AC_SUBST(P11_MODULE_PATH, [$1])
   ])
-  AC_MSG_RESULT([$P11_MODULE_PATH])
 
-  PKG_CHECK_VAR([P11_CONFIGS_PATH], [p11-kit-1], [p11_module_configs])
-  AC_MSG_CHECKING([p11 configs path])
-  AS_IF([test "x$P11_CONFIGS_PATH" = "x"], [
-    AC_MSG_FAILURE([Unable to identify p11 configs path.])
+  AS_IF([test -z "$2"], [
+    PKG_CHECK_VAR([P11_CONFIGS_PATH], [p11-kit-1], [p11_module_configs])
+    AC_MSG_CHECKING([p11 configs path])
+    AS_IF([test "x$P11_CONFIGS_PATH" = "x"], [
+      AC_MSG_FAILURE([Unable to identify p11 configs path.])
+    ])
+    AC_MSG_RESULT([$P11_CONFIGS_PATH])
+  ], [
+    AC_SUBST(P11_CONFIGS_PATH, [$2])
   ])
-  AC_MSG_RESULT([$P11_CONFIGS_PATH])
 ])
+
+AC_ARG_WITH([p11kitconfigdir],
+            AS_HELP_STRING([--with-p11kitconfigdir=DIR], [directory for p11kit config]))
+AC_SUBST(p11kitconfigdir, [$with_p11kitconfigdir])
+
+AC_ARG_WITH([p11kitmoduledir],
+            AS_HELP_STRING([--with-p11kitmoduledir=DIR], [directory for p11 libraries]))
+AC_SUBST(p11kitmoduledir, [$with_p11kitmoduledir])
 
 # set havep11kit based on if P11kit is installed, then:
 # 1. execute function do_p11kit_config
@@ -185,7 +201,7 @@ PKG_CHECK_MODULES(
   [have_p11kit=no])
 
 AS_IF([test "x$have_p11kit" = "xyes"], [
-  do_p11kit_config
+  do_p11kit_config([$p11kitmoduledir], [$p11kitconfigdir])
 ])
 
 AM_CONDITIONAL([HAVE_P11KIT], [test "x$have_p11kit" = "xyes"])
