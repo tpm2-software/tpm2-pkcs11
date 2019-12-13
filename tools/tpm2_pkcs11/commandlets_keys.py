@@ -19,6 +19,7 @@ from .utils import hash_pass
 from .utils import rand_hex_str
 from .utils import pemcert_to_attrs
 from .utils import str2bool
+from .utils import str2bytes
 
 from .tpm2 import Tpm2
 
@@ -75,7 +76,7 @@ class NewKeyCommandBase(Command):
         #create an auth value for the tertiary object.
         objauth = rand_hex_str()
 
-        encobjauth = wrapper.wrap(objauth)
+        encobjauth = wrapper.wrap(str2bytes(objauth))
 
         return (encobjauth, objauth)
 

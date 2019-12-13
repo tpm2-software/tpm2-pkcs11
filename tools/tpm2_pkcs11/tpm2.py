@@ -7,6 +7,7 @@ import uuid
 
 from subprocess import Popen, PIPE
 
+from .utils import str2bytes
 
 class Tpm2(object):
     def __init__(self, tmp):
@@ -15,9 +16,12 @@ class Tpm2(object):
     def createprimary(self, ownerauth, objauth):
         ctx = os.path.join(self._tmp, "context.out")
         cmd = [
-            'tpm2_createprimary', '-p', '%s' % objauth, '-c', ctx, '-g',
+            'tpm2_createprimary', '-c', ctx, '-g',
             'sha256', '-G', 'rsa'
         ]
+
+        if objauth and len(objauth) > 0:
+            cmd.extend(['-p', objauth])
 
         if ownerauth and len(ownerauth) > 0:
             cmd.extend(['-P', ownerauth])
@@ -152,7 +156,7 @@ class Tpm2(object):
             cmd.extend(['-G', alg])
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, stdin=PIPE, env=os.environ)
-        stdout, stderr = p.communicate(input=seal)
+        stdout, stderr = p.communicate(input=str2bytes(seal))
         rc = p.wait()
         if (rc != 0):
             os.remove(pub)
