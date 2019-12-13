@@ -115,8 +115,12 @@ class InitCommand(Command):
 
                     pid = db.addprimary(tr_handle, pobjauth)
 
-                    action_word = "Added" if use_existing_primary else "Created"
-                    print("%s a primary object of id: %d" % (action_word, pid))
+                    d = {
+                        'id' : pid,
+                        'action' : "Added" if use_existing_primary else "Created"
+                    }
+
+                    print(yaml.safe_dump(d, default_flow_style=False))
 
                 except Exception as e:
                     if shall_evict and tr_handle != None:
