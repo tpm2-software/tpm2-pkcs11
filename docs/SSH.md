@@ -23,10 +23,10 @@ We start by creating a tpm2-pkcs11 *store* and set up an RSA2048 key that SSH ca
 **Note**: Most SSH configurations allow RSA2048 keys to be used, but this can be turned off
   in the config, but this is quite rare.
 
-```sh
-tpm2_ptool.py init --pobj-pin=mypobjpin --path=~/tmp
+```bash
+tpm2_ptool.py init --path=~/tmp
 
-tpm2_ptool.py addtoken --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=myuserpin --label=label --path ~/tmp
+tpm2_ptool.py addtoken --pid=1 --label=label --sopin=mysopin --userpin=myuserpin --path=~/tmp
 
 tpm2_ptool.py addkey --algorithm=rsa2048 --label=label --userpin=myuserpin --path=~/tmp
 ```
@@ -47,7 +47,9 @@ like `$HOME`.
 The next step will use `ssh-keygen` comand to generate the public portion of an ssh key. The command is slightly complicated
 as we use tee to redirect the output to both a file called `my.pub` and to *stdout* for viewing.
 
-```sh
+Note: You may need to update the path to the tpm2-pkcs11 shared object below.
+
+```bash
 ssh-keygen -D ./src/.libs/libtpm2_pkcs11.so | tee my.pub
 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC0CTmUAAB8jfNNHrw99m7K3U/+qbV1pAb7es3L+COqDh4eDqqekCm8gKHV4PFM9nW7z6CEfqzpUxYi5VvRFdYaU460bhye7NJbE0t9wjOirWtQbI6XMCKFiv/v8ThAtROT+KKYso7BK2A6spkCQwcHoaQU72C1vGouqtP5l/XRIYydp3P1wUdgQDZ8FoGhdH5dL3KnRpKR2d301GcbxMxKg5yhc/mTNkv1ZoLIcwMY7juAjzin/BhcYIDSz3sJ9C2VsX8FZXmbEo3olYU4ZfBZ+45KJ81MtWgrkXSzetwUfiH6eeTqNfqGT2IpSwDLFHTX2TsJyFDcM7Q+QR44lEU/
 ```
@@ -55,7 +57,7 @@ ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC0CTmUAAB8jfNNHrw99m7K3U/+qbV1pAb7es3L+COq
 # Step 4 - Configuring SSH to Accept the Key
 
 Now that the public portion of the key is in ssh format and located in file `my.pub` we can add this to the authorized_keys2 file for the user:
-```sh
+```bash
 cat my.pub >> ~/.ssh/authorized_keys2
 ```
 
@@ -79,7 +81,7 @@ and `sudo make install` method.
 To log in, one used the `ssh` client application and specifies the path to the PKCS11 library via the `-I` option. It will prompt for the user pin, which
 in the example is set to `myuserpin`.
 
-```sh
+```bash
 ssh -I /usr/local/lib/libtpm2_pkcs11.so 127.0.0.1
 Enter PIN for 'label': myuserpin
 Last login: Fri Sep 21 13:28:31 2018 from 127.0.0.1
