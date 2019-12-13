@@ -63,7 +63,6 @@ else
 endif
 
 # test harness configuration
-TEST_EXTENSIONS = .int
 AM_TESTS_ENVIRONMENT = \
     TEST_FUNC_LIB=$(srcdir)/test/integration/scripts/int-test-funcs.sh \
     PATH=$(abs_top_srcdir)/tools:./src:$(PATH) \
@@ -77,6 +76,8 @@ TESTS_CFLAGS = $(CMOCKA_CFLAGS)
 # Intentionally empty so INTEGRATION and UNIT tests can append to it.
 check_PROGRAMS =
 check_SCRIPTS =
+
+TEST_EXTENSIONS = .sh .int
 
 ### Integration Tests ###
 if ENABLE_INTEGRATION
@@ -109,7 +110,6 @@ check_SCRIPTS += \
 AM_INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
 INT_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
 
-TEST_EXTENSIONS = .sh
 AM_SH_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
 SH_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
 
