@@ -63,6 +63,8 @@ else
   lib_LTLIBRARIES = $(libtpm2_pkcs11)
 endif
 
+AM_DISTCHECK_CONFIGURE_FLAGS = --with-p11kitconfigdir='$$(datarootdir)/p11kitconfigdir' --with-p11kitmoduledir='$$(libdir)'
+
 # test harness configuration
 AM_TESTS_ENVIRONMENT = \
     TEST_FUNC_LIB=$(srcdir)/test/integration/scripts/int-test-funcs.sh \
