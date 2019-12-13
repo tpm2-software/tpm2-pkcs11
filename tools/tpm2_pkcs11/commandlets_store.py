@@ -83,7 +83,7 @@ class InitCommand(Command):
 
                     if not use_existing_primary:
                         pobjauth = pobjauth if pobjauth != None else rand_hex_str(
-                        )
+                        ).decode('ascii')
                         ctx = tpm2.createprimary(ownerauth, pobjauth)
                         tr_handle = tpm2.evictcontrol(ownerauth, ctx)
                         shall_evict = True
