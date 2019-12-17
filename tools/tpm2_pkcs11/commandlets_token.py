@@ -18,6 +18,8 @@ from .utils import rand_hex_str
 from .utils import AESAuthUnwrapper
 from .utils import load_sealobject
 from .utils import str2bool
+from .utils import pkcs11_cko_to_str
+from .utils import pkcs11_ckk_to_str
 from .tpm2 import Tpm2
 
 from .pkcs11t import *  # noqa
@@ -598,11 +600,17 @@ class ListObjectsCommand(Command):
         objects = db.getobjects(token['id'])
         for o in objects:
             y = yaml.safe_load(o['attrs'])
-            output.append({
+            d = {
                 'id': o['id'],
                 'CKA_ID' : y[CKA_ID],
-                'CKA_LABEL' : binascii.unhexlify(y[CKA_LABEL]).decode()
-            })
+                'CKA_LABEL' : binascii.unhexlify(y[CKA_LABEL]).decode(),
+                'CKA_CLASS' : pkcs11_cko_to_str(y[CKA_CLASS]),
+            }
+
+            if CKA_KEY_TYPE in y:
+                d['CKA_KEY_TYPE'] = pkcs11_ckk_to_str(y[CKA_KEY_TYPE])
+
+            output.append(d)
 
         if len(output):
             print(yaml.safe_dump(output, default_flow_style=False))

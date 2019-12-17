@@ -68,6 +68,7 @@ AM_DISTCHECK_CONFIGURE_FLAGS = --with-p11kitconfigdir='$$(datarootdir)/p11kitcon
 # test harness configuration
 AM_TESTS_ENVIRONMENT = \
     TEST_FUNC_LIB=$(srcdir)/test/integration/scripts/int-test-funcs.sh \
+    TEST_FIXTURES=$(abs_top_srcdir)/test/integration/fixtures \
     PATH=$(abs_top_srcdir)/tools:./src:$(PATH) \
     PYTHONPATH=$(abs_top_srcdir)/tools \
     dbus-run-session
@@ -108,7 +109,8 @@ check_PROGRAMS += \
 
 # add test scripts
 check_SCRIPTS += \
-    test/integration/pkcs11-tool.sh
+    test/integration/pkcs11-tool.sh \
+    test/integration/tls-tests.sh
 
 AM_INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
 INT_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
