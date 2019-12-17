@@ -302,3 +302,22 @@ def pemcert_to_attrs(certpath):
             # Name hash algorithm, defaults to SHA1
             CKA_NAME_HASH_ALGORITHM : CKM_SHA_1
         }
+
+def _pkcs11_to_str(value, prefix):
+
+    g = globals()
+    submap = dict(filter(lambda elem: elem[0].startswith(prefix), g.items()))
+    inv_map = {v: k for k, v in submap.items()}
+
+    if value in inv_map:
+        return inv_map[value]
+    else:
+        return '0x{:X}'.format(cko_value)
+
+def pkcs11_cko_to_str(cko_value):
+    
+    return _pkcs11_to_str(cko_value, 'CKO_')
+    
+def pkcs11_ckk_to_str(ckk_value):
+    
+    return _pkcs11_to_str(ckk_value, 'CKK_')

@@ -127,7 +127,7 @@ echo "Added AES Keys"
 
 echo "Adding 3 RSA 2048 keys under token \"label\""
 for i in `seq 0 1`; do
-  tpm2_ptool addkey --algorithm=rsa2048 --label="label" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+  tpm2_ptool addkey --algorithm=rsa2048 --label="label" --key-label="rsa$i" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 done;
 tpm2_ptool addkey --algorithm=rsa2048 --label="label" --userpin=myuserpin --attr-always-authenticate --path=$TPM2_PKCS11_STORE
 echo "Added RSA Keys"
