@@ -531,7 +531,7 @@ class ListPrimaryCommand(Command):
             output.append({'id': p['id']})
 
         if len(output):
-            print(yaml.dump(output, default_flow_style=False))
+            print(yaml.safe_dump(output, default_flow_style=False))
 
     def __call__(self, args):
 
@@ -567,7 +567,7 @@ class ListTokenCommand(Command):
             })
 
         if len(output):
-            print(yaml.dump(output, default_flow_style=False))
+            print(yaml.safe_dump(output, default_flow_style=False))
 
     def __call__(self, args):
 
@@ -605,7 +605,7 @@ class ListObjectsCommand(Command):
             })
 
         if len(output):
-            print(yaml.dump(output, default_flow_style=False))
+            print(yaml.safe_dump(output, default_flow_style=False))
 
     def __call__(self, args):
 
