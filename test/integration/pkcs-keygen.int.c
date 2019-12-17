@@ -641,7 +641,6 @@ static void test_destroy_rsa_pkcs(void **state) {
     assert_int_equal(rv, CKR_OK);
     rv = C_DestroyObject(session, pubkey);
     assert_int_equal(rv, CKR_OK);
-
 }
 
 static void test_keygen_keytype(void **state) {
