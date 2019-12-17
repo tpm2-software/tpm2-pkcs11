@@ -1098,6 +1098,12 @@ TPM2_ALG_ID mech_to_sig_scheme(CK_MECHANISM_TYPE mode) {
     case CKM_SHA384_RSA_PKCS:
     case CKM_SHA512_RSA_PKCS:
         return TPM2_ALG_RSASSA;
+    case CKM_RSA_PKCS_PSS:
+    case CKM_SHA1_RSA_PKCS_PSS:
+    case CKM_SHA256_RSA_PKCS_PSS:
+    case CKM_SHA384_RSA_PKCS_PSS:
+    case CKM_SHA512_RSA_PKCS_PSS:
+        return TPM2_ALG_RSAPSS;
     case CKM_ECDSA:
     case CKM_ECDSA_SHA1:
         return TPM2_ALG_ECDSA;
@@ -1106,24 +1112,40 @@ TPM2_ALG_ID mech_to_sig_scheme(CK_MECHANISM_TYPE mode) {
     }
 }
 
-bool get_signature_scheme(CK_MECHANISM_TYPE mech, CK_ULONG datalen, TPMT_SIG_SCHEME *scheme) {
+CK_RV get_signature_scheme(CK_MECHANISM_PTR mech, CK_ULONG datalen, TPMT_SIG_SCHEME *scheme) {
 
-    TPM2_ALG_ID sig_scheme = mech_to_sig_scheme(mech);
+    TPM2_ALG_ID sig_scheme = mech_to_sig_scheme(mech->mechanism);
     if (sig_scheme == TPM2_ALG_ERROR) {
-        LOGE("Connot convert mechanism to signature scheme, got: 0x%lx", mech);
-        return false;
+        LOGE("Cannot convert mechanism to signature scheme, got: 0x%lx", mech);
+        return CKR_KEY_FUNCTION_NOT_PERMITTED;
     }
 
-    TPMI_ALG_HASH halg = mech_to_hash_alg_ex(mech, datalen);
+    TPMI_ALG_HASH halg = mech_to_hash_alg_ex(mech->mechanism, datalen);
     if (halg == TPM2_ALG_ERROR) {
-        LOGE("Connot convert mechanism to hash algorithm, got: 0x%lx", mech);
-        return false;
+
+        if (mech->mechanism == CKM_RSA_PKCS_PSS) {
+            CK_RSA_PKCS_PSS_PARAMS_PTR p = NULL;
+
+            if (sizeof(*p) != mech->ulParameterLen) {
+                LOGE("Invalid CKM_RSA_PKCS_PSS params");
+                return CKR_MECHANISM_PARAM_INVALID;
+            }
+
+            p = mech->pParameter;
+
+            halg = mech_to_hash_alg_ex(p->hashAlg, datalen);
+        }
+
+        if (halg == TPM2_ALG_ERROR) {
+            LOGE("Cannot convert mechanism to hash algorithm, got: 0x%lx", mech);
+            return CKR_KEY_FUNCTION_NOT_PERMITTED;
+        }
     }
 
     scheme->scheme = sig_scheme;
     scheme->details.any.hashAlg = halg;
 
-    return true;
+    return CKR_OK;
 }
 
 twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth) {
@@ -1171,6 +1193,22 @@ static CK_RV flatten_rsassa(TPMS_SIGNATURE_RSASSA *rsassa, CK_BYTE_PTR sig, CK_U
 
     if (sig) {
         memcpy(sig, rsassa->sig.buffer, *siglen);
+    }
+
+    return CKR_OK;
+}
+
+static CK_RV flatten_rsapss(TPMS_SIGNATURE_RSAPSS *rsapss, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+
+    if (sig && *siglen < rsapss->sig.size) {
+        *siglen = rsapss->sig.size;
+        return CKR_BUFFER_TOO_SMALL;
+    }
+
+    *siglen = rsapss->sig.size;
+
+    if (sig) {
+        memcpy(sig, rsapss->sig.buffer, *siglen);
     }
 
     return CKR_OK;
@@ -1228,15 +1266,17 @@ static CK_RV sig_flatten(TPMT_SIGNATURE *signature, TPMT_SIG_SCHEME *scheme, CK_
     switch(scheme->scheme) {
     case TPM2_ALG_RSASSA:
         return flatten_rsassa(&signature->signature.rsassa, sig, siglen);
+    case TPM2_ALG_RSAPSS:
+        return flatten_rsapss(&signature->signature.rsapss, sig, siglen);
     case TPM2_ALG_ECDSA:
         return flatten_ecdsa(&signature->signature.ecdsa, sig, siglen);
         /* no default */
     }
 
-    return false;
+    return CKR_GENERAL_ERROR;
 }
 
-CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_PTR mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
 
     twist auth = tobj->unsealed_auth;
     TPMI_DH_OBJECT handle = tobj->handle;
@@ -1254,15 +1294,14 @@ CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR 
     }
 
     TPMT_SIG_SCHEME in_scheme;
-    result = get_signature_scheme(mech, datalen, &in_scheme);
-    assert(result);
-    if (!result) {
+    CK_RV rv = get_signature_scheme(mech, datalen, &in_scheme);
+    if (rv != CKR_OK) {
         /*
          * do not return unsupported here
          * this should be done in C_SignInit()
          * In theory this cannot fail
          */
-        return CKR_GENERAL_ERROR;
+        return rv;
     }
 
     TPMT_TK_HASHCHECK validation = {
@@ -1290,7 +1329,7 @@ CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR 
         return CKR_GENERAL_ERROR;
     }
 
-    CK_RV rv = sig_flatten(signature, &in_scheme, sig, siglen);
+    rv = sig_flatten(signature, &in_scheme, sig, siglen);
 
     free(signature);
 
@@ -1362,7 +1401,7 @@ static CK_RV init_sig_from_mech(CK_MECHANISM_TYPE mech, CK_ULONG datalen, CK_BYT
     }
 }
 
-CK_RV tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen) {
+CK_RV tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_PTR mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen) {
 
     TPMI_DH_OBJECT handle = tobj->handle;
 
@@ -1375,7 +1414,7 @@ CK_RV tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PT
     msgdigest.size = datalen;
 
     TPMT_SIGNATURE tpmsig;
-    CK_RV rv = init_sig_from_mech(mech, datalen, sig, siglen, &tpmsig);
+    CK_RV rv = init_sig_from_mech(mech->mechanism, datalen, sig, siglen, &tpmsig);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -3032,19 +3071,24 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
 
     if (is_algorithm_supported(algs, TPM2_ALG_RSA)) {
         add_mech(CKM_RSA_PKCS);
+        add_mech(CKM_RSA_PKCS_PSS);
         add_mech(CKM_RSA_PKCS_KEY_PAIR_GEN);
         add_mech(CKM_RSA_X_509);
         if (is_algorithm_supported(algs, TPM2_ALG_SHA1)) {
            add_mech(CKM_SHA1_RSA_PKCS);
+           add_mech(CKM_SHA1_RSA_PKCS_PSS);
         }
         if (is_algorithm_supported(algs, TPM2_ALG_SHA256)) {
            add_mech(CKM_SHA256_RSA_PKCS);
+           add_mech(CKM_SHA256_RSA_PKCS_PSS);
         }
         if (is_algorithm_supported(algs, TPM2_ALG_SHA384)) {
            add_mech(CKM_SHA384_RSA_PKCS);
+           add_mech(CKM_SHA384_RSA_PKCS_PSS);
         }
         if (is_algorithm_supported(algs, TPM2_ALG_SHA512)) {
            add_mech(CKM_SHA512_RSA_PKCS);
+           add_mech(CKM_SHA512_RSA_PKCS_PSS);
         }
     }
 
