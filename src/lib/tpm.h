@@ -100,7 +100,7 @@ bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle);
  * @return
  *  Any CK_RV that C_Sign() can return.
  */
-CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen);
+CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_PTR mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen);
 
 /**
  * Perform a verification in the TPM.
@@ -121,7 +121,7 @@ CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR 
  * @return
  *  Any CK_RV that C_Verify() can return.
  */
-CK_RV tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_TYPE mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen);
+CK_RV tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_PTR mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen);
 
 typedef struct tpm_encrypt_data tpm_encrypt_data;
 CK_RV tpm_encrypt_data_init(tpm_ctx *ctx, uint32_t handle, twist auth, CK_MECHANISM_PTR, tpm_encrypt_data **encdata);

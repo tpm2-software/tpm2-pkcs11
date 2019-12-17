@@ -158,7 +158,8 @@ class PKCS11RSAPublicKey(PKCS11PublicKey):
         pubmech = [
             CKM_RSA_X_509,
             CKM_RSA_PKCS_OAEP,
-            CKM_RSA_PKCS
+            CKM_RSA_PKCS,
+            CKM_SHA256_RSA_PKCS
         ]
 
         if 'rsapss' in y:
@@ -180,7 +181,7 @@ class PKCS11ECPublicKey(PKCS11PublicKey):
         super(PKCS11ECPublicKey, self).__init__(CKK_EC, attrs, auth, tpm_priv, tpm_pub)
 
     def genmechs(self, tpm):
-        pubmech = [ CKM_ECDSA ]
+        pubmech = [ CKM_ECDSA, CKM_ECDSA_SHA1 ]
         self.update({CKA_ALLOWED_MECHANISMS: pubmech})
 
 class PKCS11PrivateKey(PKCS11Key):
@@ -228,7 +229,12 @@ class PKCS11RSAPrivateKey(PKCS11PrivateKey):
         privmech = [
             CKM_RSA_X_509,
             CKM_RSA_PKCS_OAEP,
-            CKM_RSA_PKCS
+            CKM_RSA_PKCS,
+            CKM_SHA1_RSA_PKCS,
+            CKM_SHA256_RSA_PKCS,
+            CKM_SHA384_RSA_PKCS,
+            CKM_SHA512_RSA_PKCS,
+            CKM_SHA256_RSA_PKCS
         ]
 
         if 'rsapss' in y:
@@ -250,7 +256,7 @@ class PKCS11ECPrivateKey(PKCS11PrivateKey):
         super(PKCS11ECPrivateKey, self).__init__(CKK_EC, attrs, auth, tpm_priv, tpm_pub)
 
     def genmechs(self, tpm):
-        privmech = [ CKM_ECDSA ]
+        privmech = [ CKM_ECDSA, CKM_ECDSA_SHA1 ]
         self.update({CKA_ALLOWED_MECHANISMS: privmech})
 
 class PKCS11SecretKey(PKCS11Key):

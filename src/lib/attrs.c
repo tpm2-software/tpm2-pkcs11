@@ -768,11 +768,16 @@ static CK_RV rsa_gen_mechs(attr_list *new_pub_attrs, attr_list *new_priv_attrs) 
     CK_MECHANISM_TYPE t[] = {
         CKM_RSA_X_509,
         CKM_RSA_PKCS_OAEP,
-        CKM_RSA_PKCS
+        CKM_RSA_PKCS,
+        CKM_SHA1_RSA_PKCS,
+        CKM_SHA256_RSA_PKCS,
+        CKM_SHA384_RSA_PKCS,
+        CKM_SHA512_RSA_PKCS,
+        CKM_RSA_PKCS_PSS
     };
 
     bool r = attr_list_add_buf(new_pub_attrs, CKA_ALLOWED_MECHANISMS,
-            (CK_BYTE_PTR)&t, ARRAY_LEN(t));
+            (CK_BYTE_PTR)&t, sizeof(t));
     goto_error_false(r);
 
     r = attr_list_add_buf(new_priv_attrs, CKA_ALLOWED_MECHANISMS,
@@ -845,7 +850,11 @@ error:
 
 static CK_RV ecc_gen_mechs(attr_list *new_pub_attrs, attr_list *new_priv_attrs) {
 
-    CK_MECHANISM_TYPE t = CKM_ECDSA;
+    /* XXX These are hardcoded for now */
+    CK_MECHANISM_TYPE t[] = {
+        CKM_ECDSA,
+        CKM_ECDSA_SHA1,
+    };
 
     bool r = attr_list_add_buf(new_pub_attrs, CKA_ALLOWED_MECHANISMS,
             (CK_BYTE_PTR)&t, sizeof(t));

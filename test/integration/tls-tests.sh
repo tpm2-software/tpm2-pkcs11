@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+
+set -xo pipefail
+
 # SPDX-License-Identifier: BSD-2-Clause
 CA_PEM="$TEST_FIXTURES/ca.pem"
 CA_KEY="$TEST_FIXTURES/ca.key"
@@ -12,22 +15,26 @@ EXT_FILE="$TEST_FIXTURES/xpextensions"
 # details on the PKCS11 URI can be found here: https://tools.ietf.org/html/rfc7512
 PKCS11_KEY="pkcs11:model=SW%20%20%20TPM;manufacturer=IBM;serial=0000000000000000;token=label;object=rsa0;type=private"
 
-set -e
+if [ "$ASAN_ENABLED" = "true" ]; then
+  # Skip this test when ASAN is enabled
+  exit 77
+fi
 
 function cleanup() {
-	if [ "$1" != "no-kill" ]; then
-		pkill -P $$ || true
-	fi
-    rm -f index.txt index.txt.attr serial
+  if [ "$1" != "no-kill" ]; then
+      pkill -P $$ || true
+  fi
+  rm -f index.txt index.txt.attr serial
 }
 trap cleanup EXIT
 
-cleanup "no-kill"
+onerror() {
+  echo "$BASH_COMMAND on line ${BASH_LINENO[0]} failed: $?"
+  exit 1
+}
+trap onerror ERR
 
-if [ "$ASAN_ENABLED" = "true" ]; then
-	# Skip this test when ASAN is enabled
-    exit 77
-fi
+cleanup "no-kill"
 
 if [ -z "$modpath" ]; then
   modpath="$PWD/src/.libs/libtpm2_pkcs11.so"
@@ -73,9 +80,13 @@ openssl ca -batch -keyfile "$CA_KEY" -cert "$CA_PEM" -in client.csr -key "$PASSW
 
 openssl x509 -in client.crt -out client_tpm.pem -outform pem
 
-openssl s_server -CAfile "$CA_PEM" -cert "$SERVER_PEM" -key "$SERVER_KEY" -Verify 1 &
+# OpenSSL version 1.0.2g ends up in a state where it tries to read from stdin instead of the ssl connection.
+# Feeding it one byte as stdin avoids this condition which is described in more detail here:
+# https://github.com/tpm2-software/tpm2-pkcs11/pull/366
+openssl s_server -debug -CAfile "$CA_PEM" -cert "$SERVER_PEM" -key "$SERVER_KEY" -Verify 1 <<< '1' &
 sleep 1
 
-openssl s_client -engine pkcs11 -keyform engine -key "$PKCS11_KEY" -CAfile "$CA_PEM" -cert client_tpm.pem 127.0.0.1 <<< 'Q'
+# default connects to 127.0.0.1:443
+openssl s_client -engine pkcs11 -keyform engine -key "$PKCS11_KEY" -CAfile "$CA_PEM" -cert client_tpm.pem <<< 'Q'
 
 exit 0

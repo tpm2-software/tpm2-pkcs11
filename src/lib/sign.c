@@ -23,7 +23,7 @@
 
 typedef struct sign_opdata sign_opdata;
 struct sign_opdata {
-    CK_MECHANISM_TYPE mtype;
+    CK_MECHANISM mech;
     bool do_hash;
     twist buffer;
     digest_op_data *digest_opdata;
@@ -52,7 +52,7 @@ static CK_RV is_off_tpm_hashing_needed(token *t, CK_MECHANISM_TYPE mech, bool *i
     /* all hashing already done, no need to do anything */
     if (mech == CKM_ECDSA
         || mech == CKM_RSA_PKCS) {
-        return false;
+        return CKR_OK;
     }
 
     /* does the TPM natively support it? If it does, nothing to do */
@@ -88,34 +88,6 @@ static CK_RV is_off_tpm_hashing_needed(token *t, CK_MECHANISM_TYPE mech, bool *i
      * can't synthesize it
      */
     return CKR_MECHANISM_INVALID;
-}
-
-/*
- * XXX this is probably best to query the TPM layer
- */
-static bool is_mech_supported(CK_MECHANISM_TYPE mech) {
-
-    switch (mech) {
-    case CKM_RSA_PKCS:
-        /* falls-thru */
-    case CKM_SHA1_RSA_PKCS:
-        /* falls-thru */
-    case CKM_SHA256_RSA_PKCS:
-        /* falls-thru */
-    case CKM_SHA384_RSA_PKCS:
-        /* falls-thru */
-    case CKM_SHA512_RSA_PKCS:
-        /* falls-thru */
-    case CKM_AES_CBC:
-        /* falls-thru */
-    case CKM_ECDSA:
-        /* falls-thru */
-    case CKM_ECDSA_SHA1:
-        return true;
-        /* no default */
-    }
-
-    return false;
 }
 
 static CK_RV ec_fixup_size(CK_MECHANISM_TYPE mech, tobject *tobj, CK_ULONG_PTR signature_len) {
@@ -183,6 +155,9 @@ static CK_RV ec_fixup_size(CK_MECHANISM_TYPE mech, tobject *tobj, CK_ULONG_PTR s
     return CKR_OK;
 }
 
+/*XXX Perhaps create a mechanism checking interface so we can get all
+ * this scattered mechanism logic to a single spot.
+ */
 static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
 
    switch(mech) {
@@ -190,10 +165,15 @@ static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
      case CKM_SHA256_RSA_PKCS:
      case CKM_SHA384_RSA_PKCS:
      case CKM_SHA512_RSA_PKCS:
+     case CKM_SHA1_RSA_PKCS_PSS:
+     case CKM_SHA256_RSA_PKCS_PSS:
+     case CKM_SHA384_RSA_PKCS_PSS:
+     case CKM_SHA512_RSA_PKCS_PSS:
      case CKM_ECDSA_SHA1:
          return true;
      case CKM_ECDSA:
      case CKM_RSA_PKCS:
+     case CKM_RSA_PKCS_PSS:
          return false;
     default:
         LOGE("Unknown mech: %lu", mech);
@@ -202,16 +182,20 @@ static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
     return false;
 }
 
+static CK_RV is_mech_allowed(CK_MECHANISM_TYPE mech) {
+
+    if (mech == CKM_RSA_X_509) {
+        return CKR_KEY_FUNCTION_NOT_PERMITTED;
+    }
+
+    return CKR_OK;
+}
+
 static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
 
     check_pointer(mechanism);
 
     CK_RV rv = CKR_GENERAL_ERROR;
-
-    bool is_mech_sup = is_mech_supported(mechanism->mechanism);
-    if (!is_mech_sup) {
-        return CKR_MECHANISM_INVALID;
-    }
 
     bool is_active = session_ctx_opdata_is_active(ctx);
     if (is_active) {
@@ -220,6 +204,22 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
 
     token *tok = session_ctx_get_token(ctx);
     assert(tok);
+
+    tobject *tobj = NULL;
+    rv = token_load_object(tok, key, &tobj);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    rv = is_mech_allowed(mechanism->mechanism);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    rv = object_mech_is_supported(tobj, mechanism);
+    if (rv != CKR_OK) {
+        return rv;
+    }
 
     digest_op_data *digest_opdata = NULL;
     bool do_hash = is_hashing_needed(mechanism->mechanism);
@@ -240,20 +240,11 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
 
     sign_opdata *opdata = sign_opdata_new();
     if (!opdata) {
-        digest_op_data_free(&digest_opdata);
         return CKR_HOST_MEMORY;
     }
 
-    tobject *tobj = NULL;
-    rv = token_load_object(tok, key, &tobj);
-    if (rv != CKR_OK) {
-        digest_op_data_free(&digest_opdata);
-        sign_opdata_free(&opdata);
-        return rv;
-    }
-
     opdata->do_hash = do_hash;
-    opdata->mtype = mechanism->mechanism;
+    memcpy(&opdata->mech, mechanism, sizeof(opdata->mech));
     opdata->digest_opdata = digest_opdata;
 
     /*
@@ -446,7 +437,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
 
     if (opdata->do_hash) {
 
-        hash_len = utils_get_halg_size(opdata->mtype);
+        hash_len = utils_get_halg_size(opdata->mech.mechanism);
 
         hash = malloc(hash_len);
         if (!hash) {
@@ -474,16 +465,16 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
      * is PKCS1.5
      */
 
-    bool is_raw_sign = utils_mech_is_raw_sign(opdata->mtype);
+    bool is_raw_sign = utils_mech_is_raw_sign(opdata->mech.mechanism);
     bool is_not_tpm_supported_pkcs1_5 = false;
-    rv = is_off_tpm_hashing_needed(tok, opdata->mtype, &is_not_tpm_supported_pkcs1_5);
+    rv = is_off_tpm_hashing_needed(tok, opdata->mech.mechanism, &is_not_tpm_supported_pkcs1_5);
     if (rv != CKR_OK) {
         goto session_out;
     }
 
     if (is_raw_sign || is_not_tpm_supported_pkcs1_5) {
 
-        bool is_rsa_pkcs1_5 = utils_mech_is_rsa_pkcs(opdata->mtype);
+        bool is_rsa_pkcs1_5 = utils_mech_is_rsa_pkcs(opdata->mech.mechanism);
         if (!is_rsa_pkcs1_5) {
             LOGE("Do not support synthesizing non PKCS 1_5 signing/padding schemes");
             rv = CKR_MECHANISM_INVALID;
@@ -504,7 +495,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
             assert(hash_len);
             assert(!opdata->buffer);
 
-            rv = pkcs1_5_build_struct(opdata->mtype, hash, hash_len, &built, &built_len);
+            rv = pkcs1_5_build_struct(opdata->mech.mechanism, hash, hash_len, &built, &built_len);
             if (rv != CKR_OK) {
                 goto session_out;
             }
@@ -582,7 +573,8 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
          * by setting the hashalg to TPM2_ALG_NULL. So just make sure that we propagate
          * the raw data provided (hash) into the hash variable and perform a sign.
          */
-        if (opdata->mtype == CKM_ECDSA){
+        if (opdata->mech.mechanism == CKM_ECDSA ||
+                opdata->mech.mechanism == CKM_RSA_PKCS_PSS){
             assert(!hash);
             assert(!hash_len);
             assert(opdata->buffer);
@@ -598,7 +590,9 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
             memcpy(hash, opdata->buffer, hash_len);
         }
 
-        rv = tpm_sign(tpm, tobj, opdata->mtype, hash, hash_len, signature, signature_len);
+        assert(hash);
+        assert(hash_len);
+        rv = tpm_sign(tpm, tobj, &opdata->mech, hash, hash_len, signature, signature_len);
         if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
             goto session_out;
         }
@@ -616,7 +610,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
     if (reset_ctx) {
         /* ec signature size is not stable between calls, fix it up */
         CK_RV tmp; /* we must not overwrite rv */
-        tmp = ec_fixup_size(opdata->mtype, tobj, signature_len);
+        tmp = ec_fixup_size(opdata->mech.mechanism, tobj, signature_len);
         if (tmp != CKR_OK) {
             reset_ctx = false;
             goto session_out;
@@ -738,7 +732,7 @@ CK_RV verify_final (session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG signature_
         memcpy(hash, opdata->buffer, datalen);
     }
 
-    rv = tpm_verify(tpm, tobj, opdata->mtype, hash, hash_len, signature, signature_len);
+    rv = tpm_verify(tpm, tobj, &opdata->mech, hash, hash_len, signature, signature_len);
 
 out:
     assert(tobj);
