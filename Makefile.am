@@ -26,7 +26,8 @@ EXTRA_DIST = \
     LICENSE \
     docs \
     test/integration/scripts \
-    misc/p11-kit
+    misc/p11-kit \
+    tools
 
 # Generate the AUTHORS file from git log
 AUTHORS :
