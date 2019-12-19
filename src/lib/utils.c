@@ -376,18 +376,6 @@ bool utils_mech_is_rsa_pkcs(CK_MECHANISM_TYPE mech) {
     }
 }
 
-bool utils_mech_is_ecdsa(CK_MECHANISM_TYPE mech) {
-
-    switch(mech) {
-    case CKM_ECDSA:
-        /* falls-thru*/
-    case CKM_ECDSA_SHA1:
-        return true;
-    default:
-        return false;
-    }
-}
-
 twist utils_get_rand_hex_str(size_t size) {
 
     if (size == 0) {
