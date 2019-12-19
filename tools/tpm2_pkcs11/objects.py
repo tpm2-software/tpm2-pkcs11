@@ -151,21 +151,42 @@ class PKCS11RSAPublicKey(PKCS11PublicKey):
         super(PKCS11RSAPublicKey, self).__init__(CKK_RSA, attrs, auth, tpm_priv, tpm_pub)
 
     def genmechs(self, tpm):
+        pubmech = PKCS11RSAPublicKey.rsa_gen_mechs_common(tpm)
+        self.update({CKA_ALLOWED_MECHANISMS: pubmech})
+
+    @staticmethod
+    def rsa_gen_mechs_common(tpm):
         capdata = tpm.getcap('algorithms')
         y = yaml.safe_load(capdata)
 
         # TPM's always support these
-        pubmech = [
+        mechs = [
             CKM_RSA_X_509,
             CKM_RSA_PKCS_OAEP,
             CKM_RSA_PKCS,
-            CKM_SHA256_RSA_PKCS
+            CKM_SHA256_RSA_PKCS,
+            # Internally we can synthesize CKM_SHAXXX_RSA_PKCS
+            # so just add them
+            CKM_SHA384_RSA_PKCS,
+            CKM_SHA512_RSA_PKCS,
         ]
 
         if 'rsapss' in y:
-            pubmech.append(CKM_RSA_PKCS_PSS)
+            l = [
+                CKM_RSA_PKCS_PSS,
+                CKM_SHA1_RSA_PKCS_PSS,
+                CKM_SHA256_RSA_PKCS_PSS,
+            ]
 
-        self.update({CKA_ALLOWED_MECHANISMS: pubmech})
+            if 'sha384' in y:
+                l.append(CKM_SHA384_RSA_PKCS_PSS)
+
+            if 'sha512' in y:
+                l.append(CKM_SHA512_RSA_PKCS_PSS)
+
+            mechs.extend(l)
+
+        return mechs
 
 class PKCS11ECPublicKey(PKCS11PublicKey):
 
@@ -222,24 +243,7 @@ class PKCS11RSAPrivateKey(PKCS11PrivateKey):
         super(PKCS11RSAPrivateKey, self).__init__(CKK_RSA, attrs, auth, tpm_priv, tpm_pub)
 
     def genmechs(self, tpm):
-        capdata = tpm.getcap('algorithms')
-        y = yaml.safe_load(capdata)
-
-        # TPM's always support these
-        privmech = [
-            CKM_RSA_X_509,
-            CKM_RSA_PKCS_OAEP,
-            CKM_RSA_PKCS,
-            CKM_SHA1_RSA_PKCS,
-            CKM_SHA256_RSA_PKCS,
-            CKM_SHA384_RSA_PKCS,
-            CKM_SHA512_RSA_PKCS,
-            CKM_SHA256_RSA_PKCS
-        ]
-
-        if 'rsapss' in y:
-            privmech.append(CKM_RSA_PKCS_PSS)
-
+        privmech = PKCS11RSAPublicKey.rsa_gen_mechs_common(tpm)
         self.update({CKA_ALLOWED_MECHANISMS: privmech})
 
 class PKCS11ECPrivateKey(PKCS11PrivateKey):
@@ -294,9 +298,24 @@ class PKCS11AESKey(PKCS11SecretKey):
         super(PKCS11AESKey, self).__init__(CKK_AES, attrs, auth, tpm_priv, tpm_pub)
 
     def genmechs(self, tpm):
-        mechs = [
-            CKM_AES_CBC
-        ]
+        capdata = tpm.getcap('algorithms')
+        y = yaml.safe_load(capdata)
+
+        mechs = []
+        if 'cbc' in y:
+            mechs.append(CKM_AES_CBC)
+        if 'cfb' in y:
+            mechs.append(CKM_AES_CFB128)
+        if 'ecb' in y:
+            mechs.append(CKM_AES_ECB)
+        if 'ofb' in y:
+            mechs.append(CKM_AES_OFB)
+        if 'ctr' in y:
+            mechs.append(CKM_AES_CTR)
+
+        if len(mechs) == 0:
+            raise RuntimeError('Cannot add AES key without TPM supported mechanisms')
+
         self.update({CKA_ALLOWED_MECHANISMS: mechs})
 
 def PKCS11ObjectFactory(public_yaml_data, tpm, auth, init_pubattrs, init_privattrs, tpm_pub, tpm_priv):
