@@ -25,7 +25,7 @@ include src_vars.mk
 EXTRA_DIST = \
     LICENSE \
     docs \
-    $(top_srcdir)/test/integration/scripts \
+    test/integration/scripts \
     misc/p11-kit
 
 # Generate the AUTHORS file from git log
