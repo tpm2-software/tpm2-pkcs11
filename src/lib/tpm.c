@@ -2987,75 +2987,80 @@ static CK_BBOOL is_algorithm_supported(TPMU_CAPABILITIES *capabilities, TPM2_ALG
     } \
     supported++;
 
+#define if_add_mech(list, test, mech) \
+        if (is_algorithm_supported(list, test)) { \
+           add_mech(mech); \
+        }
+
 CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULONG_PTR count){
     check_pointer(count);
     check_pointer(ctx);
+
     CK_ULONG supported = 0;
-    CK_RV rv;
 
     TPMS_CAPABILITY_DATA *capabilityData = NULL;
-    rv = tpm_get_algorithms (ctx, &capabilityData);
+    CK_RV rv = tpm_get_algorithms (ctx, &capabilityData);
     if (rv != CKR_OK) {
         LOGE("Retrieving supported algorithms from TPM failed");
         return rv;
     }
     TPMU_CAPABILITIES *algs= &capabilityData->data;
 
+    /* RSA */
     if (is_algorithm_supported(algs, TPM2_ALG_RSA)) {
+        /* if RSA is supported, these modes MUST be supported */
         add_mech(CKM_RSA_PKCS);
         add_mech(CKM_RSA_PKCS_PSS);
         add_mech(CKM_RSA_PKCS_KEY_PAIR_GEN);
         add_mech(CKM_RSA_X_509);
-        if (is_algorithm_supported(algs, TPM2_ALG_SHA1)) {
-           add_mech(CKM_SHA1_RSA_PKCS);
-           add_mech(CKM_SHA1_RSA_PKCS_PSS);
-        }
-        if (is_algorithm_supported(algs, TPM2_ALG_SHA256)) {
-           add_mech(CKM_SHA256_RSA_PKCS);
-           add_mech(CKM_SHA256_RSA_PKCS_PSS);
-        }
-        if (is_algorithm_supported(algs, TPM2_ALG_SHA384)) {
-           add_mech(CKM_SHA384_RSA_PKCS);
-           add_mech(CKM_SHA384_RSA_PKCS_PSS);
-        }
-        if (is_algorithm_supported(algs, TPM2_ALG_SHA512)) {
-           add_mech(CKM_SHA512_RSA_PKCS);
-           add_mech(CKM_SHA512_RSA_PKCS_PSS);
-        }
+
+        /*
+         * These mechs are supported synthetically even when the
+         * TPM doesn't have direct support, we can use RAW RSA
+         * and perform hashing and padding off-tpm
+         */
+        add_mech(CKM_SHA1_RSA_PKCS);
+        add_mech(CKM_SHA256_RSA_PKCS);
+        add_mech(CKM_SHA384_RSA_PKCS);
+        add_mech(CKM_SHA512_RSA_PKCS_PSS);
+
+        /*
+         * PSS cannot be synthesized, so always check for support before
+         * reporting it.
+         */
+        if_add_mech(algs, TPM2_ALG_SHA1, CKM_SHA1_RSA_PKCS_PSS)
+        if_add_mech(algs, TPM2_ALG_SHA256, CKM_SHA256_RSA_PKCS_PSS);
+        if_add_mech(algs, TPM2_ALG_SHA384, CKM_SHA384_RSA_PKCS_PSS);
+        if_add_mech(algs, TPM2_ALG_SHA512, CKM_SHA512_RSA_PKCS_PSS);
     }
 
-    if (is_algorithm_supported(algs, TPM2_ALG_OAEP)) {
-        add_mech(CKM_RSA_PKCS_OAEP);
-    }
-    if (is_algorithm_supported(algs, TPM2_ALG_CBC)) {
-        add_mech(CKM_AES_CBC);
-    }
-    if (is_algorithm_supported(algs, TPM2_ALG_CFB)) {
-        add_mech(CKM_AES_CFB1);
-    }
-    if (is_algorithm_supported(algs, TPM2_ALG_ECB)) {
-        add_mech(CKM_AES_CFB1);
-    }
-    if (is_algorithm_supported(algs, TPM2_ALG_ECDSA)) {
-        add_mech(CKM_ECDSA);
-        add_mech(CKM_ECDSA_SHA1);
-    }
+    /* ECC */
     if (is_algorithm_supported(algs, TPM2_ALG_ECC)) {
         add_mech(CKM_EC_KEY_PAIR_GEN);
+        if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA);
+        if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA_SHA1);
     }
-    if (is_algorithm_supported(algs, TPM2_ALG_SHA1)) {
-        add_mech(CKM_SHA_1);
+
+    /* AES */
+    if (is_algorithm_supported(algs, TPM2_ALG_AES)) {
+
+        if_add_mech(algs, TPM2_ALG_CBC, CKM_AES_CBC);
+        if_add_mech(algs, TPM2_ALG_CFB, CKM_AES_CFB128);
+        if_add_mech(algs, TPM2_ALG_ECB, CKM_AES_ECB);
     }
-    if (is_algorithm_supported(algs, TPM2_ALG_SHA256)) {
-        add_mech(CKM_SHA256);
-    }
+
+    /* DIGESTS */
+    /* hashing is all software, so just set them to supported */
+    add_mech(CKM_SHA_1);
+    add_mech(CKM_SHA256);
+    add_mech(CKM_SHA384);
+    add_mech(CKM_SHA512);
 
 out:
     *count = supported;
     free(capabilityData);
 
     return rv;
-
 }
 
 void tpm_init(void) {
