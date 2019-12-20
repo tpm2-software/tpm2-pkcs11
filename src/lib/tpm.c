@@ -46,6 +46,7 @@ static const char *TPM2_MANUFACTURER_MAP[][2] = {
 
 static TPMS_CAPABILITY_DATA *tpms_fixed_property_cache;
 static TPMS_CAPABILITY_DATA *tpms_alg_cache;
+static TPMS_CAPABILITY_DATA *tpms_cc_cache;
 
 struct tpm_ctx {
     TSS2_TCTI_CONTEXT *tcti_ctx;
@@ -1916,19 +1917,145 @@ CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handl
 
     return *newblob ? CKR_OK : CKR_HOST_MEMORY;
 }
-/*
- * Esys_CreateLoaded(
-    ESYS_CONTEXT *esysContext,
-    ESYS_TR parentHandle,
-    ESYS_TR shandle1,
-    ESYS_TR shandle2,
-    ESYS_TR shandle3,
-    const TPM2B_SENSITIVE_CREATE *inSensitive,
-    const TPM2B_TEMPLATE *inPublic,
-    ESYS_TR *objectHandle,
-    TPM2B_PRIVATE **outPrivate,
-    TPM2B_PUBLIC **outPublic);
- */
+
+static TSS2_RC tpm_get_cc(ESYS_CONTEXT *ectx, TPMS_CAPABILITY_DATA **capabilityData) {
+    assert(ectx);
+    assert(capabilityData);
+
+    if (tpms_cc_cache) {
+        *capabilityData = tpms_cc_cache;
+        return CKR_OK;
+    }
+
+    TPM2_CAP capability = TPM2_CAP_COMMANDS;
+    UINT32 property = TPM2_CC_FIRST;
+    UINT32 propertyCount = TPM2_MAX_CAP_CC;
+    TPMI_YES_NO moreData;
+
+    TSS2_RC rval = Esys_GetCapability(ectx,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            capability,
+            property, propertyCount, &moreData, capabilityData);
+    if (rval != TPM2_RC_SUCCESS) {
+        LOGE("Esys_GetCapability: %s", Tss2_RC_Decode(rval));
+        return rval;
+    }
+
+    tpms_cc_cache = *capabilityData;
+
+    return TSS2_RC_SUCCESS;
+}
+
+static TSS2_RC create_loaded(
+        ESYS_CONTEXT *ectx,
+        ESYS_TR parent,
+        ESYS_TR session,
+        TPM2B_SENSITIVE_CREATE *in_sens,
+        TPM2B_PUBLIC *in_pub,
+        ESYS_TR *out_handle,
+        TPM2B_PUBLIC **out_pub,
+        TPM2B_PRIVATE **out_priv
+    ) {
+
+    TSS2_RC rval;
+
+    static bool check_cc = true;
+    static bool use_create_loaded=false;
+
+    if (check_cc) {
+        /* do not free, value is cached */
+        TPMS_CAPABILITY_DATA *capabilityData = NULL;
+        rval = tpm_get_cc(ectx, &capabilityData);
+        if (rval != TSS2_RC_SUCCESS) {
+            return rval;
+        }
+
+        size_t i;
+        for (i=0; i < capabilityData->data.command.count; i++) {
+            TPMA_CC cca = capabilityData->data.command.commandAttributes[i];
+            TPM2_CC cc = cca & TPMA_CC_COMMANDINDEX_MASK;
+            if (cc == TPM2_CC_CreateLoaded) {
+                use_create_loaded = true;
+                break;
+            }
+        }
+        check_cc = false;
+    }
+
+    if (use_create_loaded) {
+
+        size_t offset = 0;
+        TPM2B_TEMPLATE template = { .size = 0 };
+        rval = Tss2_MU_TPMT_PUBLIC_Marshal(&in_pub->publicArea, &template.buffer[0],
+                                        sizeof(TPMT_PUBLIC), &offset);
+        if (rval != TSS2_RC_SUCCESS) {
+            LOGE("Tss2_MU_TPMT_PUBLIC_Marshal: %s", Tss2_RC_Decode(rval));
+            return rval;
+        }
+
+        template.size = offset;
+
+        rval = Esys_CreateLoaded(
+                ectx,
+                parent,
+                session, ESYS_TR_NONE, ESYS_TR_NONE,
+                in_sens,
+                &template,
+                out_handle,
+                out_priv,
+                out_pub);
+        if(rval != TPM2_RC_SUCCESS) {
+            LOGE("Esys_CreateLoaded: %s", Tss2_RC_Decode(rval));
+            return rval;
+        }
+    } else {
+
+        TPM2B_DATA outside_info = TPM2B_EMPTY_INIT;
+        TPML_PCR_SELECTION creation_pcr = { .count = 0 };
+        TPM2B_CREATION_DATA *creation_data = NULL;
+        TPM2B_DIGEST *creation_hash = NULL;
+        TPMT_TK_CREATION *creation_ticket = NULL;
+
+        rval = Esys_Create(ectx,
+                parent,
+                session, ESYS_TR_NONE, ESYS_TR_NONE,
+                in_sens,
+                in_pub,
+                &outside_info,
+                &creation_pcr,
+                out_priv,
+                out_pub,
+                &creation_data,
+                &creation_hash,
+                &creation_ticket);
+        if(rval != TPM2_RC_SUCCESS) {
+            LOGE("Esys_Create: %s", Tss2_RC_Decode(rval));
+            return rval;
+        }
+
+        Esys_Free(creation_data);
+        Esys_Free(creation_hash);
+        Esys_Free(creation_ticket);
+
+        assert(*out_priv);
+        assert(*out_pub);
+
+        rval = Esys_Load(ectx,
+                parent,
+                session, ESYS_TR_NONE, ESYS_TR_NONE,
+                *out_priv,
+                *out_pub,
+                out_handle);
+        if(rval != TPM2_RC_SUCCESS) {
+            LOGE("Esys_Load: %s", Tss2_RC_Decode(rval));
+            return rval;
+        }
+    }
+
+    return TSS2_RC_SUCCESS;
+}
 
 CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handle, twist objauth, twist oldpubblob, twist sealdata, twist *newpubblob, twist *newprivblob, uint32_t *handle) {
 
@@ -1947,17 +2074,6 @@ CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handl
         LOGE("Tss2_MU_TPM2B_PUBLIC_Unmarshal: %s", Tss2_RC_Decode(rc));
         return CKR_GENERAL_ERROR;
     }
-
-    offset = 0;
-    TPM2B_TEMPLATE template = { .size = 0 };
-    rc = Tss2_MU_TPMT_PUBLIC_Marshal(&pub.publicArea, &template.buffer[0],
-                                    sizeof(TPMT_PUBLIC), &offset);
-    if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Tss2_MU_TPMT_PUBLIC_Marshal: %s:", Tss2_RC_Decode(rc));
-        return CKR_GENERAL_ERROR;
-    }
-
-    template.size = offset;
 
     /*
      * Set the seal data and auth value in the sensitive portion
@@ -1992,18 +2108,17 @@ CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handl
 
     TPM2B_PRIVATE *newpriv = NULL;
     TPM2B_PUBLIC *newpub = NULL;
-    rc = Esys_CreateLoaded(
+    rc = create_loaded(
             ctx->esys_ctx,
             parent_handle,
-            ctx->hmac_session, ESYS_TR_NONE, ESYS_TR_NONE,
+            ctx->hmac_session,
             &sensitive,
-            &template,
+            &pub,
             handle,
-            &newpriv,
-            &newpub
+            &newpub,
+            &newpriv
     );
     if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Esys_CreateLoaded: %s:", Tss2_RC_Decode(rc));
         return CKR_GENERAL_ERROR;
     }
 
@@ -2293,45 +2408,6 @@ static CK_RV handle_key_type(CK_ATTRIBUTE_PTR attr, void *udata) {
     }
 
     return CKR_ATTRIBUTE_VALUE_INVALID;
-}
-
-static TSS2_RC create_loaded(
-        ESYS_CONTEXT *ectx,
-        ESYS_TR parent,
-        ESYS_TR session,
-        TPM2B_SENSITIVE_CREATE *in_sens,
-        TPM2B_PUBLIC *in_pub,
-
-        ESYS_TR *out_handle,
-        TPM2B_PUBLIC **out_pub,
-        TPM2B_PRIVATE **out_priv
-    ) {
-
-    size_t offset = 0;
-    TPM2B_TEMPLATE template = { .size = 0 };
-    TSS2_RC rval = Tss2_MU_TPMT_PUBLIC_Marshal(&in_pub->publicArea, &template.buffer[0],
-                                    sizeof(TPMT_PUBLIC), &offset);
-    if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Tss2_MU_TPMT_PUBLIC_Marshal: %s", Tss2_RC_Decode(rval));
-        return rval;
-    }
-
-    template.size = offset;
-
-    rval = Esys_CreateLoaded(
-            ectx,
-            parent,
-            session, ESYS_TR_NONE, ESYS_TR_NONE,
-            in_sens,
-            &template,
-            out_handle,
-            out_priv,
-            out_pub);
-    if(rval != TPM2_RC_SUCCESS) {
-        LOGE("Esys_CreateLoaded: 0x%x", rval);
-    }
-
-    return rval;
 }
 
 static CK_RV sanity_check_mech(CK_MECHANISM_PTR mechanism) {
@@ -3070,4 +3146,5 @@ void tpm_init(void) {
 void tpm_destroy(void) {
     Esys_Free(tpms_fixed_property_cache);
     Esys_Free(tpms_alg_cache);
+    Esys_Free(tpms_cc_cache);
 }
