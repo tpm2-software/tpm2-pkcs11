@@ -100,10 +100,8 @@ struct tpm2_hierarchy_pdata {
 
 static ESYS_CONTEXT* esys_ctx_init(TSS2_TCTI_CONTEXT *tcti_ctx) {
 
-    TSS2_ABI_VERSION abi_version = SUPPORTED_ABI_VERSION;
-
     ESYS_CONTEXT *esys_ctx = NULL;
-    TSS2_RC rval = Esys_Initialize(&esys_ctx, tcti_ctx, &abi_version);
+    TSS2_RC rval = Esys_Initialize(&esys_ctx, tcti_ctx, NULL);
     if (rval != TPM2_RC_SUCCESS) {
         LOGE("Esys_Initialize: 0x%x", rval);
         return NULL;
