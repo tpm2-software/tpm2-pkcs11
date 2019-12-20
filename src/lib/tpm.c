@@ -23,6 +23,7 @@
 
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_mu.h>
+#include <tss2/tss2_rc.h>
 #include <tss2/tss2_tctildr.h>
 
 #include "attrs.h"
@@ -221,11 +222,11 @@ CK_RV tpm_session_start(tpm_ctx *ctx, twist auth, uint32_t handle) {
     rc = Esys_TRSess_SetAttributes(ctx->esys_ctx, session, session_attrs,
                                       0xff);
     if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Esys_TRSess_SetAttributes: 0x%x", rc);
+        LOGE("Esys_TRSess_SetAttributes: %s", Tss2_RC_Decode(rc));
         rc = Esys_FlushContext(ctx->esys_ctx,
                 session);
         if (rc != TSS2_RC_SUCCESS) {
-            LOGW("Esys_FlushContext: 0x%x", rc);
+            LOGW("Esys_FlushContext: %s", Tss2_RC_Decode(rc));
         }
         return CKR_GENERAL_ERROR;
     }
@@ -242,7 +243,7 @@ CK_RV tpm_session_stop(tpm_ctx *ctx) {
     TSS2_RC rc = Esys_FlushContext(ctx->esys_ctx,
             ctx->hmac_session);
     if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Esys_FlushContext: 0x%x", rc);
+        LOGE("Esys_FlushContext: %s", Tss2_RC_Decode(rc));
         return CKR_GENERAL_ERROR;
     }
 
@@ -324,7 +325,7 @@ static CK_RV tpm_get_properties(tpm_ctx *ctx, TPMS_CAPABILITY_DATA **d) {
         capability,
         property, propertyCount, &moreData, &capabilityData);
     if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_GetCapability: 0x%x:", rval);
+        LOGE("Esys_GetCapability: %s:", Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
     }
 
@@ -361,7 +362,7 @@ static CK_RV tpm_get_algs(tpm_ctx *ctx, TPMS_CAPABILITY_DATA **d) {
         capability,
         property, propertyCount, &moreData, &capabilityData);
     if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_GetCapability: 0x%x:", rval);
+        LOGE("Esys_GetCapability: %s:", Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
     }
 
@@ -449,7 +450,7 @@ static TPM2_ALG_ID mech_to_alg(CK_MECHANISM_TYPE mech) {
         case CKM_ECDSA_SHA1:
             return TPM2_ALG_ECDSA;
         default:
-            LOGE("Cannot map mechanism 0x%lx onto TPM2 algorithm", mech);
+            LOGE("Cannot map mechanism %lx onto TPM2 algorithm", mech);
             return TPM2_ALG_ERROR;
     }
 }
@@ -807,7 +808,7 @@ bool tpm_getrandom(tpm_ctx *ctx, BYTE *data, size_t size) {
             request_size,
             &rand_bytes);
         if (rval != TSS2_RC_SUCCESS) {
-            LOGE("Esys_GetRandom: 0x%x:", rval);
+            LOGE("Esys_GetRandom: %s:", Tss2_RC_Decode(rval));
             goto out;
         }
 
@@ -846,7 +847,7 @@ CK_RV tpm_stirrandom(tpm_ctx *ctx, CK_BYTE_PTR seed, CK_ULONG seed_len) {
             ESYS_TR_NONE,
             &stir);
         if (rc != TSS2_RC_SUCCESS) {
-            LOGE("Esys_StirRandom: 0x%x:", rc);
+            LOGE("Esys_StirRandom: %s:", Tss2_RC_Decode(rc));
             return CKR_GENERAL_ERROR;
         }
 
@@ -862,7 +863,7 @@ bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle) {
                         (uint8_t *)handle_blob,
                         twist_len(handle_blob), handle);
     if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_TR_Deserialize: 0x%x:", rval);
+        LOGE("Esys_TR_Deserialize: %s:", Tss2_RC_Decode(rval));
         return false;
     }
 
@@ -880,7 +881,7 @@ static bool tpm_load(tpm_ctx *ctx,
     size_t offset = 0;
     TSS2_RC rval = Tss2_MU_TPM2B_PRIVATE_Unmarshal((uint8_t *)priv_data, len, &offset, &priv);
     if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Tss2_MU_TPM2B_PRIVATE_Unmarshal: 0x%x:", rval);
+        LOGE("Tss2_MU_TPM2B_PRIVATE_Unmarshal: %s:", Tss2_RC_Decode(rval));
         return false;
     }
 
@@ -894,7 +895,7 @@ static bool tpm_load(tpm_ctx *ctx,
            pub,
            handle);
     if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_Load: 0x%x:", rval);
+        LOGE("Esys_Load: %s:", Tss2_RC_Decode(rval));
         return false;
     }
 
@@ -915,7 +916,7 @@ static bool tpm_loadexternal(tpm_ctx *ctx,
            TPM2_RH_NULL,
            handle);
     if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_LoadExternal: 0x%x:", rval);
+        LOGE("Esys_LoadExternal: %s:", Tss2_RC_Decode(rval));
         return false;
     }
 
@@ -934,7 +935,7 @@ bool tpm_loadobj(
     size_t offset = 0;
     TSS2_RC rval = Tss2_MU_TPM2B_PUBLIC_Unmarshal((uint8_t *)pub_data, len, &offset, &pub);
     if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Tss2_MU_TPM2B_PRIVATE_Unmarshal: 0x%x:", rval);
+        LOGE("Tss2_MU_TPM2B_PRIVATE_Unmarshal: %s:", Tss2_RC_Decode(rval));
         return false;
     }
 
@@ -956,7 +957,7 @@ bool tpm_flushcontext(tpm_ctx *ctx, uint32_t handle) {
                 ctx->esys_ctx,
                 handle);
     if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_FlushContext: 0x%x", rval);
+        LOGE("Esys_FlushContext: %s", Tss2_RC_Decode(rval));
         return false;
     }
 
@@ -974,7 +975,7 @@ TPMI_ALG_HASH hashlen_to_alg_guess(CK_ULONG datalen) {
         case SHA512_DIGEST_LENGTH:
             return TPM2_ALG_SHA512;
         default:
-            LOGE("unkown digest length");
+            LOGE("unknown digest length");
             return TPM2_ALG_ERROR;
     }
 }
@@ -1099,7 +1100,7 @@ twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth) {
             ESYS_TR_NONE,
             &unsealed_data);
     if (rc != TPM2_RC_SUCCESS) {
-        LOGE("Tss2_Sys_Unseal: 0x%X", rc);
+        LOGE("Esys_Unseal: %s", Tss2_RC_Decode(rc));
         goto out;
     }
 
@@ -1255,7 +1256,7 @@ CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_PTR mech, CK_BYTE_PTR d
             &signature);
     flags_restore(ctx);
     if (rval != TPM2_RC_SUCCESS) {
-        LOGE("Esys_Sign: 0x%0x", rval);
+        LOGE("Esys_Sign: %s", Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
     }
 
@@ -1361,7 +1362,7 @@ CK_RV tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_PTR mech, CK_BYTE_PTR
             &validation);
     if (rval != TPM2_RC_SUCCESS) {
         if (rval != TPM2_RC_SIGNATURE) {
-            LOGE("Esys_VerifySignature: 0x%x", rval);
+            LOGE("Esys_VerifySignature: %s", Tss2_RC_Decode(rval));
             return CKR_GENERAL_ERROR;
         }
         return CKR_SIGNATURE_INVALID;
@@ -1381,7 +1382,7 @@ CK_RV tpm_readpub(tpm_ctx *ctx,
     TSS2_RC rval = TSS2_RETRY_EXP(Esys_ReadPublic(ctx->esys_ctx, handle, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
             public, name, qualified_name));
     if (rval != TPM2_RC_SUCCESS) {
-        LOGE("Esys_ReadPublic: 0x%x", rval);
+        LOGE("Esys_ReadPublic: %s", Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
     }
 
@@ -1630,7 +1631,7 @@ CK_RV tpm_rsa_decrypt(tpm_encrypt_data *tpm_enc_data,
             label,
             &tpm_ptext);
     if (rc != TPM2_RC_SUCCESS) {
-        LOGE("Esys_RSA_Decrypt: 0x%x", rc);
+        LOGE("Esys_RSA_Decrypt: %s", Tss2_RC_Decode(rc));
         return CKR_GENERAL_ERROR;
     }
 
@@ -1694,7 +1695,7 @@ CK_RV tpm_rsa_encrypt(tpm_encrypt_data *tpm_enc_data,
             label,
             &ctext);
     if (rc != TPM2_RC_SUCCESS) {
-        LOGE("Esys_RSA_Encrypt: 0x%x", rc);
+        LOGE("Esys_RSA_Encrypt: %s", Tss2_RC_Decode(rc));
         return CKR_GENERAL_ERROR;
     }
 
@@ -1789,7 +1790,8 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
     }
 
     if(rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_EncryptDecrypt%u: 0x%x", version, rval);
+        LOGE("Esys_EncryptDecrypt%u: %s", version,
+                Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
     }
 
@@ -1896,7 +1898,7 @@ CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handl
                         &new_tpm_auth, &newprivate);
 
     if (rval != TPM2_RC_SUCCESS) {
-        LOGE("Esys_ObjectChangeAuth: 0x%x", rval);
+        LOGE("Esys_ObjectChangeAuth: %s", Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
     }
 
@@ -1904,10 +1906,11 @@ CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handl
 
     /* serialize the new blob private */
     size_t offset = 0;
-    rval = Tss2_MU_TPM2B_PRIVATE_Marshal(newprivate, serialized, sizeof(*newprivate), &offset);
+    rval = Tss2_MU_TPM2B_PRIVATE_Marshal(newprivate, serialized,
+            sizeof(*newprivate), &offset);
     if (rval != TSS2_RC_SUCCESS) {
         free(newprivate);
-        LOGE("Tss2_MU_TPM2B_PRIVATE_Marshal: 0x%x", rval);
+        LOGE("Tss2_MU_TPM2B_PRIVATE_Marshal: %s", Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
     }
 
@@ -1944,7 +1947,7 @@ CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handl
     size_t offset = 0;
     TSS2_RC rc = Tss2_MU_TPM2B_PUBLIC_Unmarshal((uint8_t *)oldpubblob, len, &offset, &pub);
     if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Tss2_MU_TPM2B_PUBLIC_Unmarshal: 0x%x", rc);
+        LOGE("Tss2_MU_TPM2B_PUBLIC_Unmarshal: %s", Tss2_RC_Decode(rc));
         return CKR_GENERAL_ERROR;
     }
 
@@ -1953,7 +1956,7 @@ CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handl
     rc = Tss2_MU_TPMT_PUBLIC_Marshal(&pub.publicArea, &template.buffer[0],
                                     sizeof(TPMT_PUBLIC), &offset);
     if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Tss2_MU_TPMT_PUBLIC_Marshal: 0x%x:", rc);
+        LOGE("Tss2_MU_TPMT_PUBLIC_Marshal: %s:", Tss2_RC_Decode(rc));
         return CKR_GENERAL_ERROR;
     }
 
@@ -2003,17 +2006,18 @@ CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handl
             &newpub
     );
     if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Esys_CreateLoaded: 0x%x:", rc);
+        LOGE("Esys_CreateLoaded: %s:", Tss2_RC_Decode(rc));
         return CKR_GENERAL_ERROR;
     }
 
-    uint8_t serialized[sizeof(*newpriv) > sizeof(*newpub) ? sizeof(*newpriv) : sizeof(*newpub)];
+    uint8_t serialized[sizeof(*newpriv) > sizeof(*newpub) ?
+            sizeof(*newpriv) : sizeof(*newpub)];
 
     /* serialize the new blob private */
     offset = 0;
     rc = Tss2_MU_TPM2B_PRIVATE_Marshal(newpriv, serialized, sizeof(*newpriv), &offset);
     if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Tss2_MU_TPM2B_PRIVATE_Marshal: 0x%x", rc);
+        LOGE("Tss2_MU_TPM2B_PRIVATE_Marshal: %s", Tss2_RC_Decode(rc));
         goto out;
     }
 
@@ -2028,7 +2032,7 @@ CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handl
     if (rc != TSS2_RC_SUCCESS) {
         twist_free(*newprivblob);
         *newprivblob = NULL;
-        LOGE("Tss2_MU_TPM2B_PUBLIC_Marshal: 0x%x", rc);
+        LOGE("Tss2_MU_TPM2B_PUBLIC_Marshal: %s", Tss2_RC_Decode(rc));
         goto out;
     }
 
@@ -2225,7 +2229,8 @@ static CK_RV handle_ckobject_class(CK_ATTRIBUTE_PTR attr, void *udata) {
     };
 
     if (attr->ulValueLen != sizeof(class[0])) {
-        LOGE("Expected CK_OBJECT_CLASS length to be %zu got %lu", sizeof(class), attr->ulValueLen);
+        LOGE("Expected CK_OBJECT_CLASS length to be %zu got %lu",
+                sizeof(class), attr->ulValueLen);
         return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 
@@ -2310,8 +2315,8 @@ static TSS2_RC create_loaded(
     TSS2_RC rval = Tss2_MU_TPMT_PUBLIC_Marshal(&in_pub->publicArea, &template.buffer[0],
                                     sizeof(TPMT_PUBLIC), &offset);
     if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Tss2_MU_TPMT_PUBLIC_Marshal: 0x%x", rval);
-        return false;
+        LOGE("Tss2_MU_TPMT_PUBLIC_Marshal: %s", Tss2_RC_Decode(rval));
+        return rval;
     }
 
     template.size = offset;
@@ -2786,7 +2791,7 @@ CK_RV tpm2_generate_key(
         );
     if (rc != TSS2_RC_SUCCESS) {
         rv = CKR_GENERAL_ERROR;
-        LOGE("create_loaded 0x%x", rc);
+        LOGE("create_loaded %s", Tss2_RC_Decode(rc));
         goto error;
     }
 
@@ -2810,7 +2815,7 @@ CK_RV tpm2_generate_key(
     size_t offset = 0;
     rc = Tss2_MU_TPM2B_PUBLIC_Marshal(out_pub, pubb, sizeof(pubb), &offset);
     if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Tss2_MU_TPM2B_PUBLIC_Marshal: 0x%x", rc);
+        LOGE("Tss2_MU_TPM2B_PUBLIC_Marshal: %s", Tss2_RC_Decode(rc));
         rv = CKR_GENERAL_ERROR;
         goto error;
     }
@@ -2820,7 +2825,7 @@ CK_RV tpm2_generate_key(
     offset = 0;
     rc = Tss2_MU_TPM2B_PRIVATE_Marshal(out_priv, privb, sizeof(privb), &offset);
     if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Tss2_MU_TPM2B_PRIVATE_Marshal: 0x%x", rc);
+        LOGE("Tss2_MU_TPM2B_PRIVATE_Marshal: %x", Tss2_RC_Decode(rc));
         rv = CKR_GENERAL_ERROR;
         goto error;
     }
@@ -2954,7 +2959,7 @@ CK_RV tpm_get_algorithms (tpm_ctx *ctx, TPMS_CAPABILITY_DATA **capabilityData) {
             property, propertyCount, &moreData, capabilityData);
 
     if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_GetCapability: 0x%x:", rval);
+        LOGE("Esys_GetCapability: %x:", Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
     }
 

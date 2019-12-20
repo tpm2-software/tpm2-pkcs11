@@ -35,6 +35,7 @@ AC_CONFIG_HEADERS([src/lib/config.h])
 PKG_CHECK_MODULES([TSS2_ESYS],   [tss2-esys])
 PKG_CHECK_MODULES([TSS2_MU],     [tss2-mu])
 PKG_CHECK_MODULES([TSS2_TCTILDR], [tss2-tctildr])
+PKG_CHECK_MODULES([TSS2_RC], [tss2-rc])
 
 AC_DEFUN([do_esapi_manage_flags], [
   AC_DEFINE([ESAPI_MANAGE_FLAGS], [1],
