@@ -1,9 +1,4 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/***********************************************************************
- * Copyright (c) 2018, Intel Corporation
- *
- * All rights reserved.
- ***********************************************************************/
 
 #ifndef TEST_INTEGRATION_TEST_H_
 #define TEST_INTEGRATION_TEST_H_

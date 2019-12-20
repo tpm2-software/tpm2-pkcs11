@@ -1,9 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/*
- * Copyright (c) 2016-2018, William Roberts
- * Copyright (c) 2018, Intel Corporation
- * All rights reserved.
- */
+
 #ifndef TWIST_H_
 #define TWIST_H_
 

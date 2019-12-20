@@ -1,8 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/*
- * Copyright (c) 2018, Intel Corporation
- * All rights reserved.
- */
+
 #ifndef SRC_SLOT_H_
 #define SRC_SLOT_H_
 

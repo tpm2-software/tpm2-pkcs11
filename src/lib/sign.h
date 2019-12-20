@@ -1,8 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/*
- * Copyright (c) 2018, Intel Corporation
- * All rights reserved.
- */
+
 #ifndef _SRC_LIB_SIGN_H_
 #define _SRC_LIB_SIGN_H_
 
