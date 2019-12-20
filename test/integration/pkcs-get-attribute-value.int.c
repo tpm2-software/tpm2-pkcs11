@@ -1,9 +1,4 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/***********************************************************************
- * Copyright (c) 2019, Infineon Technologies AG
- *
- * All rights reserved.
- ***********************************************************************/
 
 #include <openssl/x509.h>
 
