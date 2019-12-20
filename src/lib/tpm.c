@@ -76,21 +76,6 @@ static inline UINT16 tpm2_error_get(TSS2_RC rc) {
         __result;                                          \
     })
 
-#define TSS2L_SYS_AUTH_COMMAND_INIT(cnt, array) { \
-        .count = cnt, \
-        .auths = array, \
-    }
-
-#define TPMS_AUTH_COMMAND_INIT(session_handle) \
-        TPMS_AUTH_COMMAND_INIT_ATTRS(session_handle, TPMA_SESSION_CONTINUESESSION)
-
-#define TPMS_AUTH_COMMAND_INIT_ATTRS(session_handle, attrs) { \
-        .sessionHandle = session_handle,\
-        .nonce = TPM2B_EMPTY_INIT, \
-        .sessionAttributes = attrs, \
-        .hmac = TPM2B_EMPTY_INIT \
-    }
-
 typedef struct tpm2_hierarchy_pdata tpm2_hierarchy_pdata;
 struct tpm2_hierarchy_pdata {
     struct {
@@ -112,59 +97,6 @@ struct tpm2_hierarchy_pdata {
         TPM2B_NAME name;
     } out;
 };
-
-//|decrypt|sign"
-#define _PUBLIC_AREA_TPMA_OBJECT_DEFAULT_INIT { \
-    .publicArea = { \
-        .nameAlg = TPM2_ALG_SHA256, \
-        .type = TPM2_ALG_RSA, \
-        .objectAttributes = \
-              TPMA_OBJECT_FIXEDTPM \
-            | TPMA_OBJECT_FIXEDPARENT \
-            | TPMA_OBJECT_SENSITIVEDATAORIGIN \
-            | TPMA_OBJECT_USERWITHAUTH \
-            | TPMA_OBJECT_DECRYPT \
-            | TPMA_OBJECT_SIGN_ENCRYPT, \
-        .parameters = { \
-            .rsaDetail = { \
-                .exponent = 0, \
-                .symmetric = { \
-                    .algorithm = TPM2_ALG_NULL, \
-                 }, \
-            .scheme = { .scheme = TPM2_ALG_NULL }, \
-            .keyBits = 2048 \
-            }, \
-        }, \
-            .unique = { .rsa = { .size = 0 } } \
-    }, \
-}
-
-#define TPM2B_SENSITIVE_CREATE_EMPTY_INIT { \
-           .sensitive = { \
-                .data = {   \
-                    .size = 0 \
-                }, \
-                .userAuth = {   \
-                    .size = 0 \
-                } \
-            } \
-    }
-
-#define TPM2_HIERARCHY_DATA_INIT { \
-    .in = { \
-        .public = _PUBLIC_AREA_TPMA_OBJECT_DEFAULT_INIT, \
-        .sensitive = TPM2B_SENSITIVE_CREATE_EMPTY_INIT, \
-        .hierarchy = TPM2_RH_OWNER \
-    }, \
-}
-
-#define SUPPORTED_ABI_VERSION \
-{ \
-    .tssCreator = 1, \
-    .tssFamily = 2, \
-    .tssLevel = 1, \
-    .tssVersion = 108, \
-}
 
 static ESYS_CONTEXT* esys_ctx_init(TSS2_TCTI_CONTEXT *tcti_ctx) {
 
