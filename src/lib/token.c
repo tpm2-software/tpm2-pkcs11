@@ -97,7 +97,7 @@ CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
 
     // Maximums and Minimums
     info->ulMaxPinLen = 128;
-    info->ulMinPinLen = 5;
+    info->ulMinPinLen = 0;
     info->ulMaxSessionCount = MAX_NUM_OF_SESSIONS;
     info->ulMaxRwSessionCount = MAX_NUM_OF_SESSIONS;
 
