@@ -23,6 +23,33 @@
 #include "token.h"
 #include "utils.h"
 
+CK_RV token_min_init(token *t) {
+    /*
+     * Initialize the per-token session table
+     */
+    CK_RV rv = session_table_new(&t->s_table);
+    if (rv != CKR_OK) {
+        LOGE("Could not initialize session table");
+        return rv;
+    }
+
+    /*
+     * Initialize the per-token tpm context
+     */
+    rv = tpm_ctx_new(t->config.tcti, &t->tctx);
+    if (rv != CKR_OK) {
+        LOGE("Could not initialize tpm ctx: 0x%lx", rv);
+        return rv;
+    }
+
+    rv = mutex_create(&t->mutex);
+    if (rv != CKR_OK) {
+        LOGE("Could not initialize mutex: 0x%lx", rv);
+    }
+
+    return rv;
+}
+
 void token_free_list(token *t, size_t len) {
 
     size_t i;
@@ -113,6 +140,132 @@ CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
     info->utcTime[15] = '0';
 
     return CKR_OK;
+}
+
+CK_RV get_or_create_primary(token *t) {
+
+    twist blob = NULL;
+
+    /* if there is no primary object ... */
+    if (t->pid) {
+        return CKR_OK;
+    }
+
+    /* is there one in the db to use ? */
+    CK_RV rv = db_get_first_pid(&t->pid);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    /* if so use it */
+    if (t->pid) {
+        /* tokens in the DB store already have an associated primary object */
+        return db_init_pobject(t->pid, &t->pobject, t->tctx);
+    }
+
+    /* is their a PC client spec key ? */
+    rv = tpm_get_existing_primary(t->tctx, &t->pobject.handle, &blob);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    /* nothing, create one */
+    if (!t->pobject.handle) {
+        rv = tpm_create_primary(t->tctx, &t->pobject.handle, &blob);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+    }
+
+    assert(t->pobject.handle);
+
+    rv = db_add_primary(blob, &t->pid);
+    assert(t->pid);
+    twist_free(blob);
+    return rv;
+}
+
+CK_RV token_init(token *t, CK_BYTE_PTR pin, CK_ULONG pin_len, CK_BYTE_PTR label) {
+    check_pointer(pin);
+    check_pointer(label);
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    twist newauth = NULL;
+    twist newsalthex = NULL;
+
+    twist sopin = twistbin_new(pin, pin_len);
+    if (!sopin) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    twist hexwrappingkey = utils_get_rand_hex_str(32);
+    if (!sopin) {
+        LOGE("oom");
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    /*
+     * find or create a primary object and get the serialized blob
+     * for it.
+     */
+    rv = get_or_create_primary(t);
+    if (rv != CKR_OK) {
+        LOGE("Could not find nor create a primary object");
+        goto error;
+    }
+
+    rv = utils_setup_new_object_auth(sopin, &newauth, &newsalthex);
+    if (rv != CKR_OK) {
+        goto error;
+    }
+
+    /* we have a primary object, create the seal object underneath it */
+    rv = tpm2_create_seal_obj(t->tctx, t->pobject.objauth, t->pobject.handle,
+            newauth, NULL, hexwrappingkey, &t->sealobject.sopub,
+            &t->sealobject.sopriv, &t->sealobject.handle);
+    if (rv != CKR_OK) {
+        LOGE("Could not create SO seal object");
+        goto error;
+    }
+
+    t->sealobject.soauthsalt = newsalthex;
+    newsalthex = NULL;
+
+    memcpy(t->label, label, sizeof(t->label));
+
+    /* TODO get TCTI config from ENV var and use throughout this process */
+    t->config.is_initialized = true;
+
+    rv = db_add_token(t);
+    if (rv != CKR_OK) {
+        LOGE("Could not add token to db");
+        goto error;
+    }
+
+    assert(t->id);
+
+    rv = slot_add_uninit_token();
+    if (rv != CKR_OK) {
+        LOGW("Could not add unitialized token");
+    }
+
+    rv =  CKR_OK;
+out:
+    twist_free(sopin);
+    twist_free(newauth);
+    twist_free(newsalthex);
+    twist_free(hexwrappingkey);
+
+    return rv;
+
+error:
+    token_free(t);
+    token_min_init(t);
+    t->config.is_initialized = false;
+    goto out;
 }
 
 bool token_is_any_user_logged_in(token *tok) {
@@ -308,9 +461,6 @@ CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
     if (rv != CKR_OK) {
         goto out;
     }
-
-    //CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handle, twist objauth, twist oldpubblob, twist sealdata, twist *newpubblob, twist *newprivblob, uint32_t *handle) {
-
 
     /* we store the seal data in hex form, but it's in binary form in memory, so convert it */
     sealdata = twist_hexlify(tok->wappingkey);

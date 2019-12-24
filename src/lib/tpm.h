@@ -172,6 +172,13 @@ CK_RV tpm2_generate_key(
 
 CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULONG_PTR count);
 
+CK_RV tpm_get_existing_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_blob);
+
+CK_RV tpm_create_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_blob);
+
+CK_RV tpm_create_seal_object(tpm_ctx *ctx, uint32_t primary_handle, twist newauth,
+        twist *pub_blob, twist *priv_blob);
+
 void tpm_init(void);
 
 void tpm_destroy(void);

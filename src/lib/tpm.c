@@ -2056,30 +2056,65 @@ static TSS2_RC create_loaded(
     return TSS2_RC_SUCCESS;
 }
 
+#define DEFAULT_SEAL_TEMPLATE { \
+        .size = 0, \
+        .publicArea = { \
+            .type = TPM2_ALG_KEYEDHASH, \
+            .nameAlg = TPM2_ALG_SHA256, \
+            .objectAttributes = ( \
+                TPMA_OBJECT_USERWITHAUTH | \
+                TPMA_OBJECT_FIXEDTPM | \
+                TPMA_OBJECT_FIXEDPARENT \
+            ), \
+            .authPolicy = { \
+                .size = 0, \
+            }, \
+            .parameters.keyedHashDetail = { \
+                .scheme = { \
+                    .scheme = TPM2_ALG_NULL, \
+                    .details = { \
+                        .hmac = { \
+                            .hashAlg = TPM2_ALG_SHA256 \
+                        } \
+                    } \
+                } \
+            }, \
+            .unique.keyedHash = { \
+                .size = 0, \
+                .buffer = {}, \
+            }, \
+        } \
+    }
+
 CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handle, twist objauth, twist oldpubblob, twist sealdata, twist *newpubblob, twist *newprivblob, uint32_t *handle) {
 
+    bool started_session = false;
+
     CK_RV rv = CKR_GENERAL_ERROR;
+    CK_RV tmp_rv = CKR_GENERAL_ERROR;
 
     /*
      * clone the public portion from the existing object by unmarshaling (aka unserializing) it from the
      * pub blob and converting it to a TPM2B_TEMPLATE
      */
-    TPM2B_PUBLIC pub = { .size = 0 };
-    size_t len = twist_len(oldpubblob);
+    TPM2B_PUBLIC pub = DEFAULT_SEAL_TEMPLATE;
+    if (oldpubblob) {
+        pub.size = 0;
+        size_t len = twist_len(oldpubblob);
 
-    size_t offset = 0;
-    TSS2_RC rc = Tss2_MU_TPM2B_PUBLIC_Unmarshal((uint8_t *)oldpubblob, len, &offset, &pub);
-    if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Tss2_MU_TPM2B_PUBLIC_Unmarshal: %s", Tss2_RC_Decode(rc));
-        return CKR_GENERAL_ERROR;
+        size_t offset = 0;
+        TSS2_RC rc = Tss2_MU_TPM2B_PUBLIC_Unmarshal((uint8_t *)oldpubblob, len, &offset, &pub);
+        if (rc != TSS2_RC_SUCCESS) {
+            LOGE("Tss2_MU_TPM2B_PUBLIC_Unmarshal: %s", Tss2_RC_Decode(rc));
+            return CKR_GENERAL_ERROR;
+        }
     }
-
     /*
      * Set the seal data and auth value in the sensitive portion
      */
     TPM2B_SENSITIVE_CREATE sensitive = { .size = 0 };
 
-    len = twist_len(sealdata);
+    size_t len = twist_len(sealdata);
     if (len > sizeof(sensitive.sensitive.data.buffer)) {
         LOGE("Seal data too big");
         return CKR_GENERAL_ERROR;
@@ -2100,14 +2135,22 @@ CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handl
     /*
      * Set the parent object auth
      */
-    bool res = set_esys_auth(ctx->esys_ctx, parent_handle, parentauth);
-    if (!res) {
-        return CKR_GENERAL_ERROR;
+    if (!ctx->hmac_session) {
+        rv = tpm_session_start(ctx, parentauth, parent_handle);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+        started_session = true;
+    } else {
+        bool res = set_esys_auth(ctx->esys_ctx, parent_handle, parentauth);
+        if (!res) {
+            return CKR_GENERAL_ERROR;
+        }
     }
 
     TPM2B_PRIVATE *newpriv = NULL;
     TPM2B_PUBLIC *newpub = NULL;
-    rc = create_loaded(
+    TSS2_RC rc = create_loaded(
             ctx->esys_ctx,
             parent_handle,
             ctx->hmac_session,
@@ -2125,7 +2168,7 @@ CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handl
             sizeof(*newpriv) : sizeof(*newpub)];
 
     /* serialize the new blob private */
-    offset = 0;
+    size_t offset = 0;
     rc = Tss2_MU_TPM2B_PRIVATE_Marshal(newpriv, serialized, sizeof(*newpriv), &offset);
     if (rc != TSS2_RC_SUCCESS) {
         LOGE("Tss2_MU_TPM2B_PRIVATE_Marshal: %s", Tss2_RC_Decode(rc));
@@ -2157,6 +2200,13 @@ CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handl
     rv = CKR_OK;
 
 out:
+    if (started_session) {
+        tmp_rv = tpm_session_stop(ctx);
+        if (tmp_rv != CKR_OK) {
+            rv = tmp_rv;
+        }
+    }
+
     free(newpriv);
     free(newpub);
 
@@ -2792,6 +2842,55 @@ out:
     return rv;
 }
 
+static CK_RV serialize_pub_priv_blobs(TPM2B_PUBLIC *pub,
+        TPM2B_PRIVATE *priv,
+        twist *pubblob, twist *privblob) {
+
+    twist tmppub = NULL;
+    twist tmppriv = NULL;
+
+    BYTE pubb[sizeof(*pub)];
+    size_t pubb_size = 0;
+
+    BYTE privb[sizeof(*priv)];
+    size_t privb_size = 0;
+
+    size_t offset = 0;
+    TSS2_RC rc = Tss2_MU_TPM2B_PUBLIC_Marshal(pub, pubb, sizeof(pubb), &offset);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Tss2_MU_TPM2B_PUBLIC_Marshal: %s", Tss2_RC_Decode(rc));
+        return CKR_GENERAL_ERROR;
+    }
+
+    pubb_size = offset;
+
+    offset = 0;
+    rc = Tss2_MU_TPM2B_PRIVATE_Marshal(priv, privb, sizeof(privb), &offset);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Tss2_MU_TPM2B_PRIVATE_Marshal: %x", Tss2_RC_Decode(rc));
+        return CKR_GENERAL_ERROR;
+    }
+
+    privb_size = offset;
+
+    tmppub = twistbin_new(pubb, pubb_size);
+    if (!tmppub) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    tmppriv = twistbin_new(privb, privb_size);
+    if (!tmppriv) {
+        twist_free(tmppub);
+        return CKR_HOST_MEMORY;
+    }
+
+    *pubblob = tmppub;
+    *privblob = tmppriv;
+
+    return CKR_OK;
+}
+
 CK_RV tpm2_generate_key(
         tpm_ctx *tpm,
 
@@ -2878,44 +2977,8 @@ CK_RV tpm2_generate_key(
     }
 
     /* serialize the tpm public private object portions */
-    BYTE pubb[sizeof(*out_pub)];
-    size_t pubb_size = 0;
-
-    BYTE privb[sizeof(*out_priv)];
-    size_t privb_size = 0;
-
-    size_t offset = 0;
-    rc = Tss2_MU_TPM2B_PUBLIC_Marshal(out_pub, pubb, sizeof(pubb), &offset);
-    if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Tss2_MU_TPM2B_PUBLIC_Marshal: %s", Tss2_RC_Decode(rc));
-        rv = CKR_GENERAL_ERROR;
-        goto error;
-    }
-
-    pubb_size = offset;
-
-    offset = 0;
-    rc = Tss2_MU_TPM2B_PRIVATE_Marshal(out_priv, privb, sizeof(privb), &offset);
-    if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Tss2_MU_TPM2B_PRIVATE_Marshal: %x", Tss2_RC_Decode(rc));
-        rv = CKR_GENERAL_ERROR;
-        goto error;
-    }
-
-    privb_size = offset;
-
-    tmppub = twistbin_new(pubb, pubb_size);
-    if (!tmppub) {
-        LOGE("oom");
-        rv = CKR_HOST_MEMORY;
-        goto error;
-    }
-
-    tmppriv = twistbin_new(privb, privb_size);
-    if (!tmppriv) {
-        twist_free(tmppub);
-        LOGE("oom");
-        rv = CKR_HOST_MEMORY;
+    rv = serialize_pub_priv_blobs(out_pub, out_priv, &tmppub, &tmppriv);
+    if (rv != CKR_OK) {
         goto error;
     }
 
@@ -3147,3 +3210,186 @@ void tpm_destroy(void) {
     Esys_Free(tpms_alg_cache);
     Esys_Free(tpms_cc_cache);
 }
+
+CK_RV tpm_serialize_handle(ESYS_CONTEXT *esys, ESYS_TR handle, twist *buf) {
+    assert(buf);
+
+    uint8_t *buffer = NULL;
+    size_t size = 0;
+    TSS2_RC rval = Esys_TR_Serialize(esys,
+                        handle,
+                        &buffer, &size);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_TR_Serialize: %s:", Tss2_RC_Decode(rval));
+        return CKR_GENERAL_ERROR;
+    }
+
+    twist t = twistbin_new(buffer, size);
+    Esys_Free(buffer);
+    if (!t) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    *buf = t;
+    return CKR_OK;
+}
+
+#define PARAM_1_HANDLE_IS_INVALID 0x0000018b
+
+CK_RV tpm_get_existing_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_blob) {
+    assert(tpm);
+    assert(tpm->esys_ctx);
+    assert(primary_blob);
+
+    /* The provisioning guidance states that this handle should be the SRK
+     * 0x81000001
+     *
+     * See:
+     *   - https://trustedcomputinggroup.org/wp-content/uploads/TCG-TPM-v2.0-Provisioning-Guidance-Published-v1r1.pdf
+     *
+     */
+
+    ESYS_TR handle = ESYS_TR_NONE;
+
+    TSS2_RC rval =
+    Esys_TR_FromTPMPublic(
+        tpm->esys_ctx,
+        0x81000001,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &handle);
+    if (rval != TSS2_RC_SUCCESS) {
+        if (rval != PARAM_1_HANDLE_IS_INVALID) {
+            LOGE("Esys_TR_FromTPMPublic: %s:", Tss2_RC_Decode(rval));
+            return CKR_GENERAL_ERROR;
+        }
+        LOGV("No Provisioning Guide Spec Key Handle");
+        return CKR_OK;
+    }
+
+    CK_RV rv = tpm_serialize_handle(tpm->esys_ctx, handle, primary_blob);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    *primary_handle = handle;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_create_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_blob) {
+    assert(tpm);
+    assert(primary_blob);
+    assert(tpm->esys_ctx);
+
+    /* TODO make configurable ? */
+    ESYS_TR hierarchy = ESYS_TR_RH_OWNER;
+    TPM2B_AUTH hieararchy_auth = { 0 };
+
+    TPM2B_SENSITIVE_CREATE sens = { 0 };
+
+    /* TODO use proper template ? */
+    // https://trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf
+    // https://trustedcomputinggroup.org/wp-content/uploads/TCG_PC_Client_Platform_TPM_Profile_PTP_2.0_r1.03_v22.pdf
+    TPM2B_PUBLIC pub_template = {
+        .size = 0,
+        .publicArea = {
+            .type = TPM2_ALG_ECC,
+            .nameAlg = TPM2_ALG_SHA256,
+            .objectAttributes = (TPMA_OBJECT_USERWITHAUTH |
+                                 TPMA_OBJECT_RESTRICTED |
+                                 TPMA_OBJECT_DECRYPT |
+                                 TPMA_OBJECT_FIXEDTPM |
+                                 TPMA_OBJECT_FIXEDPARENT |
+                                 TPMA_OBJECT_SENSITIVEDATAORIGIN),
+            .authPolicy = {
+                 .size = 0,
+             },
+            .parameters.eccDetail = {
+                 .symmetric = {
+                     .algorithm = TPM2_ALG_AES,
+                     .keyBits.aes = 128,
+                     .mode.aes = TPM2_ALG_CFB,
+                 },
+                 .scheme = {
+                      .scheme = TPM2_ALG_NULL,
+                  },
+                 .curveID = TPM2_ECC_NIST_P256,
+                 .kdf = {
+                      .scheme = TPM2_ALG_NULL,
+                      .details = {}}
+             },
+            .unique.ecc = {
+                 .x = {.size = 0,.buffer = {}},
+                 .y = {.size = 0,.buffer = {}},
+             },
+        },
+    };
+
+    TPM2B_DATA outside_info = { 0 };
+    TPML_PCR_SELECTION pcrs = { 0 };
+
+    TSS2_RC rval = Esys_TR_SetAuth(tpm->esys_ctx, hierarchy, &hieararchy_auth);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_TR_SetAuth: %x:", Tss2_RC_Decode(rval));
+        return CKR_GENERAL_ERROR;
+    }
+
+    TPM2B_PUBLIC *out_pub = NULL;
+    TPM2B_CREATION_DATA *data = NULL;
+    TPM2B_DIGEST *hash = NULL;
+    TPMT_TK_CREATION *ticket = NULL;
+
+    ESYS_TR handle = ESYS_TR_NONE;
+    rval = Esys_CreatePrimary(tpm->esys_ctx,
+            hierarchy,
+            ESYS_TR_PASSWORD,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            &sens,
+            &pub_template,
+            &outside_info,
+            &pcrs,
+            &handle,
+            &out_pub,
+            &data,
+            &hash,
+            &ticket);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_CreatePrimary: %s:", Tss2_RC_Decode(rval));
+        return CKR_GENERAL_ERROR;
+    }
+
+    Esys_Free(data);
+    Esys_Free(hash);
+    Esys_Free(ticket);
+    Esys_Free(out_pub);
+
+    // XXX should we be creating this here, if so it should probably
+    // match provisioning spec
+    ESYS_TR new_handle = ESYS_TR_NONE;
+    rval = Esys_EvictControl(tpm->esys_ctx,
+            ESYS_TR_RH_OWNER,
+            handle,
+            ESYS_TR_PASSWORD,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            TPM2_PERSISTENT_FIRST,
+            &new_handle);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_EvictControl: %s:", Tss2_RC_Decode(rval));
+        return CKR_GENERAL_ERROR;
+    }
+
+    CK_RV rv = tpm_serialize_handle(tpm->esys_ctx, new_handle, primary_blob);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    *primary_handle = new_handle;
+
+    return CKR_OK;
+}
+

@@ -174,3 +174,30 @@ class DestroyCommand(Command):
 
                 db.rmprimary(pid)
                 tpm2.evictcontrol(ownerauth, tr_file)
+
+@commandlet("dbup")
+class DbUp(Command):
+    '''
+    Initializes a tpm2-pkcs11 store
+    '''
+
+    # adhere to an interface
+    # pylint: disable=no-self-use
+    def generate_options(self, group_parser):
+        pass
+
+    def __call__(self, args):
+
+        path = args['path']
+
+        # create the db
+        with Db(path) as db:
+            old_ver = db.version
+            new_ver = db.VERSION
+            db.create()
+            y = {
+                'old' : old_ver,
+                'new' : new_ver,
+            }
+
+            print(yaml.safe_dump(y, default_flow_style=False))

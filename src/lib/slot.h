@@ -20,5 +20,6 @@ CK_RV slot_get_list (unsigned char token_present, CK_SLOT_ID *slot_list, unsigne
 CK_RV slot_get_info (CK_SLOT_ID slot_id, CK_SLOT_INFO *info);
 CK_RV slot_mechanism_list_get (CK_SLOT_ID slotID, CK_MECHANISM_TYPE *mechanism_list, unsigned long *count);
 CK_RV slot_mechanism_info_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE type, CK_MECHANISM_INFO *info);
+CK_RV slot_add_uninit_token(void);
 
 #endif /* SRC_SLOT_H_ */
