@@ -176,7 +176,7 @@ error:
 int init_tobjects(unsigned tokid, tobject **head) {
 
     const char *sql =
-            "SELECT * FROM tobjects WHERE tokid=?1";
+            "SELECT * FROM tobjects WHERE tokid=?";
 
     sqlite3_stmt *stmt;
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
