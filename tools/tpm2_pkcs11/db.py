@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: BSD-2-Clause
+import fcntl
 import os
 import sys
 import sqlite3
 import textwrap
 import yaml
+
+VERSION = 2
 
 #
 # With Db() as db:
@@ -224,6 +227,83 @@ class Db(object):
         except OSError:
             pass
 
+    def backup(self):
+        con = self._conn
+        dbpath = self._path + ".bak"
+        if os.path.exists(dbpath):
+            raise RuntimeError("Backup DB exists at {} not overwriting. "
+                "Refusing to run".format(dbpath))
+        bck = sqlite3.connect(dbpath)
+        with bck:
+            con.backup(bck)
+        return dbpath
+
+    def _update_on_2(self):
+        '''
+        Between version 1 and 2 of the DB the following changes need to be made:
+            The existing rows:
+              - userpub BLOB NOT NULL,
+              - userpriv BLOB NOT NULL,
+              - userauthsalt TEXT NOT NULL,
+            All have the "NOT NULL" constarint removed, like so:
+                userpub BLOB,
+                userpriv BLOB,
+                userauthsalt TEXT
+        So we need to create a new table with this constraint removed,
+        copy the data and move the table back
+        '''
+
+        c = self._conn
+
+        # Create a new table to copy data to that has the constraints removed
+        s = textwrap.dedent('''
+            CREATE TABLE sealobjects_new2(
+                id INTEGER PRIMARY KEY,
+                tokid INTEGER NOT NULL,
+                userpub BLOB,
+                userpriv BLOB,
+                userauthsalt TEXT,
+                sopub BLOB NOT NULL,
+                sopriv BLOB NOT NULL,
+                soauthsalt TEXT NOT NULL,
+                FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
+            );
+            ''')
+        c.execute(s)
+
+        # copy the data
+        s = textwrap.dedent('''
+            INSERT INTO sealobjects_new2
+            SELECT * FROM sealobjects;
+        ''')
+        c.execute(s)
+
+        # Drop the old table
+        s = 'DROP TABLE sealobjects;'
+        c.execute(s)
+
+        # Rename the new table to the correct table name
+        s = 'ALTER TABLE sealobjects_new2 RENAME TO sealobjects;'
+        c.execute(s)
+
+    def update_db(self, old_version, new_version=VERSION):
+        for x in range(old_version, new_version):
+            x = x + 1
+            getattr(self, '_update_on_{}'.format(x))()
+
+    @property
+    def version(self):
+        c = self._conn.cursor()
+        try:
+            c.execute('select schema_version from schema')
+            return c.fetchone()[0]
+        except sqlite3.OperationalError:
+            return self.VERSION
+
+    @property
+    def VERSION(self):
+        return VERSION
+
     # TODO collapse object tables into one, since they are common besides type.
     # move sealobject metadata into token metadata table.
     #
@@ -235,8 +315,20 @@ class Db(object):
     # tertiary
     #
     # NOTE: Update the DB Schema Version at the bottom if the db format changes!
-    def create(self):
+    def _do_create(self):
+
         c = self._conn.cursor()
+
+        # perform an update if we need to
+        dbbakpath = None
+        try:
+            old_version = self.version
+            if VERSION != old_version:
+                self.update_db(old_version, VERSION)
+        except Exception as e:
+            sys.stderr.write('DB Upgrade failed: "{}", backup located in "{}"'.format(e, dbbakpath))
+            raise e
+
         sql = [
             textwrap.dedent('''
             CREATE TABLE IF NOT EXISTS tokens(
@@ -251,9 +343,9 @@ class Db(object):
             CREATE TABLE IF NOT EXISTS sealobjects(
                 id INTEGER PRIMARY KEY,
                 tokid INTEGER NOT NULL,
-                userpub BLOB NOT NULL,
-                userpriv BLOB NOT NULL,
-                userauthsalt TEXT NOT NULL,
+                userpub BLOB,
+                userpriv BLOB,
+                userauthsalt TEXT,
                 sopub BLOB NOT NULL,
                 sopriv BLOB NOT NULL,
                 soauthsalt TEXT NOT NULL,
@@ -285,9 +377,53 @@ class Db(object):
             # NOTE: Update the DB Schema Version if the format above changes!
             # REPLACE updates the value if it exists, or inserts it if it doesn't
             textwrap.dedent('''
-                REPLACE INTO schema (id, schema_version) VALUES (1, 1);
+                REPLACE INTO schema (id, schema_version) VALUES (1, {version});
+            '''.format(version=VERSION)),
+            # Create a trigger to keep maximum token count in check
+            textwrap.dedent('''
+                CREATE TRIGGER IF NOT EXISTS limit_tokens
+                BEFORE INSERT ON tokens
+                BEGIN
+                    SELECT CASE WHEN
+                        (SELECT COUNT (*) FROM tokens) >= 255
+                    THEN
+                        RAISE(FAIL, "Maximum token count of 255 reached.")
+                    END;
+                END;
+            '''),
+            textwrap.dedent('''
+                CREATE TRIGGER IF NOT EXISTS limit_tobjects
+                BEFORE INSERT ON tobjects
+                BEGIN
+                    SELECT CASE WHEN
+                        (SELECT COUNT (*) FROM tobjects) >= 0x00FFFFFF
+                    THEN
+                        RAISE(FAIL, "Maximum object count of 0xFFFFFFFF reached.")
+                    END;
+                END;
             '''),
         ]
 
         for s in sql:
             c.execute(s)
+
+    def create(self):
+
+        # create a lock from the db name plush .lock suffix
+        lockpath = self._path+".lock"
+        holds_lock = False
+        dbbakpath = None
+        fd = os.open(lockpath, os.O_CREAT|os.O_RDWR)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            holds_lock = True
+            dbbakpath = self.backup()
+            self._do_create()
+            # only unlink the backup db on success
+            os.unlink(dbbakpath)
+        finally:
+            # we always want unlink to occur
+            os.unlink(lockpath)
+            if holds_lock:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)

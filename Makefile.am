@@ -112,13 +112,19 @@ check_PROGRAMS += \
 # add test scripts
 check_SCRIPTS += \
     test/integration/pkcs11-tool.sh \
+    test/integration/pkcs11-tool-init.sh.nosetup \
     test/integration/tls-tests.sh
 
+LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
+
 AM_INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
-INT_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
+INT_LOG_COMPILER=$(LOG_COMPILER)
 
 AM_SH_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
-SH_LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
+SH_LOG_COMPILER=$(LOG_COMPILER)
+
+AM_NOSETUP_LOG_FLAGS = --tabrmd-tcti=mssim
+NOSETUP_LOG_COMPILER=$(LOG_COMPILER)
 
 test_integration_pkcs_find_objects_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_find_objects_int_LDADD   = $(TESTS_LDADD)
@@ -164,8 +170,7 @@ endif
 # END INTEGRATION
 
 EXTRA_DIST += \
-    test/integration/pkcs11-tool.sh \
-    test/integration/tls-tests.sh \
+    $(check_SCRIPTS) \
     test/integration/test.h \
     test/integration/fixtures
 

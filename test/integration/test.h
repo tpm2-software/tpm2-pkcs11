@@ -21,7 +21,8 @@
 #include "openssl_compat.h"
 #include "utils.h"
 
-#define TOKEN_COUNT 3
+/* 3 in db tokens + 1 unitialized token */
+#define TOKEN_COUNT (3 + 1)
 
 #define GOOD_USERPIN "myuserpin"
 #define GOOD_SOPIN   "mysopin"

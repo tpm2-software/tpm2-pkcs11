@@ -8,6 +8,7 @@
 #include "log.h"
 #include "pkcs11.h"
 #include "twist.h"
+#include "token.h"
 #include "typed_memory.h"
 
 typedef struct yaml_emitter_state yaml_emitter_state;
@@ -184,6 +185,108 @@ char *emit_attributes_to_string(attr_list *attrs) {
         }
 
         /* add either scalar value or sequence of values */
+        rc = yaml_document_append_mapping_pair(&doc,
+                root, key, node);
+        if (!rc) {
+            LOGE("yaml_document_append_mapping_pair failed");
+            goto doc_delete;
+        }
+    }
+
+    yaml_emitter_t emitter = { 0 };
+
+    /* dummy dump the yaml to get size */
+    if (!yaml_emitter_initialize(&emitter)) {
+        LOGE("Could not inialize the emitter object");
+        goto doc_delete;
+    }
+
+    yaml_emitter_state state = { 0 };
+
+    yaml_emitter_set_output(&emitter, output_handler, &state);
+
+    yaml_emitter_set_canonical(&emitter, 1);
+
+    if (!yaml_emitter_dump(&emitter, &doc)) {
+        free(state.buf);
+        LOGE("dump failed");
+        goto emitter_delete;
+    }
+
+    if (!yaml_emitter_close(&emitter)) {
+        free(state.buf);
+        LOGE("close failed");
+        goto emitter_delete;
+    }
+
+    yaml_return =  state.buf;
+
+emitter_delete:
+    yaml_emitter_delete(&emitter);
+
+doc_delete:
+    yaml_document_delete(&doc);
+
+    return yaml_return;
+
+}
+
+char *emit_config_to_string(token *t) {
+
+    yaml_document_t doc = { 0 };
+
+    char *yaml_return = NULL;
+
+    int rc = yaml_document_initialize(&doc,
+            NULL, /* version directive */
+            NULL, /* directive start */
+            NULL, /* directive end */
+            0, /* start implicit */
+            0); /* end implicit */
+    if (!rc) {
+        LOGE("doc init failed");
+        return NULL;
+    }
+
+    int root = yaml_document_add_mapping(&doc, NULL,
+            YAML_ANY_MAPPING_STYLE);
+    if (!root) {
+        LOGE("root add failed");
+        goto doc_delete;
+    }
+
+    /* add config value is initialized */
+    int key = yaml_document_add_scalar(&doc, (yaml_char_t *)YAML_STR_TAG,
+         (yaml_char_t *)"token-init", -1, YAML_ANY_SCALAR_STYLE);
+    if (!key) {
+        LOGE("yaml_document_add_scalar for key failed");
+        goto doc_delete;
+    }
+
+    const char *value = t->config.is_initialized ? "true" : "false";
+
+    int node = yaml_document_add_scalar(&doc, (yaml_char_t *)YAML_BOOL_TAG,
+         (yaml_char_t *)value, -1, YAML_ANY_SCALAR_STYLE);
+
+    rc = yaml_document_append_mapping_pair(&doc,
+            root, key, node);
+    if (!rc) {
+        LOGE("yaml_document_append_mapping_pair failed");
+        goto doc_delete;
+    }
+
+    /* add the tcti config value */
+    if (t->config.tcti) {
+        key = yaml_document_add_scalar(&doc, (yaml_char_t *)YAML_STR_TAG,
+             (yaml_char_t *)"tcti", -1, YAML_ANY_SCALAR_STYLE);
+        if (!key) {
+            LOGE("yaml_document_add_scalar for key failed");
+            goto doc_delete;
+        }
+
+        node = yaml_document_add_scalar(&doc, (yaml_char_t *)YAML_STR_TAG,
+             (yaml_char_t *)t->config.tcti, -1, YAML_ANY_SCALAR_STYLE);
+
         rc = yaml_document_append_mapping_pair(&doc,
                 root, key, node);
         if (!rc) {
