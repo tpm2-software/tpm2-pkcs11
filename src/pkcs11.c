@@ -412,7 +412,7 @@ CK_RV C_GetMechanismInfo (CK_SLOT_ID slotID, CK_MECHANISM_TYPE type, CK_MECHANIS
 }
 
 CK_RV C_InitToken (CK_SLOT_ID slotID, CK_BYTE_PTR pin, CK_ULONG pin_len, CK_BYTE_PTR label) {
-    TOKEN_UNSUPPORTED;
+    TOKEN_WITH_LOCK_BY_SLOT(token_init, slotID, pin, pin_len, label);
 }
 
 CK_RV C_InitPIN (CK_SESSION_HANDLE session, CK_UTF8CHAR_PTR pin, CK_ULONG pin_len) {

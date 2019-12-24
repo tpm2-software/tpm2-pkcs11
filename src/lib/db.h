@@ -34,6 +34,8 @@ CK_RV db_update_for_pinchange(
         twist newprivblob,
         twist newpubblob);
 
+CK_RV db_init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm);
+
 CK_RV db_add_new_object(token *tok, tobject *tobj);
 
 /**
@@ -43,5 +45,11 @@ CK_RV db_add_new_object(token *tok, tobject *tobj);
  * @return
  */
 CK_RV db_delete_object(tobject *tobj);
+
+CK_RV db_get_first_pid(unsigned *id);
+
+CK_RV db_add_primary(twist blob, unsigned *pid);
+
+CK_RV db_add_token(token *tok);
 
 #endif /* SRC_PKCS11_LIB_DB_H_ */
