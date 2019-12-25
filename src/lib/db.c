@@ -222,7 +222,7 @@ error:
 int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
 
     const char *sql =
-            "SELECT handle,objauth FROM pobjects WHERE id=?1";
+            "SELECT handle,objauth FROM pobjects WHERE id=?";
 
     sqlite3_stmt *stmt;
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
