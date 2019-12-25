@@ -280,7 +280,7 @@ error:
 int init_sealobjects(unsigned tokid, sealobject *sealobj) {
 
     const char *sql =
-            "SELECT * FROM sealobjects WHERE tokid=?1";
+            "SELECT * FROM sealobjects WHERE tokid=?";
 
     sqlite3_stmt *stmt;
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
