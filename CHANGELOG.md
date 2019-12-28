@@ -1,5 +1,5 @@
 # Changelog
 
-## 1.0-RC1 - 2019-12-23
+## 1.0 - 2019-12-28
 
   * Initial Release
