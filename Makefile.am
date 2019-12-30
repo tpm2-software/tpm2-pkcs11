@@ -163,6 +163,12 @@ test_integration_pkcs_session_state_int_SOURCES = test/integration/pkcs-session-
 endif
 # END INTEGRATION
 
+EXTRA_DIST += \
+    test/integration/pkcs11-tool.sh \
+    test/integration/tls-tests.sh \
+    test/integration/test.h \
+    test/integration/fixtures
+
 ### Unit Tests ###
 if UNIT
 
