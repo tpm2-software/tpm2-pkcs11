@@ -49,7 +49,7 @@ EXTRA_DIST += lib/tpm2-pkcs11.map
 if HAVE_LD_VERSION_SCRIPT
 src_libtpm2_pkcs11_la_LDFLAGS = -Wl,--version-script=$(srcdir)/lib/tpm2-pkcs11.map
 endif # HAVE_LD_VERSION_SCRIPT
-src_libtpm2_pkcs11_la_LIBADD = $(AM_LDFLAGS) -ldl
+src_libtpm2_pkcs11_la_LIBADD = $(AM_LDFLAGS)
 src_libtpm2_pkcs11_la_SOURCES = $(LIB_PKCS11_SRC) $(LIB_PKCS11_INTERNAL_LIB_SRC)
 
 if HAVE_P11KIT
@@ -174,11 +174,11 @@ if UNIT
 #
 ### PKCS#11 TEST Library Definitions ###
 libtpm2_test_internal = src/libtpm2_test_internal.la
-src_libtpm2_test_internal_la_LIBADD = $(AM_LDFLAGS) -ldl
+src_libtpm2_test_internal_la_LIBADD = $(AM_LDFLAGS)
 src_libtpm2_test_internal_la_SOURCES = $(LIB_PKCS11_INTERNAL_LIB_SRC)
 
 libtpm2_test_pkcs11 = src/libtpm2_test_pkcs11.la
-src_libtpm2_test_pkcs11_la_LIBADD =  $(AM_LDFLAGS) -ldl $(libtpm2_test_internal) -ldl
+src_libtpm2_test_pkcs11_la_LIBADD =  $(AM_LDFLAGS) $(libtpm2_test_internal)
 src_libtpm2_test_pkcs11_la_SOURCES = $(LIB_PKCS11_SRC)
 
 noinst_LTLIBRARIES = $(libtpm2_test_pkcs11) $(libtpm2_test_internal)
