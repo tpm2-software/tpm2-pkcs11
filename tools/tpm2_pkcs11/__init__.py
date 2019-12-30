@@ -2,6 +2,6 @@
 
 import sys
 
-# Sunset python < 3 support
-if sys.version_info[0] < 3:
-    sys.exit("Python 3 or a more recent version is required.")
+# Requires python 3.7 or greater
+if (sys.version_info[0], sys.version_info[1]) < (3, 7):
+    sys.exit("Python 3.7 or a more recent version is required.")
