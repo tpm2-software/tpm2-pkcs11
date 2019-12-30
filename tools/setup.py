@@ -9,6 +9,7 @@ with open(readme, encoding='utf-8') as f:
 
 setup(
     name='tpm2-pkcs11-tools',
+    python_requires='>=3.7',
     long_description=long_description,
     long_description_content_type='text/markdown',
     version='1.33.7',
