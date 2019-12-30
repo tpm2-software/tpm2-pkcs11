@@ -8,6 +8,9 @@ AC_INIT([tpm2-pkcs11],
 
 AC_CONFIG_MACRO_DIR([m4])
 
+# propagate configure arguments to distcheck
+AC_SUBST([DISTCHECK_CONFIGURE_FLAGS],[$ac_configure_args])
+
 AX_IS_RELEASE([dash-version])
 AX_CHECK_ENABLE_DEBUG([info])
 

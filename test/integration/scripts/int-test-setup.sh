@@ -105,9 +105,8 @@ in
         TABRMD_OPTS="--session"
         TABRMD_TEST_TCTI_CONF="bus_type=session"
         # start an instance of the simulator for the test, have it use a random port
-        SIM_LOG_FILE=${TEST_BIN}_simulator.log
-        SIM_PID_FILE=${TEST_BIN}_simulator.pid
-#        SIM_TMP_DIR=$(mktemp --directory --tmpdir=/tmp tpm_server_XXXXXX)
+        SIM_LOG_FILE="$SIM_TMP_DIR/simulator.log"
+        SIM_PID_FILE="$SIM_TMP_DIR/simulator.pid"
         BACKOFF_FACTOR=2
         BACKOFF=1
         for i in $(seq 10); do
@@ -163,8 +162,8 @@ in
 esac
 
 # start tpm2-abrmd daemon
-TABRMD_LOG_FILE=${TEST_BIN}_tabrmd.log
-TABRMD_PID_FILE=${TEST_BIN}_tabrmd.pid
+TABRMD_LOG_FILE="$SIM_TMP_DIR/tabrmd.log"
+TABRMD_PID_FILE="$SIM_TMP_DIR/tabrmd.pid"
 tabrmd_start ${TABRMD_BIN} ${TABRMD_LOG_FILE} ${TABRMD_PID_FILE} "${TABRMD_OPTS}"
 if [ $? -ne 0 ]; then
     echo "failed to start tabrmd with name ${TABRMD_NAME}"

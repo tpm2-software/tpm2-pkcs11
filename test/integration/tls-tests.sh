@@ -24,7 +24,8 @@ function cleanup() {
   if [ "$1" != "no-kill" ]; then
       pkill -P $$ || true
   fi
-  rm -f index.txt index.txt.attr serial
+  rm -f index.txt index.txt.attr serial serial.old index.txt.old index.txt.attr.old \
+        02.pem client.csr client.crt client_tpm.pem
 }
 trap cleanup EXIT
 
