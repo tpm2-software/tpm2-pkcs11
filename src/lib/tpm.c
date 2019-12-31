@@ -154,8 +154,7 @@ void tpm_ctx_free(tpm_ctx *ctx) {
     }
 
     Esys_Finalize(&ctx->esys_ctx);
-    Tss2_Tcti_Finalize(ctx->tcti_ctx);
-    free(ctx->tcti_ctx);
+    Tss2_TctiLdr_Finalize(&ctx->tcti_ctx);
     free(ctx);
 }
 
