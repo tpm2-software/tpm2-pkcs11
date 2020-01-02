@@ -46,7 +46,7 @@ AC_DEFUN([do_esapi_manage_flags], [
 ])
 
 # Check for ESYS version below 2.2.1 which requires us to manage ESYS session flags
-PKG_CHECK_EXISTS([tss2-esys >= 2.2.1], [do_esapi_manage_flags])
+PKG_CHECK_EXISTS([tss2-esys < 2.2.1], [do_esapi_manage_flags])
 
 # require sqlite3 and libcrypto
 PKG_CHECK_MODULES([SQLITE3],     [sqlite3])
