@@ -75,7 +75,7 @@ fi
 make -j$(nproc)
 make -j check
 
-if [[ "$CC" != clang* ]] && [ "$PYTHON_INTERPRETER" == "python3" ]; then
+if [[ "$CC" != clang* ]]; then
     bash <(curl -s https://codecov.io/bash)
 fi
 

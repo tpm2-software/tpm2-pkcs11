@@ -14,7 +14,7 @@ The project depends on:
 4. [SQLite3](https://www.sqlite.org/)
 5. [tpm2-tss](https://github.com/tpm2-software/tpm2-tss): **MUST USE VERSION >= 2.0**
 6. [tpm2-tools](https://github.com/tpm2-software/tpm2-tools): **MUST USE MASTER BRANCH**
-7. [Python](https://www.python.org/): **NOT TESTED WITH PYTHON >= 2.7**
+7. [Python](https://www.python.org/): **Requires version >= 3.7**
 8. [openssl](https://www.openssl.org/): **MUST USE VERSION >= 1.0.2g**
 9. [autoconf-archive](https://github.com/autoconf-archive/autoconf-archive): **Tested with release v2018.03.13**
      Others may not work, some distros package versions too old. Either install or just copy the contents of the
