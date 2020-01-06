@@ -1,6 +1,6 @@
 # Changelog
 
-### 1.0.1-RC0 - 2019-12-30
+### 1.0.1 - 2020-1-6
 
   * stop linking against libdl
   * add missing test integration scripts to dist tarball.
