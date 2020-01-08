@@ -564,8 +564,11 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
             return CKR_KEY_HANDLE_INVALID;
         }
 
-        // Already loaded, ignored.
-        if (tobj->handle) {
+        /*
+         * The object may already be loaded by the TPM or may just be
+         * a public key object not-resident in the TPM.
+         */
+        if (tobj->handle || !tobj->pub) {
             *loaded_tobj = tobj;
             return CKR_OK;
         }

@@ -4,9 +4,6 @@
 
 #include "openssl_compat.h"
 
-#ifndef SRC_LIB_OPENSSL_COMPAT_C_
-#define SRC_LIB_OPENSSL_COMPAT_C_
-
 #if defined(LIB_TPM2_OPENSSL_OPENSSL_PRE11)
 
 /*
@@ -62,5 +59,28 @@ const unsigned char *ASN1_STRING_get0_data(const ASN1_STRING *x) {
     return ASN1_STRING_data((ASN1_STRING *)x);
 }
 
+int RSA_set0_key(RSA *r, BIGNUM *n, BIGNUM *e, BIGNUM *d) {
+
+    if ((r->n == NULL && n == NULL) || (r->e == NULL && e == NULL)) {
+        return 0;
+    }
+
+    if (n != NULL) {
+        BN_free(r->n);
+        r->n = n;
+    }
+
+    if (e != NULL) {
+        BN_free(r->e);
+        r->e = e;
+    }
+
+    if (d != NULL) {
+        BN_free(r->d);
+        r->d = d;
+    }
+
+    return 1;
+}
+
 #endif
-#endif /* SRC_LIB_OPENSSL_COMPAT_C_ */

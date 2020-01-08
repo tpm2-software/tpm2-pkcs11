@@ -124,9 +124,12 @@ typedef struct tpm_encrypt_data tpm_encrypt_data;
 CK_RV tpm_encrypt_data_init(tpm_ctx *ctx, uint32_t handle, twist auth, CK_MECHANISM_PTR, tpm_encrypt_data **encdata);
 void tpm_encrypt_data_free(tpm_encrypt_data *encdata);
 
-CK_RV tpm_encrypt(tpm_encrypt_data *tpm_enc_data, CK_BYTE_PTR ptext, CK_ULONG ptextlen, CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen);
+/* forward reference */
+typedef union crypto_op_data crypto_op_data;
 
-CK_RV tpm_decrypt(tpm_encrypt_data *tpm_enc_data, CK_BYTE_PTR ctext, CK_ULONG ctextlen, CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen);
+CK_RV tpm_encrypt(crypto_op_data *opdata, CK_BYTE_PTR ptext, CK_ULONG ptextlen, CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen);
+
+CK_RV tpm_decrypt(crypto_op_data *opdata, CK_BYTE_PTR ctext, CK_ULONG ctextlen, CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen);
 
 bool tpm_register_handle(tpm_ctx *ctx, uint32_t *handle);
 

@@ -4,8 +4,9 @@
 #include <stdlib.h>
 
 #include "attrs.h"
-#include "db.h"
 #include "checks.h"
+#include "db.h"
+#include "emitter.h"
 #include "log.h"
 #include "object.h"
 #include "pkcs11.h"
@@ -573,4 +574,237 @@ CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object) {
     rv = CKR_OK;
 
     return rv;
+}
+
+static CK_RV handle_rsa_public(token *tok, CK_ATTRIBUTE_PTR templ, CK_ULONG count, tobject **tobj) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    tobject *obj = NULL;
+
+    /* RSA Public keys should have a modulus and exponent, verify */
+    CK_ATTRIBUTE_PTR a_modulus = attr_get_attribute_by_type_raw(templ, count, CKA_MODULUS);
+    if (!a_modulus) {
+        return CKR_TEMPLATE_INCOMPLETE;
+    }
+
+    CK_ATTRIBUTE_PTR a_exponent = attr_get_attribute_by_type_raw(templ, count, CKA_PUBLIC_EXPONENT);
+    if (!a_exponent) {
+        return CKR_TEMPLATE_INCOMPLETE;
+    }
+
+    /*
+     * Create a new typed attr list
+     */
+    attr_list *tmp_attrs = NULL;
+    bool res = attr_typify(templ, count, &tmp_attrs);
+    if (!res) {
+        return CKR_GENERAL_ERROR;
+    }
+    assert(tmp_attrs);
+
+    /* Add attribute CKA_LOCAL if missing */
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tmp_attrs, CKA_LOCAL);
+    if (!a) {
+        bool result = attr_list_add_bool(tmp_attrs, CKA_LOCAL, CK_FALSE);
+        if (!result) {
+            rv = CKR_HOST_MEMORY;
+            goto out;
+        }
+    }
+
+    /* add CKA_ENCRYPT if missing */
+    a = attr_get_attribute_by_type(tmp_attrs, CKA_ENCRYPT);
+    if (!a) {
+        bool result = attr_list_add_bool(tmp_attrs, CKA_ENCRYPT, CK_TRUE);
+        if (!result) {
+            rv = CKR_HOST_MEMORY;
+            goto out;
+        }
+    }
+
+    /* add CKA_VERIFY if missing */
+    a = attr_get_attribute_by_type(tmp_attrs, CKA_VERIFY);
+    if (!a) {
+        bool result = attr_list_add_bool(tmp_attrs, CKA_VERIFY, CK_TRUE);
+        if (!result) {
+            rv = CKR_HOST_MEMORY;
+            goto out;
+        }
+    }
+
+    /* add CKA_KEY_GEN_MECHANISM as CK_UNAVAILABLE_INFORMATION */
+    a = attr_get_attribute_by_type(tmp_attrs, CKA_KEY_GEN_MECHANISM);
+    if (!a) {
+        bool result = attr_list_add_int(tmp_attrs, CKA_KEY_GEN_MECHANISM, CK_UNAVAILABLE_INFORMATION);
+        if (!result) {
+            rv = CKR_HOST_MEMORY;
+            goto out;
+        }
+    } else {
+        CK_ULONG genmech = 0;
+        rv = attr_CK_ULONG(a, &genmech);
+        if (rv != CKR_OK) {
+            LOGE("Error converting attribute CKA_KEY_GEN_MECHANISM");
+            goto out;
+        }
+
+        if (genmech != CK_UNAVAILABLE_INFORMATION) {
+           LOGE("CKA_KEY_GEN_MECHANISM cannot be anything but "
+                   "CKA_KEY_GEN_MECHANISM, got: %lu",
+                   genmech);
+           rv = CKR_ATTRIBUTE_VALUE_INVALID;
+           goto out;
+        }
+    }
+
+    /* populate CKA_ALLOWED_MECHANISMS */
+    rv = rsa_gen_mechs(tmp_attrs, NULL);
+    if (rv != CKR_OK) {
+        LOGE("Could not add RSA public mechanisms");
+        goto out;
+    }
+
+    /* populate missing RSA public key attributes */
+    rv = attr_common_add_RSA_publickey(&tmp_attrs);
+    if (rv != CKR_OK) {
+        LOGE("Could not add RSA public missing attributes");
+        goto out;
+    }
+
+    /*
+     * Now that everything is verified, create a new tobject
+     * and populate the fields that matter.
+     */
+    obj = tobject_new();
+    if (!obj) {
+        LOGE("oom");
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    obj->attrs = tmp_attrs;
+    tmp_attrs = NULL;
+
+    /* add the object to the db */
+    rv = db_add_new_object(tok, obj);
+    if (rv != CKR_OK) {
+        goto out;
+    }
+
+    /* assign temp tobject to callee provided pointer */
+    *tobj = obj;
+
+    /* callee now takes owenership */
+    obj = NULL;
+
+    rv = CKR_OK;
+
+out:
+    attr_list_free(tmp_attrs);
+    tobject_free(obj);
+
+    return rv;
+}
+
+CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OBJECT_HANDLE *object) {
+    assert(ctx);
+    check_pointer(templ);
+    check_pointer(object);
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    CK_STATE state = session_ctx_state_get(ctx);
+    LOGV("state: %lu", state);
+
+    /*
+     * Currently we only support RW user session state objects.
+     */
+    if (state != CKS_RW_USER_FUNCTIONS) {
+        if (state == CKS_RW_SO_FUNCTIONS) {
+            return CKR_USER_NOT_LOGGED_IN;
+        } else {
+            return CKR_SESSION_READ_ONLY;
+        }
+    }
+
+    /*
+     * If CKA_LOCAL is specified, it can never be CK_TRUE
+     */
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type_raw(templ, count, CKA_LOCAL);
+    if (a) {
+        CK_BBOOL bbool = CK_FALSE;
+        rv = attr_CK_BBOOL(a, &bbool);
+        if (rv != CKR_OK) {
+            LOGE("Error converting attribute CKA_LOCAL");
+            return rv;
+        }
+        if (bbool == CK_TRUE) {
+           LOGE("CKA_LOCAL cannot be true");
+           return CKR_ATTRIBUTE_VALUE_INVALID;
+        }
+    }
+
+    /*
+     * We only support RSA Public objects, so verify it.
+     */
+    a = attr_get_attribute_by_type_raw(templ, count, CKA_CLASS);
+    if (!a) {
+        LOGE("Expected attribute CKA_CLASS");
+        return CKR_TEMPLATE_INCOMPLETE;
+    }
+
+    CK_OBJECT_CLASS clazz;
+    rv = attr_CK_OBJECT_CLASS(a, &clazz);
+    if (rv != CKR_OK) {
+        LOGE("Error converting attribute CKA_CLASS");
+        return CKR_TEMPLATE_INCOMPLETE;
+    }
+
+    a = attr_get_attribute_by_type_raw(templ, count, CKA_KEY_TYPE);
+    if (!a) {
+        LOGE("Expected attribute CKA_KEY_TYPE");
+        return CKR_TEMPLATE_INCOMPLETE;
+    }
+
+    CK_KEY_TYPE key_type;
+    rv = attr_CK_KEY_TYPE(a, &key_type);
+    if (rv != CKR_OK) {
+        LOGE("Error converting attribute CKA_KEY_TYPE");
+        return rv;
+    }
+
+    if (key_type != CKK_RSA ||
+            clazz != CKO_PUBLIC_KEY) {
+        LOGE("Can only create RSA Public key objects, "
+                "CKA_CLASS(%lu), CKA_KEY_TYPE(%lu)",
+                clazz, key_type);
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    token *tok = session_ctx_get_token(ctx);
+    assert(tok);
+
+    tobject *new_tobj = NULL;
+    rv = handle_rsa_public(tok, templ, count, &new_tobj);
+    if (rv != CKR_OK) {
+        LOGE("Error creating rsa public key: %lu", rv);
+        return rv;
+    }
+    assert(new_tobj);
+
+    /*
+     * Populate linked list of objects add to object list
+     * preserving old object list if present
+     */
+    if (tok->tobjects) {
+        new_tobj->l.next = &tok->tobjects->l;
+    }
+
+    tok->tobjects = new_tobj;
+
+    /* set the handle */
+    *object = new_tobj->id;
+
+    return CKR_OK;
 }

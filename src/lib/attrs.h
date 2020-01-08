@@ -234,6 +234,8 @@ CK_RV attr_CK_ULONG(CK_ATTRIBUTE_PTR attr, CK_ULONG *x);
  */
 CK_RV attr_CK_OBJECT_CLASS(CK_ATTRIBUTE_PTR attr, CK_OBJECT_CLASS *x);
 
+CK_RV attr_CK_KEY_TYPE(CK_ATTRIBUTE_PTR attr, CK_KEY_TYPE *x);
+
 /**
  * Searches an attr_list for an attribute specified by type.
  * @param haystack
@@ -258,5 +260,9 @@ CK_ATTRIBUTE_PTR attr_get_attribute_by_type(attr_list *haystack, CK_ATTRIBUTE_TY
  */
 CK_ATTRIBUTE_PTR attr_get_attribute_by_type_raw(CK_ATTRIBUTE_PTR haystack, CK_ULONG haystack_count,
         CK_ATTRIBUTE_TYPE needle);
+
+CK_RV attr_common_add_RSA_publickey(attr_list **public_attrs);
+
+CK_RV rsa_gen_mechs(attr_list *new_pub_attrs, attr_list *new_priv_attrs);
 
 #endif /* SRC_LIB_ATTRS_H_ */
