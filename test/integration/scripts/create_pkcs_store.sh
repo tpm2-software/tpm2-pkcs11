@@ -134,7 +134,7 @@ echo "Added RSA Keys"
 
 echo "Adding 2 EC p256 keys under token \"label\""
 for i in `seq 0 1`; do
-  tpm2_ptool addkey --algorithm=ecc256 --label="label" --key-label=$i --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+  tpm2_ptool addkey --algorithm=ecc256 --label="label" --key-label="ec$i" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 done;
 echo "Added EC Keys"
 
@@ -184,14 +184,21 @@ cert="$TPM2_PKCS11_STORE/cert.pem"
 # often silly and leak.
 setup_asan
 TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
-    req -new -x509 -days 365 -subj '/CN=my key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_1 -out "$cert"
+    req -new -x509 -days 365 -subj '/CN=my key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_ec1 -out "$cert.ec1"
+
+TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
+    req -new -x509 -days 365 -subj '/CN=my key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_rsa1 -out "$cert.rsa1"
 clear_asan
 
 #
 # insert cert to token
 #
-tpm2_ptool addcert --label=label --key-label=1 --path=$TPM2_PKCS11_STORE "$cert"
+echo "Adding EC Certificate"
+tpm2_ptool addcert --label=label --key-label=ec1 --path=$TPM2_PKCS11_STORE "$cert.ec1"
+echo "added x509 Certificate"
 
+echo "Adding RSA Certificate"
+tpm2_ptool addcert --label=label --key-label=rsa1 --path=$TPM2_PKCS11_STORE "$cert.rsa1"
 echo "added x509 Certificate"
 
 # add 1 aes key under label "import-keys"

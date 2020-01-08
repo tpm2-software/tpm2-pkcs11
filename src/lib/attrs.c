@@ -565,7 +565,7 @@ error:
     return rv;
 }
 
-static CK_RV attr_common_add_RSA_publickey(attr_list **public_attrs) {
+CK_RV attr_common_add_RSA_publickey(attr_list **public_attrs) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -762,7 +762,7 @@ static CK_RV attr_common_add_EC_privatekey(attr_list **private_attrs) {
     return attr_common_add_privatekey(private_attrs);
 }
 
-static CK_RV rsa_gen_mechs(attr_list *new_pub_attrs, attr_list *new_priv_attrs) {
+CK_RV rsa_gen_mechs(attr_list *new_pub_attrs, attr_list *new_priv_attrs) {
 
     /* XXX These are hardcoded for now */
     CK_MECHANISM_TYPE t[] = {
@@ -776,13 +776,17 @@ static CK_RV rsa_gen_mechs(attr_list *new_pub_attrs, attr_list *new_priv_attrs) 
         CKM_RSA_PKCS_PSS
     };
 
-    bool r = attr_list_add_buf(new_pub_attrs, CKA_ALLOWED_MECHANISMS,
-            (CK_BYTE_PTR)&t, sizeof(t));
-    goto_error_false(r);
+    if (new_pub_attrs) {
+        bool r = attr_list_add_buf(new_pub_attrs, CKA_ALLOWED_MECHANISMS,
+                (CK_BYTE_PTR)&t, sizeof(t));
+        goto_error_false(r);
+    }
 
-    r = attr_list_add_buf(new_priv_attrs, CKA_ALLOWED_MECHANISMS,
+    if (new_priv_attrs) {
+        bool r = attr_list_add_buf(new_priv_attrs, CKA_ALLOWED_MECHANISMS,
             (CK_BYTE_PTR)&t, sizeof(t));
-    goto_error_false(r);
+        goto_error_false(r);
+    }
 
     return CKR_OK;
 
@@ -1114,3 +1118,4 @@ error:
 UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_ULONG);
 UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_BBOOL);
 UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_OBJECT_CLASS);
+UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_KEY_TYPE);

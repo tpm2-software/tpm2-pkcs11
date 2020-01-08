@@ -752,21 +752,18 @@ static void test_keygen_keytype(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
-static void test_non_common_template_attrs(void **state) {
-
-    test_info *ti = test_info_from_state(state);
-    CK_SESSION_HANDLE session = ti->handle;
+static CK_RV create_rsa_keypair(CK_SESSION_HANDLE session, CK_UTF8CHAR *label,
+        CK_OBJECT_HANDLE *pubkey, CK_OBJECT_HANDLE *privkey) {
 
     CK_BBOOL ck_true = CK_TRUE;
     CK_BBOOL ck_false = CK_FALSE;
-    CK_UTF8CHAR label[] = "test_non_common_template_attrs";
 
     CK_ATTRIBUTE pub[] = {
         ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
         ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
         ADD_ATTR_BASE(CKA_ENCRYPT, ck_true),
         ADD_ATTR_BASE(CKA_VERIFY, ck_true),
-        ADD_ATTR_STR(CKA_LABEL, label),
+        { .type = CKA_LABEL, .pValue = label, .ulValueLen = strlen((char *)label) },
         ADD_ATTR_BASE(CKA_VERIFY_RECOVER, ck_false),
         ADD_ATTR_BASE(CKA_WRAP, ck_false),
         ADD_ATTR_BASE(CKA_TRUSTED, ck_false),
@@ -777,7 +774,7 @@ static void test_non_common_template_attrs(void **state) {
         ADD_ATTR_BASE(CKA_SIGN, ck_true),
         ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
         ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
-        ADD_ATTR_STR(CKA_LABEL, label),
+        { .type = CKA_LABEL, .pValue = label, .ulValueLen = strlen((char *)label) },
         ADD_ATTR_BASE(CKA_EXTRACTABLE, ck_false),
         ADD_ATTR_BASE(CKA_SIGN_RECOVER, ck_false),
         ADD_ATTR_BASE(CKA_UNWRAP, ck_false),
@@ -790,22 +787,146 @@ static void test_non_common_template_attrs(void **state) {
         .ulParameterLen = 0
     };
 
+    return C_GenerateKeyPair (session,
+            &mech,
+            pub, ARRAY_LEN(pub),
+            priv, ARRAY_LEN(priv),
+            pubkey, privkey);
+}
+
+static void test_non_common_template_attrs(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+    CK_UTF8CHAR label[] = "test_non_common_template_attrs";
+
     CK_OBJECT_HANDLE pubkey;
     CK_OBJECT_HANDLE privkey;
 
     user_login(session);
 
-    CK_RV rv = C_GenerateKeyPair (session,
-            &mech,
-            pub, ARRAY_LEN(pub),
-            priv, ARRAY_LEN(priv),
+    CK_RV rv = create_rsa_keypair(session, label,
             &pubkey, &privkey);
     assert_int_equal(rv, CKR_OK);
+}
+
+static void test_create_obj_rsa_public_key(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_UTF8CHAR label[] = "test_external_pubkey";
+
+    CK_OBJECT_HANDLE tmppubkey;
+    CK_OBJECT_HANDLE privkey;
+
+    user_login(session);
+
+    /* create a private public RSA keyapir */
+    CK_RV rv = create_rsa_keypair(session, label,
+            &tmppubkey, &privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    BYTE _buf[2][2048] = { 0 };
+    CK_ATTRIBUTE gettempl[] = {
+        { .type = CKA_MODULUS, .pValue = _buf[0], .ulValueLen = sizeof(_buf[0]) },
+        { .type = CKA_PUBLIC_EXPONENT, .pValue = _buf[1], .ulValueLen = sizeof(_buf[1]) }
+    };
+
+    /* get the modulus and exponent */
+    rv = C_GetAttributeValue(session, tmppubkey, gettempl, ARRAY_LEN(gettempl));
+    assert_int_equal(rv, CKR_OK);
+
+    assert_int_equal(gettempl[0].type, CKA_MODULUS);
+    assert_int_equal(gettempl[1].type, CKA_PUBLIC_EXPONENT);
+
+    /*
+     * create a new public key object using the C_CreateObject interface
+     * Using the public key information from the keypairgen.
+     */
+    CK_OBJECT_CLASS clazz = CKO_PUBLIC_KEY;
+    CK_KEY_TYPE key_type = CKK_RSA;
+
+    CK_ATTRIBUTE template[] = {
+      {CKA_CLASS, &clazz, sizeof(clazz)},
+      {CKA_KEY_TYPE, &key_type, sizeof(key_type)},
+      {CKA_MODULUS, gettempl[0].pValue, gettempl[0].ulValueLen},
+      {CKA_PUBLIC_EXPONENT, gettempl[1].pValue, gettempl[1].ulValueLen}
+    };
+
+    CK_OBJECT_HANDLE pubkey = 0;
+    rv = C_CreateObject(session, template, ARRAY_LEN(template), &pubkey);
+    assert_int_equal(rv, CKR_OK);
+
+    /* https://stackoverflow.com/questions/22663457/pkcs11-key-wrapping-using-openssl */
+    CK_MECHANISM mech = {
+            .mechanism = CKM_RSA_PKCS,
+            .ulParameterLen = 0,
+            .pParameter = NULL
+    };
+
+    /*
+     * Encrypt with pub key and decrypt with privkey
+     */
+    rv = C_EncryptInit(session, &mech, pubkey);
+    assert_int_equal(rv, CKR_OK);
+
+    BYTE plaintext[] = {'m', 'y', 's', 'e', 'c', 'r', 'e', 't', 'd', 'a', 't', 'a' };
+
+    CK_BYTE ciphertext[256] = { 0 };
+    CK_ULONG ciphertext_len = sizeof(ciphertext);
+    rv = C_Encrypt(session, plaintext, sizeof(plaintext), ciphertext, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_DecryptInit(session, &mech, privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE plaintext2[sizeof(ciphertext)] = { 0 };
+    CK_ULONG plaintext2_len = sizeof(plaintext2);
+    rv = C_Decrypt(session, ciphertext, ciphertext_len, plaintext2, &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+
+    /* mode has the plaintext at end, so strip */
+    CK_BYTE *p2 = &plaintext2[sizeof(plaintext2) - sizeof(plaintext)];
+
+    assert_memory_equal(plaintext, p2, sizeof(plaintext));
+
+    /*
+     * FIXME #384
+     * Encrypt with priv key and decrypt with pubkey
+     *
+     * This doesn't seem to be working as expected, and it likely
+     * this issue:
+     *   - https://superuser.com/questions/1363466/how-to-decrypt-with-public-key-after-encrypt-with-private-key
+     *
+     * Considering that this method isn't a RAW rsa operation, the TPM is likely using the public portion.
+     * So this may never work with this mode.
+     *
+     * Currently fails with:
+     *  ERROR on line: "203" in file: "src/lib/encrypt.c": Could not perform RSA public decrypt: error:0407008A:rsa routines:RSA_padding_check_PKCS1_type_1:invalid padding
+     */
+//    rv = C_EncryptInit(session, &mech, privkey);
+//    assert_int_equal(rv, CKR_OK);
+//
+//    rv = C_Encrypt(session, plaintext, sizeof(plaintext), ciphertext, &ciphertext_len);
+//    assert_int_equal(rv, CKR_OK);
+//
+//    rv = C_DecryptInit(session, &mech, pubkey);
+//    assert_int_equal(rv, CKR_OK);
+//
+//    rv = C_Decrypt(session, ciphertext, ciphertext_len, plaintext2, &plaintext2_len);
+//    assert_int_equal(rv, CKR_OK);
+//
+//    p2 = &plaintext2[sizeof(plaintext2) - sizeof(plaintext)];
+
+    assert_memory_equal(plaintext, p2, sizeof(plaintext));
 }
 
 int main() {
 
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_create_obj_rsa_public_key,
+            test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_rsa_keygen_missing_attributes,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_destroy,

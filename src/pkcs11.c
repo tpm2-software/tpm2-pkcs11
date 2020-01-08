@@ -456,7 +456,7 @@ CK_RV C_Logout (CK_SESSION_HANDLE session) {
 }
 
 CK_RV C_CreateObject (CK_SESSION_HANDLE session, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OBJECT_HANDLE *object) {
-    TOKEN_UNSUPPORTED;
+    TOKEN_WITH_LOCK_BY_SESSION_PUB_RO(object_create, session, templ, count, object);
 }
 
 CK_RV C_CopyObject (CK_SESSION_HANDLE session, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OBJECT_HANDLE *new_object) {

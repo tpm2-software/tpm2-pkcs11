@@ -79,3 +79,6 @@ nbproject/
 build/
 m4/*
 !m4/ld-version-script.m4
+
+# Java class files
+*.class

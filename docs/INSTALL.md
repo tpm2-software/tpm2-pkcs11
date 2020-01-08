@@ -24,6 +24,9 @@ Step one is to satisfy the following dependencies:
   - pkcs11-tool (optional for testing)
   - openssl (optional for testing)
   - libp11 (optional for testing)
+  - java (optional for testing)
+  - junit (optional for testing)
+  - hamcrest (optional for testing)
 
 After satisfying the dependencies one invoke the regular autotools build process:
 ```bash
