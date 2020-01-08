@@ -10,9 +10,18 @@
 
 typedef struct token token;
 
+typedef struct sw_encrypt_data sw_encrypt_data;
 typedef struct encrypt_op_data encrypt_op_data;
-struct encrypt_op_data {
+
+typedef union crypto_op_data crypto_op_data;
+union crypto_op_data{
     tpm_encrypt_data *tpm_enc_data;
+    sw_encrypt_data *sw_enc_data;
+};
+
+struct encrypt_op_data {
+    bool use_sw;
+    crypto_op_data cryptopdata;
 };
 
 encrypt_op_data *encrypt_op_data_new(void);

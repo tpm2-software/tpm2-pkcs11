@@ -26,6 +26,7 @@
 #include "attrs.h"
 #include "checks.h"
 #include "digest.h"
+#include "encrypt.h"
 #include "openssl_compat.h"
 #include "pkcs11.h"
 #include "log.h"
@@ -1828,9 +1829,11 @@ out:
 #define ENCRYPT 0
 #define DECRYPT 1
 
-CK_RV tpm_encrypt(tpm_encrypt_data *tpm_enc_data,
+CK_RV tpm_encrypt(crypto_op_data *opdata,
         CK_BYTE_PTR ptext, CK_ULONG ptextlen,
         CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen) {
+
+    tpm_encrypt_data *tpm_enc_data = opdata->tpm_enc_data;
 
     if (tpm_enc_data->is_rsa) {
         return tpm_rsa_encrypt(tpm_enc_data, ptext, ptextlen, ctext, ctextlen);
@@ -1847,9 +1850,11 @@ CK_RV tpm_encrypt(tpm_encrypt_data *tpm_enc_data,
             iv, ptext, ptextlen, ctext, ctextlen);
 }
 
-CK_RV tpm_decrypt(tpm_encrypt_data *tpm_enc_data,
+CK_RV tpm_decrypt(crypto_op_data *opdata,
         CK_BYTE_PTR ctext, CK_ULONG ctextlen,
         CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen) {
+
+    tpm_encrypt_data *tpm_enc_data = opdata->tpm_enc_data;
 
     if (tpm_enc_data->is_rsa) {
         return tpm_rsa_decrypt(tpm_enc_data, ctext, ctextlen, ptext, ptextlen);

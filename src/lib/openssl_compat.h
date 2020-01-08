@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 #include <openssl/bn.h>
 #include <openssl/ec.h>
+#include <openssl/rsa.h>
 
 #ifndef SRC_LIB_OPENSSL_COMPAT_H_
 #define SRC_LIB_OPENSSL_COMPAT_H_
@@ -16,6 +17,8 @@ size_t EC_POINT_point2buf(const EC_GROUP *group, const EC_POINT *point,
                           unsigned char **pbuf, BN_CTX *ctx);
 
 const unsigned char *ASN1_STRING_get0_data(const ASN1_STRING *x);
+
+int RSA_set0_key(RSA *r, BIGNUM *n, BIGNUM *e, BIGNUM *d);
 
 #endif
 

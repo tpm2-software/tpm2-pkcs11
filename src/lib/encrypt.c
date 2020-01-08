@@ -1,13 +1,40 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 
+#include <openssl/bn.h>
+#include <openssl/err.h>
+#include <openssl/rsa.h>
+
 #include "checks.h"
 #include "encrypt.h"
+#include "openssl_compat.h"
 #include "session.h"
 #include "session_ctx.h"
 #include "token.h"
 #include "tpm.h"
 
-typedef CK_RV (*tpm_op)(tpm_encrypt_data *tpm_enc_data, CK_BYTE_PTR in, CK_ULONG inlen, CK_BYTE_PTR out, CK_ULONG_PTR outlen);
+struct sw_encrypt_data {
+    int padding;
+    RSA *key;
+};
+
+typedef CK_RV (*crypto_op)(crypto_op_data *enc_data, CK_BYTE_PTR in, CK_ULONG inlen, CK_BYTE_PTR out, CK_ULONG_PTR outlen);
+
+static sw_encrypt_data *sw_encrypt_data_new(void) {
+
+    return (sw_encrypt_data *)calloc(1, sizeof(sw_encrypt_data));
+}
+
+static void sw_encrypt_data_free(sw_encrypt_data *enc_data) {
+    if (!enc_data) {
+        return;
+    }
+
+    if (enc_data->key) {
+        RSA_free(enc_data->key);
+    }
+
+    free(enc_data);
+}
 
 encrypt_op_data *encrypt_op_data_new(void) {
 
@@ -17,15 +44,195 @@ encrypt_op_data *encrypt_op_data_new(void) {
 void encrypt_op_data_free(encrypt_op_data **opdata) {
 
     if (opdata) {
-        tpm_encrypt_data_free((*opdata)->tpm_enc_data);
+        (*opdata)->use_sw ?
+                sw_encrypt_data_free((*opdata)->cryptopdata.sw_enc_data) :
+                tpm_encrypt_data_free((*opdata)->cryptopdata.tpm_enc_data);
         free(*opdata);
         *opdata = NULL;
     }
 }
 
+static CK_RV sw_encrypt_data_init(CK_MECHANISM *mechanism, tobject *tobj, sw_encrypt_data **enc_data) {
+
+    BIGNUM *e = NULL;
+    BIGNUM *n = NULL;
+    RSA *r = NULL;
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    /* we only support one mechanism via this path right now */
+    if (mechanism->mechanism != CKM_RSA_PKCS) {
+        LOGE("Cannot synthesize mechanism for key");
+        return CKR_MECHANISM_INVALID;
+    }
+
+    /*
+     * We know this in RSA key since we checked the mechanism,
+     * create the OSSL key
+     */
+    r = RSA_new();
+    if (!r) {
+        LOGE("oom");
+        rv = CKR_HOST_MEMORY;
+        goto error;
+    }
+
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_MODULUS);
+    if (!a) {
+        LOGE("Expected RSA key to have modulus");
+        goto error;
+    }
+
+    n = BN_bin2bn(a->pValue, a->ulValueLen, NULL);
+    if (!n) {
+        LOGE("Could not create BN from modulus");
+        goto error;
+    }
+
+    a = attr_get_attribute_by_type(tobj->attrs, CKA_PUBLIC_EXPONENT);
+    if (!a) {
+        LOGE("Expected RSA key to have exponent");
+        goto error;
+    }
+
+    e = BN_bin2bn(a->pValue, a->ulValueLen, NULL);
+    if (!e) {
+        LOGE("Could not create BN from exponent");
+        goto error;
+    }
+
+    int rc = RSA_set0_key(r, n, e, NULL);
+    if (!rc) {
+        LOGE("Could not set RSA public key from parts");
+        goto error;
+    }
+
+    /* ownership of memory transferred */
+    n = NULL;
+    e = NULL;
+
+    sw_encrypt_data *d = sw_encrypt_data_new();
+    if (!d) {
+        LOGE("oom");
+        rv = CKR_HOST_MEMORY;
+        goto error;
+    }
+
+    d->key = r;
+    d->padding = RSA_PKCS1_PADDING;
+
+    *enc_data = d;
+
+    return CKR_OK;
+error:
+    if (n) {
+        BN_free(n);
+    }
+    if (e) {
+        BN_free(e);
+    }
+    return rv;
+}
+
+CK_RV sw_encrypt(crypto_op_data *opdata,
+        CK_BYTE_PTR ptext, CK_ULONG ptextlen,
+        CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen) {
+    assert(opdata);
+
+    sw_encrypt_data *sw_enc_data = opdata->sw_enc_data;
+
+    assert(sw_enc_data);
+    assert(sw_enc_data->key);
+
+    RSA *r = sw_enc_data->key;
+    int padding = sw_enc_data->padding;
+
+    /* make sure destination is big enough */
+    int to_len = RSA_size(r);
+    if (to_len < 0) {
+        LOGE("RSA_Size cannot be 0");
+        return CKR_GENERAL_ERROR;
+    }
+
+    if ((CK_ULONG)to_len > *ctextlen) {
+        *ctextlen = to_len;
+        return CKR_BUFFER_TOO_SMALL;
+    }
+
+    int rc = RSA_public_encrypt(ptextlen, ptext,
+        ctext, r, padding);
+    if (!rc) {
+        LOGE("Could not perform RSA public encrypt");
+        return CKR_GENERAL_ERROR;
+    }
+
+    assert(rc > 0);
+
+    *ctextlen = rc;
+
+    return CKR_OK;
+}
+
+CK_RV sw_decrypt(crypto_op_data *opdata,
+        CK_BYTE_PTR ctext, CK_ULONG ctextlen,
+        CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen) {
+    assert(opdata);
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    sw_encrypt_data *sw_enc_data = opdata->sw_enc_data;
+
+    assert(sw_enc_data);
+    assert(sw_enc_data->key);
+
+    RSA *r = sw_enc_data->key;
+    int padding = sw_enc_data->padding;
+    int to_len = RSA_size(r);
+    if (to_len <= 0) {
+        LOGE("Expected buffer size to be > 0, got: %d", to_len);
+        return CKR_GENERAL_ERROR;
+    }
+
+    unsigned char *buffer = calloc(1, to_len);
+    if (!buffer) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    int rc = RSA_public_decrypt(ctextlen, ctext, buffer, r, padding);
+    if (rc <= 0) {
+        LOGE("Could not perform RSA public decrypt: %s",
+                ERR_error_string(ERR_get_error(), NULL));
+        goto out;
+    }
+    assert(rc > 0);
+
+    if (*ptextlen > (CK_ULONG)rc) {
+        *ptextlen = rc;
+        free(buffer);
+        return CKR_BUFFER_TOO_SMALL;
+    }
+
+    memcpy(ptext, buffer, rc);
+    *ptextlen = rc;
+
+    rv = CKR_OK;
+
+out:
+    free(buffer);
+    return rv;
+}
+
 static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, operation op, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
 
     check_pointer(mechanism);
+
+    LOGV("mechanism->mechanism: %lu\n"
+            "mechanism->ulParameterLen: %lu\n"
+            "mechanism->pParameter: %s",
+            mechanism->mechanism,
+            mechanism->ulParameterLen,
+            mechanism->pParameter ? "set" : "(null)");
 
     token *tok = session_ctx_get_token(ctx);
     assert(tok);
@@ -60,7 +267,18 @@ static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata,
         opdata = supplied_opdata;
     }
 
-    rv = tpm_encrypt_data_init(tok->tctx, tobj->handle, tobj->unsealed_auth, mechanism, &opdata->tpm_enc_data);
+    /*
+     * Objects that don't have a tpm pub pointer blob are things like public key
+     * only object and don't go to the TPM.
+     */
+    if (tobj->pub) {
+       rv = tpm_encrypt_data_init(tok->tctx, tobj->handle, tobj->unsealed_auth, mechanism,
+               &opdata->cryptopdata.tpm_enc_data);
+    } else {
+        opdata->use_sw = true;
+        rv = sw_encrypt_data_init(mechanism, tobj, &opdata->cryptopdata.sw_enc_data);
+    }
+
     if (rv != CKR_OK) {
         tobject_user_decrement(tobj);
         encrypt_op_data_free(&opdata);
@@ -105,19 +323,19 @@ static CK_RV common_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdat
         opdata = supplied_opdata;
     }
 
-    tpm_op fop;
+    crypto_op fop;
     switch(op) {
     case operation_encrypt:
-        fop = tpm_encrypt;
+        fop = opdata->use_sw ? sw_encrypt : tpm_encrypt;
         break;
     case operation_decrypt:
-        fop = tpm_decrypt;
+        fop = opdata->use_sw ? sw_decrypt : tpm_decrypt;
         break;
     default:
         return CKR_GENERAL_ERROR;
     }
 
-    rv = fop(opdata->tpm_enc_data, part, part_len,
+    rv = fop(&opdata->cryptopdata, part, part_len,
             encrypted_part, encrypted_part_len);
     if (rv != CKR_OK) {
         goto out;

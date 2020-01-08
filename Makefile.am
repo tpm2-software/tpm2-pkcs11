@@ -11,6 +11,8 @@ AM_LDFLAGS      = $(EXTRA_LDFLAGS) $(CODE_COVERAGE_LIBS) $(TSS2_ESYS_LIBS) \
                   $(TSS2_MU_LIBS) $(TSS2_TCTILDR_LIBS) $(TSS2_RC_LIBS) \
 		  $(SQLITE3_LIBS) $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(YAML_LIBS)
 
+JAVAROOT=$(top_builddir)/test/integration
+
 # ax_code_coverage
 if AUTOCONF_CODE_COVERAGE_2019_01_06
 include $(top_srcdir)/aminclude_static.am
@@ -73,6 +75,7 @@ AM_TESTS_ENVIRONMENT = \
     TEST_FIXTURES=$(abs_top_srcdir)/test/integration/fixtures \
     PATH=$(abs_top_srcdir)/tools:./src:$(PATH) \
     PYTHONPATH=$(abs_top_srcdir)/tools \
+    TEST_JAVA_ROOT=$(JAVAROOT) \
     dbus-run-session
 
 TESTS_LDADD = $(noinst_LTLIBRARIES) $(lib_LTLIBRARIES) $(p11lib_LTLIBRARIES) $(AM_LDFLAGS) $(CMOCKA_LIBS) $(CRYPTO_LIBS)
@@ -83,7 +86,7 @@ TESTS_CFLAGS = $(CMOCKA_CFLAGS)
 check_PROGRAMS =
 check_SCRIPTS =
 
-TEST_EXTENSIONS = .sh .int
+TEST_EXTENSIONS = .sh .int .nosetup .java
 
 ### Integration Tests ###
 if ENABLE_INTEGRATION
@@ -165,6 +168,14 @@ test_integration_pkcs_keygen_int_SOURCES = test/integration/pkcs-keygen.int.c te
 test_integration_pkcs_session_state_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_session_state_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
 test_integration_pkcs_session_state_int_SOURCES = test/integration/pkcs-session-state.c test/integration/test.c
+
+#
+# Java Tests
+#
+check_SCRIPTS+=test/integration/pkcs11-javarunner.sh.java
+AM_JAVA_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
+JAVA_LOG_COMPILER=$(LOG_COMPILER)
+dist_noinst_JAVA = test/integration/PKCS11JavaTests.java
 
 endif
 # END INTEGRATION
