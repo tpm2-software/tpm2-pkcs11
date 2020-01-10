@@ -396,9 +396,9 @@ class Db(object):
                 BEFORE INSERT ON tobjects
                 BEGIN
                     SELECT CASE WHEN
-                        (SELECT COUNT (*) FROM tobjects) >= 0x00FFFFFF
+                        (SELECT COUNT (*) FROM tobjects) >= 16777215
                     THEN
-                        RAISE(FAIL, "Maximum object count of 0xFFFFFFFF reached.")
+                        RAISE(FAIL, "Maximum object count of 16777215 reached.")
                     END;
                 END;
             '''),
