@@ -1565,9 +1565,9 @@ CK_RV db_setup(sqlite3 *db, const char *path) {
         "BEFORE INSERT ON tobjects\n"
         "BEGIN\n"
         "    SELECT CASE WHEN\n"
-        "        (SELECT COUNT (*) FROM tobjects) >= 0x00FFFFFF\n"
+        "        (SELECT COUNT (*) FROM tobjects) >= 16777215\n"
         "    THEN\n"
-        "        RAISE(FAIL, \"Maximum object count of 0x00FFFFFF reached.\")\n"
+        "        RAISE(FAIL, \"Maximum object count of 16777215 reached.\")\n"
         "    END;\n"
         "END;\n"
     };
