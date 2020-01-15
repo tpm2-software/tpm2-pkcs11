@@ -63,6 +63,9 @@ AUTHORS
 # Test
 test-driver
 test-suite.log
+test_attr
+test_parser
+test_log
 
 # Git
 *.orig
