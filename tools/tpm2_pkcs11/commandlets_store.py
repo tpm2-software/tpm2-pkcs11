@@ -74,7 +74,6 @@ class InitCommand(Command):
 
         # create the db
         with Db(path) as db:
-            db.create()
 
             shall_evict = False
             with TemporaryDirectory() as d:
@@ -194,7 +193,6 @@ class DbUp(Command):
         with Db(path) as db:
             old_ver = db.version
             new_ver = db.VERSION
-            db.create()
             y = {
                 'old' : old_ver,
                 'new' : new_ver,
