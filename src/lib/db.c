@@ -1234,17 +1234,19 @@ out:
     return rv;
 }
 
-CK_RV db_get_version(unsigned *version) {
+#define DB_EMPTY 0
+
+CK_RV db_get_version(sqlite3 *db, unsigned *version) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
     const char *sql = "SELECT schema_version FROM schema";
 
     sqlite3_stmt *stmt;
-    int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
+    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
         LOGW("Cannot prepare version query: %s\n", sqlite3_errmsg(global.db));
-        *version = DB_VERSION;
+        *version = DB_EMPTY;
         return CKR_OK;
     }
 
@@ -1252,9 +1254,10 @@ CK_RV db_get_version(unsigned *version) {
     if (rc == SQLITE_ROW) {
         *version = sqlite3_column_int(stmt, 0);
     } else if (rc == SQLITE_DONE) {
-        *version = DB_VERSION;
+        *version = DB_EMPTY;
     } else {
         LOGE("Cannot step query: %s\n", sqlite3_errmsg(global.db));
+        *version = DB_EMPTY;
         goto error;
     }
 
@@ -1265,7 +1268,23 @@ error:
     return rv;
 }
 
-CK_RV dbup_handler_from_1_to_2(sqlite3 *db) {
+static CK_RV run_sql_list(sqlite3 *db, const char **sql, size_t cnt) {
+
+    size_t i;
+    for (i=0; i < cnt; i++) {
+        const char *s = sql[i];
+
+        int rc = sqlite3_exec(db, s, NULL, NULL, NULL);
+        if (rc != SQLITE_OK) {
+            LOGE("db creation failed: %s", sqlite3_errmsg(db));
+            return CKR_GENERAL_ERROR;
+        }
+    }
+
+    return CKR_OK;
+}
+
+CK_RV dbup_handler_from_1_to_2(sqlite3 *updb) {
 
     /* Between version 1 and 2 of the DB the following changes need to be made:
      *   The existing rows:
@@ -1293,74 +1312,63 @@ CK_RV dbup_handler_from_1_to_2(sqlite3 *db) {
             "soauthsalt TEXT NOT NULL,"
             "FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE"
         ");";
-    int rc = sqlite3_exec(db, s, NULL, NULL, NULL);
+    int rc = sqlite3_exec(updb, s, NULL, NULL, NULL);
     if (rc != SQLITE_OK) {
-        LOGE("Cannot create temp table: %s", sqlite3_errmsg(db));
+        LOGE("Cannot create temp table: %s", sqlite3_errmsg(updb));
         return CKR_GENERAL_ERROR;
     }
 
     /* copy the data */
     s = "INSERT INTO sealobjects_new2\n"
         "SELECT * FROM sealobjects;";
-    rc = sqlite3_exec(db, s, NULL, NULL, NULL);
+    rc = sqlite3_exec(updb, s, NULL, NULL, NULL);
     if (rc != SQLITE_OK) {
-        LOGE("Cannot copy data to the temp table: %s", sqlite3_errmsg(db));
+        LOGE("Cannot copy data to the temp table: %s", sqlite3_errmsg(updb));
         return CKR_GENERAL_ERROR;
     }
 
     /* Drop the old table */
     s = "DROP TABLE sealobjects;";
-    rc = sqlite3_exec(db, s, NULL, NULL, NULL);
+    rc = sqlite3_exec(updb, s, NULL, NULL, NULL);
     if (rc != SQLITE_OK) {
-        LOGE("Cannot drop the temp table: %s", sqlite3_errmsg(db));
+        LOGE("Cannot drop the temp table: %s", sqlite3_errmsg(updb));
         return CKR_GENERAL_ERROR;
     }
 
     /* Rename the new table to the correct table name */
     s = "ALTER TABLE sealobjects_new2 RENAME TO sealobjects;";
-    rc = sqlite3_exec(db, s, NULL, NULL, NULL);
+    rc = sqlite3_exec(updb, s, NULL, NULL, NULL);
     if (rc != SQLITE_OK) {
         LOGE("Cannot rename the temp table back to the original table name: %s",
-                sqlite3_errmsg(db));
+                sqlite3_errmsg(updb));
         return CKR_GENERAL_ERROR;
     }
 
-    return CKR_OK;
-}
-
-typedef CK_RV (*db_update_handlers)(sqlite3 *db);
-
-CK_RV db_update(sqlite3 *db, unsigned old_version, unsigned new_version) {
-
-    static const db_update_handlers updaters[] = {
-            NULL,
-            dbup_handler_from_1_to_2,
+    const char *sql[] = {
+        "CREATE TRIGGER limit_tokens\n"
+        "BEFORE INSERT ON tokens\n"
+        "BEGIN\n"
+        "    SELECT CASE WHEN\n"
+        "        (SELECT COUNT (*) FROM tokens) >= 255\n"
+        "    THEN\n"
+        "        RAISE(FAIL, \"Maximum token count of 255 reached.\")\n"
+        "    END;\n"
+        "END;\n",
+        "CREATE TRIGGER limit_tobjects\n"
+        "BEFORE INSERT ON tobjects\n"
+        "BEGIN\n"
+        "    SELECT CASE WHEN\n"
+        "        (SELECT COUNT (*) FROM tobjects) >= 16777215\n"
+        "    THEN\n"
+        "        RAISE(FAIL, \"Maximum object count of 16777215 reached.\")\n"
+        "    END;\n"
+        "END;\n"
     };
 
-    if (new_version > ARRAY_LEN(updaters)) {
-        LOGE("db update code does not know how to update to version: %u",
-                new_version);
-        return CKR_GENERAL_ERROR;
-    }
-
-    if (old_version == 0) {
-        LOGE("version 0 was never a valid db version");
-        return CKR_GENERAL_ERROR;
-    }
-
-    size_t i;
-    for(i=old_version; i < ARRAY_LEN(updaters) && i < new_version; i++) {
-        CK_RV rv = updaters[i](db);
-        if (rv != CKR_OK) {
-            LOGE("Running updater index %u failed", i);
-            return rv;
-        }
-    }
-
-    return CKR_OK;
+    return run_sql_list(updb, sql, ARRAY_LEN(sql));
 }
 
-static CK_RV db_backup(sqlite3 *db, const char *dbpath, char **copypath) {
+static CK_RV db_backup(sqlite3 *db, const char *dbpath, sqlite3 **updb, char **copypath) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -1376,27 +1384,13 @@ static CK_RV db_backup(sqlite3 *db, const char *dbpath, char **copypath) {
 
     LOGV("Performing DB backup at: \"%s\"", temp);
 
-    struct stat sb;
-    int rc = stat(temp, &sb);
-    if (rc == 0) {
-        LOGE("Backup DB exists at \"%s\" not overwriting. "
-                "Refusing to run, see "
-                "https://github.com/tpm2-software/tpm2-pkcs11/blob/master/docs/DB_UPGRADE.md.",
-                temp);
-        return CKR_GENERAL_ERROR;
-    } else if (rc < 0 && errno != ENOENT) {
-        LOGE("Failed to stat path \"%s\", error: %s",
-                temp, strerror(errno));
-        return CKR_GENERAL_ERROR;
-    }
-
-    rc = sqlite3_open(temp, &copydb);
+    int rc = sqlite3_open(temp, &copydb);
     if (rc != SQLITE_OK) {
         LOGE("Cannot open database: %s\n", sqlite3_errmsg(copydb));
         goto out;
     }
 
-    backup_conn = sqlite3_backup_init(copydb, "temp", db, "main");
+    backup_conn = sqlite3_backup_init(copydb, "main", db, "main");
     if (!backup_conn) {
         LOGE("Cannot backup init db: %s\n", sqlite3_errmsg(copydb));
         goto out;
@@ -1415,6 +1409,9 @@ static CK_RV db_backup(sqlite3 *db, const char *dbpath, char **copypath) {
         goto out;
     }
 
+    *updb = copydb;
+    copydb = NULL;
+
     rv = CKR_OK;
 
 out:
@@ -1427,37 +1424,125 @@ out:
     return rv;
 }
 
-CK_RV db_create(char *path, size_t len) {
+typedef CK_RV (*db_update_handlers)(sqlite3 *db);
 
-    return db_for_path(path, len, db_create_handler);
-}
+CK_RV db_update(sqlite3 **xdb, const char *dbpath, unsigned old_version, unsigned new_version) {
 
-CK_RV do_db_upgrade_if_needed(sqlite3 *db) {
+    sqlite3 *dbbak = NULL;
+    char *dbbakpath = NULL;
 
-    unsigned old_version = 0;
-    CK_RV rv = db_get_version(&old_version);
-    if (rv != CKR_OK) {
-        LOGE("Could not get DB version");
-        return rv;
-    }
+    static const db_update_handlers updaters[] = {
+            NULL,
+            dbup_handler_from_1_to_2,
+    };
 
-    if (old_version == 0) {
-        LOGE("Version of DB cannot be 0");
+    /*
+     * Sanity checks, this is definite belts and suspenders code
+     */
+    if (new_version > ARRAY_LEN(updaters)) {
+        LOGE("db update code does not know how to update to version: %u",
+                new_version);
         return CKR_GENERAL_ERROR;
     }
 
-    if (old_version == DB_VERSION) {
-        LOGV("No DB upgrade needed");
-        return CKR_OK;
+    if (old_version == 0) {
+        LOGE("version 0 was never a valid db version");
+        return CKR_GENERAL_ERROR;
     }
 
-    rv = db_update(db, old_version, DB_VERSION);
+    /*
+     * Create a DB backup of whats there
+     */
+    CK_RV rv = db_backup(*xdb, dbpath, &dbbak, &dbbakpath);
     if (rv != CKR_OK) {
-        LOGE("Could not perform db update");
+        LOGE("Could not make DB copy");
         return rv;
     }
 
-    return CKR_OK;
+    /*
+     * run the update handlers on the backup
+     */
+    size_t i;
+    for(i=old_version; i < ARRAY_LEN(updaters) && i < new_version; i++) {
+        CK_RV rv = updaters[i](dbbak);
+        if (rv != CKR_OK) {
+            LOGE("Running updater index %u failed", i);
+            goto out;
+        }
+    }
+
+    const char *sql[] = {
+        "REPLACE INTO schema (id, schema_version) VALUES (1, "xstr(DB_VERSION) ");",
+    };
+
+    rv = run_sql_list(dbbak, sql, ARRAY_LEN(sql));
+    if (rv != CKR_OK) {
+        LOGE("Could not set new schema_version");
+        goto out;
+    }
+
+    /*
+     * Swap the current db with the backup db, by:
+     * 1. closing them
+     * 2. renaming the current db as .old
+     * 3. renaming the bakup db as the old db
+     * 4. unlinking the .old db
+     * 5. opening the new db
+     */
+    sqlite3_close(*xdb);
+    *xdb = NULL;
+
+    sqlite3_close(dbbak);
+    dbbak = NULL;
+
+    char buf[PATH_MAX];
+    snprintf(buf, sizeof(buf), "%s.old", dbpath);
+
+    int rc = rename(dbpath, buf);
+    if (rc != 0) {
+       LOGE("Could not rename \"%s\" --> \"%s\", error: %s",
+               dbpath, buf, strerror(errno));
+       rv = CKR_GENERAL_ERROR;
+       goto out;
+    }
+
+    rc = rename(dbbakpath, dbpath);
+    if (rc != 0) {
+       LOGE("Could not rename \"%s\" --> \"%s\", error: %s",
+               dbbakpath, dbpath, strerror(errno));
+       rv = CKR_GENERAL_ERROR;
+       goto out;
+    }
+
+    rc = sqlite3_open(dbpath, xdb);
+    if (rc != SQLITE_OK) {
+        LOGE("Cannot open database: %s\n", sqlite3_errmsg(*xdb));
+        rv = CKR_GENERAL_ERROR;
+        goto out;
+    }
+
+    rc = unlink(buf);
+    if (rc != 0) {
+       LOGE("Could not unlink \"%s\", error: %s",
+               buf, strerror(errno));
+       rv = CKR_GENERAL_ERROR;
+       goto out;
+    }
+
+    rv = CKR_OK;
+
+out:
+    if (dbbak) {
+        sqlite3_close(dbbak);
+    }
+    free(dbbakpath);
+
+    return rv;
+}
+
+CK_RV db_create(char *path, size_t len) {
+
+    return db_for_path(path, len, db_create_handler);
 }
 
 static FILE *take_lock(const char *path, char *lockpath) {
@@ -1494,37 +1579,17 @@ static void release_lock(FILE *f, char *lockpath) {
     UNUSED(fclose(f));
 }
 
-CK_RV db_setup(sqlite3 *db, const char *path) {
+static CK_RV db_init_new(sqlite3 *db) {
 
-    char *dbbakpath = NULL;
-    char lockpath[PATH_MAX];
-    FILE *f = take_lock(path, lockpath);
-    if (!f) {
-        return CKR_GENERAL_ERROR;
-    }
-
-    CK_RV rv = db_backup(db, path, &dbbakpath);
-    if (rv != CKR_OK) {
-        LOGE("Could not make DB copy");
-        goto out;
-    }
-
-    /* run specific upgrade code */
-    rv = do_db_upgrade_if_needed(db);
-    if (rv != CKR_OK) {
-        goto out;
-    }
-
-    /* SQL that is always safe across updates */
     const char *sql[] = {
-        "CREATE TABLE IF NOT EXISTS tokens("
+        "CREATE TABLE tokens("
             "id INTEGER PRIMARY KEY,"
             "pid INTEGER NOT NULL,"
             "label TEXT UNIQUE,"
             "config TEXT NOT NULL,"
             "FOREIGN KEY (pid) REFERENCES pobjects(id) ON DELETE CASCADE"
         ");",
-        "CREATE TABLE IF NOT EXISTS sealobjects("
+        "CREATE TABLE sealobjects("
             "id INTEGER PRIMARY KEY,"
             "tokid INTEGER NOT NULL,"
             "userpub BLOB,"
@@ -1535,26 +1600,23 @@ CK_RV db_setup(sqlite3 *db, const char *path) {
             "soauthsalt TEXT NOT NULL,"
             "FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE"
         ");",
-        "CREATE TABLE IF NOT EXISTS pobjects("
+        "CREATE TABLE pobjects("
             "id INTEGER PRIMARY KEY,"
             "hierarchy TEXT NOT NULL,"
             "handle BLOB NOT NULL,"
             "objauth TEXT NOT NULL"
         ");",
-        "CREATE TABLE IF NOT EXISTS tobjects("
+        "CREATE TABLE tobjects("
             "id INTEGER PRIMARY KEY,"
             "tokid INTEGER NOT NULL,"
             "attrs TEXT NOT NULL,"
             "FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE"
         ");",
-        "CREATE TABLE IF NOT EXISTS schema("
+        "CREATE TABLE schema("
             "id INTEGER PRIMARY KEY,"
             "schema_version INTEGER NOT NULL"
         ");",
-        // NOTE: Update the DB Schema Version if the format above changes!
-        // REPLACE updates the value if it exists, or inserts it if it doesn't
-        "REPLACE INTO schema (id, schema_version) VALUES (1, "xstr(DB_VERSION) ");",
-        "CREATE TRIGGER IF NOT EXISTS limit_tokens\n"
+        "CREATE TRIGGER limit_tokens\n"
         "BEFORE INSERT ON tokens\n"
         "BEGIN\n"
         "    SELECT CASE WHEN\n"
@@ -1563,7 +1625,7 @@ CK_RV db_setup(sqlite3 *db, const char *path) {
         "        RAISE(FAIL, \"Maximum token count of 255 reached.\")\n"
         "    END;\n"
         "END;\n",
-        "CREATE TRIGGER IF NOT EXISTS limit_tobjects\n"
+        "CREATE TRIGGER limit_tobjects\n"
         "BEFORE INSERT ON tobjects\n"
         "BEGIN\n"
         "    SELECT CASE WHEN\n"
@@ -1571,42 +1633,87 @@ CK_RV db_setup(sqlite3 *db, const char *path) {
         "    THEN\n"
         "        RAISE(FAIL, \"Maximum object count of 16777215 reached.\")\n"
         "    END;\n"
-        "END;\n"
+        "END;\n",
+        "REPLACE INTO schema (id, schema_version) VALUES (1, "xstr(DB_VERSION) ");",
     };
 
-    bool fail = false;
+    return run_sql_list(db, sql, ARRAY_LEN(sql));
+}
 
-    size_t i;
-    for (i=0; i < ARRAY_LEN(sql) && !fail; i++) {
-        const char *s = sql[i];
+static CK_RV db_verify_update_ok(const char *dbpath) {
 
-        int rc = sqlite3_exec(global.db, s, NULL, NULL, NULL);
-        if (rc != SQLITE_OK) {
-            LOGE("%s", sqlite3_errmsg(global.db));
-            fail = true;
-            break;
-        }
+    char buf[PATH_MAX];
+    snprintf(buf, sizeof(buf), "%s.old", dbpath);
+
+    struct stat sb;
+    int rc = stat(buf, &sb);
+    if (rc == 0) {
+        LOGE("Backup DB exists at \"%s\" not overwriting. "
+                "Refusing to run, see "
+                "https://github.com/tpm2-software/tpm2-pkcs11/blob/master/docs/DB_UPGRADE.md.",
+                buf);
+        return CKR_GENERAL_ERROR;
+    } else if (rc < 0 && errno != ENOENT) {
+        LOGE("Failed to stat path \"%s\", error: %s",
+                buf, strerror(errno));
+        return CKR_GENERAL_ERROR;
     }
 
-    if (fail) {
-        LOGE("db creation failed");
-        UNUSED(sqlite3_close(db));
-        rv = CKR_GENERAL_ERROR;
+    return CKR_OK;
+}
+
+CK_RV db_setup(sqlite3 **xdb, const char *dbpath) {
+
+    /*
+     * take the version check lock and figure out what
+     * to do:
+     *  - nothing
+     *  - init a new db
+     *  - upgrade an existing db
+     */
+    char lockpath[PATH_MAX];
+    FILE *f = take_lock(dbpath, lockpath);
+    if (!f) {
+        return CKR_GENERAL_ERROR;
+    }
+
+    CK_RV rv = db_verify_update_ok(dbpath);
+    if (rv != CKR_OK) {
         goto out;
     }
-    rv = CKR_OK;
+
+    unsigned old_version = 0;
+    rv = db_get_version(*xdb, &old_version);
+    if (rv != CKR_OK) {
+        LOGE("Could not get DB version");
+        goto out;
+    }
+
+    if (old_version == DB_EMPTY) {
+        rv = db_init_new(*xdb);
+        goto out;
+    }
+
+    if (old_version == DB_VERSION) {
+        LOGV("No DB upgrade needed");
+        rv = CKR_OK;
+        goto out;
+    }
+
+    if (old_version > DB_VERSION) {
+        LOGE("DB Version exceeds library version: %u > %u",
+                old_version, DB_VERSION);
+        rv = CKR_OK;
+        goto out;
+    }
+
+    rv = db_update(xdb, dbpath, old_version, DB_VERSION);
 
 out:
-    /* on success remove the backup */
-    if (rv == CKR_OK && dbbakpath) {
-        LOGV("Unlinking DB backup: \"%s\"", dbbakpath);
-        unlink(dbbakpath);
-    } else if (rv != CKR_OK) {
+    if (rv != CKR_OK) {
         LOGE("Error within db, leaving backup see: "
             "https://github.com/tpm2-software/tpm2-pkcs11/blob/master/docs/DB_UPGRADE.md.");
     }
-    /* always free the backup copy path memory */
-    free(dbbakpath);
 
     release_lock(f, lockpath);
     return rv;
@@ -1614,10 +1721,10 @@ out:
 
 CK_RV db_new(sqlite3 **db) {
 
-    char path[PATH_MAX];
-    CK_RV rv = db_get_existing(path, sizeof(path));
+    char dbpath[PATH_MAX];
+    CK_RV rv = db_get_existing(dbpath, sizeof(dbpath));
     if (rv == CKR_TOKEN_NOT_PRESENT) {
-        rv = db_create(path, sizeof(path));
+        rv = db_create(dbpath, sizeof(dbpath));
     }
 
     if (rv == CKR_TOKEN_NOT_PRESENT) {
@@ -1625,15 +1732,15 @@ CK_RV db_new(sqlite3 **db) {
         LOGV("Consider exporting "PKCS11_STORE_ENV_VAR" to point to a valid store directory");
     }
 
-    LOGV("Using sqlite3 DB: \"%s\"", path);
+    LOGV("Using sqlite3 DB: \"%s\"", dbpath);
 
-    int rc = sqlite3_open(path, db);
+    int rc = sqlite3_open(dbpath, db);
     if (rc != SQLITE_OK) {
         LOGE("Cannot open database: %s\n", sqlite3_errmsg(*db));
         return CKR_GENERAL_ERROR;
     }
 
-    return db_setup(*db, path);
+    return db_setup(db, dbpath);
 }
 
 CK_RV db_free(sqlite3 **db) {
