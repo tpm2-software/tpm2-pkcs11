@@ -76,6 +76,7 @@ AM_TESTS_ENVIRONMENT = \
     PATH=$(abs_top_srcdir)/tools:./src:$(PATH) \
     PYTHONPATH=$(abs_top_srcdir)/tools \
     TEST_JAVA_ROOT=$(JAVAROOT) \
+    T=$(abs_top_srcdir) \
     dbus-run-session
 
 TESTS_LDADD = $(noinst_LTLIBRARIES) $(lib_LTLIBRARIES) $(p11lib_LTLIBRARIES) $(AM_LDFLAGS) $(CMOCKA_LIBS) $(CRYPTO_LIBS)
@@ -116,6 +117,7 @@ check_PROGRAMS += \
 check_SCRIPTS += \
     test/integration/pkcs11-tool.sh \
     test/integration/pkcs11-tool-init.sh.nosetup \
+    test/integration/pkcs11-dbup.sh.nosetup \
     test/integration/tls-tests.sh
 
 LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
