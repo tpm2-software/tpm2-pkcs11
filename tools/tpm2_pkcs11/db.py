@@ -20,6 +20,7 @@ class Db(object):
         self._conn = sqlite3.connect(self._path)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute('PRAGMA foreign_keys = ON;')
+        self._create()
 
         return self
 
@@ -218,8 +219,9 @@ class Db(object):
         self._conn.commit()
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self._conn.commit()
-        self._conn.close()
+        if (self._conn):
+            self._conn.commit()
+            self._conn.close()
 
     def delete(self):
         try:
@@ -234,11 +236,10 @@ class Db(object):
             raise RuntimeError("Backup DB exists at {} not overwriting. "
                 "Refusing to run".format(dbpath))
         bck = sqlite3.connect(dbpath)
-        with bck:
-            con.backup(bck)
-        return dbpath
+        con.backup(bck)
+        return (bck, dbpath)
 
-    def _update_on_2(self):
+    def _update_on_2(self, dbbakcon):
         '''
         Between version 1 and 2 of the DB the following changes need to be made:
             The existing rows:
@@ -252,8 +253,6 @@ class Db(object):
         So we need to create a new table with this constraint removed,
         copy the data and move the table back
         '''
-
-        c = self._conn
 
         # Create a new table to copy data to that has the constraints removed
         s = textwrap.dedent('''
@@ -269,40 +268,173 @@ class Db(object):
                 FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
             );
             ''')
-        c.execute(s)
+        dbbakcon.execute(s)
 
         # copy the data
         s = textwrap.dedent('''
             INSERT INTO sealobjects_new2
             SELECT * FROM sealobjects;
         ''')
-        c.execute(s)
+        dbbakcon.execute(s)
 
         # Drop the old table
         s = 'DROP TABLE sealobjects;'
-        c.execute(s)
+        dbbakcon.execute(s)
 
         # Rename the new table to the correct table name
         s = 'ALTER TABLE sealobjects_new2 RENAME TO sealobjects;'
-        c.execute(s)
+        dbbakcon.execute(s)
+
+        # Add the triggers
+        sql = [
+            textwrap.dedent('''
+                CREATE TRIGGER limit_tokens
+                BEFORE INSERT ON tokens
+                BEGIN
+                    SELECT CASE WHEN
+                        (SELECT COUNT (*) FROM tokens) >= 255
+                    THEN
+                        RAISE(FAIL, "Maximum token count of 255 reached.")
+                    END;
+                END;
+            '''),
+            textwrap.dedent('''
+                CREATE TRIGGER limit_tobjects
+                BEFORE INSERT ON tobjects
+                BEGIN
+                    SELECT CASE WHEN
+                        (SELECT COUNT (*) FROM tobjects) >= 16777215
+                    THEN
+                        RAISE(FAIL, "Maximum object count of 16777215 reached.")
+                    END;
+                END;
+            ''')
+        ]
+        for s in sql:
+            dbbakcon.execute(s)
 
     def update_db(self, old_version, new_version=VERSION):
-        for x in range(old_version, new_version):
-            x = x + 1
-            getattr(self, '_update_on_{}'.format(x))()
+        
+        # were doing the update, so make a backup to manipulate
+        (dbbakcon, dbbakpath) = self.backup()
 
-    @property
-    def version(self):
+        try:        
+            for x in range(old_version, new_version):
+                x = x + 1
+                getattr(self, '_update_on_{}'.format(x))(dbbakcon)
+    
+            sql = textwrap.dedent('''
+                    REPLACE INTO schema (id, schema_version) VALUES (1, {version});
+                '''.format(version=new_version))
+            dbbakcon.execute(sql)
+        finally:
+            # Close the connections
+            self._conn.commit()
+            self._conn.close()
+
+            dbbakcon.commit()
+            dbbakcon.close()
+
+            # move old db to ".old" suffix
+            olddbpath = self._path + ".old"
+            os.rename(self._path, olddbpath)
+
+            # move the backup to the normal dbpath
+            os.rename(dbbakpath, self._path)
+
+            # unlink the old
+            os.unlink(olddbpath)
+
+            # re-establish a connection
+            self._conn = sqlite3.connect(self._path)
+            self._conn.row_factory = sqlite3.Row
+
+    def _get_version(self):
         c = self._conn.cursor()
         try:
             c.execute('select schema_version from schema')
             return c.fetchone()[0]
         except sqlite3.OperationalError:
-            return self.VERSION
+            return 0
 
-    @property
-    def VERSION(self):
-        return VERSION
+    def db_init_new(self):
+        
+        c = self._conn.cursor()
+        
+        sql = [
+            textwrap.dedent('''
+            CREATE TABLE tokens(
+                id INTEGER PRIMARY KEY,
+                pid INTEGER NOT NULL,
+                label TEXT UNIQUE,
+                config TEXT NOT NULL,
+                FOREIGN KEY (pid) REFERENCES pobjects(id) ON DELETE CASCADE
+            );
+            '''),
+            textwrap.dedent('''
+            CREATE TABLE sealobjects(
+                id INTEGER PRIMARY KEY,
+                tokid INTEGER NOT NULL,
+                userpub BLOB,
+                userpriv BLOB,
+                userauthsalt TEXT,
+                sopub BLOB NOT NULL,
+                sopriv BLOB NOT NULL,
+                soauthsalt TEXT NOT NULL,
+                FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
+            );
+            '''),
+            textwrap.dedent('''
+            CREATE TABLE pobjects(
+                id INTEGER PRIMARY KEY,
+                hierarchy TEXT NOT NULL,
+                handle BLOB NOT NULL,
+                objauth TEXT NOT NULL
+            );
+            '''),
+            textwrap.dedent('''
+            CREATE TABLE tobjects(
+                id INTEGER PRIMARY KEY,
+                tokid INTEGER NOT NULL,
+                attrs TEXT NOT NULL,
+                FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
+            );
+            '''),
+            textwrap.dedent('''
+            CREATE TABLE schema(
+                id INTEGER PRIMARY KEY,
+                schema_version INTEGER NOT NULL
+            );
+            '''),
+            textwrap.dedent('''
+                CREATE TRIGGER limit_tokens
+                BEFORE INSERT ON tokens
+                BEGIN
+                    SELECT CASE WHEN
+                        (SELECT COUNT (*) FROM tokens) >= 255
+                    THEN
+                        RAISE(FAIL, "Maximum token count of 255 reached.")
+                    END;
+                END;
+            '''),
+            textwrap.dedent('''
+                CREATE TRIGGER limit_tobjects
+                BEFORE INSERT ON tobjects
+                BEGIN
+                    SELECT CASE WHEN
+                        (SELECT COUNT (*) FROM tobjects) >= 16777215
+                    THEN
+                        RAISE(FAIL, "Maximum object count of 16777215 reached.")
+                    END;
+                END;
+            '''),
+            textwrap.dedent('''
+                REPLACE INTO schema (id, schema_version) VALUES (1, {version});
+            '''.format(version=VERSION))
+        ]
+
+        for s in sql:
+            c.execute(s)
 
     # TODO collapse object tables into one, since they are common besides type.
     # move sealobject metadata into token metadata table.
@@ -317,110 +449,43 @@ class Db(object):
     # NOTE: Update the DB Schema Version at the bottom if the db format changes!
     def _do_create(self):
 
-        c = self._conn.cursor()
-
         # perform an update if we need to
         dbbakpath = None
         try:
-            old_version = self.version
-            if VERSION != old_version:
+            old_version = self._get_version()
+
+            if old_version == 0:
+                self.db_init_new()
+                self.version = old_version
+                self.VERSION = old_version
+                return False
+            elif VERSION == old_version:
+                self.version = old_version
+                self.VERSION = old_version
+                return False
+            elif old_version > VERSION:
+                raise RuntimeError("DB Version exceeds library version:" 
+                 " {} > {}".format(old_version, VERSION))
+            else:
+                self.version = old_version
                 self.update_db(old_version, VERSION)
+                self.VERSION = self._get_version()
+                return True
+        
         except Exception as e:
             sys.stderr.write('DB Upgrade failed: "{}", backup located in "{}"'.format(e, dbbakpath))
             raise e
 
-        sql = [
-            textwrap.dedent('''
-            CREATE TABLE IF NOT EXISTS tokens(
-                id INTEGER PRIMARY KEY,
-                pid INTEGER NOT NULL,
-                label TEXT UNIQUE,
-                config TEXT NOT NULL,
-                FOREIGN KEY (pid) REFERENCES pobjects(id) ON DELETE CASCADE
-            );
-            '''),
-            textwrap.dedent('''
-            CREATE TABLE IF NOT EXISTS sealobjects(
-                id INTEGER PRIMARY KEY,
-                tokid INTEGER NOT NULL,
-                userpub BLOB,
-                userpriv BLOB,
-                userauthsalt TEXT,
-                sopub BLOB NOT NULL,
-                sopriv BLOB NOT NULL,
-                soauthsalt TEXT NOT NULL,
-                FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
-            );
-            '''),
-            textwrap.dedent('''
-            CREATE TABLE IF NOT EXISTS pobjects(
-                id INTEGER PRIMARY KEY,
-                hierarchy TEXT NOT NULL,
-                handle BLOB NOT NULL,
-                objauth TEXT NOT NULL
-            );
-            '''),
-            textwrap.dedent('''
-            CREATE TABLE IF NOT EXISTS tobjects(
-                id INTEGER PRIMARY KEY,
-                tokid INTEGER NOT NULL,
-                attrs TEXT NOT NULL,
-                FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE
-            );
-            '''),
-            textwrap.dedent('''
-            CREATE TABLE IF NOT EXISTS schema(
-                id INTEGER PRIMARY KEY,
-                schema_version INTEGER NOT NULL
-            );
-            '''),
-            # NOTE: Update the DB Schema Version if the format above changes!
-            # REPLACE updates the value if it exists, or inserts it if it doesn't
-            textwrap.dedent('''
-                REPLACE INTO schema (id, schema_version) VALUES (1, {version});
-            '''.format(version=VERSION)),
-            # Create a trigger to keep maximum token count in check
-            textwrap.dedent('''
-                CREATE TRIGGER IF NOT EXISTS limit_tokens
-                BEFORE INSERT ON tokens
-                BEGIN
-                    SELECT CASE WHEN
-                        (SELECT COUNT (*) FROM tokens) >= 255
-                    THEN
-                        RAISE(FAIL, "Maximum token count of 255 reached.")
-                    END;
-                END;
-            '''),
-            textwrap.dedent('''
-                CREATE TRIGGER IF NOT EXISTS limit_tobjects
-                BEFORE INSERT ON tobjects
-                BEGIN
-                    SELECT CASE WHEN
-                        (SELECT COUNT (*) FROM tobjects) >= 16777215
-                    THEN
-                        RAISE(FAIL, "Maximum object count of 16777215 reached.")
-                    END;
-                END;
-            '''),
-        ]
-
-        for s in sql:
-            c.execute(s)
-
-    def create(self):
+    def _create(self):
 
         # create a lock from the db name plush .lock suffix
         lockpath = self._path+".lock"
         holds_lock = False
-        dbbakpath = None
         fd = os.open(lockpath, os.O_CREAT|os.O_RDWR)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX)
             holds_lock = True
-            dbbakpath = self.backup()
             self._do_create()
-            # only unlink the backup db on success
-            os.unlink(dbbakpath)
         finally:
             # we always want unlink to occur
             os.unlink(lockpath)
