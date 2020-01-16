@@ -2,6 +2,7 @@
 
 ### 1.1.0 - next
 
+  * Support C_InitToken interface.
   * Add Java PKCS11 Keystore support for RSA/ECB/RSAPKCS1.5
     via public encrypt and private decrypt.
 
