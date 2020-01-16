@@ -1380,7 +1380,9 @@ static CK_RV db_backup(sqlite3 *db, const char *dbpath, char **copypath) {
     int rc = stat(temp, &sb);
     if (rc == 0) {
         LOGE("Backup DB exists at \"%s\" not overwriting. "
-                "Refusing to run.", temp);
+                "Refusing to run, see "
+                "https://github.com/tpm2-software/tpm2-pkcs11/blob/master/docs/DB_UPGRADE.md.",
+                temp);
         return CKR_GENERAL_ERROR;
     } else if (rc < 0 && errno != ENOENT) {
         LOGE("Failed to stat path \"%s\", error: %s",
@@ -1599,6 +1601,9 @@ out:
     if (rv == CKR_OK && dbbakpath) {
         LOGV("Unlinking DB backup: \"%s\"", dbbakpath);
         unlink(dbbakpath);
+    } else if (rv != CKR_OK) {
+        LOGE("Error within db, leaving backup see: "
+            "https://github.com/tpm2-software/tpm2-pkcs11/blob/master/docs/DB_UPGRADE.md.");
     }
     /* always free the backup copy path memory */
     free(dbbakpath);
