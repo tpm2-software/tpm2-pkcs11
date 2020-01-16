@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: BSD-2-Clause
+
+set -eo pipefail
+
+tempdir=$(mktemp -d)
+
+function cleanup() {
+	rm -rf "$tempdir"
+}
+trap cleanup EXIT
+
+onerror() {
+  echo "$BASH_COMMAND on line ${BASH_LINENO[0]} failed: $?"
+  exit 1
+}
+trap onerror ERR
+
+setup_asan()
+{
+    if [ "$ASAN_ENABLED" = "true" ]; then
+        # To get line numbers set up the asan symbolizer
+        clang_version=`$CC --version | head -n 1 | cut -d\  -f 3-3 | cut -d\. -f 1-3 | cut -d- -f 1-1`
+        # Sometimes the version string has an Ubuntu on the front of it and the field
+        # location changes
+        if [ $clang_version == "version" ]; then
+            clang_version=`$CC --version | head -n 1 | cut -d\  -f 4-4 | cut -d\. -f 1-3`
+        fi
+        echo "Detected clang version: $clang_version"
+        minor_maj=`echo "$clang_version" | cut -d\. -f 1-2`
+        export LD_PRELOAD=/usr/lib/llvm-$minor_maj/lib/clang/$clang_version/lib/linux/libclang_rt.asan-$(arch).so
+        echo "export LD_PRELOAD=\"$LD_PRELOAD\""
+        export ASAN_OPTIONS=detect_leaks=0
+        echo "turning off asan detection for running commands..."
+    fi
+}
+
+#
+# Before we setup and possibly LD_PRELOAD the asan library,
+# we need to clone and build v1.0 and test HEAD (current built)
+# against it in the tempdir.
+#
+echo "T=$T"
+
+pushd "$tempdir"
+
+git clone $(realpath $T)
+pushd tpm2-pkcs11
+git checkout 1.0
+./bootstrap
+./configure --enable-debug --disable-hardening
+make -j$(nproc)
+popd
+popd
+
+echo "PWD: $(pwd)"
+
+# modpath will be to the HEAD version library
+if [ -z "$modpath" ]; then
+  modpath="$(pwd)/src/.libs/libtpm2_pkcs11.so"
+fi
+
+echo "modpath=$modpath"
+
+setup_asan
+
+pkcs11_tool() {
+  pkcs11-tool --module "$modpath" "$@"
+  return $?
+}
+
+export TPM2_PKCS11_STORE="$tempdir"
+
+echo "TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
+
+#
+# Since OLD is on 1.0, it won't automagically populate a store.
+# So we need to use the 1.0 tpm2_ptool
+# XXX should we prepend the current?
+#
+PYTHONPATH=$tempdir/tpm2-pkcs11/tools
+echo $PYTHONPATH
+
+tpm2_ptool init
+tpm2_ptool addtoken --pid=1 --sopin=mysopin --userpin=myuserpin --label=label
+
+# at this point we can verify the db schema version
+echo "Checking schema version as 1"
+v=$(sqlite3 "$TPM2_PKCS11_STORE/tpm2_pkcs11.sqlite3" 'select schema_version from schema;')
+echo "Got schema version as $v"
+test 1 -eq $v
+
+# do an upgrade
+echo "Generating RSA keypair"
+pkcs11_tool --slot=1 --label="myrsakey" --login --pin=myuserpin --keypairgen
+echo "RSA Keypair generated"
+
+echo "Checking schema version as > 1"
+v=$(sqlite3 "$TPM2_PKCS11_STORE/tpm2_pkcs11.sqlite3" 'select schema_version from schema;')
+echo "Got schema version as $v"
+test $v -ge 1
+
+exit 0
