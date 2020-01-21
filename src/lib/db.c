@@ -167,7 +167,7 @@ error:
     return NULL;
 }
 
-int init_tobjects(unsigned tokid, tobject **head) {
+int init_tobjects(token *tok) {
 
     const char *sql =
             "SELECT * FROM tobjects WHERE tokid=?";
@@ -179,13 +179,12 @@ int init_tobjects(unsigned tokid, tobject **head) {
         return rc;
     }
 
-    rc = sqlite3_bind_int(stmt, 1, tokid);
+    rc = sqlite3_bind_int(stmt, 1, tok->id);
     if (rc != SQLITE_OK) {
         LOGE("Cannot bind tobject tokid: %s\n", sqlite3_errmsg(global.db));
         goto error;
     }
 
-    list *cur = NULL;
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 
         tobject *insert = db_tobject_new(stmt);
@@ -194,16 +193,10 @@ int init_tobjects(unsigned tokid, tobject **head) {
             goto error;
         }
 
-        if (!*head) {
-            *head = insert;
-            cur = &insert->l;
-            continue;
+        CK_RV rv = token_add_tobject_last(tok, insert);
+        if (rv != CKR_OK) {
+            goto error;
         }
-
-        assert(cur);
-        assert(insert);
-        cur->next = &insert->l;
-        cur = cur->next;
     }
 
     rc = SQLITE_OK;
@@ -427,7 +420,7 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
             goto error;
         }
 
-        rc = init_tobjects(t->id, &t->tobjects);
+        rc = init_tobjects(t);
         if (rc != SQLITE_OK) {
             goto error;
         }

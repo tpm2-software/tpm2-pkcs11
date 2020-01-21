@@ -7,6 +7,7 @@
 #include "checks.h"
 #include "db.h"
 #include "key.h"
+#include "list.h"
 #include "pkcs11.h"
 #include "session.h"
 #include "session_ctx.h"
@@ -309,21 +310,20 @@ CK_RV key_gen (
         goto out;
     }
 
-    assert(new_public_tobj->id);
-    assert(new_private_tobj->id);
-
-    /* start a list of two elements public pointing to private */
-    new_public_tobj->l.next = &new_private_tobj->l;
-
-    /* add to object list preserving old object list if present */
-    if (tok->tobjects) {
-        new_private_tobj->l.next = &tok->tobjects->l;
+    rv = token_add_tobject(tok, new_public_tobj);
+    if (rv != CKR_OK) {
+        LOGE("Failed to add public object to token");
+        goto out;
     }
 
-    tok->tobjects = new_public_tobj;
+    rv = token_add_tobject(tok, new_private_tobj);
+    if (rv != CKR_OK) {
+        LOGE("Failed to add private object to token");
+        goto out;
+    }
 
-    *public_key_handle = new_public_tobj->id;
-    *private_key_handle = new_private_tobj->id;
+    *public_key_handle = new_public_tobj->index;
+    *private_key_handle = new_private_tobj->index;
 
 out:
     tpm_objdata_free(&objdata);

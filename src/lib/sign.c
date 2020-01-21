@@ -537,7 +537,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
         };
 
         /* RSA Decrypt is the RSA operation with the private key, which is what we want */
-        rv = decrypt_init_op(ctx, encrypt_opdata, &mechanism, tobj->id);
+        rv = decrypt_init_op(ctx, encrypt_opdata, &mechanism, tobj->index);
         if (rv != CKR_OK) {
             free(padded);
             encrypt_op_data_free(&encrypt_opdata);
