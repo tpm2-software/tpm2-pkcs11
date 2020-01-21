@@ -4,7 +4,6 @@
 #define SRC_TOKEN_H_
 
 #include "checks.h"
-#include "object.h"
 #include "pkcs11.h"
 #include "session_ctx.h"
 #include "tpm.h"
@@ -27,6 +26,9 @@ enum token_login_state {
     token_so_logged_in     = 1 << 1,
 };
 
+typedef struct tobject tobject;
+typedef struct pobject pobject;
+
 typedef struct token token;
 struct token {
 
@@ -42,7 +44,10 @@ struct token {
 
     sealobject sealobject;
 
-    tobject *tobjects;
+    struct {
+        tobject *head;
+        tobject *tail;
+    } tobjects;
 
     session_table *s_table;
 
@@ -68,6 +73,37 @@ void token_free(token *t);
  *  The number of elements to free
  */
 void token_free_list(token *t, size_t len);
+
+/**
+ * Adds a tobject into the token tobject list filling in
+ * gaps along the way and using the gap index as the object
+ * handle index.
+ * @param tok
+ *  The token to insert into.
+ * @param t
+ *  The tobject to insert.
+ * @return
+ *  CKR_OK on success.
+ */
+CK_RV token_add_tobject(token *tok, tobject *t);
+
+CK_RV token_find_tobject(token *tok, CK_OBJECT_HANDLE handle, tobject **tobj);
+
+/**
+ * Adds a tobject to the END of the tobject list incrementing the
+ * previous tobject index number and using that. This DOES NOT gap
+ * fill, and thus is really best for use only in the DB initialization
+ * logic to prevent multiple iterations of the linked list during initialization.
+ * @param tok
+ *  The token to insert into.
+ * @param t
+ *  The tobject to insert.
+ * @return
+ *  CKR_OK on success.
+ */
+CK_RV token_add_tobject_last(token *tok, tobject *t);
+
+void token_rm_tobject(token *tok, tobject *t);
 
 CK_RV token_get_info(token *t, CK_TOKEN_INFO *info);
 

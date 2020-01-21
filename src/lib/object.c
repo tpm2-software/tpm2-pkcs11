@@ -165,7 +165,7 @@ static object_find_data *object_find_data_new(void) {
 
 static CK_RV do_match_set(tobject_match_list *match_cur, tobject *tobj) {
 
-    match_cur->tobj_handle = tobj->id;
+    match_cur->tobj_handle = tobj->index;
 
     CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_CLASS);
     if (!a) {
@@ -211,12 +211,12 @@ CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, CK_ULONG count)
     token *tok = session_ctx_get_token(ctx);
     assert(tok);
 
-    if (!tok->tobjects) {
+    if (!tok->tobjects.head) {
         goto empty;
     }
 
     tobject_match_list *match_cur = NULL;
-    list *cur = &tok->tobjects->l;
+    list *cur = &tok->tobjects.head->l;
     while(cur) {
 
         // Get the current object, and grab it's id for the object handle
@@ -333,34 +333,18 @@ CK_RV object_find_final(session_ctx *ctx) {
     return CKR_OK;
 }
 
-static CK_RV find_object_by_id(token *tok, CK_OBJECT_HANDLE handle, bool inc, tobject **tobj) {
-
-    list *cur = &tok->tobjects->l;
-    while(cur) {
-
-        tobject *cur_tobj = list_entry(cur, tobject, l);
-
-        if (handle == cur_tobj->id) {
-            CK_RV rv = inc ? tobject_user_increment(cur_tobj) : CKR_OK;
-            if (rv == CKR_OK) {
-                *tobj = cur_tobj;
-            }
-            return rv;
-        }
-        cur = cur->next;
-    }
-
-    return CKR_OBJECT_HANDLE_INVALID;
-}
-
 CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
 
     token *tok = session_ctx_get_token(ctx);
     assert(tok);
 
     tobject *tobj = NULL;
-    CK_RV rv = find_object_by_id(tok, object, true, &tobj);
-    /* no match or error */
+    CK_RV rv = token_find_tobject(tok, object, &tobj);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    rv = tobject_user_increment(tobj);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -525,7 +509,7 @@ CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object) {
     assert(tok);
 
     tobject *tobj = NULL;
-    CK_RV rv = find_object_by_id(tok, object, false, &tobj);
+    CK_RV rv = token_find_tobject(tok, object, &tobj);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -540,35 +524,7 @@ CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object) {
         return rv;
     }
 
-    /*
-     * Remove from list by tying previous to next. We know that tobjects
-     * list is not NULL because we looked up a tobject in that list.
-     *
-     * TODO: Consider bi-directional circular linked list, it would
-     * make this a lot easier.
-     *
-     * Since we already found tobject, it's impossible for tobject
-     * to not exist in the list, thus we will always find a match.
-     */
-
-    /* if its head, just make head next */
-    if (tok->tobjects->id == tobj->id) {
-        list *next = tok->tobjects->l.next;
-        tobject *n = next ? list_entry(next, tobject, l) : NULL;
-        tok->tobjects = n;
-    /* go fish - not head so skip head, keep track of previous */
-    } else {
-        tobject *prev = tok->tobjects;
-        list *cur;
-        list_for_each(tok->tobjects->l.next, cur) {
-            tobject *c = list_entry(cur, tobject, l);
-            if (c->id == tobj->id) {
-                /* set previous to point to current "c's" next object */
-                prev->l.next = c->l.next;
-                break;
-            }
-        }
-    }
+    token_rm_tobject(tok, tobj);
 
     tobject_free(tobj);
     rv = CKR_OK;
@@ -791,20 +747,13 @@ CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OB
         LOGE("Error creating rsa public key: %lu", rv);
         return rv;
     }
-    assert(new_tobj);
 
-    /*
-     * Populate linked list of objects add to object list
-     * preserving old object list if present
-     */
-    if (tok->tobjects) {
-        new_tobj->l.next = &tok->tobjects->l;
+    rv = token_add_tobject(tok, new_tobj);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
-    tok->tobjects = new_tobj;
-
-    /* set the handle */
-    *object = new_tobj->id;
+    *object = new_tobj->index;
 
     return CKR_OK;
 }

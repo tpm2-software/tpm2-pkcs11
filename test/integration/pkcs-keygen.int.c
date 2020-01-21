@@ -437,17 +437,17 @@ static void test_destroy(void **state) {
     CK_ATTRIBUTE pub[] = {
         ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
         ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
-        ADD_ATTR_ARRAY(CKA_ID, id),
         ADD_ATTR_BASE(CKA_VERIFY, ck_true),
-        ADD_ATTR_ARRAY(CKA_EC_PARAMS, ec_params),
-        ADD_ATTR_STR(CKA_LABEL, label)
+        ADD_ATTR_ARRAY(CKA_ID, id),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_ARRAY(CKA_EC_PARAMS, ec_params)
     };
 
     CK_ATTRIBUTE priv[] = {
-        ADD_ATTR_ARRAY(CKA_ID, id),
         ADD_ATTR_BASE(CKA_SIGN, ck_true),
         ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
         ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_ARRAY(CKA_ID, id),
         ADD_ATTR_STR(CKA_LABEL, label),
         ADD_ATTR_BASE(CKA_SENSITIVE, ck_false)
     };
@@ -463,11 +463,45 @@ static void test_destroy(void **state) {
 
     user_login(session);
 
+    /* create 2 keys so we remove the one in the middle
+     * creating a gap in the internal linked list
+     */
     CK_RV rv = C_GenerateKeyPair (session,
             &mech,
             pub, ARRAY_LEN(pub),
             priv, ARRAY_LEN(priv),
             &pubkey, &privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE id2[] = "p11-templ-key-id-ecc-destroy2";
+    CK_UTF8CHAR label2[] = "p11-templ-key-label-ecc-destroy2";
+
+    CK_ATTRIBUTE pub2[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_VERIFY, ck_true),
+        ADD_ATTR_ARRAY(CKA_ID, id2),
+        ADD_ATTR_STR(CKA_LABEL, label2),
+        ADD_ATTR_ARRAY(CKA_EC_PARAMS, ec_params)
+    };
+
+    CK_ATTRIBUTE priv2[] = {
+        ADD_ATTR_BASE(CKA_SIGN, ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_ARRAY(CKA_ID, id2),
+        ADD_ATTR_STR(CKA_LABEL, label2),
+        ADD_ATTR_BASE(CKA_SENSITIVE, ck_false)
+    };
+
+    CK_OBJECT_HANDLE pubkey2;
+    CK_OBJECT_HANDLE privkey2;
+
+    rv = C_GenerateKeyPair (session,
+            &mech,
+            pub2, ARRAY_LEN(pub2),
+            priv2, ARRAY_LEN(priv2),
+            &pubkey2, &privkey2);
     assert_int_equal(rv, CKR_OK);
 
     /* verify that if it's held by sign operation, it can't be deleted */
@@ -548,8 +582,34 @@ static void test_destroy(void **state) {
 
     rv = C_FindObjectsFinal(session);
     assert_int_equal(rv, CKR_OK);
-}
 
+    /* now that we have created some gaps, create an object in the gap */
+    mech.mechanism = CKM_EC_KEY_PAIR_GEN;
+    rv = C_GenerateKeyPair (session,
+            &mech,
+            pub, ARRAY_LEN(pub),
+            priv, ARRAY_LEN(priv),
+            &pubkey, &privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    /* delete that objects */
+    rv = C_DestroyObject(session, pubkey);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_DestroyObject(session, privkey); // Heap Use After Free
+    assert_int_equal(rv, CKR_OK);
+
+    /* verify gone */
+    rv = C_FindObjectsInit(session, pub, ARRAY_LEN(pub));
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjects(session, &tmp, 1, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 0);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+}
 
 static void test_destroy_rsa_pkcs(void **state) {
 

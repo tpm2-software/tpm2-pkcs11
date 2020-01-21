@@ -6,6 +6,7 @@
 typedef struct list list;
 struct list {
     list *next;
+    list *prev;
 };
 
 #define list_entry(element, type, name) \
