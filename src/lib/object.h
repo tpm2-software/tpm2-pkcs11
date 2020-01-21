@@ -26,7 +26,9 @@ struct tobject {
 
     unsigned active;     /** number of active users */
 
-    CK_OBJECT_HANDLE id; /** external handle */
+    unsigned id; /** external handle */
+
+    CK_OBJECT_HANDLE index;
 
     /*
      * these all exist in the attribute array, but we'll keep some

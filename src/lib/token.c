@@ -15,6 +15,7 @@
 #include "checks.h"
 #include "db.h"
 #include "list.h"
+#include "object.h"
 #include "pkcs11.h"
 #include "session.h"
 #include "session_table.h"
@@ -59,6 +60,139 @@ void token_free_list(token *t, size_t len) {
     free(t);
 }
 
+CK_RV token_add_tobject_last(token *tok, tobject *t) {
+
+    if (!tok->tobjects.tail) {
+        t->l.prev = t->l.next = NULL;
+        tok->tobjects.tail = tok->tobjects.head = t;
+        t->index = 1;
+        return CKR_OK;
+    }
+
+    CK_OBJECT_HANDLE handle = tok->tobjects.tail->index;
+    if (handle == ~((CK_OBJECT_HANDLE)0)) {
+        LOGE("Too many objects for token, id: %lu, label: %*s", tok->id,
+                sizeof(tok->label), tok->label);
+        return CKR_OK;
+    }
+
+    handle++;
+    t->index = handle;
+    tok->tobjects.tail->l.next = &t->l;
+    t->l.prev = &tok->tobjects.tail->l;
+    tok->tobjects.tail = t;
+    return CKR_OK;
+}
+
+CK_RV token_add_tobject(token *tok, tobject *t) {
+
+    if (!tok->tobjects.head) {
+        t->l.prev = t->l.next = NULL;
+        tok->tobjects.tail = tok->tobjects.head = t;
+        t->index = 1;
+        return CKR_OK;
+    }
+
+    /* minimum potential handle to add */
+    CK_OBJECT_HANDLE index = 2;
+
+    list *cur = &tok->tobjects.head->l;
+    while(cur) {
+
+        if (index == 0) {
+            LOGE("Rollover, too many objects for token, id: %lu, label: %*s", tok->id,
+                    sizeof(tok->label), tok->label);
+            return CKR_OK;
+        }
+
+        tobject *c = list_entry(cur, tobject, l);
+
+        /* end of list, just add it updating the tail pointer */
+        if (!c->l.next) {
+            t->index = index;
+            t->l.prev = cur;
+            cur->next = &t->l;
+            tok->tobjects.tail = t;
+            return CKR_OK;
+        }
+
+        tobject *n = list_entry(c->l.next, tobject, l);
+
+        /* gap */
+        if (n->index - c->index > 1) {
+            assert(index < n->index && index > c->index);
+            t->index = index;
+
+            /* new object should point to next and previous */
+            t->l.next = &n->l;
+            t->l.prev = cur;
+
+            /* existing object ahead should point back at new object */
+            n->l.prev = &t->l;
+
+            /* existing object behind should point forward at new object */
+            c->l.next = &t->l;
+
+            return CKR_OK;
+        }
+
+        index++;
+        cur = cur->next;
+    }
+
+    LOGE("Could not insert tobject into token");
+
+    return CKR_GENERAL_ERROR;
+}
+
+CK_RV token_find_tobject(token *tok, CK_OBJECT_HANDLE handle, tobject **tobj) {
+    assert(tok);
+    assert(tobj);
+
+    if (!tok->tobjects.head) {
+        return CKR_KEY_HANDLE_INVALID;
+    }
+
+    list *cur = &tok->tobjects.head->l;
+    while(cur) {
+        tobject *c = list_entry(cur, tobject, l);
+        if (c->index == handle) {
+            *tobj = c;
+            return CKR_OK;
+        }
+        cur = cur->next;
+    }
+
+    return CKR_KEY_HANDLE_INVALID;
+}
+
+void token_rm_tobject(token *tok, tobject *t) {
+
+    assert(tok->tobjects.head);
+    assert(tok->tobjects.tail);
+
+    if (t == tok->tobjects.head) {
+        tok->tobjects.head = list_entry(tok->tobjects.head->l.next, tobject, l);
+    } else if (t == tok->tobjects.tail) {
+        /*
+         * remove the tail by setting the tail equal to the previous list object
+         * and setting the new tails next pointer to null as it's pointing to the
+         * old tail location.
+         */
+        tok->tobjects.tail = list_entry(tok->tobjects.tail->l.prev, tobject, l);
+        tok->tobjects.tail->l.next = NULL;
+    } else {
+        /*
+         * the previous objects next pointer should point past
+         * the removed object by pointing to it's next
+         */
+        t->l.prev->next = t->l.next;
+        t->l.next->prev = t->l.prev;
+    }
+
+    t->l.next = t->l.prev = NULL;
+}
+
 void token_free(token *t) {
 
     /*
@@ -71,14 +205,15 @@ void token_free(token *t) {
 
     sealobject_free(&t->sealobject);
 
-    if (t->tobjects) {
-        list *cur = &t->tobjects->l;
+    if (t->tobjects.head) {
+        list *cur = &t->tobjects.head->l;
         while(cur) {
             tobject *tobj = list_entry(cur, tobject, l);
             cur = cur->next;
             tobject_free(tobj);
         }
     }
+    t->tobjects.head = t->tobjects.tail = NULL;
 
     tpm_ctx_free(t->tctx);
 
@@ -526,75 +661,66 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
 
     tpm_ctx *tpm = tok->tctx;
 
-    if (!tok->tobjects) {
+    CK_RV rv = token_find_tobject(tok, key, loaded_tobj);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    tobject *tobj = *loaded_tobj;
+
+    rv = tobject_user_increment(tobj);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    /* this might not be the best place for this check */
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_CLASS);
+    if (!a) {
+        LOGE("All objects expected to have CKA_CLASS, missing"
+                " for tobj id: %lu", tobj->id);
+        return CKR_GENERAL_ERROR;
+    }
+
+    CK_OBJECT_CLASS v;
+    rv = attr_CK_OBJECT_CLASS(a, &v);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    if (v != CKO_PRIVATE_KEY
+            && v != CKO_PUBLIC_KEY
+            && v != CKO_SECRET_KEY) {
+        LOGE("Cannot use tobj id %lu in a crypto operation", tobj->id);
         return CKR_KEY_HANDLE_INVALID;
     }
 
-    list *cur = &tok->tobjects->l;
-    while(cur) {
-        tobject *tobj = list_entry(cur, tobject, l);
-        cur = cur->next;
-        if (tobj->id != key) {
-            continue;
-        }
-
-        CK_RV rv = tobject_user_increment(tobj);
-        if (rv != CKR_OK) {
-            return rv;
-        }
-
-        /* this might not be the best place for this check */
-        CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_CLASS);
-        if (!a) {
-            LOGE("All objects expected to have CKA_CLASS, missing"
-                    " for tobj id: %lu", tobj->id);
-            return CKR_GENERAL_ERROR;
-        }
-
-        CK_OBJECT_CLASS v;
-        rv = attr_CK_OBJECT_CLASS(a, &v);
-        if (rv != CKR_OK) {
-            return rv;
-        }
-
-        if (v != CKO_PRIVATE_KEY
-                && v != CKO_PUBLIC_KEY
-                && v != CKO_SECRET_KEY) {
-            LOGE("Cannot use tobj id %lu in a crypto operation", tobj->id);
-            return CKR_KEY_HANDLE_INVALID;
-        }
-
-        /*
-         * The object may already be loaded by the TPM or may just be
-         * a public key object not-resident in the TPM.
-         */
-        if (tobj->handle || !tobj->pub) {
-            *loaded_tobj = tobj;
-            return CKR_OK;
-        }
-
-        bool result = tpm_loadobj(
-                tpm,
-                tok->pobject.handle, tok->pobject.objauth,
-                tobj->pub, tobj->priv,
-                &tobj->handle);
-        if (!result) {
-            return CKR_GENERAL_ERROR;
-        }
-
-        rv = utils_ctx_unwrap_objauth(tok, tobj->objauth,
-                &tobj->unsealed_auth);
-        if (rv != CKR_OK) {
-            LOGE("Error unwrapping tertiary object auth");
-            return rv;
-        }
-
+    /*
+     * The object may already be loaded by the TPM or may just be
+     * a public key object not-resident in the TPM.
+     */
+    if (tobj->handle || !tobj->pub) {
         *loaded_tobj = tobj;
         return CKR_OK;
     }
 
-    // Found no match on key id
-    return CKR_KEY_HANDLE_INVALID;
+    bool result = tpm_loadobj(
+            tpm,
+            tok->pobject.handle, tok->pobject.objauth,
+            tobj->pub, tobj->priv,
+            &tobj->handle);
+    if (!result) {
+        return CKR_GENERAL_ERROR;
+    }
+
+    rv = utils_ctx_unwrap_objauth(tok, tobj->objauth,
+            &tobj->unsealed_auth);
+    if (rv != CKR_OK) {
+        LOGE("Error unwrapping tertiary object auth");
+        return rv;
+    }
+
+    *loaded_tobj = tobj;
+    return CKR_OK;
 }
 
 CK_RV token_get_mechanism_list(token *t, CK_MECHANISM_TYPE_PTR mechanism_list, CK_ULONG_PTR count) {

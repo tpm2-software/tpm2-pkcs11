@@ -367,9 +367,9 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
     tpm_ctx *tpm = tok->tctx;
 
     // Evict the keys
-    if (tok->tobjects) {
+    if (tok->tobjects.head) {
 
-        list *cur = &tok->tobjects->l;
+        list *cur = &tok->tobjects.head->l;
         while(cur) {
             tobject *tobj = list_entry(cur, tobject, l);
             cur = cur->next;
