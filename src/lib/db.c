@@ -38,7 +38,7 @@
 #define TPM2_PKCS11_STORE_DIR "/etc/tpm2_pkcs11"
 #endif
 
-#define DB_VERSION 2
+#define DB_VERSION 3
 
 #define goto_oom(x, l) if (!x) { LOGE("oom"); goto l; }
 #define goto_error(x, l) if (x) { goto l; }
@@ -1361,6 +1361,23 @@ CK_RV dbup_handler_from_1_to_2(sqlite3 *updb) {
     return run_sql_list(updb, sql, ARRAY_LEN(sql));
 }
 
+static CK_RV dbup_handler_from_2_to_3(sqlite3 *updb) {
+
+    /* Between version 2 and 3 of the DB the following changes need to be made:
+     *  - Drop the incorrect limit_tobjects TRIGGER.
+     */
+
+    /* Create a new table to copy data to that has the constraints removed */
+    const char *s = "DROP TRIGGER limit_tobjects;";
+    int rc = sqlite3_exec(updb, s, NULL, NULL, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("Cannot create temp table: %s", sqlite3_errmsg(updb));
+        return CKR_GENERAL_ERROR;
+    }
+
+    return CKR_OK;
+}
+
 static CK_RV db_backup(sqlite3 *db, const char *dbpath, sqlite3 **updb, char **copypath) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -1427,6 +1444,7 @@ CK_RV db_update(sqlite3 **xdb, const char *dbpath, unsigned old_version, unsigne
     static const db_update_handlers updaters[] = {
             NULL,
             dbup_handler_from_1_to_2,
+            dbup_handler_from_2_to_3,
     };
 
     /*
@@ -1616,15 +1634,6 @@ static CK_RV db_init_new(sqlite3 *db) {
         "        (SELECT COUNT (*) FROM tokens) >= 255\n"
         "    THEN\n"
         "        RAISE(FAIL, \"Maximum token count of 255 reached.\")\n"
-        "    END;\n"
-        "END;\n",
-        "CREATE TRIGGER limit_tobjects\n"
-        "BEFORE INSERT ON tobjects\n"
-        "BEGIN\n"
-        "    SELECT CASE WHEN\n"
-        "        (SELECT COUNT (*) FROM tobjects) >= 16777215\n"
-        "    THEN\n"
-        "        RAISE(FAIL, \"Maximum object count of 16777215 reached.\")\n"
         "    END;\n"
         "END;\n",
         "REPLACE INTO schema (id, schema_version) VALUES (1, "xstr(DB_VERSION) ");",
