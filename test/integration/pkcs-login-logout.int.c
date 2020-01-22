@@ -540,7 +540,7 @@ static void test_user_login_implicit_close_all_logout(void **state) {
     logout_expects(tsh[0]->handle, CKR_USER_NOT_LOGGED_IN);
 }
 
-static void swap_pin(CK_SESSION_HANDLE handle, CK_USER_TYPE user_type, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldpinlen) {
+static void _swap_pin(CK_SESSION_HANDLE handle, bool do_logout, CK_USER_TYPE user_type, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldpinlen) {
 
     CK_UTF8CHAR_PTR newpin = user_type == CKU_SO ? C("newsopin") : C("newuserpin");
     CK_ULONG newpinlen = user_type == CKU_SO ? (sizeof("newsopin") - 1): (sizeof("newuserpin") - 1);
@@ -548,7 +548,9 @@ static void swap_pin(CK_SESSION_HANDLE handle, CK_USER_TYPE user_type, CK_UTF8CH
     // Set the new pin
     CK_RV rv = C_SetPIN(handle, oldpin, oldpinlen, newpin, newpinlen);
     assert_int_equal(rv, CKR_OK);
-    logout(handle);
+    if (do_logout) {
+        logout(handle);
+    }
 
     // new pin should work for login
     login_expects(handle, user_type, CKR_OK, newpin, newpinlen);
@@ -558,6 +560,14 @@ static void swap_pin(CK_SESSION_HANDLE handle, CK_USER_TYPE user_type, CK_UTF8CH
     assert_int_equal(rv, CKR_OK);
 }
 
+static void swap_pin(CK_SESSION_HANDLE handle, CK_USER_TYPE user_type, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldpinlen) {
+    _swap_pin(handle, true, user_type, oldpin, oldpinlen);
+}
+
+static void swap_pin_nologout(CK_SESSION_HANDLE handle, CK_USER_TYPE user_type, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldpinlen) {
+    _swap_pin(handle, false, user_type, oldpin, oldpinlen);}
+
+
 static void test_user_state_pin_change_good(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -566,6 +576,16 @@ static void test_user_state_pin_change_good(void **state) {
     user_login(handle);
 
     swap_pin(handle, CKU_USER, C(GOOD_USERPIN), sizeof(GOOD_USERPIN) - 1);
+
+    logout(handle);
+}
+
+static void test_nologin_state_pin_change_good(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE handle = ti->slots[0].sessions[0].handle;
+
+    swap_pin_nologout(handle, CKU_USER, C(GOOD_USERPIN), sizeof(GOOD_USERPIN) - 1);
 
     logout(handle);
 }
@@ -674,6 +694,8 @@ int main() {
                 test_setup_rw, test_teardown),
         cmocka_unit_test_setup_teardown(test_so_state_pin_change_good,
                 test_setup_rw, test_teardown),
+        cmocka_unit_test_setup_teardown(test_nologin_state_pin_change_good,
+                        test_setup_rw, test_teardown),
         cmocka_unit_test_setup_teardown(test_ro_function_state_pin_change_bad,
                 test_setup_ro, test_teardown),
 
