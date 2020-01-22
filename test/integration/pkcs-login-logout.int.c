@@ -471,6 +471,75 @@ static void test_user_login_logout_time_two(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
+static void test_user_login_implicit_close_all_logout(void **state) {
+
+    /*
+     * We don't use the common init as this needs to manage session
+     * state on it's own
+     */
+    test_info *ti = _test_info_new();
+    *state = ti;
+
+    CK_SLOT_ID slot_id = ti->slots[0].slot_id;
+    test_session_handle *tsh[3] = {
+        &ti->slots[0].sessions[0],
+        &ti->slots[0].sessions[1],
+        &ti->slots[0].sessions[2]
+    };
+
+    /*
+     * Open an R/O session, state should be initally at
+     * CKS_RO_PUBLIC_SESSION
+     */
+    open_session(slot_id, false, tsh[0]);
+
+    CK_SESSION_INFO info;
+    CK_RV rv = C_GetSessionInfo(tsh[0]->handle, &info);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(info.state, CKS_RO_PUBLIC_SESSION);
+
+    /*
+     * Login should cause state to change from:
+     * CKS_RO_PUBLIC_SESSION
+     * to
+     * CKS_RO_USER_FUNCTIONS
+     */
+    user_login(tsh[0]->handle);
+
+    rv = C_GetSessionInfo(tsh[0]->handle, &info);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(info.state, CKS_RO_USER_FUNCTIONS);
+
+    /*
+     * Now that we're logged in, new R/0 sessions should start in the
+     * state: CKS_RO_USER_FUNCTIONS
+     */
+    open_session(slot_id, false, tsh[1]);
+
+    rv = C_GetSessionInfo(tsh[1]->handle, &info);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(info.state, CKS_RO_USER_FUNCTIONS);
+
+    /*
+     * Start another session but R/W, and state should be CKS_RW_USER_FUNCTIONS
+     */
+    open_session(slot_id, true, tsh[2]);
+
+    rv = C_GetSessionInfo(tsh[2]->handle, &info);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(info.state, CKS_RW_USER_FUNCTIONS);
+
+    /*
+     * C_CloseAllSessions: should cause a logout.
+     */
+    rv = C_CloseAllSessions(slot_id);
+    assert_int_equal(rv, CKR_OK);
+
+    /* no login should cause a CKR_USER_NOT_LOGGED_IN error */
+    open_session(slot_id, false, tsh[0]);
+    logout_expects(tsh[0]->handle, CKR_USER_NOT_LOGGED_IN);
+}
+
 static void swap_pin(CK_SESSION_HANDLE handle, CK_USER_TYPE user_type, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldpinlen) {
 
     CK_UTF8CHAR_PTR newpin = user_type == CKU_SO ? C("newsopin") : C("newuserpin");
@@ -584,9 +653,11 @@ int main() {
                 test_setup_ro, test_teardown),
         cmocka_unit_test_setup_teardown(test_user_login_logout_time_two,
                 NULL, test_teardown),
-                /*
-             * R/W Session Tests
-             */
+        cmocka_unit_test_setup_teardown(test_user_login_implicit_close_all_logout,
+                NULL, test_teardown),
+        /*
+         * R/W Session Tests
+         */
         cmocka_unit_test_setup_teardown(test_so_login_already_logged_in,
                 test_setup_rw, test_teardown),
         cmocka_unit_test_setup_teardown(test_so_login_logout_good,
