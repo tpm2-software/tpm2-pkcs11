@@ -82,3 +82,4 @@ m4/*
 
 # Java class files
 *.class
+*.stamp
