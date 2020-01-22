@@ -19,6 +19,11 @@ import org.junit.runner.JUnitCore;
 import org.junit.runner.Result;
 import org.junit.runner.notification.Failure;
 
+/* Introspection to support Java < 9 */
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.io.InputStream;
+
 public class PKCS11JavaTests {
 
     static final String PIN = "myuserpin";
@@ -29,15 +34,26 @@ public class PKCS11JavaTests {
     
     @BeforeClass
     public static void beforeAllTestMethods() throws Exception {
-    	/*
-    	 * Generate a new provider to use the SUNPKCS11 module
-    	 * 
-    	 */
-    	String cwd = System.getProperty("user.dir");
-    	Path libPath = Paths.get(cwd, "src/.libs/libtpm2_pkcs11.so.0.0.0");
-    	String pkcs11Config = "name = TPM2\nlibrary = " + libPath;
-        ByteArrayInputStream confStream = new ByteArrayInputStream(pkcs11Config.getBytes());
-        PROV = new sun.security.pkcs11.SunPKCS11(confStream);
+        /*
+         * Generate a new provider to use the SUNPKCS11 module
+         *
+         */
+        String cwd = System.getProperty("user.dir");
+        Path libPath = Paths.get(cwd, "src/.libs/libtpm2_pkcs11.so.0.0.0");
+
+        try {
+            /* Java >= 9 */
+            Method configure = Provider.class.getMethod("configure", String.class);
+            String pkcs11Config = "--name = TPM2\nlibrary = " + libPath;
+            PROV = Security.getProvider("SunPKCS11");
+            PROV = (Provider) configure.invoke(PROV, pkcs11Config);
+        } catch (NoSuchMethodException e) {
+            /* Java <= 8 */
+            Constructor SunPKCS11 = Class.forName("sun.security.pkcs11.SunPKCS11").getConstructor(InputStream.class);
+            String pkcs11Config = "name = TPM2\nlibrary = " + libPath;
+            ByteArrayInputStream confStream = new ByteArrayInputStream(pkcs11Config.getBytes());
+            PROV = (Provider) SunPKCS11.newInstance(confStream);
+        }
 
         /* add the provider */
         Security.addProvider(PROV);
