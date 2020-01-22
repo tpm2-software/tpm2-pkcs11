@@ -102,6 +102,13 @@ AC_ARG_ENABLE(
     [build and execute integration tests])],,
   [enable_integration=no])
 
+# Test for Java compiler and interpreter without throwing fatal errors (since
+# these macros are defined using AC_DEFUN they cannot be called conditionally)
+m4_pushdef([AC_MSG_ERROR], [have_javac=no])
+AX_PROG_JAVAC()
+AX_PROG_JAVA()
+m4_popdef([AC_MSG_ERROR])
+
 AC_DEFUN([integration_test_checks], [
 
   PKG_CHECK_MODULES([CMOCKA],[cmocka])
@@ -113,6 +120,13 @@ AC_DEFUN([integration_test_checks], [
   AC_CHECK_PROG([ss], [ss], [yes], [no])
     AS_IF([test "x$ss" != "xyes"],
       [AC_MSG_ERROR([Integration tests enabled but ss executable not found.])])
+
+  AS_IF([test "x$have_javac" = "xno"],
+    [AC_MSG_ERROR([Integration tests enabled but no Java compiler was found])])
+  AX_CHECK_CLASS([org.junit.Assert], ,
+    [AC_MSG_ERROR([Integration tests enabled but JUnit not found, try setting CLASSPATH])])
+  AX_CHECK_CLASS([org.hamcrest.SelfDescribing], ,
+    [AC_MSG_ERROR([Integration tests enabled but Hamcrest not found, try setting CLASSPATH])])
 
   AC_SUBST([ENABLE_INTEGRATION], [$enable_integration])
 ]) # end function integration_test_checks
