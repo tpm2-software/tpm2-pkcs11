@@ -413,6 +413,12 @@ bool token_is_user_logged_in(token *tok) {
     return tok->login_state & token_user_logged_in;
 }
 
+bool token_is_so_logged_in(token *tok) {
+
+    return tok->login_state & token_so_logged_in;
+}
+
+
 void token_lock(token *t) {
     mutex_lock_fatal(t->mutex);
 }
@@ -465,7 +471,10 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
     twist toldpin = NULL;
     twist tnewpin = NULL;
 
-    bool is_so = (tok->login_state == token_so_logged_in);
+    bool session_started = false;
+
+    bool is_so = token_is_so_logged_in(tok);
+    bool is_anyone_logged_in = token_is_any_user_logged_in(tok);
 
     toldpin = twistbin_new(oldpin, oldlen);
     if (!toldpin) {
@@ -498,6 +507,30 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
     twist oldauth = utils_hash_pass(toldpin, oldsalt);
     if (!oldauth) {
         goto out;
+    }
+
+    /* if no one is logged in, we need to start a session with the TPM */
+    if (!is_anyone_logged_in) {
+        rv = tpm_session_start(tok->tctx, tok->pobject.objauth, tok->pobject.handle);
+        if (rv != CKR_OK) {
+            LOGE("Could not start session with TPM");
+            goto out;
+        }
+        session_started = true;
+
+        assert(!tok->sealobject.handle);
+
+        sealobject *sealobj = &tok->sealobject;
+
+        twist sealpub = is_so ? sealobj->sopub : sealobj->userpub;
+        twist sealpriv = is_so ? sealobj->sopriv : sealobj->userpriv;
+
+        bool res = tpm_loadobj(tok->tctx, tok->pobject.handle, tok->pobject.objauth,
+                sealpub, sealpriv, &sealobj->handle);
+        if (!res) {
+            rv = CKR_GENERAL_ERROR;
+            goto out;
+        }
     }
 
     /*
@@ -554,6 +587,20 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
     rv = CKR_OK;
 
 out:
+
+    if (session_started) {
+        rv = tpm_session_stop(tok->tctx);
+        if (rv != CKR_OK) {
+            LOGE("Could not stop session with TPM");
+        }
+        bool result = tpm_flushcontext(tok->tctx, tok->sealobject.handle);
+        if (!result) {
+            LOGW("Could not evict the seal object");
+            assert(0);
+            rv = CKR_GENERAL_ERROR;
+        }
+        tok->sealobject.handle = 0;
+    }
 
     /* If the function failed, then these pointers ARE NOT CLAIMED and must be free'd */
     if (rv != CKR_OK) {
