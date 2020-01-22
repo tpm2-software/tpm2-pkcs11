@@ -300,7 +300,7 @@ CK_RV object_find(session_ctx *ctx, CK_OBJECT_HANDLE *object, CK_ULONG max_objec
         CK_OBJECT_HANDLE handle = opdata->cur->tobj_handle;
 
         // filter out CKO_PRIVATE and CKO_SECRET if not logged in
-        if (token_is_user_logged_in(tok) && is_not_public(opdata->cur)) {
+        if (!token_is_user_logged_in(tok) && is_not_public(opdata->cur)) {
             opdata->cur = opdata->cur->next;
             continue;
         }
