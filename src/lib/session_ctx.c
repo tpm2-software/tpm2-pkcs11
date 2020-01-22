@@ -282,7 +282,6 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
     uint32_t pobj_handle = tok->pobject.handle;
     twist pobjauth = tok->pobject.objauth;
 
-    // TODO evict sealobjhandle
     bool res = tpm_loadobj(tpm, pobj_handle, pobjauth, sealpub, sealpriv, &sealobj->handle);
     if (!res) {
         goto error;
@@ -385,6 +384,14 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
             }
         }
     }
+
+    /* evict the seal object */
+    bool result = tpm_flushcontext(tpm, tok->sealobject.handle);
+    if (!result) {
+        LOGW("Could not evict the seal object");
+        assert(0);
+    }
+    tok->sealobject.handle = 0;
 
     /*
      * State transition all sessions in the table
