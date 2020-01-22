@@ -6,7 +6,7 @@ import sqlite3
 import textwrap
 import yaml
 
-VERSION = 2
+VERSION = 3
 
 #
 # With Db() as db:
@@ -312,6 +312,9 @@ class Db(object):
         ]
         for s in sql:
             dbbakcon.execute(s)
+
+    def _update_on_3(self, dbbakcon):
+        dbbakcon.execute('DROP TRIGGER limit_tobjects;')
 
     def update_db(self, old_version, new_version=VERSION):
         
