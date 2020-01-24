@@ -3165,7 +3165,7 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
         add_mech(CKM_SHA1_RSA_PKCS);
         add_mech(CKM_SHA256_RSA_PKCS);
         add_mech(CKM_SHA384_RSA_PKCS);
-        add_mech(CKM_SHA512_RSA_PKCS_PSS);
+        add_mech(CKM_SHA512_RSA_PKCS);
 
         /*
          * PSS cannot be synthesized, so always check for support before

@@ -43,50 +43,6 @@ static void sign_opdata_free(sign_opdata **opdata) {
     *opdata = NULL;
 }
 
-
-static CK_RV is_off_tpm_hashing_needed(token *t, CK_MECHANISM_TYPE mech, bool *is_pkcs1_5_hash_needed) {
-
-    /* all hashing already done, no need to do anything */
-    if (mech == CKM_ECDSA
-        || mech == CKM_RSA_PKCS) {
-        return CKR_OK;
-    }
-
-    /* does the TPM natively support it? If it does, nothing to do */
-    CK_MECHANISM_TYPE mechs[64];
-    CK_ULONG count = ARRAY_LEN(mechs);
-    CK_RV rv = token_get_mechanism_list(t, mechs, &count);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    CK_ULONG i;
-    for (i=0; i < count; i++) {
-        CK_MECHANISM_TYPE m = mechs[i];
-        if (m == mech) {
-            *is_pkcs1_5_hash_needed = false;
-            return CKR_OK;
-        }
-    }
-
-    /* tpm doesn't support it, is it what we know how to synthesize */
-    switch (mech) {
-        case CKM_SHA1_RSA_PKCS:
-        case CKM_SHA256_RSA_PKCS:
-        case CKM_SHA384_RSA_PKCS:
-        case CKM_SHA512_RSA_PKCS:
-            *is_pkcs1_5_hash_needed = true;
-            return CKR_OK;
-        /* no default */
-    }
-
-    /*
-     * if it's not in the list, we assume we
-     * can't synthesize it
-     */
-    return CKR_MECHANISM_INVALID;
-}
-
 static CK_RV ec_fixup_size(CK_MECHANISM_TYPE mech, tobject *tobj, CK_ULONG_PTR signature_len) {
 
     if (mech != CKM_ECDSA &&
@@ -463,20 +419,9 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
      */
 
     bool is_raw_sign = utils_mech_is_raw_sign(opdata->mech.mechanism);
-    bool is_not_tpm_supported_pkcs1_5 = false;
-    rv = is_off_tpm_hashing_needed(tok, opdata->mech.mechanism, &is_not_tpm_supported_pkcs1_5);
-    if (rv != CKR_OK) {
-        goto session_out;
-    }
+    bool is_pkcs1_5 = utils_mech_is_rsa_pkcs(opdata->mech.mechanism);
 
-    if (is_raw_sign || is_not_tpm_supported_pkcs1_5) {
-
-        bool is_rsa_pkcs1_5 = utils_mech_is_rsa_pkcs(opdata->mech.mechanism);
-        if (!is_rsa_pkcs1_5) {
-            LOGE("Do not support synthesizing non PKCS 1_5 signing/padding schemes");
-            rv = CKR_MECHANISM_INVALID;
-            goto session_out;
-        }
+    if (is_raw_sign || (is_pkcs1_5 && opdata->do_hash)) {
 
         bool free_built = false;
         char *built = NULL;
