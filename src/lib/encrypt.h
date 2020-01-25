@@ -21,10 +21,11 @@ union crypto_op_data{
 
 struct encrypt_op_data {
     bool use_sw;
+    CK_OBJECT_CLASS clazz;
     crypto_op_data cryptopdata;
 };
 
-encrypt_op_data *encrypt_op_data_new(void);
+encrypt_op_data *encrypt_op_data_new(tobject *tobj);
 void encrypt_op_data_free(encrypt_op_data **opdata);
 
 CK_RV encrypt_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key);
