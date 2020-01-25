@@ -466,7 +466,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
         }
 
         /* sign padded pkcs 1.5 structure */
-        encrypt_op_data *encrypt_opdata = encrypt_op_data_new();
+        encrypt_op_data *encrypt_opdata = encrypt_op_data_new(tobj);
         if (!encrypt_opdata) {
             free(padded);
             rv = CKR_HOST_MEMORY;

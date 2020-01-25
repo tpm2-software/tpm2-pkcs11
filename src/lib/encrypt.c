@@ -17,7 +17,7 @@ struct sw_encrypt_data {
     RSA *key;
 };
 
-typedef CK_RV (*crypto_op)(crypto_op_data *enc_data, CK_BYTE_PTR in, CK_ULONG inlen, CK_BYTE_PTR out, CK_ULONG_PTR outlen);
+typedef CK_RV (*crypto_op)(crypto_op_data *enc_data, CK_OBJECT_CLASS, CK_BYTE_PTR in, CK_ULONG inlen, CK_BYTE_PTR out, CK_ULONG_PTR outlen);
 
 static sw_encrypt_data *sw_encrypt_data_new(void) {
 
@@ -36,9 +36,29 @@ static void sw_encrypt_data_free(sw_encrypt_data *enc_data) {
     free(enc_data);
 }
 
-encrypt_op_data *encrypt_op_data_new(void) {
+encrypt_op_data *encrypt_op_data_new(tobject *tobj) {
 
-    return (encrypt_op_data *)calloc(1, sizeof(encrypt_op_data));
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_CLASS);
+    if (!a) {
+        LOGE("Expected tobjects to have attribuet CKA_CLASS");
+        return NULL;
+    }
+
+    CK_OBJECT_CLASS clazz;
+    CK_RV rv = attr_CK_OBJECT_CLASS(a, &clazz);
+    if (rv != CKR_OK) {
+        LOGE("Could not convert CKA_CLASS");
+        return NULL;
+    }
+
+    encrypt_op_data *d = (encrypt_op_data *)calloc(1, sizeof(encrypt_op_data));
+    if (!d) {
+        return NULL;
+    }
+
+    d->clazz = clazz;
+
+    return d;
 }
 
 void encrypt_op_data_free(encrypt_op_data **opdata) {
@@ -134,9 +154,10 @@ error:
     return rv;
 }
 
-CK_RV sw_encrypt(crypto_op_data *opdata,
+CK_RV sw_encrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
         CK_BYTE_PTR ptext, CK_ULONG ptextlen,
         CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen) {
+    UNUSED(clazz);
     assert(opdata);
 
     sw_encrypt_data *sw_enc_data = opdata->sw_enc_data;
@@ -173,9 +194,10 @@ CK_RV sw_encrypt(crypto_op_data *opdata,
     return CKR_OK;
 }
 
-CK_RV sw_decrypt(crypto_op_data *opdata,
+CK_RV sw_decrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
         CK_BYTE_PTR ctext, CK_ULONG ctextlen,
         CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen) {
+    UNUSED(clazz);
     assert(opdata);
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -258,7 +280,7 @@ static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata,
 
     encrypt_op_data *opdata;
     if (!supplied_opdata) {
-        opdata = encrypt_op_data_new();
+        opdata = encrypt_op_data_new(tobj);
         if (!opdata) {
             tobject_user_decrement(tobj);
             return CKR_HOST_MEMORY;
@@ -335,7 +357,7 @@ static CK_RV common_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdat
         return CKR_GENERAL_ERROR;
     }
 
-    rv = fop(&opdata->cryptopdata, part, part_len,
+    rv = fop(&opdata->cryptopdata, opdata->clazz, part, part_len,
             encrypted_part, encrypted_part_len);
     if (rv != CKR_OK) {
         goto out;
