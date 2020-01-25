@@ -1836,14 +1836,15 @@ out:
 #define ENCRYPT 0
 #define DECRYPT 1
 
-CK_RV tpm_encrypt(crypto_op_data *opdata,
+CK_RV tpm_encrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
         CK_BYTE_PTR ptext, CK_ULONG ptextlen,
         CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen) {
 
     tpm_encrypt_data *tpm_enc_data = opdata->tpm_enc_data;
 
     if (tpm_enc_data->is_rsa) {
-        return tpm_rsa_encrypt(tpm_enc_data, ptext, ptextlen, ctext, ctextlen);
+        return clazz == CKO_PRIVATE_KEY ? tpm_rsa_decrypt(tpm_enc_data, ptext, ptextlen, ctext, ctextlen) :
+                tpm_rsa_encrypt(tpm_enc_data, ptext, ptextlen, ctext, ctextlen);
     }
 
     tpm_ctx *ctx = tpm_enc_data->ctx;
@@ -1857,14 +1858,16 @@ CK_RV tpm_encrypt(crypto_op_data *opdata,
             iv, ptext, ptextlen, ctext, ctextlen);
 }
 
-CK_RV tpm_decrypt(crypto_op_data *opdata,
+CK_RV tpm_decrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
         CK_BYTE_PTR ctext, CK_ULONG ctextlen,
         CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen) {
 
     tpm_encrypt_data *tpm_enc_data = opdata->tpm_enc_data;
 
     if (tpm_enc_data->is_rsa) {
-        return tpm_rsa_decrypt(tpm_enc_data, ctext, ctextlen, ptext, ptextlen);
+        LOGV("tpm_encrypt object class: %lu", clazz);
+        return clazz == CKO_PRIVATE_KEY ? tpm_rsa_decrypt(tpm_enc_data, ctext, ctextlen, ptext, ptextlen) :
+                tpm_rsa_encrypt(tpm_enc_data, ctext, ctextlen, ptext, ptextlen);
     }
 
     tpm_ctx *ctx = tpm_enc_data->ctx;
