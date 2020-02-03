@@ -458,7 +458,7 @@ class ObjMod(Command):
             print(yaml.safe_dump({keyname : obj_attrs[key]}))
             sys.exit()
 
-        if not type:
+        if not vtype:
             sys.exit("When specifying a value, type is required")
 
         value = getattr(cls, ObjMod._type_map[vtype])(value)
