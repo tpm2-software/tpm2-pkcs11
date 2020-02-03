@@ -179,15 +179,6 @@ static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
     return false;
 }
 
-static CK_RV is_mech_allowed(CK_MECHANISM_TYPE mech) {
-
-    if (mech == CKM_RSA_X_509) {
-        return CKR_KEY_FUNCTION_NOT_PERMITTED;
-    }
-
-    return CKR_OK;
-}
-
 static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
 
     check_pointer(mechanism);
@@ -204,11 +195,6 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
 
     tobject *tobj = NULL;
     rv = token_load_object(tok, key, &tobj);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    rv = is_mech_allowed(mechanism->mechanism);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -469,64 +455,79 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
         goto session_out;
     }
 
+    bool free_data = false;
     if (is_raw_sign || is_not_tpm_supported_pkcs1_5) {
 
+        char *data_to_enc = NULL;
+        size_t data_to_enc_len = 0;
+
         bool is_rsa_pkcs1_5 = utils_mech_is_rsa_pkcs(opdata->mech.mechanism);
-        if (!is_rsa_pkcs1_5) {
-            LOGE("Do not support synthesizing non PKCS 1_5 signing/padding schemes");
-            rv = CKR_MECHANISM_INVALID;
-            goto session_out;
-        }
+        if (opdata->mech.mechanism != CKM_RSA_X_509) {
+            if (!is_rsa_pkcs1_5) {
+                LOGE("Do not support synthesizing non PKCS 1_5 signing/padding schemes");
+                rv = CKR_MECHANISM_INVALID;
+                goto session_out;
+            }
 
-        bool free_built = false;
-        char *built = NULL;
-        size_t built_len = 0;
+            bool free_built = false;
+            char *built = NULL;
+            size_t built_len = 0;
 
-        if(opdata->do_hash) {
-            /*
-             * Ok we did the hash, AND because of the entry condition, it's a SW hash, as is_raw_sign
-             * means we didn't do the hashing. In this case, hash and hash_len should be set with
-             * the digest.
-             */
-            assert(hash);
-            assert(hash_len);
-            assert(!opdata->buffer);
+            if(opdata->do_hash) {
+                /*
+                 * Ok we did the hash, AND because of the entry condition, it's a SW hash, as is_raw_sign
+                 * means we didn't do the hashing. In this case, hash and hash_len should be set with
+                 * the digest.
+                 */
+                assert(hash);
+                assert(hash_len);
+                assert(!opdata->buffer);
 
-            rv = pkcs1_5_build_struct(opdata->mech.mechanism, hash, hash_len, &built, &built_len);
+                rv = pkcs1_5_build_struct(opdata->mech.mechanism, hash, hash_len, &built, &built_len);
+                if (rv != CKR_OK) {
+                    goto session_out;
+                }
+
+                free_built = true;
+
+            } else {
+                /*
+                 * We just mark the existing PKCS1.5 signing structure as
+                 * hash so we can just apply padding to hash below.
+                 */
+                assert(!hash);
+                assert(!hash_len);
+                assert(opdata->buffer);
+
+                built = (char *)opdata->buffer;
+                built_len = twist_len(opdata->buffer);
+            }
+
+            /* apply padding */
+            char *padded = NULL;
+            size_t padded_len = 0;
+            rv = apply_pkcs_1_5_pad(tobj, built, built_len, &padded, &padded_len);
+            if (free_built) {
+                free(built);
+            }
             if (rv != CKR_OK) {
                 goto session_out;
             }
 
-            free_built = true;
-
+            free_data = true;
+            data_to_enc = padded;
+            data_to_enc_len = padded_len;
         } else {
-            /*
-             * We just mark the existing PKCS1.5 signing structure as
-             * hash so we can just apply padding to hash below.
-             */
-            assert(!hash);
-            assert(!hash_len);
-            assert(opdata->buffer);
-
-            built = (char *)opdata->buffer;
-            built_len = twist_len(opdata->buffer);
-        }
-
-        /* apply padding */
-        char *padded = NULL;
-        size_t padded_len = 0;
-        rv = apply_pkcs_1_5_pad(tobj, built, built_len, &padded, &padded_len);
-        if (free_built) {
-            free(built);
-        }
-        if (rv != CKR_OK) {
-            goto session_out;
+            data_to_enc = (char *)opdata->buffer;
+            data_to_enc_len = twist_len(opdata->buffer);
         }
 
         /* sign padded pkcs 1.5 structure */
         encrypt_op_data *encrypt_opdata = encrypt_op_data_new();
         if (!encrypt_opdata) {
-            free(padded);
+            if (free_data) {
+                free(data_to_enc);
+            }
             rv = CKR_HOST_MEMORY;
             goto session_out;
         }
@@ -539,13 +540,17 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
         /* RSA Decrypt is the RSA operation with the private key, which is what we want */
         rv = decrypt_init_op(ctx, encrypt_opdata, &mechanism, tobj->index);
         if (rv != CKR_OK) {
-            free(padded);
+            if (free_data) {
+                free(data_to_enc);
+            }
             encrypt_op_data_free(&encrypt_opdata);
             goto session_out;
         }
 
-        rv = decrypt_oneshot_op(ctx, encrypt_opdata, (CK_BYTE_PTR)padded, padded_len, signature, signature_len);
-        free(padded);
+        rv = decrypt_oneshot_op(ctx, encrypt_opdata, (CK_BYTE_PTR)data_to_enc, data_to_enc_len, signature, signature_len);
+        if (free_data) {
+            free(data_to_enc);
+        }
         encrypt_op_data_free(&encrypt_opdata);
         if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
             goto session_out;
