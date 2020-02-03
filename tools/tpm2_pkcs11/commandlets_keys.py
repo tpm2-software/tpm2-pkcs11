@@ -451,10 +451,10 @@ class ObjMod(Command):
                 sys.exit('Unknown key: %d', key)
             keyname = keynames[key]
 
-        if key and not key in obj_attrs:
-            sys.exit("Key not found")
-
         if not value:
+            if key and not key in obj_attrs:
+                sys.exit("Key not found")
+
             print(yaml.safe_dump({keyname : obj_attrs[key]}))
             sys.exit()
 
