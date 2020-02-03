@@ -8,7 +8,10 @@
     via public encrypt and private decrypt.
   * Decouple handles from db primary keys. Key handles are
     no longer stable between runs.
-
+  * tpm2_ptool objmod:
+    - Support adding an attribute.
+    - Fix bug in variable name vtype over type.
+    
 ### 1.0.1 - 2020-1-6
 
   * stop linking against libdl
