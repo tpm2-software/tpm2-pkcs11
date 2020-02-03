@@ -1062,6 +1062,9 @@ CK_RV get_signature_scheme(CK_MECHANISM_PTR mech, CK_ULONG datalen, TPMT_SIG_SCH
 
             p = mech->pParameter;
 
+            LOGV("PSS PARAMS\n\thashAlg:0x%x\n\tmgf: 0x%x\n\tsLen: %d",
+                    p->hashAlg, p->mgf, p->sLen);
+
             halg = mech_to_hash_alg_ex(p->hashAlg, datalen);
         }
 
