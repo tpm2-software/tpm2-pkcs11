@@ -349,6 +349,8 @@ bool utils_mech_is_raw_sign(CK_MECHANISM_TYPE mech) {
 
     switch(mech) {
     case CKM_RSA_PKCS:
+        /* falls-thru */
+    case CKM_RSA_X_509:
         return true;
     default:
         return false;
