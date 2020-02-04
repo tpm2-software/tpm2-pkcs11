@@ -11,6 +11,8 @@
   * tpm2_ptool objmod:
     - Support adding an attribute.
     - Fix bug in variable name vtype over type.
+  * C_Sign: support mechanism CKM_RSA_X_509.
+  * C_GetTokenInfo: add missing mechanism CKM_SHA512_RSA_PKCS.
     
 ### 1.0.1 - 2020-1-6
 
