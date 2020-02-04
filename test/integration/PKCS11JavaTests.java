@@ -10,6 +10,9 @@ import java.security.Provider;
 import java.security.Security;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.Signature;
 import javax.crypto.Cipher;
 
 import org.junit.Assert;
@@ -93,8 +96,38 @@ public class PKCS11JavaTests {
         String decrypted = new String(decryptedData, output - plainData.length, plainData.length);
         
         Assert.assertEquals(plaintext, decrypted);
-    }	
-	
+    }
+    
+    @Test
+    public void test_signverify_signature() throws Exception {
+
+        /* Get the key/cert pair */
+        Key rsaKey = KEY_STORE.getKey(KEY_ALIAS, null);
+        Assert.assertEquals("RSA", rsaKey.getAlgorithm());
+
+        X509Certificate certificate = (X509Certificate) KEY_STORE.getCertificate(KEY_ALIAS);
+
+        /* get the public key from the cert */
+        Key rsaPublicKey = certificate.getPublicKey();
+
+        /* Sign private Verify public */
+        Signature signature = Signature.getInstance("SHA256withRSA", PROV);
+
+        String plaintext = "mysecretdata";
+
+        byte[] plainData = plaintext.getBytes("UTF-8");
+
+        signature.initSign((PrivateKey) rsaKey);
+        signature.update(plainData);
+        byte[] signedData = signature.sign();
+
+        signature.initVerify((PublicKey)rsaPublicKey);
+        signature.update(plainData);
+
+        boolean retSignature = signature.verify(signedData);
+        Assert.assertTrue(retSignature);
+    }
+
 	public static void main(String [] args) {
 		int rc = 1;
 		Result result = JUnitCore.runClasses(PKCS11JavaTests.class);
