@@ -97,7 +97,8 @@ integration_scripts = \
     test/integration/pkcs11-dbup.sh.nosetup \
     test/integration/tls-tests.sh \
     test/integration/openssl.sh \
-    test/integration/pkcs11-javarunner.sh.java
+    test/integration/pkcs11-javarunner.sh.java \
+    test/integration/nss-tests.sh
 
 EXTRA_DIST += \
     $(integration_scripts) \
