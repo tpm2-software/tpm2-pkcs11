@@ -270,7 +270,13 @@ def pemcert_to_attrs(certpath):
         hexbercertchecksum = h(bercertchecksum).decode()
 
         subj = c['subject']
-        hexsubj=h(d(str2bytes(subj))).decode()
+        hexsubj = h(d(str2bytes(subj))).decode()
+
+        issuer = c['issuer']
+        hexissuer = h(d(str2bytes(issuer))).decode()
+
+        serial = c['serialNumber']
+        hexserial = h(d(str2bytes(serial))).decode()
 
         return {
             # The attrs of this attribute is derived by taking the first 3 bytes of the CKA_VALUE
@@ -285,10 +291,10 @@ def pemcert_to_attrs(certpath):
             CKA_PUBLIC_KEY_INFO : "",
             # DER encoded subject
             CKA_SUBJECT : hexsubj,
-            # der encoding of issuer, default empty
-            CKA_ISSUER : '',
-            # der encoding of the cert serial, default empty
-            CKA_SERIAL_NUMBER : '',
+            # DER encoding of issuer
+            CKA_ISSUER : hexissuer,
+            # DER encoding of the cert serial
+            CKA_SERIAL_NUMBER : hexserial,
             # BER encoding of the certificate
             CKA_VALUE : hexbercert,
             # RFC2279 string to URL where cert can be found, default empty

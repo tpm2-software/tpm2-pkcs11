@@ -396,6 +396,8 @@ static void verify_cert_attrs(CK_SESSION_HANDLE s, CK_OBJECT_HANDLE h) {
     CK_ATTRIBUTE_PTR value = NULL;
     CK_ATTRIBUTE_PTR checkvalue = NULL;
     CK_ATTRIBUTE_PTR subject = NULL;
+    CK_ATTRIBUTE_PTR issuer = NULL;
+    CK_ATTRIBUTE_PTR serial_number = NULL;
 
     CK_ULONG i = 0;
     for (i=0; i < ARRAY_LEN(attrs); i++) {
@@ -430,6 +432,12 @@ static void verify_cert_attrs(CK_SESSION_HANDLE s, CK_OBJECT_HANDLE h) {
             case CKA_SUBJECT:
                 subject = a;
                 break;
+            case CKA_ISSUER:
+                issuer = a;
+		break;
+            case CKA_SERIAL_NUMBER:
+                serial_number = a;
+		break;
             case CKA_LABEL:
                 /* a label should be set ? */
                 assert_true(a->ulValueLen > 0);
@@ -456,10 +464,6 @@ static void verify_cert_attrs(CK_SESSION_HANDLE s, CK_OBJECT_HANDLE h) {
                 // falls-thru
             case CKA_PUBLIC_KEY_INFO:
                 // falls-thru
-            case CKA_ISSUER:
-                // falls-thru
-            case CKA_SERIAL_NUMBER:
-                // falls-thru
             case CKA_START_DATE:
                 // falls-thru
             case CKA_END_DATE:
@@ -471,6 +475,8 @@ static void verify_cert_attrs(CK_SESSION_HANDLE s, CK_OBJECT_HANDLE h) {
     }
 
     assert_non_null(subject);
+    assert_non_null(issuer);
+    assert_non_null(serial_number);
 
     assert_non_null(value);
     assert_non_null(checkvalue);
