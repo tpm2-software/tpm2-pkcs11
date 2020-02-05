@@ -412,7 +412,6 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
 
     if (is_raw_sign || (is_pkcs1_5 && opdata->do_hash)) {
 
-        bool free_built = false;
         char *built = NULL;
         size_t built_len = 0;
 
@@ -431,30 +430,38 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
                 goto session_out;
             }
 
-            free_built = true;
-
         } else {
+
             /*
-             * We just mark the existing PKCS1.5 signing structure as
-             * hash so we can just apply padding to hash below.
+             * We just use the appended buffer, but make a copy to make the free logic easier.
              */
             assert(!hash);
             assert(!hash_len);
             assert(opdata->buffer);
 
-            built = (char *)opdata->buffer;
+            built = malloc(twist_len(opdata->buffer));
+            if (!built) {
+                goto session_out;
+            }
             built_len = twist_len(opdata->buffer);
+            memcpy(built, opdata->buffer, built_len);
         }
 
-        /* apply padding */
         char *padded = NULL;
         size_t padded_len = 0;
-        rv = apply_pkcs_1_5_pad(tobj, built, built_len, &padded, &padded_len);
-        if (free_built) {
+
+        if (is_pkcs1_5) {
+            /* apply padding */
+            rv = apply_pkcs_1_5_pad(tobj, built, built_len, &padded, &padded_len);
             free(built);
-        }
-        if (rv != CKR_OK) {
-            goto session_out;
+            if (rv != CKR_OK) {
+                goto session_out;
+            }
+        } else {
+            padded = built;
+            padded_len = built_len;
+            built = NULL;
+            built_len = 0;
         }
 
         /* sign padded pkcs 1.5 structure */
