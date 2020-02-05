@@ -985,18 +985,22 @@ TPMI_ALG_HASH mech_to_hash_alg_ex(CK_MECHANISM_TYPE mode, CK_ULONG datalen) {
         return TPM2_ALG_NULL;
 
     case CKM_SHA1_RSA_PKCS:
+    case CKM_SHA1_RSA_PKCS_PSS:
     case CKM_SHA_1:
         return TPM2_ALG_SHA1;
 
     case CKM_SHA256_RSA_PKCS:
+    case CKM_SHA256_RSA_PKCS_PSS:
     case CKM_SHA256:
         return TPM2_ALG_SHA256;
 
     case CKM_SHA384_RSA_PKCS:
+    case CKM_SHA384_RSA_PKCS_PSS:
     case CKM_SHA384:
         return TPM2_ALG_SHA384;
 
     case CKM_SHA512_RSA_PKCS:
+    case CKM_SHA512_RSA_PKCS_PSS:
     case CKM_SHA512:
         return TPM2_ALG_SHA512;
 

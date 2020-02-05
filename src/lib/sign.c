@@ -381,7 +381,10 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
     if (opdata->do_hash) {
 
         hash_len = utils_get_halg_size(opdata->mech.mechanism);
-
+        if (!hash_len) {
+            LOGE("Hash algorithm cannot have 0 size");
+            return CKR_GENERAL_ERROR;
+        }
         hash = malloc(hash_len);
         if (!hash) {
             LOGE("oom");
