@@ -1594,6 +1594,8 @@ CK_RV tpm_rsa_decrypt(tpm_encrypt_data *tpm_enc_data,
         CK_BYTE_PTR ctext, CK_ULONG ctextlen,
         CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen) {
 
+    LOGV("Performing TPM RSA Decrypt");
+
     CK_RV rv = CKR_GENERAL_ERROR;
 
     tpm_ctx *ctx = tpm_enc_data->ctx;
@@ -1662,6 +1664,8 @@ out:
 CK_RV tpm_rsa_encrypt(tpm_encrypt_data *tpm_enc_data,
         CK_BYTE_PTR pptext, CK_ULONG pptextlen,
         CK_BYTE_PTR cctext, CK_ULONG_PTR cctextlen) {
+
+    LOGV("Performing TPM RSA Encrypt");
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
