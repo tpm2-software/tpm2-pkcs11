@@ -42,18 +42,26 @@ static const EVP_MD *ossl_halg_from_mech(CK_MECHANISM_TYPE mech) {
         case CKM_ECDSA_SHA1:
             /* falls-thru */
         case CKM_SHA1_RSA_PKCS:
+            /* falls-thru */
+        case CKM_SHA1_RSA_PKCS_PSS:
             return EVP_sha1();
         case CKM_SHA256:
             /* falls-thru */
         case CKM_SHA256_RSA_PKCS:
+            /* falls-thru */
+        case CKM_SHA256_RSA_PKCS_PSS:
             return EVP_sha256();
         case CKM_SHA384:
             /* falls-thru */
         case CKM_SHA384_RSA_PKCS:
+            /* falls-thru */
+        case CKM_SHA384_RSA_PKCS_PSS:
             return EVP_sha384();
         case CKM_SHA512:
             /* falls-thru */
         case CKM_SHA512_RSA_PKCS:
+            /* falls-thru */
+        case CKM_SHA512_RSA_PKCS_PSS:
             return EVP_sha512();
         default:
             return NULL;
