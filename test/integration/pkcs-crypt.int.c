@@ -8,7 +8,10 @@ struct test_info {
     struct {
         CK_OBJECT_HANDLE aes;
         CK_OBJECT_HANDLE aes_always_auth;
-        CK_OBJECT_HANDLE rsa;
+        struct {
+            CK_OBJECT_HANDLE priv;
+            CK_OBJECT_HANDLE pub;
+        } rsa;
     } objects;
 };
 
@@ -47,7 +50,7 @@ static int test_setup(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     /* get a AES key without always auth*/
-    CK_OBJECT_HANDLE objhandles[3];
+    CK_OBJECT_HANDLE objhandles[4];
     rv = C_FindObjects(handle, &objhandles[0], 1, &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(count, 1);
@@ -71,18 +74,39 @@ static int test_setup(void **state) {
     key_class = CKO_PRIVATE_KEY;
     key_type = CKK_RSA;
 
-    tmpl[0].type = CKA_CLASS;
-    tmpl[0].pValue = &key_class;
-    tmpl[0].ulValueLen = sizeof(key_class);
-    tmpl[1].type = CKA_KEY_TYPE;
-    tmpl[1].pValue = &key_type;
-    tmpl[1].ulValueLen = sizeof(key_type);
-    tmpl[2].pValue = &_false;
+    char _label[] = "rsa0";
 
-    rv = C_FindObjectsInit(handle, tmpl, ARRAY_LEN(tmpl));
+    CK_ATTRIBUTE tmpl_rsapriv[] = {
+      {CKA_CLASS, &key_class, sizeof(key_class)},
+      {CKA_KEY_TYPE, &key_type, sizeof(key_type)},
+      {CKA_ALWAYS_AUTHENTICATE, &_false, sizeof(_false)},
+      {CKA_LABEL, _label, sizeof(_label) - 1},
+    };
+
+    rv = C_FindObjectsInit(handle, tmpl_rsapriv, ARRAY_LEN(tmpl_rsapriv));
     assert_int_equal(rv, CKR_OK);
 
     rv = C_FindObjects(handle, &objhandles[2], 1, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(handle);
+    assert_int_equal(rv, CKR_OK);
+
+    /* get an rsa public key */
+    key_class = CKO_PUBLIC_KEY;
+    key_type = CKK_RSA;
+
+    CK_ATTRIBUTE tmpl_rsapub[] = {
+      {CKA_CLASS, &key_class, sizeof(key_class)},
+      {CKA_KEY_TYPE, &key_type, sizeof(key_type)},
+      {CKA_LABEL, _label, sizeof(_label) - 1},
+    };
+
+    rv = C_FindObjectsInit(handle, tmpl_rsapub, ARRAY_LEN(tmpl_rsapub));
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjects(handle, &objhandles[3], 1, &count);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(count, 1);
 
@@ -94,7 +118,8 @@ static int test_setup(void **state) {
     info->slot = slots[1];
     info->objects.aes = objhandles[0];
     info->objects.aes_always_auth = objhandles[1];
-    info->objects.rsa = objhandles[2];
+    info->objects.rsa.priv = objhandles[2];
+    info->objects.rsa.pub = objhandles[3];
 
     *state = info;
 
@@ -459,7 +484,7 @@ static void test_rsa_oaep_encrypt_decrypt_oneshot_good(void **state) {
     CK_BYTE ciphertext[256] = { 0 };
 
     /* init */
-    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.rsa);
+    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.rsa.pub);
     assert_int_equal(rv, CKR_OK);
 
     /* part 1 */
@@ -469,7 +494,7 @@ static void test_rsa_oaep_encrypt_decrypt_oneshot_good(void **state) {
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(ciphertext_len, sizeof(ciphertext));
 
-    rv = C_DecryptInit (session, &mechanism, ti->objects.rsa);
+    rv = C_DecryptInit (session, &mechanism, ti->objects.rsa.priv);
     assert_int_equal(rv, CKR_OK);
 
     CK_BYTE plaintext2[sizeof(ciphertext)];
@@ -485,7 +510,7 @@ static void test_rsa_oaep_encrypt_decrypt_oneshot_good(void **state) {
     /* retry with SHA1 */
     params.hashAlg = CKM_SHA_1;
     params.mgf = CKG_MGF1_SHA1;
-    rv = C_EncryptInit(session, &mechanism, ti->objects.rsa);
+    rv = C_EncryptInit(session, &mechanism, ti->objects.rsa.pub);
     assert_int_equal(rv, CKR_OK);
 
     /* part 1 */
@@ -494,7 +519,7 @@ static void test_rsa_oaep_encrypt_decrypt_oneshot_good(void **state) {
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(ciphertext_len, sizeof(ciphertext));
 
-    rv = C_DecryptInit (session, &mechanism, ti->objects.rsa);
+    rv = C_DecryptInit (session, &mechanism, ti->objects.rsa.priv);
     assert_int_equal(rv, CKR_OK);
 
     plaintext2_len = sizeof(plaintext2);
@@ -652,7 +677,7 @@ static void test_rsa_x509_encrypt_decrypt_oneshot_good(void **state) {
 
 
     /* init */
-    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.rsa);
+    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.rsa.priv);
     assert_int_equal(rv, CKR_OK);
 
     /* part 1 */
@@ -662,7 +687,7 @@ static void test_rsa_x509_encrypt_decrypt_oneshot_good(void **state) {
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(ciphertext_len, sizeof(ciphertext));
 
-    rv = C_DecryptInit (session, &mechanism, ti->objects.rsa);
+    rv = C_DecryptInit (session, &mechanism, ti->objects.rsa.pub);
     assert_int_equal(rv, CKR_OK);
 
     CK_BYTE plaintext2[sizeof(ciphertext)];
