@@ -125,11 +125,12 @@ static bool is_hashing_needed(CK_MECHANISM_TYPE mech) {
      case CKM_ECDSA_SHA1:
          return true;
      case CKM_ECDSA:
+     case CKM_RSA_X_509:
      case CKM_RSA_PKCS:
      case CKM_RSA_PKCS_PSS:
          return false;
     default:
-        LOGE("Unknown mech: %lu", mech);
+        LOGW("Unknown mech: %lu", mech);
     }
 
     return false;
