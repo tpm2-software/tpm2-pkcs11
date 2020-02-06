@@ -200,8 +200,10 @@ void token_free(token *t) {
      */
     session_table_free_ctx_all(t);
     session_table_free(t->s_table);
+    t->s_table = NULL;
 
     twist_free(t->pobject.objauth);
+    t->pobject.objauth = NULL;
 
     sealobject_free(&t->sealobject);
 
@@ -216,10 +218,13 @@ void token_free(token *t) {
     t->tobjects.head = t->tobjects.tail = NULL;
 
     tpm_ctx_free(t->tctx);
+    t->tctx = NULL;
 
     mutex_destroy(t->mutex);
+    t->mutex = NULL;
 
     free(t->config.tcti);
+    t->config.tcti = NULL;
 }
 
 CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
