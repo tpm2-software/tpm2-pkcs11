@@ -118,7 +118,8 @@ check_SCRIPTS += \
     test/integration/pkcs11-tool.sh \
     test/integration/pkcs11-tool-init.sh.nosetup \
     test/integration/pkcs11-dbup.sh.nosetup \
-    test/integration/tls-tests.sh
+    test/integration/tls-tests.sh \
+    test/integration/openssl.sh
 
 LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
 
