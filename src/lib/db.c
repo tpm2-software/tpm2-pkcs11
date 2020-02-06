@@ -1039,10 +1039,9 @@ CK_RV db_destroy(void) {
 #define DB_NAME "tpm2_pkcs11.sqlite3"
 #define PKCS11_STORE_ENV_VAR "TPM2_PKCS11_STORE"
 
-static CK_RV handle_env_var(char *path, size_t len, bool *skip, bool *stat_is_no_token) {
+static CK_RV handle_env_var(char *path, size_t len, bool *skip, bool *fatal) {
 
     *skip = false;
-    *stat_is_no_token = true;
 
     char *env_path = getenv(PKCS11_STORE_ENV_VAR);
     if (!env_path) {
@@ -1056,6 +1055,8 @@ static CK_RV handle_env_var(char *path, size_t len, bool *skip, bool *stat_is_no
                 l, len);
         return CKR_GENERAL_ERROR;
     }
+
+    *fatal = true;
 
     return CKR_OK;
 }
@@ -1131,11 +1132,11 @@ CK_RV db_for_path(char *path, size_t len, db_handler h) {
 
         CK_RV rv = CKR_GENERAL_ERROR;
         bool skip = false;
-        bool stat_is_no_token = false;
+        bool fatal = false;
 
         switch (i) {
         case 0:
-            rv = handle_env_var(path, len, &skip, &stat_is_no_token);
+            rv = handle_env_var(path, len, &skip, &fatal);
             break;
         case 1:
             rv = handle_home(path, len, &skip);
@@ -1160,7 +1161,7 @@ CK_RV db_for_path(char *path, size_t len, db_handler h) {
         }
 
         rv = h(path, len);
-        if (rv != CKR_TOKEN_NOT_PRESENT) {
+        if (fatal || rv != CKR_TOKEN_NOT_PRESENT) {
             return rv;
         }
     }
