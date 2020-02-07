@@ -154,17 +154,9 @@ export OPENSSL_CONF="$osslconf"
 
 PKCS11_KEY="pkcs11:model=SW%20%20%20TPM;manufacturer=IBM;serial=0000000000000000;token=$token_label;object=$key_label;type=private"
 
-openssl dgst -engine pkcs11 -keyform engine -sha256 -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:auto -sign "$PKCS11_KEY" -out data.sig data.txt
+openssl dgst -engine pkcs11 -keyform engine -sha256 -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:-1 -sign "$PKCS11_KEY" -out data.sig data.txt
 
-openssl dgst -sha256 -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:auto -signature data.sig -verify pubkey.pem data.txt
-
-osslversion=$(openssl version | awk '{print $2}')
-
-if [[ "$osslversion" =~ ^0|^1\.0+ ]]; then
-  echo "OpenSSL versions less than 1.1.0 are known not to work with externally generate PSS signatures"
-  echo "See this PR for the gory details: https://github.com/tpm2-software/tpm2-pkcs11/pull/403"
-  exit 0
-fi;
+openssl dgst -sha256 -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:-1 -signature data.sig -verify pubkey.pem data.txt
 
 rm data.sig
 
@@ -176,6 +168,6 @@ rm data.sig
 # Their is no generic way to really figure out the OpenSC version AFAICT to we code this to the common denominator of SHA1
 pkcs11_tool --pin "$PIN" --token-label "$token_label" --id "$cka_id_hex" --sign --mechanism SHA1-RSA-PKCS-PSS -i data.txt -o data.sig
 
-openssl dgst -sha1 -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:auto -signature data.sig -verify pubkey.pem data.txt
+openssl dgst -sha1 -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:-1 -signature data.sig -verify pubkey.pem data.txt
 
 exit 0
