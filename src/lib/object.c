@@ -171,7 +171,7 @@ static object_find_data *object_find_data_new(void) {
 
 static CK_RV do_match_set(tobject_match_list *match_cur, tobject *tobj) {
 
-    match_cur->tobj_handle = tobj->index;
+    match_cur->tobj_handle = tobj->obj_handle;
 
     CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_CLASS);
     if (!a) {
@@ -467,7 +467,7 @@ CK_RV tobject_set_auth(tobject *tobj, twist authbin, twist wrappedauthhex) {
 void tobject_set_handle(tobject *tobj, uint32_t handle) {
     assert(tobj);
 
-    tobj->handle = handle;
+    tobj->tpm_handle = handle;
 }
 
 void tobject_set_id(tobject *tobj, unsigned id) {
@@ -759,7 +759,7 @@ CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OB
         return rv;
     }
 
-    *object = new_tobj->index;
+    *object = new_tobj->obj_handle;
 
     return CKR_OK;
 }

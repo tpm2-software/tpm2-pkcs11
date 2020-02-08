@@ -28,7 +28,7 @@ struct tobject {
 
     unsigned id; /** external handle */
 
-    CK_OBJECT_HANDLE index;
+    CK_OBJECT_HANDLE obj_handle; /** application visible handle */
 
     /*
      * these all exist in the attribute array, but we'll keep some
@@ -44,7 +44,7 @@ struct tobject {
 
     twist unsealed_auth; /** unwrapped auth value */
 
-    uint32_t handle;     /** loaded tpm handle */
+    uint32_t tpm_handle;     /** loaded tpm handle */
 
     bool is_authenticated; /** true if a context specific login has authenticated use of the object */
 };

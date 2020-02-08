@@ -294,7 +294,7 @@ static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata,
      * only object and don't go to the TPM.
      */
     if (tobj->pub) {
-       rv = tpm_encrypt_data_init(tok->tctx, tobj->handle, tobj->unsealed_auth, mechanism,
+       rv = tpm_encrypt_data_init(tok->tctx, tobj->tpm_handle, tobj->unsealed_auth, mechanism,
                &opdata->cryptopdata.tpm_enc_data);
     } else {
         opdata->use_sw = true;

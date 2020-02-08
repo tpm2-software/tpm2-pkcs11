@@ -1215,7 +1215,7 @@ static CK_RV sig_flatten(TPMT_SIGNATURE *signature, TPMT_SIG_SCHEME *scheme, CK_
 CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_PTR mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
 
     twist auth = tobj->unsealed_auth;
-    TPMI_DH_OBJECT handle = tobj->handle;
+    TPMI_DH_OBJECT handle = tobj->tpm_handle;
 
     TPM2B_DIGEST tdigest;
     if (sizeof(tdigest.buffer) < datalen) {
@@ -1339,7 +1339,7 @@ static CK_RV init_sig_from_mech(CK_MECHANISM_TYPE mech, CK_ULONG datalen, CK_BYT
 
 CK_RV tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_PTR mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen) {
 
-    TPMI_DH_OBJECT handle = tobj->handle;
+    TPMI_DH_OBJECT handle = tobj->tpm_handle;
 
     // Copy the data into the digest block
     TPM2B_DIGEST msgdigest;

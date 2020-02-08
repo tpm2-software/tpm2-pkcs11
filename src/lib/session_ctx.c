@@ -372,11 +372,11 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
         while(cur) {
             tobject *tobj = list_entry(cur, tobject, l);
             cur = cur->next;
-            if (tobj->handle) {
-                bool result = tpm_flushcontext(tpm, tobj->handle);
+            if (tobj->tpm_handle) {
+                bool result = tpm_flushcontext(tpm, tobj->tpm_handle);
                 assert(result);
                 UNUSED(result);
-                tobj->handle = 0;
+                tobj->tpm_handle = 0;
 
                 /* Clear the unwrapped auth value for tertiary objects */
                 twist_free(tobj->unsealed_auth);
