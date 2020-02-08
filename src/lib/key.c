@@ -322,8 +322,8 @@ CK_RV key_gen (
         goto out;
     }
 
-    *public_key_handle = new_public_tobj->index;
-    *private_key_handle = new_private_tobj->index;
+    *public_key_handle = new_public_tobj->obj_handle;
+    *private_key_handle = new_private_tobj->obj_handle;
 
 out:
     tpm_objdata_free(&objdata);

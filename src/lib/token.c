@@ -65,11 +65,11 @@ CK_RV token_add_tobject_last(token *tok, tobject *t) {
     if (!tok->tobjects.tail) {
         t->l.prev = t->l.next = NULL;
         tok->tobjects.tail = tok->tobjects.head = t;
-        t->index = 1;
+        t->obj_handle = 1;
         return CKR_OK;
     }
 
-    CK_OBJECT_HANDLE handle = tok->tobjects.tail->index;
+    CK_OBJECT_HANDLE handle = tok->tobjects.tail->obj_handle;
     if (handle == ~((CK_OBJECT_HANDLE)0)) {
         LOGE("Too many objects for token, id: %lu, label: %*s", tok->id,
                 sizeof(tok->label), tok->label);
@@ -77,7 +77,7 @@ CK_RV token_add_tobject_last(token *tok, tobject *t) {
     }
 
     handle++;
-    t->index = handle;
+    t->obj_handle = handle;
     tok->tobjects.tail->l.next = &t->l;
     t->l.prev = &tok->tobjects.tail->l;
     tok->tobjects.tail = t;
@@ -89,7 +89,7 @@ CK_RV token_add_tobject(token *tok, tobject *t) {
     if (!tok->tobjects.head) {
         t->l.prev = t->l.next = NULL;
         tok->tobjects.tail = tok->tobjects.head = t;
-        t->index = 1;
+        t->obj_handle = 1;
         return CKR_OK;
     }
 
@@ -109,7 +109,7 @@ CK_RV token_add_tobject(token *tok, tobject *t) {
 
         /* end of list, just add it updating the tail pointer */
         if (!c->l.next) {
-            t->index = index;
+            t->obj_handle = index;
             t->l.prev = cur;
             cur->next = &t->l;
             tok->tobjects.tail = t;
@@ -119,9 +119,9 @@ CK_RV token_add_tobject(token *tok, tobject *t) {
         tobject *n = list_entry(c->l.next, tobject, l);
 
         /* gap */
-        if (n->index - c->index > 1) {
-            assert(index < n->index && index > c->index);
-            t->index = index;
+        if (n->obj_handle - c->obj_handle > 1) {
+            assert(index < n->obj_handle && index > c->obj_handle);
+            t->obj_handle = index;
 
             /* new object should point to next and previous */
             t->l.next = &n->l;
@@ -156,7 +156,7 @@ CK_RV token_find_tobject(token *tok, CK_OBJECT_HANDLE handle, tobject **tobj) {
     list *cur = &tok->tobjects.head->l;
     while(cur) {
         tobject *c = list_entry(cur, tobject, l);
-        if (c->index == handle) {
+        if (c->obj_handle == handle) {
             *tobj = c;
             return CKR_OK;
         }
@@ -750,7 +750,7 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
      * The object may already be loaded by the TPM or may just be
      * a public key object not-resident in the TPM.
      */
-    if (tobj->handle || !tobj->pub) {
+    if (tobj->tpm_handle || !tobj->pub) {
         *loaded_tobj = tobj;
         return CKR_OK;
     }
@@ -759,7 +759,7 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
             tpm,
             tok->pobject.handle, tok->pobject.objauth,
             tobj->pub, tobj->priv,
-            &tobj->handle);
+            &tobj->tpm_handle);
     if (!result) {
         return CKR_GENERAL_ERROR;
     }
