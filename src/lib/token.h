@@ -14,7 +14,7 @@ typedef struct token_config token_config;
 struct token_config {
     bool is_initialized;  /* token initialization state */
     char *tcti;           /* token specific tcti config */
-} config;
+};
 
 typedef struct session_table session_table;
 typedef struct session_ctx session_ctx;
