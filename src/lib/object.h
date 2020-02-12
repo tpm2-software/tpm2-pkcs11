@@ -12,7 +12,6 @@
 #include "twist.h"
 #include "utils.h"
 
-typedef struct token token;
 typedef struct session_ctx session_ctx;
 
 typedef struct pobject pobject;
