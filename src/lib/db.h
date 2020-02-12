@@ -18,9 +18,6 @@
 CK_RV db_init(void);
 CK_RV db_destroy(void);
 
-CK_RV db_new(sqlite3 **db);
-CK_RV db_free(sqlite3 **db);
-
 CK_RV db_get_tokens(token **t, size_t *len);
 
 CK_RV db_update_for_pinchange(
