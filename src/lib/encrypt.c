@@ -6,6 +6,7 @@
 
 #include "checks.h"
 #include "encrypt.h"
+#include "mech.h"
 #include "openssl_compat.h"
 #include "session.h"
 #include "session_ctx.h"
@@ -24,23 +25,24 @@ static sw_encrypt_data *sw_encrypt_data_new(void) {
     return (sw_encrypt_data *)calloc(1, sizeof(sw_encrypt_data));
 }
 
-static void sw_encrypt_data_free(sw_encrypt_data *enc_data) {
+static void sw_encrypt_data_free(sw_encrypt_data **enc_data) {
     if (!enc_data) {
         return;
     }
 
-    if (enc_data->key) {
-        RSA_free(enc_data->key);
+    if ((*enc_data)->key) {
+        RSA_free((*enc_data)->key);
     }
 
-    free(enc_data);
+    free(*enc_data);
+    *enc_data = NULL;
 }
 
 encrypt_op_data *encrypt_op_data_new(tobject *tobj) {
 
     CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_CLASS);
     if (!a) {
-        LOGE("Expected tobjects to have attribuet CKA_CLASS");
+        LOGE("Expected tobjects to have attribute CKA_CLASS");
         return NULL;
     }
 
@@ -65,8 +67,8 @@ void encrypt_op_data_free(encrypt_op_data **opdata) {
 
     if (opdata) {
         (*opdata)->use_sw ?
-                sw_encrypt_data_free((*opdata)->cryptopdata.sw_enc_data) :
-                tpm_encrypt_data_free((*opdata)->cryptopdata.tpm_enc_data);
+                sw_encrypt_data_free(&(*opdata)->cryptopdata.sw_enc_data) :
+                tpm_opdata_free(&(*opdata)->cryptopdata.tpm_opdata);
         free(*opdata);
         *opdata = NULL;
     }
@@ -245,7 +247,7 @@ out:
     return rv;
 }
 
-static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, operation op, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, operation op, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
 
     check_pointer(mechanism);
 
@@ -294,8 +296,8 @@ static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata,
      * only object and don't go to the TPM.
      */
     if (tobj->pub) {
-       rv = tpm_encrypt_data_init(tok->tctx, tobj->tpm_handle, tobj->unsealed_auth, mechanism,
-               &opdata->cryptopdata.tpm_enc_data);
+        rv = mech_get_tpm_opdata(tok->tctx, mechanism, tobj,
+                &opdata->cryptopdata.tpm_opdata);
     } else {
         opdata->use_sw = true;
         rv = sw_encrypt_data_init(mechanism, tobj, &opdata->cryptopdata.sw_enc_data);
@@ -303,7 +305,9 @@ static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata,
 
     if (rv != CKR_OK) {
         tobject_user_decrement(tobj);
-        encrypt_op_data_free(&opdata);
+        if (!supplied_opdata) {
+            encrypt_op_data_free(&opdata);
+        }
         return rv;
     }
 

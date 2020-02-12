@@ -15,7 +15,7 @@ typedef struct encrypt_op_data encrypt_op_data;
 
 typedef union crypto_op_data crypto_op_data;
 union crypto_op_data{
-    tpm_encrypt_data *tpm_enc_data;
+    tpm_op_data *tpm_opdata;
     sw_encrypt_data *sw_enc_data;
 };
 
