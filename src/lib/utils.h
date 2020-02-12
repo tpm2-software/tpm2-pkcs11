@@ -22,6 +22,15 @@
 
 #define UNUSED(x) (void)x
 
+#define SAFE_CAST(m, r) \
+    do { \
+        if (!m->pParameter || m->ulParameterLen != sizeof(typeof(*r))) { \
+            return CKR_MECHANISM_PARAM_INVALID; \
+        } \
+        \
+        r = (typeof(r))m->pParameter; \
+    } while (0)
+
 #define goto_error_false(r) if(!r) { goto error; }
 
 int str_to_ul(const char *val, size_t *res);

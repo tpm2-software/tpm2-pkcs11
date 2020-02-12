@@ -7,6 +7,7 @@
 
 #include "checks.h"
 #include "digest.h"
+#include "mech.h"
 #include "session.h"
 #include "session_ctx.h"
 #include "token.h"
@@ -34,51 +35,15 @@ void digest_op_data_free(digest_op_data **opdata) {
     *opdata = NULL;
 }
 
-static const EVP_MD *ossl_halg_from_mech(CK_MECHANISM_TYPE mech) {
-
-    switch(mech) {
-        case CKM_SHA_1:
-            /* falls-thru */
-        case CKM_ECDSA_SHA1:
-            /* falls-thru */
-        case CKM_SHA1_RSA_PKCS:
-            /* falls-thru */
-        case CKM_SHA1_RSA_PKCS_PSS:
-            return EVP_sha1();
-        case CKM_SHA256:
-            /* falls-thru */
-        case CKM_SHA256_RSA_PKCS:
-            /* falls-thru */
-        case CKM_SHA256_RSA_PKCS_PSS:
-            return EVP_sha256();
-        case CKM_SHA384:
-            /* falls-thru */
-        case CKM_SHA384_RSA_PKCS:
-            /* falls-thru */
-        case CKM_SHA384_RSA_PKCS_PSS:
-            return EVP_sha384();
-        case CKM_SHA512:
-            /* falls-thru */
-        case CKM_SHA512_RSA_PKCS:
-            /* falls-thru */
-        case CKM_SHA512_RSA_PKCS_PSS:
-            return EVP_sha512();
-        default:
-            return NULL;
-    }
-    /* no return, not possible */
-}
-
-bool digest_is_supported(CK_MECHANISM_TYPE type) {
-    return ossl_halg_from_mech(type) != NULL;
-}
-
-
 static CK_RV digest_sw_init(digest_op_data *opdata) {
 
-    const EVP_MD *md = ossl_halg_from_mech(opdata->mechanism);
-    if (!md) {
-        return CKR_MECHANISM_INVALID;
+    CK_MECHANISM m = { 0 };
+    m.mechanism = opdata->mechanism;
+
+    const EVP_MD *md = NULL;
+    CK_RV rv = mech_get_digester(&m, &md);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     EVP_MD_CTX *mdctx = EVP_MD_CTX_create();

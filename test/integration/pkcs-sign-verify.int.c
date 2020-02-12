@@ -406,7 +406,7 @@ static void test_sign_verify_CKM_ECDSA(void **state) {
         0x67, 0x58, 0xae, 0x5a, 0xa3, 0x2e, 0x47, 0x0d
     };
 
-    CK_ULONG siglen;
+    CK_ULONG siglen = 0;
 
     /* Call C_Sign for size */
     rv = C_Sign(session, sha256_msg_hash, sizeof(sha256_msg_hash), NULL,

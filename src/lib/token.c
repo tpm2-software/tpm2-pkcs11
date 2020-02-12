@@ -7,10 +7,6 @@
 #include <string.h>
 #include <time.h>
 
-#include <openssl/evp.h>
-#include <openssl/rand.h>
-#include <openssl/sha.h>
-
 #include "attrs.h"
 #include "checks.h"
 #include "db.h"
@@ -773,37 +769,4 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
 
     *loaded_tobj = tobj;
     return CKR_OK;
-}
-
-CK_RV token_get_mechanism_list(token *t, CK_MECHANISM_TYPE_PTR mechanism_list, CK_ULONG_PTR count) {
-
-    check_pointer(count);
-
-    /* build a cache of mechanisms */
-    static bool is_mech_list_initialized = false;
-    static CK_MECHANISM_TYPE mech_list_cache[64];
-    static CK_ULONG mech_cache_len = ARRAY_LEN(mech_list_cache);
-    if (!is_mech_list_initialized) {
-        CK_RV rv = tpm2_getmechanisms(t->tctx, mech_list_cache, &mech_cache_len);
-        if (rv != CKR_OK) {
-            return rv;
-        }
-        is_mech_list_initialized = true;
-    }
-
-    if (mechanism_list) {
-
-        if (*count < mech_cache_len) {
-            *count = mech_cache_len;
-            return CKR_BUFFER_TOO_SMALL;
-        }
-
-        memcpy(mechanism_list, mech_list_cache,
-                ARRAY_BYTES(mech_cache_len, mech_list_cache));
-    }
-
-    *count = mech_cache_len;
-
-    return CKR_OK;
-
 }

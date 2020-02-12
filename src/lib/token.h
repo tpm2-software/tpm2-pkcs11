@@ -152,19 +152,6 @@ void token_unlock(token *t);
  */
 CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj);
 
-/**
- * Retrieves the supported mechanism list for the token.
- * @param t
- *  The token to query.
- * @param mechanism_list
- *  The mechanism list to populate.
- * @param count
- *  The length of the mechanism_list, which is set to the actual length on return.
- * @return
- *  CKR_* status codes.
- */
-CK_RV token_get_mechanism_list(token *t, CK_MECHANISM_TYPE_PTR mechanism_list, CK_ULONG_PTR count);
-
 CK_RV token_min_init(token *t);
 
 CK_RV token_init(token *t, CK_BYTE_PTR pin, CK_ULONG pin_len, CK_BYTE_PTR label);

@@ -76,27 +76,33 @@ static inline UINT16 tpm2_error_get(TSS2_RC rc) {
         __result;                                          \
     })
 
-typedef struct tpm2_hierarchy_pdata tpm2_hierarchy_pdata;
-struct tpm2_hierarchy_pdata {
-    struct {
-        TPMI_RH_HIERARCHY hierarchy;
-        TPM2B_SENSITIVE_CREATE sensitive;
-        TPM2B_PUBLIC public;
-        TPM2B_DATA outside_info;
-        TPML_PCR_SELECTION creation_pcr;
-        TPM2_HANDLE object_handle;
-    } in;
-    struct {
-        TPM2_HANDLE handle;
-        TPM2B_PUBLIC public;
-        TPM2B_DIGEST hash;
+struct tpm_op_data {
+
+    tpm_ctx *ctx;
+
+    tobject *tobj;
+
+    CK_KEY_TYPE op_type;
+
+    union {
         struct {
-            TPM2B_CREATION_DATA data;
-            TPMT_TK_CREATION ticket;
-        } creation;
-        TPM2B_NAME name;
-    } out;
+            TPMT_SIG_SCHEME sig;
+            TPMT_RSA_DECRYPT raw;
+            TPM2B_DATA label;
+        } rsa;
+        struct {
+            TPMI_ALG_SYM_MODE mode;
+            TPM2B_IV iv;
+        } sym;
+        struct {
+            TPMT_SIG_SCHEME sig;
+        } ecc;
+    };
 };
+
+static inline tpm_op_data *tpm_opdata_new(void) {
+    return (tpm_op_data *)calloc(1, sizeof(tpm_op_data));
+}
 
 static ESYS_CONTEXT* esys_ctx_init(TSS2_TCTI_CONTEXT *tcti_ctx) {
 
@@ -338,43 +344,6 @@ static CK_RV tpm_get_properties(tpm_ctx *ctx, TPMS_CAPABILITY_DATA **d) {
     return CKR_OK;
 }
 
-static CK_RV tpm_get_algs(tpm_ctx *ctx, TPMS_CAPABILITY_DATA **d) {
-
-    if (tpms_alg_cache) {
-        *d = tpms_alg_cache;
-        return CKR_OK;
-    }
-
-    assert(!tpms_alg_cache);
-
-    TPM2_CAP capability = TPM2_CAP_ALGS;
-    UINT32 property = TPM2_ALG_FIRST;
-    UINT32 propertyCount = TPM2_MAX_CAP_ALGS;
-    TPMS_CAPABILITY_DATA *capabilityData;
-    TPMI_YES_NO moreData;
-
-    TSS2_RC rval = Esys_GetCapability(ctx->esys_ctx,
-        ESYS_TR_NONE,
-        ESYS_TR_NONE,
-        ESYS_TR_NONE,
-        capability,
-        property, propertyCount, &moreData, &capabilityData);
-    if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_GetCapability: %s:", Tss2_RC_Decode(rval));
-        return CKR_GENERAL_ERROR;
-    }
-
-    if (!capabilityData ||
-        capabilityData->data.tpmProperties.count < TPM2_PT_VENDOR_STRING_4 - TPM2_PT_FIXED + 1) {
-        LOGE("TPM did not reply with correct amount of capabilities");
-        Esys_Free(capabilityData);
-        return CKR_GENERAL_ERROR;
-    }
-
-    *d = tpms_alg_cache = capabilityData;
-    return CKR_OK;
-}
-
 static CK_RV find_fixed_cap(TPMS_CAPABILITY_DATA *d, TPM2_PT property, CK_ULONG_PTR value) {
 
     TPML_TAGGED_TPM_PROPERTY *t = &d->data.tpmProperties;
@@ -391,69 +360,7 @@ static CK_RV find_fixed_cap(TPMS_CAPABILITY_DATA *d, TPM2_PT property, CK_ULONG_
     return CKR_MECHANISM_INVALID;
 }
 
-static CK_RV find_alg(TPMS_CAPABILITY_DATA *d, TPM2_ALG_ID alg) {
-
-    TPML_ALG_PROPERTY *t = &d->data.algorithms;
-    TPMS_ALG_PROPERTY *p = t->algProperties;
-
-    CK_ULONG i;
-    for (i=0; i < t->count; i++) {
-            if (alg == p[i].alg) {
-                return CKR_OK;
-            }
-    }
-
-    return CKR_MECHANISM_INVALID;
-}
-
-static TPM2_ALG_ID mech_to_alg(CK_MECHANISM_TYPE mech) {
-
-    switch(mech) {
-        case CKM_AES_CBC:
-            return TPM2_ALG_CBC;
-        case CKM_AES_CFB1:
-            return TPM2_ALG_CFB;
-        case CKM_AES_ECB:
-            return TPM2_ALG_ECB;
-        case CKM_AES_KEY_GEN:
-            return TPM2_ALG_AES;
-        case CKM_RSA_PKCS_KEY_PAIR_GEN:
-            /* falls thru */
-        case CKM_RSA_PKCS:
-            /* falls thru */
-        case CKM_RSA_X_509:
-            /* falls thru */
-        case CKM_RSA_PKCS_OAEP:
-            /* falls thru */
-        case CKM_SHA1_RSA_PKCS:
-            /* falls thru */
-        case CKM_SHA256_RSA_PKCS:
-            /* falls thru */
-        case CKM_SHA384_RSA_PKCS:
-            /* falls thru */
-        case CKM_SHA512_RSA_PKCS:
-            return TPM2_ALG_RSA;
-        case CKM_SHA_1:
-            return TPM2_ALG_SHA1;
-        case CKM_SHA256:
-            return TPM2_ALG_SHA256;
-        case CKM_SHA384:
-            return TPM2_ALG_SHA384;
-        case CKM_SHA512:
-            return TPM2_ALG_SHA512;
-        case CKM_EC_KEY_PAIR_GEN:
-            return TPM2_ALG_ECC;
-        case CKM_ECDSA:
-            /* falls thru */
-        case CKM_ECDSA_SHA1:
-            return TPM2_ALG_ECDSA;
-        default:
-            LOGE("Cannot map mechanism %lx onto TPM2 algorithm", mech);
-            return TPM2_ALG_ERROR;
-    }
-}
-
-static CK_RV tpm_find_max_rsa_keysize(tpm_ctx *tctx, CK_ULONG_PTR max) {
+CK_RV tpm_find_max_rsa_keysize(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR max) {
 
     TPMT_PUBLIC_PARMS input = { 0 };
 
@@ -462,7 +369,13 @@ static CK_RV tpm_find_max_rsa_keysize(tpm_ctx *tctx, CK_ULONG_PTR max) {
     input.parameters.rsaDetail.scheme.scheme = TPM2_ALG_NULL;
     input.parameters.rsaDetail.symmetric.algorithm = TPM2_ALG_NULL;
 
-    CK_ULONG max_found = 0;
+    static CK_ULONG max_found = 0;
+
+    if (max_found) {
+        *min = 1024;
+        *max = max_found;
+        return CKR_OK;
+    }
 
     TPM2_KEY_BITS i;
     for(i=2; i < 5; i++) {
@@ -487,12 +400,96 @@ static CK_RV tpm_find_max_rsa_keysize(tpm_ctx *tctx, CK_ULONG_PTR max) {
         }
     }
 
+    *min = 1024;
     *max = max_found;
 
     return CKR_OK;
 }
 
-static CK_RV tpm_find_ecc_keysizes(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR max) {
+static TPM2_ALGORITHM_ID nid_to_tpm2alg(int nid) {
+
+    switch (nid) {
+    case NID_X9_62_prime192v1:
+        return TPM2_ECC_NIST_P192;
+    case NID_secp224r1:
+        return TPM2_ECC_NIST_P224;
+    case NID_X9_62_prime256v1:
+        return TPM2_ECC_NIST_P256;
+    case NID_secp384r1:
+        return TPM2_ECC_NIST_P384;
+    case NID_secp521r1:
+        return TPM2_ECC_NIST_P521;
+    default:
+        LOGE("Unsupported nid to tpm EC algorithm mapping, got nid: %d", nid);
+        return TPM2_ALG_ERROR;
+    }
+}
+
+CK_RV tpm_is_rsa_keysize_supported(tpm_ctx *tctx, CK_ULONG test_size) {
+
+    TPMT_PUBLIC_PARMS input = { 0 };
+
+    input.type = TPM2_ALG_RSA;
+    input.parameters.rsaDetail.exponent = 0;
+    input.parameters.rsaDetail.scheme.scheme = TPM2_ALG_NULL;
+    input.parameters.rsaDetail.symmetric.algorithm = TPM2_ALG_NULL;
+    input.parameters.rsaDetail.keyBits = test_size;
+
+    TSS2_RC rval = Esys_TestParms(tctx->esys_ctx,
+            ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &input);
+    if (rval != TSS2_RC_SUCCESS) {
+        if ((rval & (TPM2_RC_P | TPM2_RC_1)) == (TPM2_RC_P | TPM2_RC_1)) {
+            rval &= ~(TPM2_RC_P | TPM2_RC_1);
+            if (rval == TPM2_RC_KEY_SIZE || rval == TPM2_RC_VALUE) {
+                return CKR_MECHANISM_INVALID;
+            }
+        }
+        return CKR_GENERAL_ERROR;
+    }
+
+    return CKR_OK;
+}
+
+CK_RV tpm_is_ecc_curve_supported(tpm_ctx *tctx, int nid) {
+
+    TPMT_PUBLIC_PARMS input = { 0 };
+
+    input.type = TPM2_ALG_ECC;
+    input.parameters.eccDetail.kdf.scheme = TPM2_ALG_NULL;
+    input.parameters.eccDetail.scheme.scheme = TPM2_ALG_NULL;
+    input.parameters.eccDetail.symmetric.algorithm = TPM2_ALG_NULL;
+
+    input.parameters.eccDetail.curveID = nid_to_tpm2alg(nid);
+    if (input.parameters.eccDetail.curveID == TPM2_ALG_ERROR) {
+        return CKR_MECHANISM_INVALID;
+    }
+
+    TSS2_RC rval = Esys_TestParms(tctx->esys_ctx,
+            ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &input);
+    if (rval != TSS2_RC_SUCCESS) {
+        if ((rval & (TPM2_RC_P | TPM2_RC_1)) == (TPM2_RC_P | TPM2_RC_1)) {
+            rval &= ~(TPM2_RC_P | TPM2_RC_1);
+            if (rval == TPM2_RC_CURVE || rval == TPM2_RC_VALUE) {
+                return CKR_MECHANISM_INVALID;
+            }
+        }
+        return CKR_GENERAL_ERROR;
+    }
+
+    return CKR_OK;
+}
+
+CK_RV tpm_find_ecc_keysizes(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR max) {
+
+    static bool cached = false;
+    static CK_ULONG found_max = 0;
+    static CK_ULONG found_min = ~0;
+
+    if (cached) {
+        *min = found_min/8;
+        *max = found_max/8;
+        return CKR_OK;
+    }
 
     TPMT_PUBLIC_PARMS input = { 0 };
 
@@ -515,8 +512,6 @@ static CK_RV tpm_find_ecc_keysizes(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR
         { TPM2_ECC_SM2_P256,  256 * 8 },
     };
 
-    CK_ULONG found_max = 0;
-    CK_ULONG found_min = ~0;
 
     TPM2_ALG_ID i;
     for(i=0; i < ARRAY_LEN(tests); i++) {
@@ -545,188 +540,42 @@ static CK_RV tpm_find_ecc_keysizes(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR
 
     }
 
-    *max = found_max;
-    *min = found_min;
+    *max = found_max/8;
+    *min = found_min/8;
+    cached = true;
 
     return CKR_OK;
 }
 
-static CK_RV handle_aes_mech_info(CK_MECHANISM_TYPE t,
-        TPMS_CAPABILITY_DATA *p, TPMS_CAPABILITY_DATA *a,
-        CK_MECHANISM_INFO_PTR info, CK_FLAGS flag) {
-
-    /* map pkcs11 alg onto tpm2 alg */
-    TPM2_ALG_ID alg = mech_to_alg(t);
-    if (alg == TPM2_ALG_ERROR) {
-        return CKR_MECHANISM_INVALID;
-    }
-
-    /* is tpm2 alg supported? */
-    CK_RV rv = find_alg(a, alg);
-    if (rv != CKR_OK) {
-        return rv;
-    }
+CK_RV tpm_find_aes_keysizes(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR max) {
 
     /* ok it's supported, what are the key sizes? */
-    CK_ULONG max;
-
-    rv = find_fixed_cap(p, TPM2_PT_CONTEXT_SYM_SIZE, &max);
-    if (rv != CKR_OK) {
-        return rv;
+    static CK_ULONG _max = 0;
+    static const CK_ULONG _min = 128;
+    if (_max) {
+        *min = _min/8;
+        *max = _max/8;
+        return CKR_OK;
     }
-
-    /* if it's supported 128bites is min by spec IIUC */
-    /* convert to bytes for return values */
-    info->ulMinKeySize = 128/8;
-    info->ulMaxKeySize = max/8;
-    info->flags = flag;
-
-    return rv;
-}
-
-static CK_RV handle_rsa_mech_info(tpm_ctx *tctx, CK_MECHANISM_TYPE t,
-        TPMS_CAPABILITY_DATA *a,
-        CK_MECHANISM_INFO_PTR info, CK_FLAGS flag) {
-
-    /* map pkcs11 alg onto tpm2 alg */
-    TPM2_ALG_ID alg = mech_to_alg(t);
-    if (alg == TPM2_ALG_ERROR) {
-        return CKR_MECHANISM_INVALID;
-    }
-
-    /* is tpm2 alg supported? */
-    CK_RV rv = find_alg(a, alg);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    /* ok it's supported, what are the key sizes? */
-    CK_ULONG max;
-    rv = tpm_find_max_rsa_keysize(tctx, &max);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    /* if it's supported 1024 is min by spec IIUC */
-    info->ulMinKeySize = 1024;
-    info->ulMaxKeySize = max;
-    info->flags = flag;
-
-    return rv;
-}
-
-static CK_RV handle_ecc_mech_info(tpm_ctx *tctx, CK_MECHANISM_TYPE t,
-        TPMS_CAPABILITY_DATA *a,
-        CK_MECHANISM_INFO_PTR info, CK_FLAGS flag) {
-
-    /* map pkcs11 alg onto tpm2 alg */
-    TPM2_ALG_ID alg = mech_to_alg(t);
-    if (alg == TPM2_ALG_ERROR) {
-        return CKR_MECHANISM_INVALID;
-    }
-
-    /* is tpm2 alg supported? */
-    CK_RV rv = find_alg(a, alg);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    /* ok it's supported, what are the key sizes? */
-    CK_ULONG max, min;
-    rv = tpm_find_ecc_keysizes(tctx, &min, &max);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    /* TPM reports bits, pkcs11 expects bytes */
-    info->ulMinKeySize = min/8;
-    info->ulMaxKeySize = max/8;
-    info->flags = flag;
-
-    return rv;
-}
-
-static CK_RV handle_hash_mech_info(CK_MECHANISM_TYPE t, CK_MECHANISM_INFO_PTR info) {
-
-    /*
-     * TODO this should be moved out of TPM layer perhaps? or all hashing should
-     * be brought into TPM layer for consistency
-     */
-    bool is_supported = digest_is_supported(t);
-    if (!is_supported) {
-        return CKR_MECHANISM_INVALID;
-    }
-
-    info->ulMinKeySize = 0;
-    info->ulMaxKeySize = 0;
-    info->flags = CKF_DIGEST;
-
-    return CKR_OK;
-}
-
-CK_RV tpm_get_mech_info(tpm_ctx *ctx, CK_MECHANISM_TYPE t, CK_MECHANISM_INFO_PTR info) {
-
-    check_pointer(ctx);
-    check_pointer(info);
 
     TPMS_CAPABILITY_DATA *fixed_property_data = NULL;
-    CK_RV rv = tpm_get_properties(ctx, &fixed_property_data);
+    CK_RV rv = tpm_get_properties(tctx, &fixed_property_data);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    TPMS_CAPABILITY_DATA *alg_property_data = NULL;
-    rv = tpm_get_algs(ctx, &alg_property_data);
+    rv = find_fixed_cap(fixed_property_data,
+            TPM2_PT_CONTEXT_SYM_SIZE, &_max);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    CK_FLAGS flags = 0;
+    /* if it's supported 128bits is min by spec IIUC */
+    /* convert to bytes for return values */
+    *min = _min/8;
+    *max = _max/8;
 
-    switch(t) {
-    /* AES based crypto */
-    case CKM_AES_KEY_GEN:
-        flags = CKF_GENERATE;
-        /* fall-thru */
-    case CKM_AES_CBC:
-    case CKM_AES_CFB1:
-    case CKM_AES_ECB:
-        flags |= CKF_HW;
-        return handle_aes_mech_info(t, fixed_property_data, alg_property_data, info, flags);
-    /* RSA based crypto */
-    case CKM_RSA_PKCS_KEY_PAIR_GEN:
-        flags = CKF_HW | CKF_GENERATE_KEY_PAIR;
-        return handle_rsa_mech_info(ctx, t, alg_property_data, info, flags);
-    case CKM_RSA_PKCS:
-    case CKM_RSA_X_509:
-        flags = CKF_HW | CKF_ENCRYPT | CKF_DECRYPT | CKF_SIGN | CKF_VERIFY;
-        return handle_rsa_mech_info(ctx, t, alg_property_data, info, flags);
-    case CKM_RSA_PKCS_OAEP:
-        flags = CKF_HW | CKF_ENCRYPT| CKF_DECRYPT;
-        return handle_rsa_mech_info(ctx, t, alg_property_data, info, flags);
-    case CKM_SHA1_RSA_PKCS:
-    case CKM_SHA256_RSA_PKCS:
-    case CKM_SHA384_RSA_PKCS:
-    case CKM_SHA512_RSA_PKCS:
-        flags = CKF_HW | CKF_SIGN | CKF_VERIFY;
-        return handle_rsa_mech_info(ctx, t, alg_property_data, info, flags);
-    case CKM_EC_KEY_PAIR_GEN:
-        flags = CKF_HW | CKF_GENERATE_KEY_PAIR;
-        return handle_ecc_mech_info(ctx, t, alg_property_data, info, flags);
-    case CKM_ECDSA:
-    case CKM_ECDSA_SHA1:
-        flags = CKF_HW | CKF_SIGN | CKF_VERIFY;
-        return handle_ecc_mech_info(ctx, t, alg_property_data, info, flags);
-    /* Hashes */
-    case CKM_SHA_1:
-    case CKM_SHA256:
-    case CKM_SHA384:
-    case CKM_SHA512:
-        return handle_hash_mech_info(t, info);
-        /* no default */
-    }
-
-    return CKR_MECHANISM_INVALID;
+    return CKR_OK;
 }
 
 CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
@@ -962,128 +811,6 @@ bool tpm_flushcontext(tpm_ctx *ctx, uint32_t handle) {
     return true;
 }
 
-TPMI_ALG_HASH hashlen_to_alg_guess(CK_ULONG datalen) {
-    switch (datalen) {
-        case SHA_DIGEST_LENGTH:
-            return TPM2_ALG_SHA1;
-        case SHA256_DIGEST_LENGTH:
-            return TPM2_ALG_SHA256;
-        case SHA384_DIGEST_LENGTH:
-            return TPM2_ALG_SHA384;
-        case SHA512_DIGEST_LENGTH:
-            return TPM2_ALG_SHA512;
-        default:
-            LOGE("unknown digest length");
-            return TPM2_ALG_ERROR;
-    }
-}
-
-TPMI_ALG_HASH mech_to_hash_alg_ex(CK_MECHANISM_TYPE mode, CK_ULONG datalen) {
-
-    switch (mode) {
-    case CKM_RSA_PKCS:
-        return TPM2_ALG_NULL;
-
-    case CKM_SHA1_RSA_PKCS:
-    case CKM_SHA1_RSA_PKCS_PSS:
-    case CKM_SHA_1:
-        return TPM2_ALG_SHA1;
-
-    case CKM_SHA256_RSA_PKCS:
-    case CKM_SHA256_RSA_PKCS_PSS:
-    case CKM_SHA256:
-        return TPM2_ALG_SHA256;
-
-    case CKM_SHA384_RSA_PKCS:
-    case CKM_SHA384_RSA_PKCS_PSS:
-    case CKM_SHA384:
-        return TPM2_ALG_SHA384;
-
-    case CKM_SHA512_RSA_PKCS:
-    case CKM_SHA512_RSA_PKCS_PSS:
-    case CKM_SHA512:
-        return TPM2_ALG_SHA512;
-
-    case CKM_ECDSA_SHA1:
-        return TPM2_ALG_SHA1;
-    case CKM_ECDSA:
-        // ECDSA is NOT using a hash.
-        // It needs a length (determined by the name of an hash alg) anyway.
-        // The length/hash_alg with correct length will be specified later.
-        return datalen ? hashlen_to_alg_guess(datalen) : TPM2_ALG_ERROR;
-
-    default:
-        return TPM2_ALG_ERROR;
-    }
-}
-
-TPMI_ALG_HASH mech_to_hash_alg(CK_MECHANISM_TYPE mode) {
-
-    return mech_to_hash_alg_ex(mode, 0);
-}
-
-
-TPM2_ALG_ID mech_to_sig_scheme(CK_MECHANISM_TYPE mode) {
-
-    switch (mode) {
-    case CKM_SHA1_RSA_PKCS:
-    case CKM_SHA256_RSA_PKCS:
-    case CKM_SHA384_RSA_PKCS:
-    case CKM_SHA512_RSA_PKCS:
-        return TPM2_ALG_RSASSA;
-    case CKM_RSA_PKCS_PSS:
-    case CKM_SHA1_RSA_PKCS_PSS:
-    case CKM_SHA256_RSA_PKCS_PSS:
-    case CKM_SHA384_RSA_PKCS_PSS:
-    case CKM_SHA512_RSA_PKCS_PSS:
-        return TPM2_ALG_RSAPSS;
-    case CKM_ECDSA:
-    case CKM_ECDSA_SHA1:
-        return TPM2_ALG_ECDSA;
-    default:
-        return TPM2_ALG_ERROR;
-    }
-}
-
-CK_RV get_signature_scheme(CK_MECHANISM_PTR mech, CK_ULONG datalen, TPMT_SIG_SCHEME *scheme) {
-
-    TPM2_ALG_ID sig_scheme = mech_to_sig_scheme(mech->mechanism);
-    if (sig_scheme == TPM2_ALG_ERROR) {
-        LOGE("Cannot convert mechanism to signature scheme, got: 0x%lx", mech);
-        return CKR_KEY_FUNCTION_NOT_PERMITTED;
-    }
-
-    TPMI_ALG_HASH halg = mech_to_hash_alg_ex(mech->mechanism, datalen);
-    if (halg == TPM2_ALG_ERROR) {
-
-        if (mech->mechanism == CKM_RSA_PKCS_PSS) {
-            CK_RSA_PKCS_PSS_PARAMS_PTR p = NULL;
-
-            if (sizeof(*p) != mech->ulParameterLen) {
-                LOGE("Invalid CKM_RSA_PKCS_PSS params");
-                return CKR_MECHANISM_PARAM_INVALID;
-            }
-
-            p = mech->pParameter;
-
-            LOGV("PSS PARAMS\n\thashAlg:0x%x\n\tmgf: 0x%x\n\tsLen: %d",
-                    p->hashAlg, p->mgf, p->sLen);
-
-            halg = mech_to_hash_alg_ex(p->hashAlg, datalen);
-        }
-
-        if (halg == TPM2_ALG_ERROR) {
-            LOGE("Cannot convert mechanism to hash algorithm, got: 0x%lx", mech);
-            return CKR_KEY_FUNCTION_NOT_PERMITTED;
-        }
-    }
-
-    scheme->scheme = sig_scheme;
-    scheme->details.any.hashAlg = halg;
-
-    return CKR_OK;
-}
-
 twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth) {
 
     twist t = NULL;
@@ -1212,10 +939,49 @@ static CK_RV sig_flatten(TPMT_SIGNATURE *signature, TPMT_SIG_SCHEME *scheme, CK_
     return CKR_GENERAL_ERROR;
 }
 
-CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_PTR mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+static TPMI_ALG_HASH guess_hash_by_size(CK_ULONG len) {
+    switch(len) {
+    case 20:
+        return TPM2_ALG_SHA1;
+    case 32:
+        return TPM2_ALG_SHA256;
+    case 48:
+        return TPM2_ALG_SHA384;
+    case 64:
+        return TPM2_ALG_SHA512;
+        /* no default */
+    }
+
+    return TPM2_ALG_ERROR;
+}
+
+static CK_RV ecc_fixup_halg(TPMT_SIG_SCHEME *sig, CK_ULONG datalen) {
+    if (sig->details.any.hashAlg == TPM2_ALG_ERROR) {
+        TPMI_ALG_HASH halg = guess_hash_by_size(datalen);
+        if (halg == TPM2_ALG_ERROR) {
+            LOGE("Cannot figure out hashing algorithm for signature of len: %lu", datalen);
+            return CKR_GENERAL_ERROR;
+        }
+        sig->details.any.hashAlg = halg;
+    }
+    return CKR_OK;
+}
+
+CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+    assert(opdata);
+
+    tobject *tobj = opdata->tobj;
+    assert(tobj);
+
+    tpm_ctx *tctx = opdata->ctx;
+    assert(tctx);
 
     twist auth = tobj->unsealed_auth;
     TPMI_DH_OBJECT handle = tobj->tpm_handle;
+    ESYS_CONTEXT *ectx = tctx->esys_ctx;
+    ESYS_TR session = tctx->hmac_session;
+    TPMT_SIG_SCHEME *scheme = opdata->op_type == CKK_RSA ? &opdata->rsa.sig :
+            &opdata->ecc.sig;
 
     TPM2B_DIGEST tdigest;
     if (sizeof(tdigest.buffer) < datalen) {
@@ -1224,20 +990,9 @@ CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_PTR mech, CK_BYTE_PTR d
     memcpy(tdigest.buffer, data, datalen);
     tdigest.size = datalen;
 
-    bool result = set_esys_auth(ctx->esys_ctx, handle, auth);
+    bool result = set_esys_auth(opdata->ctx->esys_ctx, handle, auth);
     if (!result) {
         return CKR_GENERAL_ERROR;
-    }
-
-    TPMT_SIG_SCHEME in_scheme;
-    CK_RV rv = get_signature_scheme(mech, datalen, &in_scheme);
-    if (rv != CKR_OK) {
-        /*
-         * do not return unsupported here
-         * this should be done in C_SignInit()
-         * In theory this cannot fail
-         */
-        return rv;
     }
 
     TPMT_TK_HASHCHECK validation = {
@@ -1246,26 +1001,33 @@ CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_PTR mech, CK_BYTE_PTR d
         .digest = TPM2B_EMPTY_INIT
     };
 
-    flags_turndown(ctx, TPMA_SESSION_ENCRYPT);
+    if (opdata->op_type == CKK_EC) {
+        CK_RV rv = ecc_fixup_halg(&opdata->ecc.sig, datalen);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+    }
+
+    flags_turndown(opdata->ctx, TPMA_SESSION_ENCRYPT);
 
     TPMT_SIGNATURE *signature = NULL;
     TSS2_RC rval = Esys_Sign(
-            ctx->esys_ctx,
+            ectx,
             handle,
-            ctx->hmac_session,
+            session,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             &tdigest,
-            &in_scheme,
+            scheme,
             &validation,
             &signature);
-    flags_restore(ctx);
+    flags_restore(opdata->ctx);
     if (rval != TPM2_RC_SUCCESS) {
         LOGE("Esys_Sign: %s", Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
     }
 
-    rv = sig_flatten(signature, &in_scheme, sig, siglen);
+    CK_RV rv = sig_flatten(signature, scheme, sig, siglen);
 
     free(signature);
 
@@ -1309,22 +1071,10 @@ static CK_RV init_ecdsa_sig(CK_BYTE_PTR sig, CK_ULONG siglen, TPMS_SIGNATURE_ECD
     return CKR_OK;
 }
 
-static CK_RV init_sig_from_mech(CK_MECHANISM_TYPE mech, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen, TPMT_SIGNATURE *tpmsig) {
+static CK_RV init_sig_from_mech(TPMT_SIG_SCHEME *scheme, CK_BYTE_PTR sig, CK_ULONG siglen, TPMT_SIGNATURE *tpmsig) {
 
-    /*
-     * VerifyInit should be verifying that the mech and sig is supported, so
-     * we can't return that error code here as PKCS11 doesn't support it,
-     * so just return general error.
-     */
-    tpmsig->sigAlg = mech_to_sig_scheme(mech);
-    if (tpmsig->sigAlg == TPM2_ALG_ERROR) {
-        return CKR_GENERAL_ERROR;
-    }
-
-    tpmsig->signature.any.hashAlg = mech_to_hash_alg_ex(mech, datalen);
-    if (tpmsig->signature.any.hashAlg == TPM2_ALG_ERROR) {
-        return CKR_GENERAL_ERROR;
-    }
+    tpmsig->sigAlg = scheme->scheme;
+    tpmsig->signature.any.hashAlg = scheme->details.any.hashAlg;
 
     switch(tpmsig->sigAlg) {
     case TPM2_ALG_RSASSA:
@@ -1332,14 +1082,31 @@ static CK_RV init_sig_from_mech(CK_MECHANISM_TYPE mech, CK_ULONG datalen, CK_BYT
     case TPM2_ALG_ECDSA:
         return init_ecdsa_sig(sig, siglen, &tpmsig->signature.ecdsa);
     default:
-        LOGE("Unsupported verification algorithm, got: 0x%lx", mech);
+        LOGE("Unsupported verification algorithm, got sigAlg: 0x%lx", tpmsig->sigAlg);
         return CKR_GENERAL_ERROR;
     }
 }
 
-CK_RV tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_PTR mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen) {
+CK_RV tpm_verify(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen) {
+    assert(opdata);
+
+    tobject *tobj = opdata->tobj;
+    assert(tobj);
+
+    tpm_ctx *tctx = opdata->ctx;
+    assert(tctx);
 
     TPMI_DH_OBJECT handle = tobj->tpm_handle;
+    ESYS_CONTEXT *ectx = tctx->esys_ctx;
+    TPMT_SIG_SCHEME *scheme = opdata->op_type == CKK_RSA ? &opdata->rsa.sig :
+            &opdata->ecc.sig;
+
+    if (opdata->op_type == CKK_EC) {
+        CK_RV rv = ecc_fixup_halg(&opdata->ecc.sig, datalen);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+    }
 
     // Copy the data into the digest block
     TPM2B_DIGEST msgdigest;
@@ -1349,15 +1116,19 @@ CK_RV tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_PTR mech, CK_BYTE_PTR
     memcpy(msgdigest.buffer, data, datalen);
     msgdigest.size = datalen;
 
+    /*
+     * TODO this would be a good candidate to move into the init
+     * but if just use OSSL for verify, we don't even need this TPM code
+     */
     TPMT_SIGNATURE tpmsig;
-    CK_RV rv = init_sig_from_mech(mech->mechanism, datalen, sig, siglen, &tpmsig);
+    CK_RV rv = init_sig_from_mech(scheme, sig, siglen, &tpmsig);
     if (rv != CKR_OK) {
         return rv;
     }
 
     TPMT_TK_VERIFIED *validation = NULL;
     TSS2_RC rval = Esys_VerifySignature(
-            ctx->esys_ctx,
+            ectx,
             handle,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
@@ -1390,70 +1161,6 @@ CK_RV tpm_readpub(tpm_ctx *ctx,
         LOGE("Esys_ReadPublic: %s", Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
     }
-
-    return CKR_OK;
-}
-
-struct tpm_encrypt_data {
-    tpm_ctx *ctx;
-
-    uint32_t handle;
-    twist auth;
-
-    bool is_rsa;
-
-    union {
-        struct {
-            TPMT_RSA_DECRYPT scheme;
-            TPM2B_DATA label;
-        } rsa;
-        struct {
-            TPMI_ALG_SYM_MODE mode;
-            TPM2B_IV iv;
-        } sym;
-    };
-};
-
-static CK_RV mech_to_sym(CK_MECHANISM_PTR mech, tpm_encrypt_data *tpm_enc_data) {
-
-    switch(mech->mechanism) {
-    case CKM_AES_CBC:
-        tpm_enc_data->sym.mode = TPM2_ALG_CBC;
-        break;
-    case CKM_AES_ECB:
-        tpm_enc_data->sym.mode = TPM2_ALG_ECB;
-        break;
-    case CKM_AES_CFB1:
-        tpm_enc_data->sym.mode = TPM2_ALG_CFB;
-        break;
-    default:
-        LOGE("Unsupported mechanism: 0x%lx", mech->mechanism);
-        return CKR_MECHANISM_INVALID;
-    }
-
-    if (mech->ulParameterLen > 0) {
-
-        if (mech->ulParameterLen > sizeof(tpm_enc_data->sym.iv.buffer)) {
-            return CKR_MECHANISM_PARAM_INVALID;
-        }
-
-        tpm_enc_data->sym.iv.size = mech->ulParameterLen;
-        memcpy(tpm_enc_data->sym.iv.buffer, mech->pParameter, mech->ulParameterLen);
-    } else {
-        /* initialize to 16 zeros if IV not specified */
-        tpm_enc_data->sym.iv.size = sizeof(tpm_enc_data->sym.iv.buffer);
-        memset(tpm_enc_data->sym.iv.buffer, 0, sizeof(tpm_enc_data->sym.iv.buffer));
-    }
-
-    return CKR_OK;
-}
-
-static CK_RV mech_to_rsa_raw(CK_MECHANISM_PTR mech, tpm_encrypt_data *encdata) {
-    UNUSED(mech);
-
-    encdata->rsa.scheme.scheme = TPM2_ALG_NULL;
-
-    encdata->rsa.label.size = 0;
 
     return CKR_OK;
 }
@@ -1493,15 +1200,45 @@ static CK_RV get_oaep_mgf1_alg(tpm_ctx *tpm, uint32_t handle, CK_RSA_PKCS_MGF_TY
     return rv;
 }
 
-static CK_RV mech_to_rsa_oaep(tpm_ctx *tpm, CK_MECHANISM_PTR mech, tpm_encrypt_data *encdata) {
+static TPMI_ALG_HASH mech_to_hash_alg(CK_MECHANISM_TYPE t) {
 
-    encdata->rsa.scheme.scheme = TPM2_ALG_OAEP;
+    switch(t) {
+    case CKM_SHA_1:
+        return TPM2_ALG_SHA1;
+    case CKM_SHA256:
+        return TPM2_ALG_SHA256;
+    case CKM_SHA384:
+        return TPM2_ALG_SHA384;
+    case CKM_SHA512:
+        return TPM2_ALG_SHA512;
+        /* no default */
+    }
+
+    return TPM2_ALG_ERROR;
+}
+
+static void set_common_opdata(tpm_op_data *opdata, tpm_ctx *tctx, tobject *tobj, CK_KEY_TYPE key_type) {
+
+    opdata->tobj = tobj;
+    opdata->ctx = tctx;
+    opdata->op_type = key_type;
+}
+
+CK_RV tpm_rsa_oaep_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    assert(outdata);
+    assert(mech);
+
+    /*
+     * At the current moment, this is the only thing that cannot be flattened and requires PARAMS
+     * and a TPM ctx for verifying the hash alg. Others just pass along the tctx via the opdata
+     */
+
+    CK_RSA_PKCS_OAEP_PARAMS_PTR params = NULL;
+    SAFE_CAST(mech, params);
 
     if (mech->ulParameterLen != sizeof(CK_RSA_PKCS_OAEP_PARAMS)) {
         return CKR_MECHANISM_PARAM_INVALID;
     }
-
-    CK_RSA_PKCS_OAEP_PARAMS_PTR params = (CK_RSA_PKCS_OAEP_PARAMS_PTR)mech->pParameter;
 
     if (params->source != CKZ_DATA_SPECIFIED
             && params->pSourceData != NULL
@@ -1513,7 +1250,7 @@ static CK_RV mech_to_rsa_oaep(tpm_ctx *tpm, CK_MECHANISM_PTR mech, tpm_encrypt_d
      * TPM is hardcoded to MGF1 + <name alg> in the TPM, make sure what is requested is supported
      */
     CK_RSA_PKCS_MGF_TYPE supported_mgf;
-    CK_RV rv = get_oaep_mgf1_alg(tpm, encdata->handle, &supported_mgf);
+    CK_RV rv = get_oaep_mgf1_alg(tctx, tobj->tpm_handle, &supported_mgf);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -1523,78 +1260,356 @@ static CK_RV mech_to_rsa_oaep(tpm_ctx *tpm, CK_MECHANISM_PTR mech, tpm_encrypt_d
     }
     */
 
-    encdata->rsa.scheme.details.oaep.hashAlg = mech_to_hash_alg(params->hashAlg);
-    if (encdata->rsa.scheme.details.oaep.hashAlg == TPM2_ALG_ERROR) {
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->rsa.raw.scheme = TPM2_ALG_OAEP;
+
+    opdata->rsa.raw.details.anySig.hashAlg = mech_to_hash_alg(params->hashAlg);
+    if (opdata->rsa.raw.details.anySig.hashAlg == TPM2_ALG_ERROR) {
+        tpm_opdata_free(&opdata);
         return CKR_MECHANISM_PARAM_INVALID;
     }
 
-    if (params->ulSourceDataLen > sizeof(encdata->rsa.label.buffer)) {
+    if (params->ulSourceDataLen > sizeof(opdata->rsa.label.buffer)) {
+        tpm_opdata_free(&opdata);
         return CKR_MECHANISM_PARAM_INVALID;
     }
 
-    encdata->rsa.label.size = params->ulSourceDataLen;
+    opdata->rsa.label.size = params->ulSourceDataLen;
     if (params->ulSourceDataLen) {
         if (!params->pSourceData) {
+            tpm_opdata_free(&opdata);
             return CKR_MECHANISM_PARAM_INVALID;
         }
-        memcpy(encdata->rsa.label.buffer, params->pSourceData, params->ulSourceDataLen);
+        memcpy(opdata->rsa.label.buffer, params->pSourceData, params->ulSourceDataLen);
     }
+
+    set_common_opdata(opdata, tctx, tobj, CKK_RSA);
+
+    *outdata = opdata;
 
     return CKR_OK;
 }
 
-CK_RV tpm_encrypt_data_init(tpm_ctx *ctx, uint32_t handle, twist auth, CK_MECHANISM_PTR mech, tpm_encrypt_data **encdata) {
+CK_RV tpm_rsa_pkcs_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mech);
+    assert(outdata);
+    assert(mech);
 
-    CK_RV rv = CKR_MECHANISM_INVALID;
-
-    tpm_encrypt_data *tpm_enc_data = calloc(1, sizeof(*tpm_enc_data));
-    if (!tpm_enc_data) {
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
         return CKR_HOST_MEMORY;
     }
 
-    tpm_enc_data->ctx = ctx;
-    tpm_enc_data->handle = handle;
-    tpm_enc_data->auth = auth;
+    opdata->rsa.raw.scheme = TPM2_ALG_NULL;
+    opdata->rsa.label.size = 0;
 
-    switch(mech->mechanism) {
-        case CKM_RSA_X_509:
-        case CKM_RSA_PKCS:
-        case CKM_SHA1_RSA_PKCS:
-        case CKM_SHA256_RSA_PKCS:
-        case CKM_SHA384_RSA_PKCS:
-        case CKM_SHA512_RSA_PKCS:
-            tpm_enc_data->is_rsa = true;
-            rv = mech_to_rsa_raw(mech, tpm_enc_data);
-            break;
+    set_common_opdata(opdata, tctx, tobj, CKK_RSA);
 
-        case CKM_RSA_PKCS_OAEP:
-            tpm_enc_data->is_rsa = true;
-            rv = mech_to_rsa_oaep(ctx, mech, tpm_enc_data);
-            break;
+    *outdata = opdata;
 
-        case CKM_AES_CBC:
-        case CKM_AES_ECB:
-        case CKM_AES_CFB1:
-            rv = mech_to_sym(mech, tpm_enc_data);
-            break;
-        /* no default */
-    }
-
-    if (rv == CKR_OK) {
-        *encdata = tpm_enc_data;
-    } else {
-        free(tpm_enc_data);
-    }
-
-    return rv;
+    return CKR_OK;
 }
 
-void tpm_encrypt_data_free(tpm_encrypt_data *encdata) {
+CK_RV tpm_rsa_pss_sha1_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mech);
+    assert(outdata);
+    assert(mech);
 
-    free(encdata);
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->rsa.sig.scheme = TPM2_ALG_RSAPSS;
+    opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA1;
+
+    set_common_opdata(opdata, tctx, tobj, CKK_RSA);
+
+    *outdata = opdata;
+
+    return CKR_OK;
 }
 
-CK_RV tpm_rsa_decrypt(tpm_encrypt_data *tpm_enc_data,
+CK_RV tpm_rsa_pss_sha256_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mech);
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->rsa.sig.scheme = TPM2_ALG_RSAPSS;
+    opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA256;
+
+    set_common_opdata(opdata, tctx, tobj, CKK_RSA);
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_rsa_pss_sha384_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mech);
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->rsa.sig.scheme = TPM2_ALG_RSAPSS;
+    opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA384;
+
+    set_common_opdata(opdata, tctx, tobj, CKK_RSA);
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_rsa_pss_sha512_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mech);
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->rsa.sig.scheme = TPM2_ALG_RSAPSS;
+    opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA512;
+
+    set_common_opdata(opdata, tctx, tobj, CKK_RSA);
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_rsa_pkcs_sha1_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mech);
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->rsa.sig.scheme = TPM2_ALG_RSASSA;
+    opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA1;
+
+    set_common_opdata(opdata, tctx, tobj, CKK_RSA);
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_rsa_pkcs_sha256_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mech);
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->rsa.sig.scheme = TPM2_ALG_RSASSA;
+    opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA256;
+
+    set_common_opdata(opdata, tctx, tobj, CKK_RSA);
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_rsa_pkcs_sha384_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mech);
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->rsa.sig.scheme = TPM2_ALG_RSASSA;
+    opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA384;
+
+    set_common_opdata(opdata, tctx, tobj, CKK_RSA);
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_rsa_pkcs_sha512_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mech);
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->rsa.sig.scheme = TPM2_ALG_RSASSA;
+    opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA512;
+
+    set_common_opdata(opdata, tctx, tobj, CKK_RSA);
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_ec_ecdsa_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mech);
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->ecc.sig.scheme = TPM2_ALG_ECDSA;
+
+    /*
+     * we don't know the proper algorithm to set until ESys_Sign() is called,
+     * So we need to detect this case and guess the algorithm based on hash size.
+     */
+    opdata->ecc.sig.details.any.hashAlg = TPM2_ALG_ERROR;
+
+    set_common_opdata(opdata, tctx, tobj, CKK_EC);
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_ec_ecdsa_sha1_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mech);
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->ecc.sig.scheme = TPM2_ALG_ECDSA;
+    opdata->ecc.sig.details.any.hashAlg = TPM2_ALG_SHA1;
+
+    set_common_opdata(opdata, tctx, tobj, CKK_EC);
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+static CK_RV aes_common_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data *opdata) {
+
+    if (mech->ulParameterLen > sizeof(opdata->sym.iv.buffer) ||
+            mech->ulParameterLen % 8) {
+        return CKR_MECHANISM_PARAM_INVALID;
+    }
+
+    opdata->sym.iv.size = mech->ulParameterLen;
+    memcpy(opdata->sym.iv.buffer, mech->pParameter, mech->ulParameterLen);
+    opdata->tobj = tobj;
+    opdata->ctx = tctx;
+    opdata->op_type = CKK_AES;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_aes_cbc_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->sym.mode = TPM2_ALG_CBC;
+
+    CK_RV rv = aes_common_opdata(tctx, mech, tobj, opdata);
+    if (rv != CKR_OK) {
+        free(opdata);
+        return rv;
+    }
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_aes_cfb_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->sym.mode = TPM2_ALG_CFB;
+
+    CK_RV rv = aes_common_opdata(tctx, mech, tobj, opdata);
+    if (rv != CKR_OK) {
+        free(opdata);
+        return rv;
+    }
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_aes_ecb_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->sym.mode = TPM2_ALG_ECB;
+
+    CK_RV rv = aes_common_opdata(tctx, mech, tobj, opdata);
+    if (rv != CKR_OK) {
+        free(opdata);
+        return rv;
+    }
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+void tpm_opdata_free(tpm_op_data **opdata) {
+
+    if (opdata) {
+        free(*opdata);
+        *opdata = NULL;
+    }
+}
+
+CK_RV tpm_rsa_decrypt(tpm_op_data *tpm_enc_data,
         CK_BYTE_PTR ctext, CK_ULONG ctextlen,
         CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen) {
 
@@ -1604,7 +1619,7 @@ CK_RV tpm_rsa_decrypt(tpm_encrypt_data *tpm_enc_data,
 
     tpm_ctx *ctx = tpm_enc_data->ctx;
 
-    TPMT_RSA_DECRYPT *scheme = &tpm_enc_data->rsa.scheme;
+    TPMT_RSA_DECRYPT *scheme = &tpm_enc_data->rsa.raw;
     TPM2B_DATA *label = &tpm_enc_data->rsa.label;
 
     /*
@@ -1618,8 +1633,8 @@ CK_RV tpm_rsa_decrypt(tpm_encrypt_data *tpm_enc_data,
     }
     memcpy(tpm_ctext.buffer, ctext, ctextlen);
 
-    twist auth = tpm_enc_data->auth;
-    ESYS_TR handle = tpm_enc_data->handle;
+    twist auth = tpm_enc_data->tobj->unsealed_auth;
+    ESYS_TR handle = tpm_enc_data->tobj->tpm_handle;
     bool result = set_esys_auth(ctx->esys_ctx, handle, auth);
     if (!result) {
         return CKR_GENERAL_ERROR;
@@ -1665,7 +1680,7 @@ out:
     return rv;
 }
 
-CK_RV tpm_rsa_encrypt(tpm_encrypt_data *tpm_enc_data,
+CK_RV tpm_rsa_encrypt(tpm_op_data *tpm_enc_data,
         CK_BYTE_PTR pptext, CK_ULONG pptextlen,
         CK_BYTE_PTR cctext, CK_ULONG_PTR cctextlen) {
 
@@ -1675,7 +1690,7 @@ CK_RV tpm_rsa_encrypt(tpm_encrypt_data *tpm_enc_data,
 
     tpm_ctx *ctx = tpm_enc_data->ctx;
 
-    TPMT_RSA_DECRYPT *scheme = &tpm_enc_data->rsa.scheme;
+    TPMT_RSA_DECRYPT *scheme = &tpm_enc_data->rsa.raw;
     TPM2B_DATA *label = &tpm_enc_data->rsa.label;
 
     /*
@@ -1689,7 +1704,7 @@ CK_RV tpm_rsa_encrypt(tpm_encrypt_data *tpm_enc_data,
     }
     memcpy(message.buffer, pptext, pptextlen);
 
-    ESYS_TR handle = tpm_enc_data->handle;
+    ESYS_TR handle = tpm_enc_data->tobj->tpm_handle;
 
     TPM2B_PUBLIC_KEY_RSA *ctext;
 
@@ -1844,9 +1859,9 @@ CK_RV tpm_encrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
         CK_BYTE_PTR ptext, CK_ULONG ptextlen,
         CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen) {
 
-    tpm_encrypt_data *tpm_enc_data = opdata->tpm_enc_data;
+    tpm_op_data *tpm_enc_data = opdata->tpm_opdata;
 
-    if (tpm_enc_data->is_rsa) {
+    if (tpm_enc_data->op_type == CKK_RSA) {
         return clazz == CKO_PRIVATE_KEY ? tpm_rsa_decrypt(tpm_enc_data, ptext, ptextlen, ctext, ctextlen) :
                 tpm_rsa_encrypt(tpm_enc_data, ptext, ptextlen, ctext, ctextlen);
     }
@@ -1855,8 +1870,8 @@ CK_RV tpm_encrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
     TPMI_ALG_SYM_MODE mode = tpm_enc_data->sym.mode;
     TPM2B_IV *iv = &tpm_enc_data->sym.iv;
 
-    twist auth = tpm_enc_data->auth;
-    ESYS_TR handle = tpm_enc_data->handle;
+    twist auth = tpm_enc_data->tobj->unsealed_auth;
+    ESYS_TR handle = tpm_enc_data->tobj->tpm_handle;
 
     return encrypt_decrypt(ctx, handle, auth, mode, ENCRYPT,
             iv, ptext, ptextlen, ctext, ctextlen);
@@ -1866,9 +1881,9 @@ CK_RV tpm_decrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
         CK_BYTE_PTR ctext, CK_ULONG ctextlen,
         CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen) {
 
-    tpm_encrypt_data *tpm_enc_data = opdata->tpm_enc_data;
+    tpm_op_data *tpm_enc_data = opdata->tpm_opdata;
 
-    if (tpm_enc_data->is_rsa) {
+    if (tpm_enc_data->op_type == CKK_RSA) {
         LOGV("tpm_encrypt object class: %lu", clazz);
         return clazz == CKO_PRIVATE_KEY ? tpm_rsa_decrypt(tpm_enc_data, ctext, ctextlen, ptext, ptextlen) :
                 tpm_rsa_encrypt(tpm_enc_data, ctext, ctextlen, ptext, ptextlen);
@@ -1878,8 +1893,8 @@ CK_RV tpm_decrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
     TPMI_ALG_SYM_MODE mode = tpm_enc_data->sym.mode;
     TPM2B_IV *iv = &tpm_enc_data->sym.iv;
 
-    twist auth = tpm_enc_data->auth;
-    ESYS_TR handle = tpm_enc_data->handle;
+    twist auth = tpm_enc_data->tobj->unsealed_auth;
+    ESYS_TR handle = tpm_enc_data->tobj->tpm_handle;
 
     return encrypt_decrypt(ctx, handle, auth, mode, DECRYPT,
             iv, ctext, ctextlen, ptext, ptextlen);
@@ -2314,26 +2329,12 @@ static CK_RV handle_ecparams(CK_ATTRIBUTE_PTR attr, void *udata) {
 
     TPMS_ECC_PARMS *ec = &keydat->pub.publicArea.parameters.eccDetail;
 
-    switch (nid) {
-    case NID_X9_62_prime192v1:
-        ec->curveID = TPM2_ECC_NIST_P192;
-    break;
-    case NID_secp224r1:
-        ec->curveID = TPM2_ECC_NIST_P224;
-    break;
-    case NID_X9_62_prime256v1:
-        ec->curveID = TPM2_ECC_NIST_P256;
-    break;
-    case NID_secp384r1:
-        ec->curveID = TPM2_ECC_NIST_P384;
-    break;
-    case NID_secp521r1:
-        ec->curveID = TPM2_ECC_NIST_P521;
-    break;
-    default:
-        LOGE("Unsupported nid to tpm EC algorithm mapping, got nid: %d", nid);
+    TPMI_ECC_CURVE curve = nid_to_tpm2alg(nid);
+    if (curve == TPM2_ALG_ERROR) {
         return CKR_CURVE_NOT_SUPPORTED;
     }
+
+    ec->curveID = curve;
 
     return CKR_OK;
 }
@@ -3167,28 +3168,20 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
     if (is_algorithm_supported(algs, TPM2_ALG_RSA)) {
         /* if RSA is supported, these modes MUST be supported */
         add_mech(CKM_RSA_PKCS);
+        add_mech(CKM_RSA_PKCS_OAEP);
         add_mech(CKM_RSA_PKCS_PSS);
         add_mech(CKM_RSA_PKCS_KEY_PAIR_GEN);
         add_mech(CKM_RSA_X_509);
 
-        /*
-         * These mechs are supported synthetically even when the
-         * TPM doesn't have direct support, we can use RAW RSA
-         * and perform hashing and padding off-tpm
-         */
-        add_mech(CKM_SHA1_RSA_PKCS);
-        add_mech(CKM_SHA256_RSA_PKCS);
-        add_mech(CKM_SHA384_RSA_PKCS);
-        add_mech(CKM_SHA512_RSA_PKCS);
-
-        /*
-         * PSS cannot be synthesized, so always check for support before
-         * reporting it.
-         */
         if_add_mech(algs, TPM2_ALG_SHA1, CKM_SHA1_RSA_PKCS_PSS)
         if_add_mech(algs, TPM2_ALG_SHA256, CKM_SHA256_RSA_PKCS_PSS);
         if_add_mech(algs, TPM2_ALG_SHA384, CKM_SHA384_RSA_PKCS_PSS);
         if_add_mech(algs, TPM2_ALG_SHA512, CKM_SHA512_RSA_PKCS_PSS);
+
+        if_add_mech(algs, TPM2_ALG_SHA1, CKM_SHA1_RSA_PKCS)
+        if_add_mech(algs, TPM2_ALG_SHA256, CKM_SHA256_RSA_PKCS);
+        if_add_mech(algs, TPM2_ALG_SHA384, CKM_SHA384_RSA_PKCS);
+        if_add_mech(algs, TPM2_ALG_SHA512, CKM_SHA512_RSA_PKCS);
     }
 
     /* ECC */
@@ -3200,22 +3193,16 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
 
     /* AES */
     if (is_algorithm_supported(algs, TPM2_ALG_AES)) {
+        add_mech(CKM_AES_KEY_GEN);
 
         if_add_mech(algs, TPM2_ALG_CBC, CKM_AES_CBC);
         if_add_mech(algs, TPM2_ALG_CFB, CKM_AES_CFB128);
         if_add_mech(algs, TPM2_ALG_ECB, CKM_AES_ECB);
     }
 
-    /* DIGESTS */
-    /* hashing is all software, so just set them to supported */
-    add_mech(CKM_SHA_1);
-    add_mech(CKM_SHA256);
-    add_mech(CKM_SHA384);
-    add_mech(CKM_SHA512);
-
 out:
     *count = supported;
-    free(capabilityData);
+    Esys_Free(capabilityData);
 
     return rv;
 }
