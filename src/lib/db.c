@@ -1027,15 +1027,6 @@ error:
 }
 
 
-CK_RV db_init(void) {
-
-    return db_new(&global.db);
-}
-
-CK_RV db_destroy(void) {
-    return db_free(&global.db);
-}
-
 #define DB_NAME "tpm2_pkcs11.sqlite3"
 #define PKCS11_STORE_ENV_VAR "TPM2_PKCS11_STORE"
 
@@ -1757,4 +1748,13 @@ CK_RV db_free(sqlite3 **db) {
     *db = NULL;
 
     return CKR_OK;
+}
+
+CK_RV db_init(void) {
+
+    return db_new(&global.db);
+}
+
+CK_RV db_destroy(void) {
+    return db_free(&global.db);
 }
