@@ -16,6 +16,11 @@
 
 typedef struct tpm_ctx tpm_ctx;
 
+typedef struct tpm_op_data tpm_op_data;
+
+/* forward reference */
+typedef union crypto_op_data crypto_op_data;
+
 /**
  * Destroys the system API context, and when the refcnt
  * hits 0 for the tcti context, destroys it as well.
@@ -52,7 +57,15 @@ CK_RV tpm_ctx_new(const char *tcti, tpm_ctx **tctx);
  */
 CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info);
 
-CK_RV tpm_get_mech_info(tpm_ctx *ctx, CK_MECHANISM_TYPE t, CK_MECHANISM_INFO_PTR info);
+CK_RV tpm_is_rsa_keysize_supported(tpm_ctx *tctx, CK_ULONG test_size);
+
+CK_RV tpm_find_max_rsa_keysize(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR max);
+
+CK_RV tpm_find_ecc_keysizes(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR max);
+
+CK_RV tpm_find_aes_keysizes(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR max);
+
+CK_RV tpm_is_ecc_curve_supported(tpm_ctx *tctx, int nid);
 
 /**
  * Generates random bytes from the TPM
@@ -78,60 +91,34 @@ twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth);
 
 bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle);
 
-/**
- * Perform a signing operation using the TPM.
- * @param ctx
- *  The tpm context.
- * @param tobj
- *  The tertiary object (aka key) to sign with.
- * @param mech
- *  The PKCS11 mechanism.
- * @param data
- *  The data to sign, should be digested.
- * @param datalen
- *  The length of the data.
- * @param sig
- *  The signature buffer to output the data in.
- * @param siglen
- *  The length of the signature buffer.
- * @return
- *  Any CK_RV that C_Sign() can return.
- */
-CK_RV tpm_sign(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_PTR mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen);
+CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen);
 
-/**
- * Perform a verification in the TPM.
- * @param ctx
- *  The tpm context.
- * @param tobj
- *  The tertiary object (aka key) to sign with.
- * @param mech
- *  The PKCS11 mechanism.
- * @param data
- *  The data to verify, should be digested.
- * @param datalen
- *  The length of the data.
- * @param sig
- *  The signature to verify.
- * @param siglen
- *  The length of the signature.
- * @return
- *  Any CK_RV that C_Verify() can return.
- */
-CK_RV tpm_verify(tpm_ctx *ctx, tobject *tobj, CK_MECHANISM_PTR mech, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen);
+CK_RV tpm_verify(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen);
 
-typedef struct tpm_encrypt_data tpm_encrypt_data;
-CK_RV tpm_encrypt_data_init(tpm_ctx *ctx, uint32_t handle, twist auth, CK_MECHANISM_PTR, tpm_encrypt_data **encdata);
-void tpm_encrypt_data_free(tpm_encrypt_data *encdata);
+CK_RV tpm_rsa_pkcs_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_oaep_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pss_sha1_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pss_sha256_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pss_sha384_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pss_sha512_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
 
-/* forward reference */
-typedef union crypto_op_data crypto_op_data;
+CK_RV tpm_rsa_pkcs_sha1_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pkcs_sha256_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pkcs_sha384_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pkcs_sha512_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+
+CK_RV tpm_ec_ecdsa_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_ec_ecdsa_sha1_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+
+CK_RV tpm_aes_cbc_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_aes_cfb_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_aes_ecb_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+
+void tpm_opdata_free(tpm_op_data **opdata);
 
 CK_RV tpm_encrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz, CK_BYTE_PTR ptext, CK_ULONG ptextlen, CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen);
 
 CK_RV tpm_decrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz, CK_BYTE_PTR ctext, CK_ULONG ctextlen, CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen);
-
-bool tpm_register_handle(tpm_ctx *ctx, uint32_t *handle);
 
 CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handle,
         twist oldauth, twist newauth,
@@ -178,9 +165,6 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
 CK_RV tpm_get_existing_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_blob);
 
 CK_RV tpm_create_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_blob);
-
-CK_RV tpm_create_seal_object(tpm_ctx *ctx, uint32_t primary_handle, twist newauth,
-        twist *pub_blob, twist *priv_blob);
 
 void tpm_init(void);
 

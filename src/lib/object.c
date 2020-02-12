@@ -3,6 +3,8 @@
 #include <limits.h>
 #include <stdlib.h>
 
+#include <openssl/obj_mac.h>
+
 #include "attrs.h"
 #include "checks.h"
 #include "db.h"
@@ -81,6 +83,101 @@ CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech) {
     /* TODO further sanity checking for CKR_MECHANISM_PARAM_INVALID */
 
     return CKR_MECHANISM_INVALID;
+}
+
+CK_RV tobject_get_max_buf_size(tobject *tobj, size_t *maxsize) {
+
+    assert(tobj);
+
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_KEY_TYPE);
+    if (!a) {
+        LOGE("Expected attribute CKA_KEY_TYPE");
+        return CKR_TEMPLATE_INCOMPLETE;
+    }
+
+    CK_KEY_TYPE key_type;
+    CK_RV rv = attr_CK_KEY_TYPE(a, &key_type);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    if (key_type == CKK_RSA) {
+
+        a = attr_get_attribute_by_type(tobj->attrs, CKA_MODULUS);
+        if (!a) {
+            LOGE("RSA Keys should have a modulus");
+            return CKR_GENERAL_ERROR;
+        }
+
+        *maxsize = a->ulValueLen;
+        return CKR_OK;
+
+    }
+
+    if (key_type == CKK_EC) {
+        a = attr_get_attribute_by_type(tobj->attrs, CKA_EC_PARAMS);
+        if (!a) {
+            LOGE("EC Keys should have params");
+            return CKR_GENERAL_ERROR;
+        }
+
+        int nid = 0;
+        CK_RV rv = ec_params_to_nid(a, &nid);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+
+        /*
+         * Math below is based off of ECDSA signature:
+         * SEQUENCE (2 elem)
+         *  INTEGER R
+         *  INTEGER S
+         *
+         *  Integers R and S are bounded by keysize in bytes, followed by their
+         *  respective headers(2bytes) followed by the SEQUENCE header(2 bytes)
+         */
+        unsigned keysize;
+
+        switch (nid) {
+        case NID_X9_62_prime192v1:
+            keysize = 24;
+        break;
+        case NID_secp224r1:
+            keysize = 28;
+        break;
+        case NID_X9_62_prime256v1:
+            keysize = 32;
+        break;
+        case NID_secp384r1:
+            keysize = 48;
+        break;
+        case NID_secp521r1:
+            keysize = 66; /* round up */
+        break;
+        default:
+            LOGE("Unsupported nid to tpm signature size maaping: %d", nid);
+            return CKR_CURVE_NOT_SUPPORTED;
+        }
+
+        /* R and S are INTEGER objects with a header and len byte */
+        static const unsigned INT_HDR = 2U;
+        /* R and S are combined in a SEQUENCE object with a header and len byte */
+        static const unsigned SEQ_HDR = 2U;
+        /* an R or S with a high bit set needs an extra nul byte so it's not negative (twos comp)*/
+        static const unsigned EXTRA = 1U;
+
+        unsigned tmp = ((keysize + INT_HDR + EXTRA) * 2); /* x2 1 for R and 1 for S */
+
+        tmp += SEQ_HDR;
+
+        *maxsize = tmp;
+
+        return CKR_OK;
+    }
+
+    LOGE("Unknown signing key type, got: 0x%lx", key_type);
+
+    return CKR_GENERAL_ERROR;
 }
 
 static bool attr_filter(attr_list *attrs, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {

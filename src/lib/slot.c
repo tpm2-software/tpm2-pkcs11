@@ -5,6 +5,7 @@
 
 #include "checks.h"
 #include "db.h"
+#include "mech.h"
 #include "pkcs11.h"
 #include "slot.h"
 #include "token.h"
@@ -139,7 +140,7 @@ CK_RV slot_mechanism_list_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE *mechanism_
     }
 
     token_lock(t);
-    CK_RV rv = token_get_mechanism_list(t, mechanism_list, count);
+    CK_RV rv = mech_get_supported(t->tctx, mechanism_list, count);
     token_unlock(t);
     return rv;
 }
@@ -156,7 +157,7 @@ CK_RV slot_mechanism_info_get (CK_SLOT_ID slot_id, CK_MECHANISM_TYPE type, CK_ME
     token_lock(t);
 
     /* tpm builds and maintains cache */
-    CK_RV rv = tpm_get_mech_info(t->tctx, type, info);
+    CK_RV rv = mech_get_info(t->tctx, type, info);
     if (rv != CKR_OK) {
         token_unlock(t);
         return rv;

@@ -119,7 +119,7 @@ void test_get_mechanism_info_good(void **state) {
     /* Test all other mechanisms */
     CK_ULONG aes_mechs[] = {
         CKM_AES_CBC,
-        CKM_AES_CFB1,
+        CKM_AES_CFB128,
         CKM_AES_ECB,
     };
     for (size_t i = 0; i < ARRAY_LEN(aes_mechs); i++) {
@@ -128,7 +128,7 @@ void test_get_mechanism_info_good(void **state) {
 
         assert_int_equal(mech_info.ulMinKeySize, 128/8);
         assert_int_equal(mech_info.ulMaxKeySize, 256/8);
-        assert_int_equal(mech_info.flags, CKF_HW);
+        assert_int_equal(mech_info.flags, CKF_ENCRYPT|CKF_DECRYPT|CKF_HW);
     }
 
     struct {
@@ -142,7 +142,7 @@ void test_get_mechanism_info_good(void **state) {
         { CKM_SHA1_RSA_PKCS,         CKF_HW | CKF_SIGN    | CKF_VERIFY                          },
         { CKM_SHA256_RSA_PKCS,       CKF_HW | CKF_SIGN    | CKF_VERIFY                          },
         { CKM_SHA384_RSA_PKCS,       CKF_HW | CKF_SIGN    | CKF_VERIFY                          },
-        { CKM_SHA512_RSA_PKCS,       CKF_HW | CKF_SIGN    | CKF_VERIFY                          },
+        { CKM_SHA512_RSA_PKCS,                CKF_SIGN    | CKF_VERIFY                          },
     };
     for (size_t i = 0; i < ARRAY_LEN(rsa_mechs); i++) {
         rv = C_GetMechanismInfo(slot_id, rsa_mechs[i].mech, &mech_info);
