@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
+#include "config.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -70,9 +71,10 @@ CK_RV type_mem_dup(void *in, size_t len, void **dup) {
 
     *dup = buf;
 
+#ifndef NDEBUG
     CK_BYTE check = type_from_ptr(buf, len);
     assert(check == type);
-
+#endif
     return CKR_OK;
 }
 
@@ -81,7 +83,9 @@ void type_mem_cpy(void *dest, void *in, size_t size) {
     assert(dest);
     assert(size);
     memcpy(dest, in, size + 1);
+#ifndef NDEBUG
     CK_BYTE check = type_from_ptr(in, size);
     CK_BYTE got = type_from_ptr(dest, size);
     assert(check == got);
+#endif
 }
