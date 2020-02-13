@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
+#include "config.h"
 #include <assert.h>
 #include <stdlib.h>
 
@@ -332,3 +333,4 @@ doc_delete:
     return yaml_return;
 
 }
+
