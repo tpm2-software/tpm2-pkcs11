@@ -2,7 +2,7 @@
 
 #ifndef SRC_PKCS11_MUTEX_H_
 #define SRC_PKCS11_MUTEX_H_
-
+#include "config.h"
 #include <assert.h>
 
 #include "log.h"
