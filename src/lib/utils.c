@@ -353,36 +353,6 @@ size_t utils_get_halg_size(CK_MECHANISM_TYPE mttype) {
     return 0;
 }
 
-bool utils_mech_is_raw_sign(CK_MECHANISM_TYPE mech) {
-
-    switch(mech) {
-    case CKM_RSA_PKCS:
-        /* falls-thru */
-    case CKM_RSA_X_509:
-        return true;
-    default:
-        return false;
-    }
-}
-
-bool utils_mech_is_rsa_pkcs(CK_MECHANISM_TYPE mech) {
-
-    switch(mech) {
-    case CKM_RSA_PKCS:
-        /* falls-thru*/
-    case CKM_SHA1_RSA_PKCS:
-        /* falls-thru*/
-    case CKM_SHA256_RSA_PKCS:
-        /* falls-thru*/
-    case CKM_SHA384_RSA_PKCS:
-        /* falls-thru*/
-    case CKM_SHA512_RSA_PKCS:
-        return true;
-    default:
-        return false;
-    }
-}
-
 twist utils_get_rand_hex_str(size_t size) {
 
     if (size == 0) {
@@ -439,70 +409,6 @@ CK_RV utils_ctx_wrap_objauth(token *tok, twist data, twist *wrapped_auth) {
     }
 
     *wrapped_auth = wrapped;
-
-    return CKR_OK;
-}
-
-CK_RV generic_attr_copy(CK_ATTRIBUTE_PTR in, CK_ULONG count, void *udata) {
-    CK_ATTRIBUTE_PTR out = &((CK_ATTRIBUTE_PTR)udata)[count];
-
-
-    void *newval = NULL;
-
-    if (in->pValue) {
-        newval = calloc(1, in->ulValueLen);
-        if (!newval) {
-            return CKR_HOST_MEMORY;
-        }
-        memcpy(newval, in->pValue, in->ulValueLen);
-    }
-
-    out->ulValueLen = in->ulValueLen;
-    out->type = in->type;
-    out->pValue = newval;
-
-    return CKR_OK;
-}
-CK_RV fake_ec_param_copy(CK_ATTRIBUTE_PTR in, CK_ULONG count, void *udata) {
-    CK_ATTRIBUTE_PTR out = &((CK_ATTRIBUTE_PTR)udata)[count];
-
-
-    void *newval = NULL;
-    unsigned char fake_oid[] = { 0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07 };
-
-
-    if (in->pValue) {
-        newval = calloc(1, 10);
-        if (!newval) {
-            return CKR_HOST_MEMORY;
-        }
-        memcpy(newval, fake_oid, 10);
-    }
-
-    out->ulValueLen = 10;
-    out->type = in->type;
-    out->pValue = newval;
-
-    return CKR_OK;
-}
-
-CK_RV generic_mech_copy(CK_MECHANISM_PTR in, CK_ULONG count, void *udata) {
-    CK_MECHANISM_PTR out = &((CK_MECHANISM_PTR)udata)[count];
-
-
-    void *newval = NULL;
-
-    if (in->pParameter) {
-        newval = calloc(1, in->ulParameterLen);
-        if (!newval) {
-            return CKR_HOST_MEMORY;
-        }
-        memcpy(newval, in->pParameter, in->ulParameterLen);
-    }
-
-    out->ulParameterLen = in->ulParameterLen;
-    out->mechanism = in->mechanism;
-    out->pParameter = newval;
 
     return CKR_OK;
 }
