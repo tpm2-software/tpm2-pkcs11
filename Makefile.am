@@ -76,7 +76,7 @@ AM_TESTS_ENVIRONMENT = \
     PATH=$(abs_top_srcdir)/tools:./src:$(PATH) \
     PYTHONPATH=$(abs_top_srcdir)/tools \
     TEST_JAVA_ROOT=$(JAVAROOT) \
-    T=$(abs_top_srcdir) \
+    PACKAGE_URL=$(PACKAGE_URL) \
     dbus-run-session
 
 TESTS_LDADD = $(noinst_LTLIBRARIES) $(lib_LTLIBRARIES) $(p11lib_LTLIBRARIES) $(AM_LDFLAGS) $(CMOCKA_LIBS) $(CRYPTO_LIBS)

@@ -40,13 +40,14 @@ setup_asan()
 # we need to clone and build v1.0 and test HEAD (current built)
 # against it in the tempdir.
 #
-echo "T=$T"
-
 pushd "$tempdir"
 
-git clone $(realpath $T)
+if ! git clone --branch 1.0 --depth 1 "$PACKAGE_URL" tpm2-pkcs11; then
+    echo "Could not clone project repository '$PACKAGE_URL'"
+    exit 77
+fi
+
 pushd tpm2-pkcs11
-git checkout 1.0
 ./bootstrap
 ./configure --enable-debug --disable-hardening
 make -j$(nproc)
