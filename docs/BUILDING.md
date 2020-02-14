@@ -33,7 +33,7 @@ in known package managers are likely too old.
 
 ### Optional Dependencies for Enabling Testing
 1. [CMocka](https://cmocka.org/)
-2. [TPM2.0 Simulator v194](https://sourceforge.net/projects/ibmswtpm2/files/ibmtpm1119.tar.gz/download): **Tested with version 1119**
+2. [TPM 2.0 Simulator](https://sourceforge.net/projects/ibmswtpm2/files/ibmtpm1563.tar.gz/download): **Tested with version 1563**
 4. [tpm2-abrmd](https://github.com/tpm2-software/tpm2-abrmd)
 5. Dependencies for [tpm2-ptool](# Optional Dependencies for tpm2_ptool)
 
