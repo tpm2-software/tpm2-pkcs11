@@ -142,7 +142,7 @@ void test_get_mechanism_info_good(void **state) {
         { CKM_SHA1_RSA_PKCS,         CKF_HW | CKF_SIGN    | CKF_VERIFY                          },
         { CKM_SHA256_RSA_PKCS,       CKF_HW | CKF_SIGN    | CKF_VERIFY                          },
         { CKM_SHA384_RSA_PKCS,       CKF_HW | CKF_SIGN    | CKF_VERIFY                          },
-        { CKM_SHA512_RSA_PKCS,                CKF_SIGN    | CKF_VERIFY                          },
+        { CKM_SHA512_RSA_PKCS,       CKF_HW | CKF_SIGN    | CKF_VERIFY                          },
     };
     for (size_t i = 0; i < ARRAY_LEN(rsa_mechs); i++) {
         rv = C_GetMechanismInfo(slot_id, rsa_mechs[i].mech, &mech_info);
