@@ -85,7 +85,7 @@ struct token_get_cb_ud {
     token *tokens;
 };
 
-tobject *db_tobject_new(sqlite3_stmt *stmt) {
+static tobject *db_tobject_new(sqlite3_stmt *stmt) {
 
     tobject *tobj = tobject_new();
     if (!tobj) {
@@ -167,7 +167,7 @@ error:
     return NULL;
 }
 
-int init_tobjects(token *tok) {
+static int init_tobjects(token *tok) {
 
     const char *sql =
             "SELECT * FROM tobjects WHERE tokid=?";
@@ -206,7 +206,7 @@ error:
     return rc;
 }
 
-int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
+static int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
 
     const char *sql =
             "SELECT handle,objauth FROM pobjects WHERE id=?";
@@ -268,7 +268,7 @@ CK_RV db_init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
     return rc == SQLITE_OK ? CKR_OK : CKR_GENERAL_ERROR;
 }
 
-int init_sealobjects(unsigned tokid, sealobject *sealobj) {
+static int init_sealobjects(unsigned tokid, sealobject *sealobj) {
 
     const char *sql =
             "SELECT * FROM sealobjects WHERE tokid=?";
@@ -1108,7 +1108,7 @@ static CK_RV handle_path(char *path, size_t len, bool *skip) {
 
 typedef CK_RV (*db_handler)(char *path, size_t len);
 
-CK_RV db_for_path(char *path, size_t len, db_handler h) {
+static CK_RV db_for_path(char *path, size_t len, db_handler h) {
 
     /*
      * Search in the following order:
@@ -1160,7 +1160,7 @@ CK_RV db_for_path(char *path, size_t len, db_handler h) {
     return CKR_TOKEN_NOT_PRESENT;
 }
 
-CK_RV db_get_path_handler(char *path, size_t len) {
+static CK_RV db_get_path_handler(char *path, size_t len) {
     UNUSED(len);
 
     struct stat sb;
@@ -1179,12 +1179,12 @@ CK_RV db_get_path_handler(char *path, size_t len) {
     return CKR_OK;
 }
 
-CK_RV db_get_existing(char *path, size_t len) {
+static CK_RV db_get_existing(char *path, size_t len) {
 
     return db_for_path(path, len, db_get_path_handler);
 }
 
-CK_RV db_create_handler(char *path, size_t len) {
+static CK_RV db_create_handler(char *path, size_t len) {
     UNUSED(len);
 
     CK_RV rv = CKR_TOKEN_NOT_PRESENT;
@@ -1221,7 +1221,7 @@ out:
 
 #define DB_EMPTY 0
 
-CK_RV db_get_version(sqlite3 *db, unsigned *version) {
+static CK_RV db_get_version(sqlite3 *db, unsigned *version) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -1269,7 +1269,7 @@ static CK_RV run_sql_list(sqlite3 *db, const char **sql, size_t cnt) {
     return CKR_OK;
 }
 
-CK_RV dbup_handler_from_1_to_2(sqlite3 *updb) {
+static CK_RV dbup_handler_from_1_to_2(sqlite3 *updb) {
 
     /* Between version 1 and 2 of the DB the following changes need to be made:
      *   The existing rows:
@@ -1428,7 +1428,7 @@ out:
 
 typedef CK_RV (*db_update_handlers)(sqlite3 *db);
 
-CK_RV db_update(sqlite3 **xdb, const char *dbpath, unsigned old_version, unsigned new_version) {
+static CK_RV db_update(sqlite3 **xdb, const char *dbpath, unsigned old_version, unsigned new_version) {
 
     sqlite3 *dbbak = NULL;
     char *dbbakpath = NULL;
@@ -1543,7 +1543,7 @@ out:
     return rv;
 }
 
-CK_RV db_create(char *path, size_t len) {
+static CK_RV db_create(char *path, size_t len) {
 
     return db_for_path(path, len, db_create_handler);
 }
@@ -1656,7 +1656,7 @@ static CK_RV db_verify_update_ok(const char *dbpath) {
     return CKR_OK;
 }
 
-CK_RV db_setup(sqlite3 **xdb, const char *dbpath) {
+static CK_RV db_setup(sqlite3 **xdb, const char *dbpath) {
 
     /*
      * take the version check lock and figure out what
@@ -1713,7 +1713,7 @@ out:
     return rv;
 }
 
-CK_RV db_new(sqlite3 **db) {
+static CK_RV db_new(sqlite3 **db) {
 
     char dbpath[PATH_MAX];
     CK_RV rv = db_get_existing(dbpath, sizeof(dbpath));
@@ -1737,7 +1737,7 @@ CK_RV db_new(sqlite3 **db) {
     return db_setup(db, dbpath);
 }
 
-CK_RV db_free(sqlite3 **db) {
+static CK_RV db_free(sqlite3 **db) {
 
     int rc = sqlite3_close(*db);
     if (rc != SQLITE_OK) {
