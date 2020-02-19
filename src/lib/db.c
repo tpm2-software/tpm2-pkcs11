@@ -585,50 +585,6 @@ error:
     return CKR_GENERAL_ERROR;
 }
 
-CK_RV generic_mech_type_handler(CK_MECHANISM_PTR mech, CK_ULONG index, void *userdat) {
-    UNUSED(index);
-    assert(userdat);
-
-    twist *t = (twist *)(userdat);
-
-    char tmp[128];
-    snprintf(tmp, sizeof(tmp), "%lu=\n", mech->mechanism);
-
-    twist x = twist_append(*t, tmp);
-    if (!x) {
-        return CKR_HOST_MEMORY;
-    }
-
-    *t = x;
-
-    return CKR_OK;
-}
-
-CK_RV oaep_mech_type_handler(CK_MECHANISM_PTR mech, CK_ULONG index, void *userdat) {
-    UNUSED(index);
-    assert(userdat);
-    assert(mech->pParameter);
-    assert(mech->ulParameterLen);
-
-    twist *t = (twist *)(userdat);
-
-    CK_RSA_PKCS_OAEP_PARAMS_PTR p = mech->pParameter;
-
-    /* 9=hashalg=592,mgf=2 */
-    char tmp[256];
-    snprintf(tmp, sizeof(tmp), "%lu=hashalg=%lu,mgf=%lu\n",
-            mech->mechanism, p->hashAlg, p->mgf);
-
-    twist x = twist_append(*t, tmp);
-    if (!x) {
-        return CKR_HOST_MEMORY;
-    }
-
-    *t = x;
-
-    return CKR_OK;
-}
-
 CK_RV db_add_new_object(token *tok, tobject *tobj) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -843,6 +799,9 @@ CK_RV db_add_token(token *tok) {
     assert(tok);
     assert(tok->id);
 
+    /* This function is only called from token_initialize, hence... */
+    assert(tok->config.is_initialized);
+
     CK_RV rv = CKR_GENERAL_ERROR;
 
     sqlite3_stmt *stmt = NULL;
@@ -929,14 +888,6 @@ CK_RV db_add_token(token *tok) {
 
     rc = sqlite3_finalize(stmt);
     gotobinderror(rc, "finalize");
-
-    /* nothing more to add */
-    if (!tok->config.is_initialized) {
-        rc = commit();
-        gotobinderror(rc, "commit");
-        rv = CKR_OK;
-        goto out;
-    }
 
     /* add the sealobjects WITHIN the transaction */
     sql = "INSERT INTO sealobjects"
