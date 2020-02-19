@@ -11,6 +11,8 @@ AM_LDFLAGS      = $(EXTRA_LDFLAGS) $(CODE_COVERAGE_LIBS) $(TSS2_ESYS_LIBS) \
                   $(TSS2_MU_LIBS) $(TSS2_TCTILDR_LIBS) $(TSS2_RC_LIBS) \
 		  $(SQLITE3_LIBS) $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(YAML_LIBS)
 
+check-programs: $(check_PROGRAMS)
+
 JAVAROOT=$(top_builddir)/test/integration
 
 # ax_code_coverage
