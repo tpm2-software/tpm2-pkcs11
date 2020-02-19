@@ -27,7 +27,28 @@ enum token_login_state {
 };
 
 typedef struct tobject tobject;
+
 typedef struct pobject pobject;
+struct pobject {
+    uint32_t handle;
+    twist objauth;
+};
+
+typedef struct sealobject sealobject;
+struct sealobject {
+
+    unsigned id;
+
+    twist userpub;
+    twist userpriv;
+    twist userauthsalt;
+
+    twist sopub;
+    twist sopriv;
+    twist soauthsalt;
+
+    uint32_t handle;
+};
 
 typedef struct token token;
 struct token {

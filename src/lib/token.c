@@ -189,6 +189,21 @@ void token_rm_tobject(token *tok, tobject *t) {
     t->l.next = t->l.prev = NULL;
 }
 
+static void sealobject_free(sealobject *sealobj) {
+    twist_free(sealobj->soauthsalt);
+    twist_free(sealobj->sopriv);
+    twist_free(sealobj->sopub);
+    twist_free(sealobj->userauthsalt);
+    twist_free(sealobj->userpub);
+    twist_free(sealobj->userpriv);
+    sealobj->soauthsalt = NULL;
+    sealobj->sopriv = NULL;
+    sealobj->sopub = NULL;
+    sealobj->userauthsalt = NULL;
+    sealobj->userpub = NULL;
+    sealobj->userpriv = NULL;
+}
+
 void token_free(token *t) {
 
     /*
