@@ -14,12 +14,6 @@
 
 typedef struct session_ctx session_ctx;
 
-typedef struct pobject pobject;
-struct pobject {
-    uint32_t handle;
-    twist objauth;
-};
-
 typedef struct tobject tobject;
 struct tobject {
 
@@ -46,22 +40,6 @@ struct tobject {
     uint32_t tpm_handle;     /** loaded tpm handle */
 
     bool is_authenticated; /** true if a context specific login has authenticated use of the object */
-};
-
-typedef struct sealobject sealobject;
-struct sealobject {
-
-    unsigned id;
-
-    twist userpub;
-    twist userpriv;
-    twist userauthsalt;
-
-    twist sopub;
-    twist sopriv;
-    twist soauthsalt;
-
-    uint32_t handle;
 };
 
 tobject *tobject_new(void);
@@ -97,7 +75,6 @@ CK_RV tobject_set_auth(tobject *tobj, twist authbin, twist wrappedauthhex);
 void tobject_set_handle(tobject *tobj, uint32_t handle);
 void tobject_set_id(tobject *tobj, unsigned id);
 void tobject_free(tobject *tobj);
-void sealobject_free(sealobject *sealobj);
 
 CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, unsigned long count);
 

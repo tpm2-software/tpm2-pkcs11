@@ -46,21 +46,6 @@ void tobject_free(tobject *tobj) {
     free(tobj);
 }
 
-void sealobject_free(sealobject *sealobj) {
-    twist_free(sealobj->soauthsalt);
-    twist_free(sealobj->sopriv);
-    twist_free(sealobj->sopub);
-    twist_free(sealobj->userauthsalt);
-    twist_free(sealobj->userpub);
-    twist_free(sealobj->userpriv);
-    sealobj->soauthsalt = NULL;
-    sealobj->sopriv = NULL;
-    sealobj->sopub = NULL;
-    sealobj->userauthsalt = NULL;
-    sealobj->userpub = NULL;
-    sealobj->userpriv = NULL;
-}
-
 CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech) {
 
     CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_ALLOWED_MECHANISMS);
