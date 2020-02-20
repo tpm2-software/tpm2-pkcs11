@@ -7,7 +7,7 @@
 
 #include "checks.h"
 #include "config.h"
-#include "db.h"
+#include "backend.h"
 #include "general.h"
 #include "log.h"
 #include "mutex.h"
@@ -239,9 +239,7 @@ CK_RV general_init(void *init_args) {
      *
      * THESE MUST GO AFTER MUTEX INIT above!!
      */
-    tpm_init();
-
-    rv = db_init();
+    rv = backend_init();
     if (rv != CKR_OK) {
         goto err;
     }
@@ -266,10 +264,8 @@ CK_RV general_finalize(void *reserved) {
 
     _g_is_init = false;
 
-    db_destroy();
     slot_destroy();
-
-    tpm_destroy();
+    backend_destroy();
 
     return CKR_OK;
 }

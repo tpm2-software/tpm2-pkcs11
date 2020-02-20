@@ -4,7 +4,7 @@
 #include <string.h>
 
 #include "checks.h"
-#include "db.h"
+#include "backend.h"
 #include "mech.h"
 #include "pkcs11.h"
 #include "slot.h"
@@ -24,7 +24,7 @@ CK_RV slot_init(void) {
         return rv;
     }
 
-    return db_get_tokens(&global.token, &global.token_cnt);
+    return backend_get_tokens(&global.token, &global.token_cnt);
 }
 
 static void slot_lock(void) {
