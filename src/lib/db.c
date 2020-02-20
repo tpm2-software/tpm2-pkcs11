@@ -298,7 +298,7 @@ static int init_sealobjects(unsigned tokid, sealobject *sealobj) {
         const char *name = sqlite3_column_name(stmt, i);
 
         if (!strcmp(name, "id")) {
-            sealobj->id = sqlite3_column_int(stmt, i);
+            // pass
         } else if (!strcmp(name, "userauthsalt")) {
             const char *x = (const char *)sqlite3_column_text(stmt, i);
             if (x) {

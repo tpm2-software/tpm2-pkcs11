@@ -37,8 +37,6 @@ struct pobject {
 typedef struct sealobject sealobject;
 struct sealobject {
 
-    unsigned id;
-
     twist userpub;
     twist userpriv;
     twist userauthsalt;
