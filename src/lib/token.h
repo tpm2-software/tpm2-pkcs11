@@ -55,13 +55,19 @@ struct token {
     unsigned pid;
     unsigned char label[32];
 
-    token_config config;
+    union { /* anon union for backend data */
+        struct {
+            token_config config;
 
-    pobject pobject;
+            pobject pobject;
+
+            sealobject sealobject;
+
+            tpm_ctx *tctx;
+        }; /* esysdb */
+    };
 
     twist wappingkey;
-
-    sealobject sealobject;
 
     struct {
         tobject *head;
@@ -71,8 +77,6 @@ struct token {
     session_table *s_table;
 
     token_login_state login_state;
-
-    tpm_ctx *tctx;
 
     void *mutex;
 };
