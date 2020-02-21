@@ -1333,7 +1333,11 @@ static CK_RV db_backup(sqlite3 *db, const char *dbpath, sqlite3 **updb, char **c
 
     sqlite3_backup *backup_conn = NULL;
 
-    snprintf(temp, sizeof(temp), "%s%s", dbpath, suffix);
+    unsigned l = snprintf(temp, sizeof(temp), "%s%s", dbpath, suffix);
+    if (l >= sizeof(temp)) {
+        LOGE("Backup DB path is longer than PATH_MAX");
+        goto out;
+    }
 
     LOGV("Performing DB backup at: \"%s\"", temp);
 
@@ -1450,7 +1454,12 @@ static CK_RV db_update(sqlite3 **xdb, const char *dbpath, unsigned old_version, 
     dbbak = NULL;
 
     char buf[PATH_MAX];
-    snprintf(buf, sizeof(buf), "%s.old", dbpath);
+    unsigned l = snprintf(buf, sizeof(buf), "%s.old", dbpath);
+    if (l >= sizeof(buf)) {
+        LOGE("Old database path is longer than PATH_MAX");
+        rv = CKR_GENERAL_ERROR;
+        goto out;
+    }
 
     int rc = rename(dbpath, buf);
     if (rc != 0) {
@@ -1501,7 +1510,11 @@ static CK_RV db_create(char *path, size_t len) {
 
 static FILE *take_lock(const char *path, char *lockpath) {
 
-    snprintf(lockpath, PATH_MAX, "%s%s", path, ".lock");
+    unsigned l = snprintf(lockpath, PATH_MAX, "%s%s", path, ".lock");
+    if (l >= PATH_MAX) {
+        LOGE("Lock file path is longer than PATH_MAX");
+        return NULL;
+    }
 
     FILE *f = fopen(lockpath, "w+");
     if (!f) {
@@ -1588,7 +1601,11 @@ static CK_RV db_init_new(sqlite3 *db) {
 static CK_RV db_verify_update_ok(const char *dbpath) {
 
     char buf[PATH_MAX];
-    snprintf(buf, sizeof(buf), "%s.old", dbpath);
+    unsigned l = snprintf(buf, sizeof(buf), "%s.old", dbpath);
+    if (l >= sizeof(buf)) {
+        LOGE("Backup DB path is longer than PATH_MAX");
+        return CKR_GENERAL_ERROR;
+    }
 
     struct stat sb;
     int rc = stat(buf, &sb);
