@@ -31,7 +31,7 @@ static void test_config_parser_empty_seq(void **state) {
     /* test class */
     CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(attrs, CKA_CLASS);
     assert_non_null(a);
-    CK_OBJECT_CLASS got_class;
+    CK_OBJECT_CLASS got_class = CKO_DATA;
     CK_RV rv = attr_CK_OBJECT_CLASS(a, &got_class);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(got_class, CKO_CERTIFICATE);
@@ -45,7 +45,7 @@ static void test_config_parser_empty_seq(void **state) {
     /* test decrypt */
     a = attr_get_attribute_by_type(attrs, CKA_DECRYPT);
     assert_non_null(a);
-    CK_BBOOL got_bool;
+    CK_BBOOL got_bool = CK_FALSE;
     rv = attr_CK_BBOOL(a, &got_bool);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(got_bool, CK_TRUE);
