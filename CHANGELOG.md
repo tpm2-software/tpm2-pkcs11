@@ -15,6 +15,7 @@
   * C_GetTokenInfo: add missing mechanism CKM_SHA512_RSA_PKCS.
   * Fix store search logic to fail when TPM2_PKCS11_STORE cannot be accessed.
   * Fix potential double free in token_free() logic.
+  * Fix -Werror=format-truncation with GCC >= 7 #415
     
 ### 1.0.1 - 2020-1-6
 
