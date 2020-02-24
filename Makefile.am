@@ -91,6 +91,19 @@ check_SCRIPTS =
 
 TEST_EXTENSIONS = .sh .int .nosetup .java
 
+integration_scripts = \
+    test/integration/pkcs11-tool.sh \
+    test/integration/pkcs11-tool-init.sh.nosetup \
+    test/integration/pkcs11-dbup.sh.nosetup \
+    test/integration/tls-tests.sh \
+    test/integration/openssl.sh \
+    test/integration/pkcs11-javarunner.sh.java
+
+EXTRA_DIST += \
+    $(integration_scripts) \
+    test/integration/test.h \
+    test/integration/fixtures
+
 ### Integration Tests ###
 if ENABLE_INTEGRATION
 
@@ -116,12 +129,7 @@ check_PROGRAMS += \
     test/integration/pkcs-session-state.int
 
 # add test scripts
-check_SCRIPTS += \
-    test/integration/pkcs11-tool.sh \
-    test/integration/pkcs11-tool-init.sh.nosetup \
-    test/integration/pkcs11-dbup.sh.nosetup \
-    test/integration/tls-tests.sh \
-    test/integration/openssl.sh
+check_SCRIPTS += $(integration_scripts)
 
 LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
 
@@ -177,18 +185,12 @@ test_integration_pkcs_session_state_int_SOURCES = test/integration/pkcs-session-
 #
 # Java Tests
 #
-check_SCRIPTS+=test/integration/pkcs11-javarunner.sh.java
 AM_JAVA_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
 JAVA_LOG_COMPILER=$(LOG_COMPILER)
 dist_noinst_JAVA = test/integration/PKCS11JavaTests.java
 
 endif
 # END INTEGRATION
-
-EXTRA_DIST += \
-    $(check_SCRIPTS) \
-    test/integration/test.h \
-    test/integration/fixtures
 
 ### Unit Tests ###
 if UNIT
