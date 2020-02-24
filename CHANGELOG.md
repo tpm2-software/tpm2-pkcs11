@@ -1,6 +1,6 @@
 # Changelog
 
-### 1.1.0 - next
+### 1.1.0-RC0 - 2020-02-24
   * DB Schema Change from 1 to 3.
     - **Backup your DB before upgrading**
   * Support C_InitToken interface.
