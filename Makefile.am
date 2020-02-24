@@ -188,6 +188,7 @@ test_integration_pkcs_session_state_int_SOURCES = test/integration/pkcs-session-
 AM_JAVA_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
 JAVA_LOG_COMPILER=$(LOG_COMPILER)
 dist_noinst_JAVA = test/integration/PKCS11JavaTests.java
+CLEANFILES += test/integration/PKCS11JavaTests.class
 
 endif
 # END INTEGRATION

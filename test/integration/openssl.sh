@@ -170,4 +170,6 @@ pkcs11_tool --pin "$PIN" --token-label "$token_label" --id "$cka_id_hex" --sign 
 
 openssl dgst -sha1 -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:-1 -signature data.sig -verify pubkey.pem data.txt
 
+rm data.sig
+
 exit 0
