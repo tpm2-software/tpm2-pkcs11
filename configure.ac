@@ -121,6 +121,14 @@ AC_DEFUN([integration_test_checks], [
     AS_IF([test "x$ss" != "xyes"],
       [AC_MSG_ERROR([Integration tests enabled but ss executable not found.])])
 
+  AC_CHECK_PROG([certutil], [certutil], [yes], [no])
+    AS_IF([test "x$certutil" != "xyes"],
+      [AC_MSG_ERROR([Integration tests enabled but certutil executable not found.])])
+
+  AC_CHECK_PROG([modutil], [modutil], [yes], [no])
+    AS_IF([test "x$modutil" != "xyes"],
+      [AC_MSG_ERROR([Integration tests enabled but modutil executable not found.])])
+
   AS_IF([test "x$have_javac" = "xno"],
     [AC_MSG_ERROR([Integration tests enabled but no Java compiler was found])])
   AX_CHECK_CLASS([org.junit.Assert], ,
