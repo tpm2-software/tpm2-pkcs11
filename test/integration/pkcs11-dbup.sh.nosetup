@@ -37,18 +37,23 @@ setup_asan()
 
 #
 # Before we setup and possibly LD_PRELOAD the asan library,
-# we need to clone and build v1.0 and test HEAD (current built)
+# we need to download and build v1.0 and test HEAD (current build)
 # against it in the tempdir.
 #
 pushd "$tempdir"
 
-if ! git clone --branch 1.0 --depth 1 "$PACKAGE_URL" tpm2-pkcs11; then
-    echo "Could not clone project repository '$PACKAGE_URL'"
+oldver=1.0
+if ! wget "$PACKAGE_URL/releases/download/$oldver/tpm2-pkcs11-$oldver.tar.gz"; then
+    echo "Could not download old version tpm2-pkcs11-$oldver.tar.gz"
     exit 77
 fi
+if ! sha256sum "tpm2-pkcs11-$oldver.tar.gz" | grep -q ^883d976f7f1d3c1097612615916ce4d4568545eb658f59c445ce3d475d391e9f; then
+    echo "Integrity check of tpm2-pkcs11-$oldver.tar.gz failed"
+    exit 99
+fi
+tar xzf "tpm2-pkcs11-$oldver.tar.gz"
 
-pushd tpm2-pkcs11
-./bootstrap
+pushd "tpm2-pkcs11-$oldver"
 ./configure --enable-debug --disable-hardening
 make -j$(nproc)
 popd
@@ -79,7 +84,7 @@ echo "TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
 # So we need to use the 1.0 tpm2_ptool
 # XXX should we prepend the current?
 #
-PYTHONPATH=$tempdir/tpm2-pkcs11/tools
+PYTHONPATH=$tempdir/tpm2-pkcs11-$oldver/tools
 echo $PYTHONPATH
 
 tpm2_ptool init
