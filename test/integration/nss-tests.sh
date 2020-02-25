@@ -12,12 +12,6 @@ EXT_FILE="$TEST_FIXTURES/smimeextensions"
 
 export NSS_DEFAULT_DB_TYPE=sql
 
-if ! command -v certutil ||
-   ! command -v modutil; then
-  # Skip this test unless certutil/modutil are found
-  exit 77
-fi
-
 function pinentry() {
   pin="$1"
   shift
