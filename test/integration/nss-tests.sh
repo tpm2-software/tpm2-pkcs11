@@ -12,6 +12,11 @@ EXT_FILE="$TEST_FIXTURES/smimeextensions"
 
 export NSS_DEFAULT_DB_TYPE=sql
 
+if [ "$ASAN_ENABLED" = "true" ]; then
+  # Skip this test when ASAN is enabled
+  exit 77
+fi
+
 function pinentry() {
   pin="$1"
   shift
