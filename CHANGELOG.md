@@ -1,6 +1,6 @@
 # Changelog
 
-### 1.1.0-RC0 - 2020-02-24
+### 1.1.0-RC1 - next
   * DB Schema Change from 1 to 3.
     - **Backup your DB before upgrading**
   * Support C_InitToken interface.
@@ -16,6 +16,10 @@
   * Fix store search logic to fail when TPM2_PKCS11_STORE cannot be accessed.
   * Fix potential double free in token_free() logic.
   * Fix -Werror=format-truncation with GCC >= 7 #415
+  * Fix unitialized variable warnings #416
+  * test: use release tarball vs source code.
+  * build: clean leftover file in make clean.
+  * release: add missing tests to tarball no matter configure options.
     
 ### 1.0.1 - 2020-1-6
 
