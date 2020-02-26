@@ -3164,24 +3164,57 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
     }
     TPMU_CAPABILITIES *algs= &capabilityData->data;
 
+    /* get the TPMA_MODES field from fixed properties */
+    TPMS_CAPABILITY_DATA *fixed_props = NULL;
+    rv = tpm_get_properties(ctx, &fixed_props);
+    if (rv != CKR_OK) {
+        LOGE("Could not get fixed properties from TPM");
+        Esys_Free(capabilityData);
+        return rv;
+    }
+
+    TPMA_MODES modes = 0;
+    TPML_TAGGED_TPM_PROPERTY *plist = &fixed_props->data.tpmProperties;
+    UINT32 i;
+    for (i = 0; i < plist->count; i++) {
+        TPM2_PT property = plist->tpmProperty[i].property;
+        if (property == TPM2_PT_MODES) {
+            modes = plist->tpmProperty[i].value;
+            break;
+        }
+    }
+
     /* RSA */
     if (is_algorithm_supported(algs, TPM2_ALG_RSA)) {
         /* if RSA is supported, these modes MUST be supported */
         add_mech(CKM_RSA_PKCS);
         add_mech(CKM_RSA_PKCS_OAEP);
-        add_mech(CKM_RSA_PKCS_PSS);
         add_mech(CKM_RSA_PKCS_KEY_PAIR_GEN);
         add_mech(CKM_RSA_X_509);
-
-        if_add_mech(algs, TPM2_ALG_SHA1, CKM_SHA1_RSA_PKCS_PSS)
-        if_add_mech(algs, TPM2_ALG_SHA256, CKM_SHA256_RSA_PKCS_PSS);
-        if_add_mech(algs, TPM2_ALG_SHA384, CKM_SHA384_RSA_PKCS_PSS);
-        if_add_mech(algs, TPM2_ALG_SHA512, CKM_SHA512_RSA_PKCS_PSS);
 
         if_add_mech(algs, TPM2_ALG_SHA1, CKM_SHA1_RSA_PKCS)
         if_add_mech(algs, TPM2_ALG_SHA256, CKM_SHA256_RSA_PKCS);
         if_add_mech(algs, TPM2_ALG_SHA384, CKM_SHA384_RSA_PKCS);
         if_add_mech(algs, TPM2_ALG_SHA512, CKM_SHA512_RSA_PKCS);
+
+        /*
+         * RSA PSS signatures, per Anex B7 of:
+         *   - https://trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-1-Architecture-01.38.pdf
+         *
+         * States that the saltlen is the maximum permitted. However, most things, and the TLS spec
+         * call out that saltlen should equal hashlength. However, in FIPS-140-2 mode, the saltlen
+         * does equal hash length, so:
+         *  - if fips mode is on, we can support it nativeley
+         *  - if fips mode is off, we can synthesize it by applying the padding
+         *    and using rsa RSA.
+         */
+        if (modes & TPMA_MODES_FIPS_140_2) {
+           add_mech(CKM_RSA_PKCS_PSS);
+           if_add_mech(algs, TPM2_ALG_SHA1, CKM_SHA1_RSA_PKCS_PSS)
+           if_add_mech(algs, TPM2_ALG_SHA256, CKM_SHA256_RSA_PKCS_PSS);
+           if_add_mech(algs, TPM2_ALG_SHA384, CKM_SHA384_RSA_PKCS_PSS);
+           if_add_mech(algs, TPM2_ALG_SHA512, CKM_SHA512_RSA_PKCS_PSS);
+        }
     }
 
     /* ECC */

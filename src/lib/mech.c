@@ -14,6 +14,7 @@
 #include "log.h"
 #include "mech.h"
 #include "object.h"
+#include "openssl_compat.h"
 #include "pkcs11.h"
 #include "tpm.h"
 #include "utils.h"
@@ -88,6 +89,9 @@ static CK_RV hash_validator(CK_MECHANISM_PTR mech, attr_list *attrs);
 static CK_RV rsa_pkcs_synthesizer(CK_MECHANISM_PTR mech, attr_list *attrs,
         CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
+static CK_RV rsa_pss_synthesizer(CK_MECHANISM_PTR mech, attr_list *attrs,
+        CK_BYTE_PTR inbuf, CK_ULONG inlen,
+        CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
 static CK_RV rsa_pkcs_hash_synthesizer(CK_MECHANISM_PTR mech, attr_list *attrs,
         CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
@@ -118,7 +122,8 @@ static mdetail _g_mechs[MAX_MECHS] = {
 
     { .type = CKM_RSA_PKCS,      .flags = mf_force_synthetic|mf_sign|mf_verify|mf_encrypt|mf_decrypt|mf_rsa, .validator = rsa_pkcs_validator, .synthesizer = rsa_pkcs_synthesizer, .get_tpm_opdata = tpm_rsa_pkcs_get_opdata },
 
-    { .type = CKM_RSA_PKCS_PSS,  .flags = mf_sign|mf_verify|mf_rsa,       .validator = rsa_pss_validator,  .get_halg = rsa_pss_get_halg,  .get_digester = rsa_pss_get_digester,  .get_tpm_opdata = tpm_rsa_pss_get_opdata },
+    { .type = CKM_RSA_PKCS_PSS,  .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_validator,  .get_halg = rsa_pss_get_halg,  .get_digester = rsa_pss_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_get_opdata },
+
     { .type = CKM_RSA_PKCS_OAEP, . flags = mf_encrypt|mf_decrypt|mf_rsa,  .validator = rsa_oaep_validator, .get_halg = rsa_oaep_get_halg, .get_digester = rsa_oaep_get_digester, .get_tpm_opdata = tpm_rsa_oaep_get_opdata },
 
     { .type = CKM_SHA1_RSA_PKCS,   .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pkcs_hash_validator, .synthesizer = rsa_pkcs_hash_synthesizer, .get_halg = sha1_get_halg, .get_digester = sha1_get_digester,     .get_tpm_opdata = tpm_rsa_pkcs_sha1_get_opdata  },
@@ -126,10 +131,10 @@ static mdetail _g_mechs[MAX_MECHS] = {
     { .type = CKM_SHA384_RSA_PKCS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pkcs_hash_validator, .synthesizer = rsa_pkcs_hash_synthesizer, .get_halg = sha384_get_halg, .get_digester = sha384_get_digester, .get_tpm_opdata = tpm_rsa_pkcs_sha384_get_opdata },
     { .type = CKM_SHA512_RSA_PKCS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pkcs_hash_validator, .synthesizer = rsa_pkcs_hash_synthesizer, .get_halg = sha512_get_halg, .get_digester = sha512_get_digester, .get_tpm_opdata = tpm_rsa_pkcs_sha512_get_opdata },
 
-    { .type = CKM_SHA1_RSA_PKCS_PSS,   .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha1_get_halg, .get_digester = sha1_get_digester,     .get_tpm_opdata = tpm_rsa_pss_sha1_get_opdata },
-    { .type = CKM_SHA256_RSA_PKCS_PSS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha256_get_halg, .get_digester = sha256_get_digester, .get_tpm_opdata = tpm_rsa_pss_sha256_get_opdata },
-    { .type = CKM_SHA384_RSA_PKCS_PSS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha384_get_halg, .get_digester = sha384_get_digester, .get_tpm_opdata = tpm_rsa_pss_sha384_get_opdata },
-    { .type = CKM_SHA512_RSA_PKCS_PSS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha512_get_halg, .get_digester = sha512_get_digester, .get_tpm_opdata = tpm_rsa_pss_sha512_get_opdata },
+    { .type = CKM_SHA1_RSA_PKCS_PSS,   .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha1_get_halg, .get_digester = sha1_get_digester,     .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha1_get_opdata },
+    { .type = CKM_SHA256_RSA_PKCS_PSS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha256_get_halg, .get_digester = sha256_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha256_get_opdata },
+    { .type = CKM_SHA384_RSA_PKCS_PSS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha384_get_halg, .get_digester = sha384_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha384_get_opdata },
+    { .type = CKM_SHA512_RSA_PKCS_PSS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha512_get_halg, .get_digester = sha512_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha512_get_opdata },
 
     /* EC */
     { .type = CKM_EC_KEY_PAIR_GEN, .flags = mf_is_keygen|mf_ecc,      .validator = ecc_keygen_validator },
@@ -310,13 +315,9 @@ CK_RV rsa_pss_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
 
     /*
      * now that the PSS portion IS supported AND the mechanism params check out,
-     * is supported natively?
+     * we need raw RSA, do we have it?
      */
-    if (m->flags & mf_tpm_supported) {
-        return CKR_OK;
-    }
-
-    return CKR_MECHANISM_INVALID;
+    return has_raw_rsa(attrs);
 }
 
 CK_RV rsa_oaep_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
@@ -383,11 +384,11 @@ CK_RV rsa_pss_hash_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
         return rsa_pss_validator(mech, attrs);
     }
 
-    if (m->flags & mf_tpm_supported) {
-        return CKR_OK;
-    }
-
-    return CKR_MECHANISM_INVALID;
+    /*
+     * now that the PSS portion IS supported AND the mechanism params check out,
+     * we need raw RSA, do we have it?
+     */
+    return has_raw_rsa(attrs);
 }
 
 CK_RV rsa_keygen_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
@@ -704,6 +705,89 @@ CK_RV rsa_pkcs_synthesizer(CK_MECHANISM_PTR mech, attr_list *attrs,
     }
 
     *outlen = padded_len;
+
+    return CKR_OK;
+}
+
+CK_RV rsa_pss_synthesizer(CK_MECHANISM_PTR mech, attr_list *attrs,
+        CK_BYTE_PTR inbuf, CK_ULONG inlen,
+        CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen) {
+
+    const EVP_MD *md = NULL;
+    CK_RV rv = mech_get_digester(mech, &md);
+    if (rv != CKR_OK) {
+        LOGE("Could not get digester for mech: 0x%lx", mech->mechanism);
+        return rv;
+    }
+
+    int expected_len = EVP_MD_size(md);
+    if (expected_len <= 0) {
+        LOGE("Hash size cannot be 0 or negative, got: %d",
+                expected_len);
+        return CKR_GENERAL_ERROR;
+    }
+
+    if (inlen != (unsigned)expected_len) {
+        LOGE("Expected input size to be hash size, %lu != %d",
+                inlen, expected_len);
+        return CKR_GENERAL_ERROR;
+    }
+
+    CK_ATTRIBUTE_PTR modulus_attr = attr_get_attribute_by_type(attrs, CKA_MODULUS);
+    if (!modulus_attr) {
+        LOGE("Signing key has no CKA_MODULUS");
+        return CKR_GENERAL_ERROR;
+    }
+
+    CK_ATTRIBUTE_PTR exp_attr = attr_get_attribute_by_type(attrs, CKA_PUBLIC_EXPONENT);
+    if (!exp_attr) {
+        LOGE("Signing key has no CKA_PUBLIC_EXPONENT");
+        return CKR_GENERAL_ERROR;
+    }
+
+    if (modulus_attr->ulValueLen > *outlen) {
+        LOGE("Output buffer is too small, got: %lu, required at least %lu",
+                *outlen, modulus_attr->ulValueLen);
+        return CKR_GENERAL_ERROR;
+    }
+
+    BIGNUM *e = BN_bin2bn(exp_attr->pValue, exp_attr->ulValueLen, NULL);
+    if (!e) {
+        LOGE("Could not convert exponent to bignum");
+        return CKR_GENERAL_ERROR;
+    }
+
+    BIGNUM *n = BN_bin2bn(modulus_attr->pValue, modulus_attr->ulValueLen, NULL);
+    if (!n) {
+        LOGE("Could not convert modulus to bignum");
+        BN_free(e);
+        return CKR_GENERAL_ERROR;
+    }
+
+    RSA *rsa = RSA_new();
+    if (!rsa) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    int rc = RSA_set0_key(rsa, n, e, NULL);
+    if (!rc) {
+        LOGE("Could not set modulus and exponent to OSSL RSA key");
+        BN_free(n);
+        BN_free(e);
+        RSA_free(rsa);
+        return CKR_GENERAL_ERROR;
+    }
+
+    rc = RSA_padding_add_PKCS1_PSS(rsa, outbuf,
+            inbuf, md, -1);
+    RSA_free(rsa);
+    if (!rc) {
+        LOGE("Applying RSA padding failed");
+        return CKR_GENERAL_ERROR;
+    }
+
+    *outlen = modulus_attr->ulValueLen;
 
     return CKR_OK;
 }
