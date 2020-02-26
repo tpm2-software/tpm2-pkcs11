@@ -128,6 +128,10 @@ AC_DEFUN([integration_test_checks], [
   AC_CHECK_PROG([modutil], [modutil], [yes], [no])
     AS_IF([test "x$modutil" != "xyes"],
       [AC_MSG_ERROR([Integration tests enabled but modutil executable not found.])])
+  
+  AC_CHECK_PROG([expect], [expect], [yes], [no])
+    AS_IF([test "x$expect" != "xyes"],
+      [AC_MSG_ERROR([Integration tests enabled but expect executable not found.])])
 
   AS_IF([test "x$have_javac" = "xno"],
     [AC_MSG_ERROR([Integration tests enabled but no Java compiler was found])])
