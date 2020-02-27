@@ -1,5 +1,10 @@
 # Changelog
 
+### next - next
+  * Fix PSS signatures. Non-FIPS mode TPMs produce PSS signatures with a
+    max salt len that poses interoperability issues with verifying clients,
+    notably TLS in OpenSSL.
+
 ### 1.1.0 - 2020-03-09
   * DB Schema Change from 1 to 3.
     - **Backup your DB before upgrading**
