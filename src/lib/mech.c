@@ -968,9 +968,7 @@ static bool is_mech_supported(mdetail *m) {
 
     return (f & mf_tpm_supported) ||
            (f & mf_is_keygen)     ||
-           (f & mf_is_digester)   ||
-           (m->synthesizer);
-
+           (f & mf_is_digester);
 }
 
 CK_RV mech_get_supported(tpm_ctx *tctx, CK_MECHANISM_TYPE_PTR mechlist, CK_ULONG_PTR count) {
