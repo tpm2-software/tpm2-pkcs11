@@ -5,7 +5,7 @@
     max salt len that poses interoperability issues with verifying clients,
     notably TLS in OpenSSL.
 
-### 1.1.0-RC1 - next
+### 1.1.0-RC1 - 2020-03-02
   * DB Schema Change from 1 to 3.
     - **Backup your DB before upgrading**
   * Support C_InitToken interface.
@@ -25,6 +25,8 @@
   * test: use release tarball vs source code.
   * build: clean leftover file in make clean.
   * release: add missing tests to tarball no matter configure options.
+  * test: fix invalid flags on CKM_SHA512_RSA_PKCS causing test failures.
+  * Switch OASIS pkcs11 headers to FSF Unlimited License Headers.
     
 ### 1.0.1 - 2020-1-6
 
