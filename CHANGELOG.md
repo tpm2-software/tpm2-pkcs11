@@ -20,6 +20,7 @@
   * test: use release tarball vs source code.
   * build: clean leftover file in make clean.
   * release: add missing tests to tarball no matter configure options.
+  * Switch OASIS pkcs11 headers to FSF Unlimited License Headers.
     
 ### 1.0.1 - 2020-1-6
 
