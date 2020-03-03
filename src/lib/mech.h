@@ -48,4 +48,6 @@ CK_RV mech_get_info(tpm_ctx *tctx, CK_MECHANISM_TYPE mech_type, CK_MECHANISM_INF
 
 CK_RV mech_get_padding(CK_MECHANISM_PTR mech, int *padding);
 
+CK_RV mech_get_label(CK_MECHANISM_PTR mech, twist *label);
+
 #endif /* SRC_LIB_MECH_H_ */

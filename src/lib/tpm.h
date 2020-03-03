@@ -114,9 +114,9 @@ CK_RV tpm_aes_ecb_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj
 
 void tpm_opdata_free(tpm_op_data **opdata);
 
-CK_RV tpm_encrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz, CK_BYTE_PTR ptext, CK_ULONG ptextlen, CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen);
+CK_RV tpm_encrypt(crypto_op_data *opdata, CK_BYTE_PTR ptext, CK_ULONG ptextlen, CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen);
 
-CK_RV tpm_decrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz, CK_BYTE_PTR ctext, CK_ULONG ctextlen, CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen);
+CK_RV tpm_decrypt(crypto_op_data *opdata, CK_BYTE_PTR ctext, CK_ULONG ctextlen, CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen);
 
 CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handle,
         twist oldauth, twist newauth,
