@@ -33,6 +33,40 @@
 #include "mutex.h"
 #include "tpm.h"
 
+#ifndef ESAPI_MANAGE_FLAGS
+#define ESAPI_MANAGE_FLAGS 0
+#endif
+
+#define DEFAULT_SEAL_TEMPLATE { \
+        .size = 0, \
+        .publicArea = { \
+            .type = TPM2_ALG_KEYEDHASH, \
+            .nameAlg = TPM2_ALG_SHA256, \
+            .objectAttributes = ( \
+                TPMA_OBJECT_USERWITHAUTH | \
+                TPMA_OBJECT_FIXEDTPM | \
+                TPMA_OBJECT_FIXEDPARENT \
+            ), \
+            .authPolicy = { \
+                .size = 0, \
+            }, \
+            .parameters.keyedHashDetail = { \
+                .scheme = { \
+                    .scheme = TPM2_ALG_NULL, \
+                    .details = { \
+                        .hmac = { \
+                            .hashAlg = TPM2_ALG_SHA256 \
+                        } \
+                    } \
+                } \
+            }, \
+            .unique.keyedHash = { \
+                .size = 0, \
+                .buffer = {}, \
+            }, \
+        } \
+    }
+
 /**
  * Maps 4-byte manufacturer identifier to manufacturer name.
  */
@@ -246,10 +280,6 @@ CK_RV tpm_session_stop(tpm_ctx *ctx) {
 
     return CKR_OK;
 }
-
-#ifndef ESAPI_MANAGE_FLAGS
-#define ESAPI_MANAGE_FLAGS 0
-#endif
 
 CK_RV tpm_ctx_new(const char *config, tpm_ctx **tctx) {
 
@@ -1897,36 +1927,6 @@ static TSS2_RC create_loaded(
 
     return TSS2_RC_SUCCESS;
 }
-
-#define DEFAULT_SEAL_TEMPLATE { \
-        .size = 0, \
-        .publicArea = { \
-            .type = TPM2_ALG_KEYEDHASH, \
-            .nameAlg = TPM2_ALG_SHA256, \
-            .objectAttributes = ( \
-                TPMA_OBJECT_USERWITHAUTH | \
-                TPMA_OBJECT_FIXEDTPM | \
-                TPMA_OBJECT_FIXEDPARENT \
-            ), \
-            .authPolicy = { \
-                .size = 0, \
-            }, \
-            .parameters.keyedHashDetail = { \
-                .scheme = { \
-                    .scheme = TPM2_ALG_NULL, \
-                    .details = { \
-                        .hmac = { \
-                            .hashAlg = TPM2_ALG_SHA256 \
-                        } \
-                    } \
-                } \
-            }, \
-            .unique.keyedHash = { \
-                .size = 0, \
-                .buffer = {}, \
-            }, \
-        } \
-    }
 
 CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handle, twist objauth, twist oldpubblob, twist sealdata, twist *newpubblob, twist *newprivblob, uint32_t *handle) {
 
