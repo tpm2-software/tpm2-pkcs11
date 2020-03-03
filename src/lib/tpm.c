@@ -27,7 +27,7 @@
 #include "checks.h"
 #include "digest.h"
 #include "encrypt.h"
-#include "openssl_compat.h"
+#include "ssl_util.h"
 #include "pkcs11.h"
 #include "log.h"
 #include "mutex.h"
@@ -1032,120 +1032,6 @@ CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_
     free(signature);
 
     return rv;
-}
-
-static CK_RV init_rsassa_sig(CK_BYTE_PTR sig, CK_ULONG siglen, TPMS_SIGNATURE_RSASSA *rsassa) {
-
-    if (siglen > sizeof(rsassa->sig.buffer)) {
-        return CKR_SIGNATURE_LEN_RANGE;
-    }
-
-    rsassa->sig.size = siglen;
-    memcpy(rsassa->sig.buffer, sig, siglen);
-
-    return CKR_OK;
-}
-
-static CK_RV init_ecdsa_sig(CK_BYTE_PTR sig, CK_ULONG siglen, TPMS_SIGNATURE_ECDSA *ecdsa) {
-
-    TPM2B_ECC_PARAMETER *R = &ecdsa->signatureR;
-    TPM2B_ECC_PARAMETER *S = &ecdsa->signatureS;
-
-    // See comments in flatten_ecdsa about signature format.
-
-    if ((siglen % 2) != 0) {
-        return CKR_SIGNATURE_LEN_RANGE;
-    }
-
-    CK_ULONG coordlen = siglen / 2;
-    if (coordlen > sizeof(R->buffer)) {
-        return CKR_SIGNATURE_LEN_RANGE;
-    }
-
-    R->size = coordlen;
-    memcpy(R->buffer, sig, coordlen);
-
-    S->size = coordlen;
-    memcpy(S->buffer, sig + coordlen, coordlen);
-
-    return CKR_OK;
-}
-
-static CK_RV init_sig_from_mech(TPMT_SIG_SCHEME *scheme, CK_BYTE_PTR sig, CK_ULONG siglen, TPMT_SIGNATURE *tpmsig) {
-
-    tpmsig->sigAlg = scheme->scheme;
-    tpmsig->signature.any.hashAlg = scheme->details.any.hashAlg;
-
-    switch(tpmsig->sigAlg) {
-    case TPM2_ALG_RSASSA:
-        return init_rsassa_sig(sig, siglen, &tpmsig->signature.rsassa);
-    case TPM2_ALG_ECDSA:
-        return init_ecdsa_sig(sig, siglen, &tpmsig->signature.ecdsa);
-    default:
-        LOGE("Unsupported verification algorithm, got sigAlg: 0x%lx", tpmsig->sigAlg);
-        return CKR_GENERAL_ERROR;
-    }
-}
-
-CK_RV tpm_verify(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen) {
-    assert(opdata);
-
-    tobject *tobj = opdata->tobj;
-    assert(tobj);
-
-    tpm_ctx *tctx = opdata->ctx;
-    assert(tctx);
-
-    TPMI_DH_OBJECT handle = tobj->tpm_handle;
-    ESYS_CONTEXT *ectx = tctx->esys_ctx;
-    TPMT_SIG_SCHEME *scheme = opdata->op_type == CKK_RSA ? &opdata->rsa.sig :
-            &opdata->ecc.sig;
-
-    if (opdata->op_type == CKK_EC) {
-        CK_RV rv = ecc_fixup_halg(&opdata->ecc.sig, datalen);
-        if (rv != CKR_OK) {
-            return rv;
-        }
-    }
-
-    // Copy the data into the digest block
-    TPM2B_DIGEST msgdigest;
-    if (sizeof(msgdigest.buffer) < datalen) {
-        return CKR_DATA_LEN_RANGE;
-    }
-    memcpy(msgdigest.buffer, data, datalen);
-    msgdigest.size = datalen;
-
-    /*
-     * TODO this would be a good candidate to move into the init
-     * but if just use OSSL for verify, we don't even need this TPM code
-     */
-    TPMT_SIGNATURE tpmsig;
-    CK_RV rv = init_sig_from_mech(scheme, sig, siglen, &tpmsig);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    TPMT_TK_VERIFIED *validation = NULL;
-    TSS2_RC rval = Esys_VerifySignature(
-            ectx,
-            handle,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            &msgdigest,
-            &tpmsig,
-            &validation);
-    if (rval != TPM2_RC_SUCCESS) {
-        if (rval != TPM2_RC_SIGNATURE) {
-            LOGE("Esys_VerifySignature: %s", Tss2_RC_Decode(rval));
-            return CKR_GENERAL_ERROR;
-        }
-        return CKR_SIGNATURE_INVALID;
-    }
-
-    free(validation);
-    return CKR_OK;
 }
 
 CK_RV tpm_readpub(tpm_ctx *ctx,

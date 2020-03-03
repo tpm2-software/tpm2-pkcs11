@@ -46,4 +46,6 @@ CK_RV mech_get_tpm_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, t
 
 CK_RV mech_get_info(tpm_ctx *tctx, CK_MECHANISM_TYPE mech_type, CK_MECHANISM_INFO_PTR info);
 
+CK_RV mech_get_padding(CK_MECHANISM_PTR mech, int *padding);
+
 #endif /* SRC_LIB_MECH_H_ */
