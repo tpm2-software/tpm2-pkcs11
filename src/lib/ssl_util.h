@@ -13,6 +13,7 @@
 
 #include "log.h"
 #include "object.h"
+#include "twist.h"
 
 #if (OPENSSL_VERSION_NUMBER < 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)) || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x20700000L) /* OpenSSL 1.1.0 */
 #define LIB_TPM2_OPENSSL_OPENSSL_PRE11
@@ -32,6 +33,17 @@ int ECDSA_SIG_set0(ECDSA_SIG *sig, BIGNUM *r, BIGNUM *s);
 
 EC_KEY *EVP_PKEY_get0_EC_KEY(EVP_PKEY *pkey);
 
+static inline void *OPENSSL_memdup(const void *dup, size_t l) {
+
+    void *p = OPENSSL_malloc(l);
+    if (!p) {
+        return NULL;
+    }
+
+    memcpy(p, dup, l);
+    return p;
+}
+
 #endif
 
 /* Utility APIs */
@@ -40,13 +52,8 @@ EC_KEY *EVP_PKEY_get0_EC_KEY(EVP_PKEY *pkey);
 
 CK_RV ssl_util_tobject_to_evp(EVP_PKEY **outpkey, tobject *obj);
 
-CK_RV ssl_util_decrypt(EVP_PKEY *pkey,
-        int padding,
-        CK_BYTE_PTR ctext, CK_ULONG ctextlen,
-        CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen);
-
 CK_RV ssl_util_encrypt(EVP_PKEY *pkey,
-        int padding,
+        int padding, twist label, const EVP_MD *md,
         CK_BYTE_PTR ptext, CK_ULONG ptextlen,
         CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen);
 

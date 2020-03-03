@@ -520,13 +520,7 @@ static CK_RV rsa_pss_get_halg(CK_MECHANISM_PTR mech, CK_MECHANISM_TYPE_PTR halg)
 
 static CK_RV rsa_oaep_get_halg(CK_MECHANISM_PTR mech, CK_MECHANISM_TYPE_PTR halg) {
 
-    /* this should never fail on the look up */
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
-        return CKR_GENERAL_ERROR;
-    }
-
-    CK_RSA_PKCS_PSS_PARAMS_PTR params;
+    CK_RSA_PKCS_OAEP_PARAMS_PTR params;
     SAFE_CAST(mech, params);
 
     *halg = params->hashAlg;
@@ -1226,6 +1220,36 @@ CK_RV mech_get_padding(CK_MECHANISM_PTR mech, int *padding) {
     return CKR_OK;
 }
 
+CK_RV mech_get_label(CK_MECHANISM_PTR mech, twist *label) {
+
+    check_pointer(mech);
+    check_pointer(label);
+
+    if (mech->mechanism != CKM_RSA_PKCS_OAEP) {
+        *label = NULL;
+        return CKR_OK;
+    }
+
+    CK_RSA_PKCS_OAEP_PARAMS_PTR params;
+    SAFE_CAST(mech, params);
+
+    /* empty label ? */
+    if (!params->ulSourceDataLen) {
+        *label = NULL;
+        return CKR_OK;
+    }
+
+    /* non empty label */
+    twist t = twistbin_new(params->pSourceData, params->ulSourceDataLen);
+    if (!t) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    *label = t;
+
+    return CKR_OK;
+}
 
 CK_RV mech_get_info(tpm_ctx *tctx, CK_MECHANISM_TYPE mech_type, CK_MECHANISM_INFO_PTR info) {
 

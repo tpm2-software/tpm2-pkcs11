@@ -1566,72 +1566,6 @@ out:
     return rv;
 }
 
-CK_RV tpm_rsa_encrypt(tpm_op_data *tpm_enc_data,
-        CK_BYTE_PTR pptext, CK_ULONG pptextlen,
-        CK_BYTE_PTR cctext, CK_ULONG_PTR cctextlen) {
-
-    LOGV("Performing TPM RSA Encrypt");
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    tpm_ctx *ctx = tpm_enc_data->ctx;
-
-    TPMT_RSA_DECRYPT *scheme = &tpm_enc_data->rsa.raw;
-    TPM2B_DATA *label = &tpm_enc_data->rsa.label;
-
-    /*
-     * Validate that plaintext data fits in a message buffer.
-     * Do this first since it requires no trip to the TPM
-     * to verify or memory allocation.
-     */
-    TPM2B_PUBLIC_KEY_RSA message = { .size = pptextlen };
-    if (pptextlen > sizeof(message.buffer)) {
-        return CKR_ARGUMENTS_BAD;
-    }
-    memcpy(message.buffer, pptext, pptextlen);
-
-    ESYS_TR handle = tpm_enc_data->tobj->tpm_handle;
-
-    TPM2B_PUBLIC_KEY_RSA *ctext;
-
-    TSS2_RC rc = Esys_RSA_Encrypt(
-            ctx->esys_ctx,
-            handle,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            &message,
-            scheme,
-            label,
-            &ctext);
-    if (rc != TPM2_RC_SUCCESS) {
-        LOGE("Esys_RSA_Encrypt: %s", Tss2_RC_Decode(rc));
-        return CKR_GENERAL_ERROR;
-    }
-
-    if (!cctext) {
-        *cctextlen = ctext->size;
-        rv = CKR_OK;
-        goto out;
-    }
-
-    if (*cctextlen < ctext->size) {
-        *cctextlen = ctext->size;
-        rv = CKR_BUFFER_TOO_SMALL;
-        goto out;
-    }
-
-    *cctextlen = ctext->size;
-    memcpy(cctext, ctext->buffer, ctext->size);
-
-    rv = CKR_OK;
-
-out:
-    free(ctext);
-
-    return rv;
-}
-
 static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_ALG_SYM_MODE mode, TPMI_YES_NO is_decrypt,
         TPM2B_IV *iv, CK_BYTE_PTR data_in, CK_ULONG data_in_len, CK_BYTE_PTR data_out, CK_ULONG_PTR data_out_len) {
 
@@ -1741,15 +1675,14 @@ out:
 #define ENCRYPT 0
 #define DECRYPT 1
 
-CK_RV tpm_encrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
+CK_RV tpm_encrypt(crypto_op_data *opdata,
         CK_BYTE_PTR ptext, CK_ULONG ptextlen,
         CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen) {
 
     tpm_op_data *tpm_enc_data = opdata->tpm_opdata;
 
     if (tpm_enc_data->op_type == CKK_RSA) {
-        return clazz == CKO_PRIVATE_KEY ? tpm_rsa_decrypt(tpm_enc_data, ptext, ptextlen, ctext, ctextlen) :
-                tpm_rsa_encrypt(tpm_enc_data, ptext, ptextlen, ctext, ctextlen);
+        return tpm_rsa_decrypt(tpm_enc_data, ptext, ptextlen, ctext, ctextlen);
     }
 
     tpm_ctx *ctx = tpm_enc_data->ctx;
@@ -1763,16 +1696,14 @@ CK_RV tpm_encrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
             iv, ptext, ptextlen, ctext, ctextlen);
 }
 
-CK_RV tpm_decrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
+CK_RV tpm_decrypt(crypto_op_data *opdata,
         CK_BYTE_PTR ctext, CK_ULONG ctextlen,
         CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen) {
 
     tpm_op_data *tpm_enc_data = opdata->tpm_opdata;
 
     if (tpm_enc_data->op_type == CKK_RSA) {
-        LOGV("tpm_encrypt object class: %lu", clazz);
-        return clazz == CKO_PRIVATE_KEY ? tpm_rsa_decrypt(tpm_enc_data, ctext, ctextlen, ptext, ptextlen) :
-                tpm_rsa_encrypt(tpm_enc_data, ctext, ctextlen, ptext, ptextlen);
+        return tpm_rsa_decrypt(tpm_enc_data, ctext, ctextlen, ptext, ptextlen);
     }
 
     tpm_ctx *ctx = tpm_enc_data->ctx;
