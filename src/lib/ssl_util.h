@@ -1,0 +1,58 @@
+/* SPDX-License-Identifier: BSD-2-Clause */
+#ifndef SRC_LIB_SSL_UTIL_H_
+#define SRC_LIB_SSL_UTIL_H_
+
+#include <openssl/bn.h>
+#include <openssl/ec.h>
+#include <openssl/err.h>
+#include <openssl/ecdsa.h>
+#include <openssl/evp.h>
+#include <openssl/rsa.h>
+
+#include "pkcs11.h"
+
+#include "log.h"
+#include "object.h"
+
+#if (OPENSSL_VERSION_NUMBER < 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)) || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x20700000L) /* OpenSSL 1.1.0 */
+#define LIB_TPM2_OPENSSL_OPENSSL_PRE11
+#endif
+
+/* OpenSSL Backwards Compat APIs */
+#if defined(LIB_TPM2_OPENSSL_OPENSSL_PRE11)
+size_t EC_POINT_point2buf(const EC_GROUP *group, const EC_POINT *point,
+                          point_conversion_form_t form,
+                          unsigned char **pbuf, BN_CTX *ctx);
+
+const unsigned char *ASN1_STRING_get0_data(const ASN1_STRING *x);
+
+int RSA_set0_key(RSA *r, BIGNUM *n, BIGNUM *e, BIGNUM *d);
+
+int ECDSA_SIG_set0(ECDSA_SIG *sig, BIGNUM *r, BIGNUM *s);
+
+EC_KEY *EVP_PKEY_get0_EC_KEY(EVP_PKEY *pkey);
+
+#endif
+
+/* Utility APIs */
+
+#define SSL_UTIL_LOGE(m) LOGE("%s: %s", m, ERR_error_string(ERR_get_error(), NULL));
+
+CK_RV ssl_util_tobject_to_evp(EVP_PKEY **outpkey, tobject *obj);
+
+CK_RV ssl_util_decrypt(EVP_PKEY *pkey,
+        int padding,
+        CK_BYTE_PTR ctext, CK_ULONG ctextlen,
+        CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen);
+
+CK_RV ssl_util_encrypt(EVP_PKEY *pkey,
+        int padding,
+        CK_BYTE_PTR ptext, CK_ULONG ptextlen,
+        CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen);
+
+CK_RV ssl_util_sig_verify(EVP_PKEY *pkey,
+        int padding, const EVP_MD *md,
+        CK_BYTE_PTR digest, CK_ULONG digest_len,
+        CK_BYTE_PTR signature, CK_ULONG signature_len);
+
+#endif /* SRC_LIB_SSL_UTIL_H_ */

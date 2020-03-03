@@ -4,12 +4,18 @@
 #include <assert.h>
 #include <stdlib.h>
 
+#include <openssl/ec.h>
+#include <openssl/ecdsa.h>
+#include <openssl/evp.h>
+ #include <openssl/rsa.h>
+
 #include "attrs.h"
 #include "checks.h"
 #include "digest.h"
 #include "encrypt.h"
 #include "log.h"
 #include "mech.h"
+#include "ssl_util.h"
 #include "session.h"
 #include "session_ctx.h"
 #include "sign.h"
@@ -23,10 +29,52 @@ struct sign_opdata {
     twist buffer;
     digest_op_data *digest_opdata;
     encrypt_op_data *crypto_opdata;
+
+    int padding;
+    EVP_PKEY *pkey;
+    const EVP_MD *md;
 };
 
-static sign_opdata *sign_opdata_new(void) {
-    return calloc(1, sizeof(sign_opdata));
+static sign_opdata *sign_opdata_new(CK_MECHANISM_PTR mechanism, tobject *tobj) {
+
+    int padding = 0;
+    CK_RV rv = mech_get_padding(mechanism, &padding);
+    if (rv != CKR_OK) {
+        return NULL;
+    }
+
+    const EVP_MD *md = NULL;
+
+    bool is_hashing_needed = false;
+    rv = mech_is_hashing_needed(mechanism,
+            &is_hashing_needed);
+    if (rv != CKR_OK) {
+        return NULL;
+    }
+
+    if (is_hashing_needed) {
+        rv = mech_get_digester(mechanism, &md);
+        if (rv != CKR_OK) {
+            return NULL;
+        }
+    }
+
+    EVP_PKEY *pkey = NULL;
+    rv = ssl_util_tobject_to_evp(&pkey, tobj);
+    if (rv != CKR_OK) {
+        return NULL;
+    }
+
+    sign_opdata *opdata = calloc(1, sizeof(sign_opdata));
+    if (!opdata) {
+        LOGE("oom");
+        return NULL;
+    }
+
+    opdata->padding = padding;
+    opdata->pkey = pkey;
+    opdata->md = md;
+    return opdata;
 }
 
 static void sign_opdata_free(sign_opdata **opdata) {
@@ -34,6 +82,10 @@ static void sign_opdata_free(sign_opdata **opdata) {
 
     if (*opdata && !(*opdata)->do_hash) {
         twist_free((*opdata)->buffer);
+    }
+
+    if ((*opdata)->pkey) {
+        EVP_PKEY_free((*opdata)->pkey);
     }
 
     if ((*opdata)->crypto_opdata) {
@@ -94,14 +146,17 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
         }
     }
 
-    tpm_op_data *tpm_opdata;
-    rv = mech_get_tpm_opdata(tok->tctx, mechanism, tobj, &tpm_opdata);
-    if (rv != CKR_OK) {
-        tpm_opdata_free(&tpm_opdata);
-        return rv;
+    /* TPM is only used on sign operations, not verify */
+    tpm_op_data *tpm_opdata = NULL;
+    if (op == operation_sign) {
+        rv = mech_get_tpm_opdata(tok->tctx, mechanism, tobj, &tpm_opdata);
+        if (rv != CKR_OK) {
+            tpm_opdata_free(&tpm_opdata);
+            return rv;
+        }
     }
 
-    sign_opdata *opdata = sign_opdata_new();
+    sign_opdata *opdata = sign_opdata_new(mechanism, tobj);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -116,7 +171,16 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
         return CKR_HOST_MEMORY;
     }
 
-    opdata->crypto_opdata->cryptopdata.tpm_opdata = tpm_opdata;
+    if (op == operation_verify) {
+        opdata->crypto_opdata->use_sw = true;
+        rv = sw_encrypt_data_init(mechanism, tobj, &opdata->crypto_opdata->cryptopdata.sw_enc_data);
+        if (rv != CKR_OK) {
+            sign_opdata_free(&opdata);
+            return rv;
+        }
+    } else {
+        opdata->crypto_opdata->cryptopdata.tpm_opdata = tpm_opdata;
+    }
 
     /*
      * Store everything for later
@@ -423,7 +487,7 @@ CK_RV verify_final (session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG signature_
         memcpy(hash, opdata->buffer, datalen);
     }
 
-    rv = tpm_verify(opdata->crypto_opdata->cryptopdata.tpm_opdata,
+    rv = ssl_util_sig_verify(opdata->pkey, opdata->padding, opdata->md,
             hash, hash_len, signature, signature_len);
 
 out:

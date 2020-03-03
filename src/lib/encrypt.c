@@ -1,22 +1,18 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 
 #include <openssl/bn.h>
+#include <openssl/ec.h>
 #include <openssl/err.h>
 #include <openssl/rsa.h>
 
 #include "checks.h"
 #include "encrypt.h"
 #include "mech.h"
-#include "openssl_compat.h"
+#include "ssl_util.h"
 #include "session.h"
 #include "session_ctx.h"
 #include "token.h"
 #include "tpm.h"
-
-struct sw_encrypt_data {
-    int padding;
-    RSA *key;
-};
 
 typedef CK_RV (*crypto_op)(crypto_op_data *enc_data, CK_OBJECT_CLASS, CK_BYTE_PTR in, CK_ULONG inlen, CK_BYTE_PTR out, CK_ULONG_PTR outlen);
 
@@ -31,7 +27,7 @@ static void sw_encrypt_data_free(sw_encrypt_data **enc_data) {
     }
 
     if ((*enc_data)->key) {
-        RSA_free((*enc_data)->key);
+        EVP_PKEY_free((*enc_data)->key);
     }
 
     free(*enc_data);
@@ -74,89 +70,36 @@ void encrypt_op_data_free(encrypt_op_data **opdata) {
     }
 }
 
-static CK_RV sw_encrypt_data_init(CK_MECHANISM *mechanism, tobject *tobj, sw_encrypt_data **enc_data) {
+CK_RV sw_encrypt_data_init(CK_MECHANISM *mechanism, tobject *tobj, sw_encrypt_data **enc_data) {
 
-    BIGNUM *e = NULL;
-    BIGNUM *n = NULL;
-    RSA *r = NULL;
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-
-    /* we only support one mechanism via this path right now */
-    if (mechanism->mechanism != CKM_RSA_PKCS) {
-        LOGE("Cannot synthesize mechanism for key");
-        return CKR_MECHANISM_INVALID;
+    EVP_PKEY *pkey = NULL;
+    CK_RV rv = ssl_util_tobject_to_evp(&pkey, tobj);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
-    /*
-     * We know this in RSA key since we checked the mechanism,
-     * create the OSSL key
-     */
-    r = RSA_new();
-    if (!r) {
-        LOGE("oom");
-        rv = CKR_HOST_MEMORY;
-        goto error;
+    int padding = 0;
+    rv = mech_get_padding(mechanism, &padding);
+    if (rv != CKR_OK) {
+        return rv;
     }
-
-    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_MODULUS);
-    if (!a) {
-        LOGE("Expected RSA key to have modulus");
-        goto error;
-    }
-
-    n = BN_bin2bn(a->pValue, a->ulValueLen, NULL);
-    if (!n) {
-        LOGE("Could not create BN from modulus");
-        goto error;
-    }
-
-    a = attr_get_attribute_by_type(tobj->attrs, CKA_PUBLIC_EXPONENT);
-    if (!a) {
-        LOGE("Expected RSA key to have exponent");
-        goto error;
-    }
-
-    e = BN_bin2bn(a->pValue, a->ulValueLen, NULL);
-    if (!e) {
-        LOGE("Could not create BN from exponent");
-        goto error;
-    }
-
-    int rc = RSA_set0_key(r, n, e, NULL);
-    if (!rc) {
-        LOGE("Could not set RSA public key from parts");
-        goto error;
-    }
-
-    /* ownership of memory transferred */
-    n = NULL;
-    e = NULL;
 
     sw_encrypt_data *d = sw_encrypt_data_new();
     if (!d) {
         LOGE("oom");
-        rv = CKR_HOST_MEMORY;
-        goto error;
+        EVP_PKEY_free(pkey);
+        return CKR_HOST_MEMORY;
     }
 
-    d->key = r;
-    d->padding = RSA_PKCS1_PADDING;
+    d->key = pkey;
+    d->padding = padding;
 
     *enc_data = d;
 
     return CKR_OK;
-error:
-    if (n) {
-        BN_free(n);
-    }
-    if (e) {
-        BN_free(e);
-    }
-    return rv;
 }
 
-CK_RV sw_encrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
+static CK_RV sw_encrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
         CK_BYTE_PTR ptext, CK_ULONG ptextlen,
         CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen) {
     UNUSED(clazz);
@@ -167,84 +110,27 @@ CK_RV sw_encrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
     assert(sw_enc_data);
     assert(sw_enc_data->key);
 
-    RSA *r = sw_enc_data->key;
-    int padding = sw_enc_data->padding;
-
-    /* make sure destination is big enough */
-    int to_len = RSA_size(r);
-    if (to_len < 0) {
-        LOGE("RSA_Size cannot be 0");
-        return CKR_GENERAL_ERROR;
-    }
-
-    if ((CK_ULONG)to_len > *ctextlen) {
-        *ctextlen = to_len;
-        return CKR_BUFFER_TOO_SMALL;
-    }
-
-    int rc = RSA_public_encrypt(ptextlen, ptext,
-        ctext, r, padding);
-    if (!rc) {
-        LOGE("Could not perform RSA public encrypt");
-        return CKR_GENERAL_ERROR;
-    }
-
-    assert(rc > 0);
-
-    *ctextlen = rc;
-
-    return CKR_OK;
+    return ssl_util_encrypt(sw_enc_data->key,
+            sw_enc_data->padding,
+            ptext, ptextlen,
+            ctext, ctextlen);
 }
 
-CK_RV sw_decrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
+static CK_RV sw_decrypt(crypto_op_data *opdata, CK_OBJECT_CLASS clazz,
         CK_BYTE_PTR ctext, CK_ULONG ctextlen,
         CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen) {
     UNUSED(clazz);
     assert(opdata);
-
-    CK_RV rv = CKR_GENERAL_ERROR;
 
     sw_encrypt_data *sw_enc_data = opdata->sw_enc_data;
 
     assert(sw_enc_data);
     assert(sw_enc_data->key);
 
-    RSA *r = sw_enc_data->key;
-    int padding = sw_enc_data->padding;
-    int to_len = RSA_size(r);
-    if (to_len <= 0) {
-        LOGE("Expected buffer size to be > 0, got: %d", to_len);
-        return CKR_GENERAL_ERROR;
-    }
-
-    unsigned char *buffer = calloc(1, to_len);
-    if (!buffer) {
-        LOGE("oom");
-        return CKR_HOST_MEMORY;
-    }
-
-    int rc = RSA_public_decrypt(ctextlen, ctext, buffer, r, padding);
-    if (rc <= 0) {
-        LOGE("Could not perform RSA public decrypt: %s",
-                ERR_error_string(ERR_get_error(), NULL));
-        goto out;
-    }
-    assert(rc > 0);
-
-    if (*ptextlen > (CK_ULONG)rc) {
-        *ptextlen = rc;
-        free(buffer);
-        return CKR_BUFFER_TOO_SMALL;
-    }
-
-    memcpy(ptext, buffer, rc);
-    *ptextlen = rc;
-
-    rv = CKR_OK;
-
-out:
-    free(buffer);
-    return rv;
+    return ssl_util_decrypt(sw_enc_data->key,
+            sw_enc_data->padding,
+            ctext, ctextlen,
+            ptext, ptextlen);
 }
 
 static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, operation op, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
