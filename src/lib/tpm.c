@@ -67,15 +67,6 @@ static inline UINT16 tpm2_error_get(TSS2_RC rc) {
     return ((rc & TPM2_ERROR_TSS2_RC_ERROR_MASK));
 }
 
-#define TSS2_RETRY_EXP(expression)                         \
-    ({                                                     \
-        TSS2_RC __result = 0;                              \
-        do {                                               \
-            __result = (expression);                       \
-        } while (tpm2_error_get(__result) == TPM2_RC_RETRY); \
-        __result;                                          \
-    })
-
 struct tpm_op_data {
 
     tpm_ctx *ctx;
@@ -1041,8 +1032,8 @@ CK_RV tpm_readpub(tpm_ctx *ctx,
         TPM2B_NAME **name,
         TPM2B_NAME **qualified_name) {
 
-    TSS2_RC rval = TSS2_RETRY_EXP(Esys_ReadPublic(ctx->esys_ctx, handle, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
-            public, name, qualified_name));
+    TSS2_RC rval = Esys_ReadPublic(ctx->esys_ctx, handle, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+            public, name, qualified_name);
     if (rval != TPM2_RC_SUCCESS) {
         LOGE("Esys_ReadPublic: %s", Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
