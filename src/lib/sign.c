@@ -171,7 +171,7 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
         return CKR_HOST_MEMORY;
     }
 
-    if (op == operation_verify) {
+    if (op != operation_sign) {
         opdata->crypto_opdata->use_sw = true;
         rv = sw_encrypt_data_init(mechanism, tobj, &opdata->crypto_opdata->cryptopdata.sw_enc_data);
         if (rv != CKR_OK) {
@@ -513,4 +513,47 @@ CK_RV verify(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR 
     }
 
     return verify_final(ctx, signature, signature_len);
+}
+
+CK_RV verify_recover_init (session_ctx *ctx, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
+
+    return common_init(operation_verify_recover, ctx, mechanism, key);
+}
+
+CK_RV verify_recover (session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG signature_len,
+        CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
+
+    check_pointer(signature);
+    check_pointer(signature_len);
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    sign_opdata *opdata = NULL;
+    rv = session_ctx_opdata_get(ctx, operation_verify_recover, &opdata);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    rv = session_ctx_tobject_authenticated(ctx);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    tobject *tobj = session_ctx_opdata_get_tobject(ctx);
+    assert(tobj);
+
+    rv = ssl_util_verify_recover(opdata->pkey, opdata->padding, opdata->md,
+            signature, signature_len, data, data_len);
+    assert(tobj);
+    tobj->is_authenticated = false;
+    CK_RV tmp_rv = tobject_user_decrement(tobj);
+    if (tmp_rv != CKR_OK && rv == CKR_OK) {
+        rv = tmp_rv;
+    }
+
+    encrypt_op_data_free(&opdata->crypto_opdata);
+
+    session_ctx_opdata_clear(ctx);
+
+    return rv;
 }

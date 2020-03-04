@@ -26,4 +26,9 @@ CK_RV verify_final(session_ctx *ctx, unsigned char *signature, unsigned long sig
 
 CK_RV verify(session_ctx *ctx, unsigned char *data, unsigned long data_len, unsigned char *signature, unsigned long signature_len);
 
+CK_RV verify_recover_init (session_ctx *ctx, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key);
+
+CK_RV verify_recover (session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG signature_len,
+        CK_BYTE_PTR data, CK_ULONG_PTR data_len);
+
 #endif

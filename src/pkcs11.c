@@ -584,11 +584,11 @@ CK_RV C_VerifyFinal (CK_SESSION_HANDLE session, CK_BYTE_PTR signature, CK_ULONG 
 }
 
 CK_RV C_VerifyRecoverInit (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
-    TOKEN_UNSUPPORTED;
+    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(verify_recover_init, session, mechanism, key);
 }
 
 CK_RV C_VerifyRecover (CK_SESSION_HANDLE session, CK_BYTE_PTR signature, CK_ULONG signature_len, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
-    TOKEN_UNSUPPORTED;
+    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(verify_recover, session, signature, signature_len, data, data_len);
 }
 
 CK_RV C_DigestEncryptUpdate (CK_SESSION_HANDLE session, CK_BYTE_PTR part, CK_ULONG part_len, CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {

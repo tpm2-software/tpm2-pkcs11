@@ -369,12 +369,12 @@ error:
     return rv;
 }
 
-static CK_RV do_sig_verify_rsa(EVP_PKEY *pkey,
-        int padding, const EVP_MD *md,
-        CK_BYTE_PTR digest, CK_ULONG digest_len,
-        CK_BYTE_PTR signature, CK_ULONG signature_len) {
+typedef int (*fn_EVP_PKEY_init)(EVP_PKEY_CTX *ctx);
 
-    CK_RV rv = CKR_GENERAL_ERROR;
+static CK_RV setup_evp_pkey_ctx(EVP_PKEY *pkey,
+        int padding, const EVP_MD *md,
+        fn_EVP_PKEY_init init_fn,
+        EVP_PKEY_CTX **outpkey_ctx) {
 
     EVP_PKEY_CTX *pkey_ctx = EVP_PKEY_CTX_new(pkey, NULL);
     if (!pkey_ctx) {
@@ -382,7 +382,7 @@ static CK_RV do_sig_verify_rsa(EVP_PKEY *pkey,
         return CKR_GENERAL_ERROR;
     }
 
-    int rc = EVP_PKEY_verify_init(pkey_ctx);
+    int rc = init_fn(pkey_ctx);
     if (!rc) {
         SSL_UTIL_LOGE("EVP_PKEY_verify_init failed");
         goto error;
@@ -402,22 +402,40 @@ static CK_RV do_sig_verify_rsa(EVP_PKEY *pkey,
         goto error;
     }
 
-    rc = EVP_PKEY_verify(pkey_ctx, signature, signature_len, digest, digest_len);
+    *outpkey_ctx = pkey_ctx;
+
+    return CKR_OK;
+
+error:
+    EVP_PKEY_CTX_free(pkey_ctx);
+    return CKR_GENERAL_ERROR;
+}
+
+static CK_RV do_sig_verify_rsa(EVP_PKEY *pkey,
+        int padding, const EVP_MD *md,
+        CK_BYTE_PTR digest, CK_ULONG digest_len,
+        CK_BYTE_PTR signature, CK_ULONG signature_len) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    EVP_PKEY_CTX *pkey_ctx = NULL;
+    rv = setup_evp_pkey_ctx(pkey, padding, md,
+            EVP_PKEY_verify_init, &pkey_ctx);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    int rc = EVP_PKEY_verify(pkey_ctx, signature, signature_len, digest, digest_len);
     if (rc < 0) {
         SSL_UTIL_LOGE("EVP_PKEY_verify failed");
-        goto error;
     } else if (rc == 1) {
         rv = CKR_OK;
     } else {
         rv = CKR_SIGNATURE_INVALID;
     }
 
-out:
     EVP_PKEY_CTX_free(pkey_ctx);
     return rv;
-
-error:
-    goto out;
 }
 
 static CK_RV create_ecdsa_sig(CK_BYTE_PTR sig, CK_ULONG siglen, ECDSA_SIG **outsig) {
@@ -516,4 +534,36 @@ CK_RV ssl_util_sig_verify(EVP_PKEY *pkey,
         LOGE("Unknown PKEY type, got: %d", type);
         return CKR_GENERAL_ERROR;
     }
+}
+
+CK_RV ssl_util_verify_recover(EVP_PKEY *pkey,
+        int padding, const EVP_MD *md,
+        CK_BYTE_PTR signature, CK_ULONG signature_len,
+        CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
+
+    int type = EVP_PKEY_type(EVP_PKEY_id(pkey));
+    if (type != EVP_PKEY_RSA) {
+        LOGE("Cannot perform verify recover on non RSA key types");
+        return CKR_GENERAL_ERROR;
+    }
+
+    EVP_PKEY_CTX *pkey_ctx = NULL;
+    CK_RV rv = setup_evp_pkey_ctx(pkey, padding, md,
+            EVP_PKEY_verify_recover_init, &pkey_ctx);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    int rc = EVP_PKEY_verify_recover(pkey_ctx, data, data_len,
+            signature, signature_len);
+    if (rc < 0) {
+        SSL_UTIL_LOGE("EVP_PKEY_verify_recover failed");
+    } else if (rc == 1) {
+        rv = CKR_OK;
+    } else {
+        rv = CKR_SIGNATURE_INVALID;
+    }
+
+    EVP_PKEY_CTX_free(pkey_ctx);
+    return rv;
 }
