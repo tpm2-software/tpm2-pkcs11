@@ -951,33 +951,22 @@ static void test_create_obj_rsa_public_key(void **state) {
 
     assert_memory_equal(plaintext, p2, sizeof(plaintext));
 
-    /*
-     * FIXME #384
-     * Encrypt with priv key and decrypt with pubkey
-     *
-     * This doesn't seem to be working as expected, and it likely
-     * this issue:
-     *   - https://superuser.com/questions/1363466/how-to-decrypt-with-public-key-after-encrypt-with-private-key
-     *
-     * Considering that this method isn't a RAW rsa operation, the TPM is likely using the public portion.
-     * So this may never work with this mode.
-     *
-     * Currently fails with:
-     *  ERROR on line: "203" in file: "src/lib/encrypt.c": Could not perform RSA public decrypt: error:0407008A:rsa routines:RSA_padding_check_PKCS1_type_1:invalid padding
-     */
-//    rv = C_EncryptInit(session, &mech, privkey);
-//    assert_int_equal(rv, CKR_OK);
-//
-//    rv = C_Encrypt(session, plaintext, sizeof(plaintext), ciphertext, &ciphertext_len);
-//    assert_int_equal(rv, CKR_OK);
-//
-//    rv = C_DecryptInit(session, &mech, pubkey);
-//    assert_int_equal(rv, CKR_OK);
-//
-//    rv = C_Decrypt(session, ciphertext, ciphertext_len, plaintext2, &plaintext2_len);
-//    assert_int_equal(rv, CKR_OK);
-//
-//    p2 = &plaintext2[sizeof(plaintext2) - sizeof(plaintext)];
+    rv = C_EncryptInit(session, &mech, privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    unsigned char padded_plaintext[256] = { 0 };
+    memcpy(padded_plaintext, plaintext, sizeof(plaintext));
+
+    rv = C_Encrypt(session, padded_plaintext, sizeof(padded_plaintext), ciphertext, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_DecryptInit(session, &mech, pubkey);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Decrypt(session, ciphertext, ciphertext_len, plaintext2, &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+
+    p2 = &plaintext2[sizeof(plaintext2) - sizeof(plaintext)];
 
     assert_memory_equal(plaintext, p2, sizeof(plaintext));
 }
