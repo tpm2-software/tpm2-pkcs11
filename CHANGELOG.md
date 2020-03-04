@@ -5,6 +5,8 @@
     max salt len that poses interoperability issues with verifying clients,
     notably TLS in OpenSSL.
   * Fix Java PKCS11 Provider Signature Verification: #401
+  * VerifyRecover support, known working with Public Key RSA objects and
+    mechanism CKM_RSA_PKCS.
 
 ### 1.1.0-RC1 - 2020-03-02
   * DB Schema Change from 1 to 3.
