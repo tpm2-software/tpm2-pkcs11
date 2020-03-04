@@ -25,24 +25,6 @@ void *type_calloc(size_t nmemb, size_t size, CK_BYTE type) {
     return ptr;
 }
 
-void *type_realloc(void *orig, size_t size, CK_BYTE type) {
-
-    assert(size != 0);
-
-    // overflow safety here...
-    size_t total = size;
-    total += 1;
-
-    CK_BYTE_PTR ptr = (CK_BYTE_PTR)realloc(orig, total);
-    if (!ptr) {
-        return NULL;
-    }
-
-    ptr[total - 1] = type;
-
-    return ptr;
-}
-
 CK_BYTE type_from_ptr(void *ptr, size_t len) {
 
     if (!len || !ptr) {
