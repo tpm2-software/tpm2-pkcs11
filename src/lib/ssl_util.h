@@ -62,4 +62,9 @@ CK_RV ssl_util_sig_verify(EVP_PKEY *pkey,
         CK_BYTE_PTR digest, CK_ULONG digest_len,
         CK_BYTE_PTR signature, CK_ULONG signature_len);
 
+CK_RV ssl_util_verify_recover(EVP_PKEY *pkey,
+        int padding, const EVP_MD *md,
+        CK_BYTE_PTR signature, CK_ULONG signature_len,
+        CK_BYTE_PTR data, CK_ULONG_PTR data_len);
+
 #endif /* SRC_LIB_SSL_UTIL_H_ */

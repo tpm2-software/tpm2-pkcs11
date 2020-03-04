@@ -18,6 +18,7 @@ enum operation {
     operation_find,
     operation_sign,
     operation_verify,
+    operation_verify_recover,
     operation_encrypt,
     operation_decrypt,
     operation_digest,

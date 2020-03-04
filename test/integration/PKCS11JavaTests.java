@@ -92,6 +92,19 @@ public class PKCS11JavaTests {
 		String decrypted = new String(decryptedData, output - plainData.length, plainData.length);
 
 		Assert.assertEquals(plaintext, decrypted);
+
+		/* Encrypt private decrypt public */
+		cipher.init(Cipher.ENCRYPT_MODE, rsaKey);
+		encryptedData = cipher.doFinal(plainData);
+
+		cipher.init(Cipher.DECRYPT_MODE, rsaPublicKey);
+		output = cipher.getOutputSize(encryptedData.length);
+		decryptedData = cipher.doFinal(encryptedData);
+
+		Assert.assertArrayEquals(plainData, decryptedData);
+
+		String s = new String(decryptedData);
+		Assert.assertEquals(plaintext, s);
 	}
 
 	@Test
