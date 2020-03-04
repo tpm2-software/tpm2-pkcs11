@@ -4,6 +4,7 @@
   * Fix PSS signatures. Non-FIPS mode TPMs produce PSS signatures with a
     max salt len that poses interoperability issues with verifying clients,
     notably TLS in OpenSSL.
+  * Fix Java PKCS11 Provider Signature Verification: #401
 
 ### 1.1.0-RC1 - 2020-03-02
   * DB Schema Change from 1 to 3.
