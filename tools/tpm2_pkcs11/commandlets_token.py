@@ -432,19 +432,6 @@ class InitPinCommand(Command):
 def _empty_validator(s):
     return s
 
-@staticmethod
-def _log_level_validator(s):
-
-    try:
-        x = int(s, 0)
-    except ValueError:
-        try:
-            x = ['error', 'warn', 'verbose'].index(s)
-        except ValueError:
-            sys.exit('Expected log-level to be one of "error", "warn", or "verbose"')
-
-    return x
-
 @commandlet("config")
 class ConfigCommand(Command):
     '''
@@ -452,7 +439,7 @@ class ConfigCommand(Command):
     '''
     _keys = {
         'token-init' : str2bool,
-        'log-level'  : _log_level_validator.__func__,
+        'log-level'  : _empty_validator.__func__,
         'tcti'       : _empty_validator.__func__
     }
 
@@ -492,6 +479,9 @@ class ConfigCommand(Command):
         if not key and value:
             sys.exit("Cannot specify --value without a key")
 
+        if key == 'log-level':
+            print('WARN --key="log-level is deprecated', file=sys.stderr)
+
         # key has to be set here based on above logical check
         # throws an error if the key isn't known to the system
         validator = cls.get_validator_for_key(key)
@@ -500,6 +490,11 @@ class ConfigCommand(Command):
         if not value:
             print("%s=%s" % (key, str(token_config[key] if key in token_config else "")))
             sys.exit(0)
+
+        # bitbucket log-level sets
+        if key == 'log-level':
+            print('WARN --key="log-level is ignored', file=sys.stderr)
+            return
 
         v = validator(value)
         token_config[key] = v
