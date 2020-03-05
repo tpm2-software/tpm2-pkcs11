@@ -33,14 +33,12 @@ void tpm_ctx_free(tpm_ctx *ctx);
 /**
  * Creates a new tpm_ctx with it's own ESAPI
  * and TCTI contexts internally.
- * @param tcti
- *  An optional (can be null) tcti config string.
  * @param tctx
  *  The tpm_ctx to create.
  * @return
  *  CJR_OK on success, anything else is a failure.
  */
-CK_RV tpm_ctx_new(const char *tcti, tpm_ctx **tctx);
+CK_RV tpm_ctx_new(tpm_ctx **tctx);
 
 /**
  * Retrieves Spec Version, FW Version, Manufacturer and Model from TPM
@@ -164,7 +162,7 @@ CK_RV tpm_get_existing_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *pr
 
 CK_RV tpm_create_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_blob);
 
-void tpm_init(void);
+CK_RV tpm_init(const char *tcti);
 
 void tpm_destroy(void);
 

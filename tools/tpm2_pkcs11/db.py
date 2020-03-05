@@ -6,7 +6,7 @@ import sqlite3
 import textwrap
 import yaml
 
-VERSION = 3
+VERSION = 4
 
 #
 # With Db() as db:
@@ -61,6 +61,14 @@ class Db(object):
         c.execute("SELECT * from tobjects WHERE tokid=?", (tokid, ))
         x = c.fetchall()
         return x
+
+    def get_store_config(self):
+        c = self._conn.cursor()
+        c.execute("SELECT config from config WHERE id=1")
+        x = c.fetchone()
+        if x is None:
+            return None
+        return x[0]
 
     def rmtoken(self, label):
         # This works on the premise of a cascading delete tied by foriegn
@@ -117,16 +125,14 @@ class Db(object):
 
         return c.lastrowid
 
-    def updateconfig(self, token, config):
+    def update_store_config(self, config):
 
         new_config = yaml.dump(config, canonical=True)
 
-        sql = 'UPDATE tokens SET config=? WHERE id=?'
-
-        values = (new_config, token['id'])
+        s = 'REPLACE INTO config (id, config) VALUES (1, ?);'
 
         c = self._conn.cursor()
-        c.execute(sql, values)
+        c.execute(s, (new_config,))
 
     def addsealobjects(self, tokid, usersealauth, usersealpriv, usersealpub,
                        sosealauth, sosealpriv, sosealpub):
@@ -316,6 +322,45 @@ class Db(object):
     def _update_on_3(self, dbbakcon):
         dbbakcon.execute('DROP TRIGGER limit_tobjects;')
 
+    def _update_on_4(self, dbbakcon):
+
+        c = dbbakcon.cursor()
+
+        s = textwrap.dedent('''
+            CREATE TABLE config(
+                id INTEGER PRIMARY KEY,
+                config TEXT
+            );
+            ''')
+        c.execute(s)
+
+        # If the lead token has any custom TCTI/LOG Level move it forward
+        c.execute('SELECT config FROM tokens ORDER BY id ASC LIMIT 1;')
+        d = c.fetchone()[0]
+        if not d:
+            # No tokens, so nothing to do
+            return
+
+        y = yaml.safe_load(d)
+
+        tcti = y.get('tcti', None)
+        loglevel = y.get('log-level', None)
+
+        # Nothing todo, done
+        if tcti is None and loglevel is None:
+            return
+
+        m = {}
+        if tcti:
+            m['tcti'] = tcti
+        if loglevel:
+            m['log-level'] = loglevel
+
+        yaml_config = yaml.safe_dump(m, canonical=True)
+
+        s = 'REPLACE INTO config (id, config) VALUES (1, ?);'
+        c.execute(s, yaml_config)
+
     def update_db(self, old_version, new_version=VERSION):
         
         # were doing the update, so make a backup to manipulate
@@ -430,6 +475,12 @@ class Db(object):
                         RAISE(FAIL, "Maximum object count of 16777215 reached.")
                     END;
                 END;
+            '''),
+            textwrap.dedent('''
+            CREATE TABLE config(
+                id INTEGER PRIMARY KEY,
+                config TEXT
+            );
             '''),
             textwrap.dedent('''
                 REPLACE INTO schema (id, schema_version) VALUES (1, {version});

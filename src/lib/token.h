@@ -10,10 +10,30 @@
 #include "twist.h"
 #include "utils.h"
 
-typedef struct token_config token_config;
-struct token_config {
+typedef struct token_config_v2 token_config_v2;
+struct token_config_v2 {
     bool is_initialized;  /* token initialization state */
-    char *tcti;           /* token specific tcti config */
+};
+
+/*
+ * Old Token Config structure. Per token data for
+ * tcti and loglevel where broken, since they had
+ * to be done on a per process level. Log level affects
+ * the process wide logging, independent of tokens,
+ * so conflicting options wouldn't work right, and the tct
+ * loader loads tcti's in a static scope, ie one tcti per
+ * process. Since no one really needs this per-token tcti,
+ * and you can replicate the behavior with a store per desired
+ * target tpm, just drop it.
+ *
+ * The loglevel and tcti data are now in the db under the config
+ * table, which is a store wide configuration.
+ */
+typedef struct token_config_v1 token_config_v1;
+struct token_config_v1 {
+    bool is_initialized;
+    const char *tcti;
+    const char *loglevel;
 };
 
 typedef struct session_table session_table;
@@ -57,7 +77,7 @@ struct token {
     unsigned pid;
     unsigned char label[32];
 
-    token_config config;
+    token_config_v2 config;
 
     pobject pobject;
 

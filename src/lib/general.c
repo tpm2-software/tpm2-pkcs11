@@ -239,22 +239,35 @@ CK_RV general_init(void *init_args) {
      *
      * THESE MUST GO AFTER MUTEX INIT above!!
      */
-    tpm_init();
-
-    rv = db_init();
+    struct store_config config = { 0 };
+    rv = db_init(&config);
     if (rv != CKR_OK) {
         goto err;
     }
 
+    rv = tpm_init(config.tcti);
+    if (rv != CKR_OK) {
+        db_destroy();
+        goto err;
+    }
+
+    log_set_level(config.loglevel);
+
     rv = slot_init();
     if (rv != CKR_OK) {
+        tpm_destroy();
+        db_destroy();
         goto err;
     }
 
     _g_is_init = true;
 
-    return CKR_OK;
+    rv = CKR_OK;
+
 err:
+    free((void *)config.loglevel);
+    free((void *)config.tcti);
+
     return rv;
 }
 

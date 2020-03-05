@@ -5,10 +5,12 @@
 
 #include "attrs.h"
 #include "pkcs11.h"
+#include "store-config.h"
 #include "token.h"
 
 char *emit_attributes_to_string(attr_list *attrs);
 
-char *emit_config_to_string(token *tok);
+char *emit_token_config_to_string_v2(token_config_v2 *config);
+char *emit_store_config_to_string(store_config *config);
 
 #endif /* SRC_LIB_EMITTER_H_ */

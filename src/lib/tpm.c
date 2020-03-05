@@ -83,6 +83,8 @@ static TPMS_CAPABILITY_DATA *tpms_fixed_property_cache;
 static TPMS_CAPABILITY_DATA *tpms_alg_cache;
 static TPMS_CAPABILITY_DATA *tpms_cc_cache;
 
+static const char *_g_tcti_config;
+
 struct tpm_ctx {
     TSS2_TCTI_CONTEXT *tcti_ctx;
     ESYS_CONTEXT *esys_ctx;
@@ -281,11 +283,12 @@ CK_RV tpm_session_stop(tpm_ctx *ctx) {
     return CKR_OK;
 }
 
-CK_RV tpm_ctx_new(const char *config, tpm_ctx **tctx) {
+CK_RV tpm_ctx_new(tpm_ctx **tctx) {
 
     ESYS_CONTEXT *esys = NULL;
     TSS2_TCTI_CONTEXT *tcti = NULL;
 
+    const char *config = _g_tcti_config;
     /* no specific config, try environment */
     if (!config) {
         config = getenv(TPM2_PKCS11_TCTI);
@@ -3048,14 +3051,26 @@ out:
     return rv;
 }
 
-void tpm_init(void) {
-    /* nothing to do */
+CK_RV tpm_init(const char *tcti) {
+
+    if (!tcti) {
+        return CKR_OK;
+    }
+
+    _g_tcti_config = strdup(tcti);
+    if (!_g_tcti_config) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    return CKR_OK;
 }
 
 void tpm_destroy(void) {
     Esys_Free(tpms_fixed_property_cache);
     Esys_Free(tpms_alg_cache);
     Esys_Free(tpms_cc_cache);
+    free((void *)_g_tcti_config);
 }
 
 CK_RV tpm_serialize_handle(ESYS_CONTEXT *esys, ESYS_TR handle, twist *buf) {

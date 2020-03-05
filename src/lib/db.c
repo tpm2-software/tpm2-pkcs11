@@ -38,7 +38,7 @@
 #define TPM2_PKCS11_STORE_DIR "/etc/tpm2_pkcs11"
 #endif
 
-#define DB_VERSION 3
+#define DB_VERSION 4
 
 #define goto_oom(x, l) if (!x) { LOGE("oom"); goto l; }
 #define goto_error(x, l) if (x) { goto l; }
@@ -386,7 +386,7 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
                     LOGE("Expected token config to contain config data");
                     goto error;
                 }
-                bool result = parse_token_config_from_string(config, bytes, &t->config);
+                bool result = parse_token_config_from_string_v2(config, bytes, &t->config);
                 if (!result) {
                     LOGE("Could not parse token config, got: \"%s\"", config);
                     goto error;
@@ -806,7 +806,7 @@ CK_RV db_add_token(token *tok) {
 
     sqlite3_stmt *stmt = NULL;
 
-    char *config = emit_config_to_string(tok);
+    char *config = emit_token_config_to_string_v2(&tok->config);
     if (!config) {
         LOGE("Could not get token config");
         return CKR_GENERAL_ERROR;
@@ -1204,6 +1204,46 @@ error:
     return rv;
 }
 
+static CK_RV db_get_store_config(sqlite3 *db, store_config *config) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    const char *sql = "SELECT config FROM config";
+
+    memset(config, 0, sizeof(*config));
+
+    sqlite3_stmt *stmt;
+    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGW("Cannot prepare config query: %s\n", sqlite3_errmsg(global.db));
+        return CKR_OK;
+    }
+
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        /* we have data, parse it and update the config */
+        const unsigned char *conf_yaml = sqlite3_column_text(stmt, 0);
+        size_t len = sqlite3_column_bytes(stmt, 0);
+        bool result = parse_store_config_from_string(
+                conf_yaml, len, config);
+        if (!result) {
+            LOGE("Could not parse store config, got: \"%s\"",
+                    conf_yaml);
+            goto error;
+        }
+    } else if (rc != SQLITE_DONE) {
+        /* something else happened (error), that wasn't empty db */
+        LOGE("Cannot step query: %s\n", sqlite3_errmsg(db));
+        goto error;
+    }
+
+    rv = CKR_OK;
+
+error:
+    sqlite3_finalize(stmt);
+    return rv;
+}
+
 static CK_RV run_sql_list(sqlite3 *db, const char **sql, size_t cnt) {
 
     size_t i;
@@ -1321,6 +1361,112 @@ static CK_RV dbup_handler_from_2_to_3(sqlite3 *updb) {
     return CKR_OK;
 }
 
+static CK_RV dbup_handler_from_3_to_4(sqlite3 *updb) {
+
+    /* Between version 3 and 4 of the DB the following changes need to be made:
+     *  - Create per store config table.
+     *  - Drop per-token txti and loglevel config and migrate to per-store config.
+     */
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    /* Create a new table to copy data to that has the constraints removed */
+    const char *s =
+        "CREATE TABLE config("
+            "id INTEGER PRIMARY KEY,"
+            "config TEXT"
+        ");";
+    int rc = sqlite3_exec(updb, s, NULL, NULL, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("Cannot create temp table: %s", sqlite3_errmsg(updb));
+        return CKR_GENERAL_ERROR;
+    }
+
+    /* If the lead token has any custom TCTI/LOG Level move it forward */
+    s = "SELECT config FROM tokens ORDER BY id ASC LIMIT 1;";
+    sqlite3_stmt *stmt;
+    rc = sqlite3_prepare_v2(updb, s, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGW("Cannot prepare version query: %s\n", sqlite3_errmsg(global.db));
+        return CKR_GENERAL_ERROR;
+    }
+
+    const unsigned char *yaml_config = NULL;
+    size_t yaml_config_len = 0;
+
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        yaml_config = sqlite3_column_text(stmt, 0);
+        yaml_config_len = sqlite3_column_bytes(stmt, 0);
+    } else if (rc == SQLITE_DONE) {
+        goto done;
+    } else {
+        LOGE("Cannot step query: %s\n", sqlite3_errmsg(global.db));
+        goto out;
+    }
+
+    /* yaml config has something, deal with it */
+    if (!(yaml_config_len && yaml_config && strcmp((const char *)yaml_config, ""))) {
+        goto done;
+    }
+
+    /* Step 1: Get the old config data */
+    token_config_v1 old_config = { 0 };
+    bool result = parse_token_config_from_string_v1(
+            yaml_config, yaml_config_len,
+            &old_config);
+    if (!result) {
+        goto out;
+    }
+
+    /* Step 2: Transfer over the old config data to the new store data */
+    store_config new_config = { 0 };
+    new_config.loglevel = old_config.loglevel;
+    new_config.tcti = old_config.tcti;
+
+    char *new_store_config_yaml = emit_store_config_to_string(&new_config);
+    free((void *)new_config.tcti);
+    free((void *)new_config.loglevel);
+    if (!new_store_config_yaml) {
+        goto out;
+    }
+
+    /* Step 3: Set the new store data */
+    s = "REPLACE INTO config (id, config) VALUES (1, ?);";
+
+    sqlite3_stmt *stmt2;
+    rc = sqlite3_prepare_v2(updb, s, -1, &stmt2, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("Cannot prepare config insert query: %s\n",
+                sqlite3_errmsg(updb));
+        return rc;
+    }
+
+    rc = sqlite3_bind_text(stmt2, 1, new_store_config_yaml, -1, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("Cannot bind new store yaml config id: %s\n",
+                sqlite3_errmsg(updb));
+        sqlite3_finalize(stmt2);
+        goto out;
+    }
+
+    rc = sqlite3_step(stmt2);
+    if (rc != SQLITE_DONE) {
+        LOGE("stepping in store yaml config update, got: %s\n",
+                sqlite3_errstr(rc));
+        sqlite3_finalize(stmt2);
+        goto out;
+    }
+    sqlite3_finalize(stmt2);
+
+done:
+    rv = CKR_OK;
+
+out:
+    sqlite3_finalize(stmt);
+    return rv;
+}
+
 static CK_RV db_backup(sqlite3 *db, const char *dbpath, sqlite3 **updb, char **copypath) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -1392,6 +1538,7 @@ static CK_RV db_update(sqlite3 **xdb, const char *dbpath, unsigned old_version, 
             NULL,
             dbup_handler_from_1_to_2,
             dbup_handler_from_2_to_3,
+            dbup_handler_from_3_to_4
     };
 
     /*
@@ -1579,6 +1726,10 @@ static CK_RV db_init_new(sqlite3 *db) {
             "attrs TEXT NOT NULL,"
             "FOREIGN KEY (tokid) REFERENCES tokens(id) ON DELETE CASCADE"
         ");",
+        "CREATE TABLE config("
+            "id INTEGER PRIMARY KEY,"
+            "config TEXT"
+        ");",
         "CREATE TABLE schema("
             "id INTEGER PRIMARY KEY,"
             "schema_version INTEGER NOT NULL"
@@ -1718,9 +1869,13 @@ static CK_RV db_free(sqlite3 **db) {
     return CKR_OK;
 }
 
-CK_RV db_init(void) {
+CK_RV db_init(store_config *config) {
 
-    return db_new(&global.db);
+    CK_RV rv = db_new(&global.db);
+    if (rv == CKR_OK) {
+        rv = db_get_store_config(global.db, config);
+    }
+    return rv;
 }
 
 CK_RV db_destroy(void) {

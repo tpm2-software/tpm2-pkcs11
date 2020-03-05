@@ -6,6 +6,7 @@
 #include <yaml.h>
 
 #include "attrs.h"
+#include "emitter.h"
 #include "log.h"
 #include "pkcs11.h"
 #include "twist.h"
@@ -16,6 +17,13 @@ typedef struct yaml_emitter_state yaml_emitter_state;
 struct yaml_emitter_state {
     char *buf;
     size_t size;
+};
+
+typedef struct kvp kvp;
+struct kvp {
+    const char *key;
+    const char *value;
+    const char *tag;
 };
 
 static int output_handler(void *data, unsigned char *buffer, size_t size) {
@@ -232,7 +240,7 @@ doc_delete:
 
 }
 
-char *emit_config_to_string(token *t) {
+static char *emit_config_kvp(kvp *k, size_t len) {
 
     yaml_document_t doc = { 0 };
 
@@ -264,32 +272,31 @@ char *emit_config_to_string(token *t) {
         goto doc_delete;
     }
 
-    const char *value = t->config.is_initialized ? "true" : "false";
+    size_t i;
+    for (i=0; i < len; i++) {
+        kvp *x = &k[i];
 
-    int node = yaml_document_add_scalar(&doc, (yaml_char_t *)YAML_BOOL_TAG,
-         (yaml_char_t *)value, -1, YAML_ANY_SCALAR_STYLE);
+        const char *value = x->value;
+        const char *tag = x->tag;
+        const char *key = x->key;
 
-    rc = yaml_document_append_mapping_pair(&doc,
-            root, key, node);
-    if (!rc) {
-        LOGE("yaml_document_append_mapping_pair failed");
-        goto doc_delete;
-    }
+        if (!value) {
+            /* nothing to do, skip it */
+            continue;
+        }
 
-    /* add the tcti config value */
-    if (t->config.tcti) {
-        key = yaml_document_add_scalar(&doc, (yaml_char_t *)YAML_STR_TAG,
-             (yaml_char_t *)"tcti", -1, YAML_ANY_SCALAR_STYLE);
-        if (!key) {
-            LOGE("yaml_document_add_scalar for key failed");
+        int doc_key = yaml_document_add_scalar(&doc, (yaml_char_t *)YAML_STR_TAG,
+             (yaml_char_t *)key, -1, YAML_ANY_SCALAR_STYLE);
+        if (!doc_key) {
+            LOGE("yaml_document_add_scalar for key \"%s\" failed", key);
             goto doc_delete;
         }
 
-        node = yaml_document_add_scalar(&doc, (yaml_char_t *)YAML_STR_TAG,
-             (yaml_char_t *)t->config.tcti, -1, YAML_ANY_SCALAR_STYLE);
+        int doc_node = yaml_document_add_scalar(&doc, (yaml_char_t *)tag,
+             (yaml_char_t *)value, -1, YAML_ANY_SCALAR_STYLE);
 
         rc = yaml_document_append_mapping_pair(&doc,
-                root, key, node);
+                root, doc_key, doc_node);
         if (!rc) {
             LOGE("yaml_document_append_mapping_pair failed");
             goto doc_delete;
@@ -331,6 +338,23 @@ doc_delete:
     yaml_document_delete(&doc);
 
     return yaml_return;
-
 }
 
+char *emit_token_config_to_string_v2(token_config_v2 *config) {
+
+    kvp k[] = {
+        { .key = "token-init", .tag = YAML_BOOL_TAG, .value = config->is_initialized ? "true" : "false" },
+    };
+
+    return emit_config_kvp(k, ARRAY_LEN(k));
+}
+
+char *emit_store_config_to_string(store_config *config) {
+
+    kvp k[] = {
+        { .key = "tcti",      .tag = YAML_STR_TAG, .value = config->tcti },
+        { .key = "log-level", .tag = YAML_INT_TAG, .value = config->loglevel },
+    };
+
+    return emit_config_kvp(k, ARRAY_LEN(k));
+}

@@ -6,6 +6,7 @@
 #include <sqlite3.h>
 
 #include "pkcs11.h"
+#include "store-config.h"
 #include "token.h"
 #include "twist.h"
 
@@ -15,7 +16,7 @@
  */
 #define MAX_TOKEN_CNT 255
 
-CK_RV db_init(void);
+CK_RV db_init(store_config *config);
 CK_RV db_destroy(void);
 
 CK_RV db_get_tokens(token **t, size_t *len);

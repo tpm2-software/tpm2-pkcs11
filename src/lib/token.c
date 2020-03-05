@@ -33,7 +33,7 @@ CK_RV token_min_init(token *t) {
     /*
      * Initialize the per-token tpm context
      */
-    rv = tpm_ctx_new(t->config.tcti, &t->tctx);
+    rv = tpm_ctx_new(&t->tctx);
     if (rv != CKR_OK) {
         LOGE("Could not initialize tpm ctx: 0x%lx", rv);
         return rv;
@@ -233,9 +233,6 @@ void token_free(token *t) {
 
     mutex_destroy(t->mutex);
     t->mutex = NULL;
-
-    free(t->config.tcti);
-    t->config.tcti = NULL;
 }
 
 CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {

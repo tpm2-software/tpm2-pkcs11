@@ -17,7 +17,6 @@ from .utils import hash_pass
 from .utils import rand_hex_str
 from .utils import AESAuthUnwrapper
 from .utils import load_sealobject
-from .utils import str2bool
 from .utils import pkcs11_cko_to_str
 from .utils import pkcs11_ckk_to_str
 from .tpm2 import Tpm2
@@ -427,92 +426,6 @@ class InitPinCommand(Command):
             with TemporaryDirectory() as d:
                 tpm2 = Tpm2(d)
                 InitPinCommand.initpin(db, tpm2, args)
-
-@staticmethod
-def _empty_validator(s):
-    return s
-
-@staticmethod
-def _log_level_validator(s):
-
-    try:
-        x = int(s, 0)
-    except ValueError:
-        try:
-            x = ['error', 'warn', 'verbose'].index(s)
-        except ValueError:
-            sys.exit('Expected log-level to be one of "error", "warn", or "verbose"')
-
-    return x
-
-@commandlet("config")
-class ConfigCommand(Command):
-    '''
-    Manipulates and retrieves token configuration data.
-    '''
-    _keys = {
-        'token-init' : str2bool,
-        'log-level'  : _log_level_validator.__func__,
-        'tcti'       : _empty_validator.__func__
-    }
-
-    # adhere to an interface
-    # pylint: disable=no-self-use
-    def generate_options(self, group_parser):
-        group_parser.add_argument(
-            '--key', type=str, help='The key to set, valid keys are: %s.\n' % self._keys.keys())
-        group_parser.add_argument(
-            '--value', type=str, help='The value for the key.\n')
-        group_parser.add_argument(
-            '--label',
-            type=str,
-            help='The label of the token.\n',
-            required=True)
-
-    @classmethod
-    def get_validator_for_key(cls, key):
-        return cls._keys[key]
-
-    @classmethod
-    def config(cls, db, args):
-
-        label = args['label']
-
-        key = args['key']
-        value = args['value']
-
-        token = db.gettoken(label)
-
-        token_config = yaml.safe_load(io.StringIO(token['config']))
-        if not key and not value:
-            yaml_tok_cconf = yaml.safe_dump(token_config, default_flow_style=False)
-            print(yaml_tok_cconf)
-            sys.exit(0)
-
-        if not key and value:
-            sys.exit("Cannot specify --value without a key")
-
-        # key has to be set here based on above logical check
-        # throws an error if the key isn't known to the system
-        validator = cls.get_validator_for_key(key)
-
-        # no value, just key. Print the current value for key is set or empty if not set
-        if not value:
-            print("%s=%s" % (key, str(token_config[key] if key in token_config else "")))
-            sys.exit(0)
-
-        v = validator(value)
-        token_config[key] = v
-
-        # update the database
-        db.updateconfig(token, token_config)
-
-    def __call__(self, args):
-
-        path = args['path']
-
-        with Db(path) as db:
-            ConfigCommand.config(db, args)
 
 @commandlet("listprimaries")
 class ListPrimaryCommand(Command):

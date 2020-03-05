@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <yaml.h>
 
+#include "parser.h"
 #include "pkcs11.h"
 #include "token.h"
 #include "twist.h"
@@ -19,6 +20,13 @@ struct handler_state {
     CK_ATTRIBUTE_TYPE key;
     size_t seqbytes;
     void *seqbuf;
+};
+
+typedef struct kvp kvp;
+struct kvp {
+    const char *key;
+    const char *value;
+    const char *tag; /* Optional type constraint, like YAML TAG like YAML_BOOL_TAG */
 };
 
 typedef bool (*handler)(yaml_event_t *e, handler_state *state, attr_list *l);
@@ -341,8 +349,77 @@ struct config_state {
     char key[64];
 };
 
-bool handle_config_event(yaml_event_t *e,
-        config_state *state, token_config *config) {
+bool kvp_get_tag(const char *needle, kvp *k, size_t len, const char **tag) {
+    assert(needle);
+    assert(k);
+
+    size_t i;
+    for (i=0; i < len; i++) {
+        kvp *x = &k[i];
+        assert(x->key);
+        if (!strcmp(needle, x->key)) {
+            if (tag) {
+                *tag = x->tag;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+bool kvp_get_value(const char *key, kvp *k, size_t len, const char **value) {
+    assert(key);
+    assert(k);
+
+    size_t i;
+    for (i=0; i < len; i++) {
+        kvp *x = &k[i];
+        assert(x->key);
+        if (!strcmp(key, x->key)) {
+            *value = x->value;
+            return true;
+        }
+    }
+    return false;
+}
+
+void kvp_free(kvp *kvp_list, size_t kvp_list_len) {
+    assert(kvp_list);
+
+    size_t i;
+    for (i=0; i < kvp_list_len; i++) {
+        kvp *x = &kvp_list[i];
+        free((void *)x->value);
+    }
+}
+
+bool kvp_set_key(const char *key, const char *value,
+        kvp *kvp_list, size_t kvp_list_len) {
+    assert(key);
+
+    /* nothing to do */
+    if (!value) {
+        return true;
+    }
+
+    size_t i;
+    for (i=0; i < kvp_list_len; i++) {
+        kvp *x = &kvp_list[i];
+        if (!strcmp(key, x->key)) {
+            char *dup = strdup(value);
+            if (!dup) {
+                LOGE("oom");
+                return false;
+            }
+            x->value = dup;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool handle_event(yaml_event_t *e,
+        config_state *state, kvp *kvp_list, size_t kvp_len) {
 
     switch(e->type) {
     case YAML_NO_EVENT:
@@ -389,18 +466,26 @@ bool handle_config_event(yaml_event_t *e,
                     e->data.scalar.value);
         } else {
 
-            if (!strcmp(state->key, "tcti")) {
-                config->tcti = strdup((const char *)e->data.scalar.value);
-                if (!config->tcti) {
-                    LOGE("oom");
+            const char *tag = NULL;
+            bool has_key = kvp_get_tag(state->key,
+                    kvp_list, kvp_len, &tag);
+            if (!has_key) {
+                LOGE("Unknown key: \"%s\"", state->key);
+                return false;
+            }
+
+            if (tag) {
+                bool tag_match = !strcmp(tag, (const char *)e->data.scalar.tag);
+                if (!tag_match) {
+                    LOGE("Expected tag of \"%s\", got: \"%s\"",
+                            tag, e->data.scalar.tag);
                     return false;
                 }
-            } else if(!strcmp(state->key, "token-init")) {
-                config->is_initialized = !strcmp((const char *)e->data.scalar.value, "true")
-                        ? true : false;
-            } else {
-                LOGE("Unknown key, got: \"%s\"\n",
-                        state->key);
+            }
+
+            bool set_ok = kvp_set_key(state->key, (const char *)e->data.scalar.value,
+                    kvp_list, kvp_len);
+            if (!set_ok) {
                 return false;
             }
 
@@ -414,7 +499,10 @@ bool handle_config_event(yaml_event_t *e,
     return false;
 }
 
-bool parse_token_config_from_string(const unsigned char *yaml, size_t size, token_config *config) {
+static bool generic_kvp_parse(const unsigned char *yaml, size_t size,
+        kvp *kvp_list, size_t kvp_len) {
+
+    bool rv = false;
 
     yaml_parser_t parser;
 
@@ -428,28 +516,190 @@ bool parse_token_config_from_string(const unsigned char *yaml, size_t size, toke
     config_state state = { 0 };
 
     yaml_event_t event;
+    yaml_event_type_t event_type = YAML_NO_EVENT;
     do {
         int rc = yaml_parser_parse(&parser, &event);
         if (!rc) {
             LOGE("Parser error %d", parser.error);
-            return false;
+            goto error;
         }
 
         /* handle events */
-        rc = handle_config_event(&event, &state, config);
-        if (!rc) {
+        bool result = handle_event(&event, &state,
+                kvp_list, kvp_len);
+        event_type = event.type;
+        yaml_event_delete(&event);
+        if (!result) {
             LOGE("Parser error %d", parser.error);
-            return false;
+            goto error;
         }
+    } while(event_type != YAML_STREAM_END_EVENT);
 
-        if(event.type != YAML_STREAM_END_EVENT) {
-            yaml_event_delete(&event);
-        }
+    rv = true;
 
-    } while(event.type != YAML_STREAM_END_EVENT);
-
-    yaml_event_delete(&event);
+out:
     yaml_parser_delete(&parser);
 
-    return true;
+    return rv;
+error:
+    kvp_free(kvp_list, kvp_len);
+    goto out;
+}
+
+bool parse_token_config_from_string_v2(const unsigned char *yaml, size_t size, token_config_v2 *config) {
+
+    bool rc = false;
+
+    kvp kvp_list[] = {
+        { .key = "token-init", .value = NULL, .tag = YAML_BOOL_TAG },
+        { .key = "tcti",       .value = NULL, .tag = YAML_STR_TAG }, /* ignored */
+        { .key = "log-level",  .value = NULL, .tag = YAML_INT_TAG }  /* ignored */
+    };
+
+    bool result = generic_kvp_parse(yaml, size, kvp_list, ARRAY_LEN(kvp_list));
+    if (!result) {
+        return false;
+    }
+
+    const char *value = NULL;
+    result = kvp_get_value("token-init", kvp_list, ARRAY_LEN(kvp_list), &value);
+    if (!result) {
+        LOGE("Could not retrieve value for key \"token-init\"");
+        goto out;
+    }
+
+    if (!value) {
+        LOGE("Expected token config key \"token-init\"");
+        goto out;
+    }
+
+    config->is_initialized = !strcmp(value, "true")
+                            ? true : false;
+
+    /* all is well */
+    rc = true;
+
+out:
+    kvp_free(kvp_list, ARRAY_LEN(kvp_list));
+    return rc;
+}
+
+bool parse_token_config_from_string_v1(const unsigned char *yaml, size_t size, token_config_v1 *config) {
+
+    bool rc = false;
+
+    kvp kvp_list[] = {
+        { .key = "token-init", .value = NULL, .tag = YAML_BOOL_TAG },
+        { .key = "tcti",       .value = NULL, .tag = YAML_STR_TAG },
+        { .key = "log-level",  .value = NULL, .tag = YAML_INT_TAG }
+    };
+
+    bool result = generic_kvp_parse(yaml, size, kvp_list, ARRAY_LEN(kvp_list));
+    if (!result) {
+        return false;
+    }
+
+    const char *value = NULL;
+    result = kvp_get_value("token-init", kvp_list, ARRAY_LEN(kvp_list), &value);
+    if (!result) {
+        LOGE("Could not retrieve value for key \"token-init\"");
+        goto out;
+    }
+
+    if (!value) {
+        LOGE("Expected token config key \"token-init\"");
+        goto out;
+    }
+
+    config->is_initialized = !strcmp(value, "true")
+                            ? true : false;
+
+    value = NULL;
+    result = kvp_get_value("tcti", kvp_list, ARRAY_LEN(kvp_list), &value);
+    if (!result) {
+        LOGE("Could not retrieve value for key \"tcti\"");
+        goto out;
+    }
+
+    if (value) {
+        config->tcti = strdup(value);
+        if (!config->tcti) {
+            LOGE("oom");
+            goto out;
+        }
+    }
+
+    result = kvp_get_value("log-level", kvp_list, ARRAY_LEN(kvp_list), &value);
+    if (!result) {
+        LOGE("Could not retrieve value for key \"log-level\"");
+        goto out;
+    }
+
+    if (value) {
+        config->loglevel = strdup(value);
+        if (!config->loglevel) {
+            free((void *)config->tcti);
+            LOGE("oom");
+            goto out;
+        }
+    }
+
+    /* all is well */
+    rc = true;
+
+out:
+    kvp_free(kvp_list, ARRAY_LEN(kvp_list));
+    return rc;
+}
+
+bool parse_store_config_from_string(const unsigned char *yaml, size_t size, store_config *config) {
+
+    bool rc = false;
+
+    kvp kvp_list[] = {
+        { .key = "tcti",      .value = NULL, .tag = YAML_STR_TAG },
+        { .key = "log-level", .value = NULL, .tag = YAML_INT_TAG }
+    };
+
+    bool result = generic_kvp_parse(yaml, size, kvp_list, ARRAY_LEN(kvp_list));
+    if (!result) {
+        return false;
+    }
+
+    const char *value = NULL;
+    result = kvp_get_value("tcti", kvp_list, ARRAY_LEN(kvp_list), &value);
+    if (!result) {
+        LOGE("Could not retrieve value for key \"tcti\"");
+        goto out;
+    }
+
+    if (value) {
+        config->tcti = strdup(value);
+        if (!config->tcti) {
+            LOGE("oom");
+            goto out;
+        }
+    }
+
+    result = kvp_get_value("log-level", kvp_list, ARRAY_LEN(kvp_list), &value);
+    if (!result) {
+        LOGE("Could not retrieve value for key \"log-level\"");
+        goto out;
+    }
+
+    if (value) {
+        config->loglevel = strdup(value);
+        if (!config->loglevel) {
+            free((void *)config->tcti);
+            LOGE("oom");
+            goto out;
+        }
+    }
+
+    /* all is well */
+    rc = true;
+
+out:
+    kvp_free(kvp_list, ARRAY_LEN(kvp_list));
+    return rc;
 }

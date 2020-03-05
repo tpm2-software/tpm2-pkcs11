@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: BSD-2-Clause
 import argparse
+import io
 import os
 import sys
 import traceback
@@ -14,6 +15,7 @@ from .utils import bytes_to_file
 from .utils import TemporaryDirectory
 from .utils import rand_hex_str
 from .utils import query_yes_no
+from .utils import str2bool
 
 from .tpm2 import Tpm2
 
@@ -199,3 +201,91 @@ class DbUp(Command):
             }
 
             print(yaml.safe_dump(y, default_flow_style=False))
+
+@staticmethod
+def _empty_validator(s):
+    return s
+
+@staticmethod
+def _log_level_validator(s):
+
+    if s == "":
+        return s
+
+    try:
+        x = int(s, 0)
+    except ValueError:
+        try:
+            x = ['error', 'warn', 'verbose'].index(s)
+        except ValueError:
+            sys.exit('Expected log-level to be one of "error", "warn", or "verbose"')
+
+    return x
+
+@commandlet("config")
+class ConfigCommand(Command):
+    '''
+    Manipulates and retrieves token configuration data.
+    '''
+    _keys = {
+        'token-init' : str2bool,
+        'log-level'  : _log_level_validator.__func__,
+        'tcti'       : _empty_validator.__func__
+    }
+
+    # adhere to an interface
+    # pylint: disable=no-self-use
+    def generate_options(self, group_parser):
+        group_parser.add_argument(
+            '--key', type=str, help='The key to set, valid keys are: %s.\n' % self._keys.keys())
+        group_parser.add_argument(
+            '--value', type=str, help='The value for the key.\n')
+
+    @classmethod
+    def get_validator_for_key(cls, key):
+        try:
+            return cls._keys[key]
+        except KeyError:
+            sys.exit('Invalid key, got: \"{}\", expected ont of "{}"'.format(
+                key, ", ".join(ConfigCommand._keys.keys())))
+
+    @classmethod
+    def config(cls, db, args):
+
+        key = args['key']
+        value = args['value']
+
+        s = db.get_store_config()
+        store_config = yaml.safe_load(io.StringIO(s)) if s is not None else {}
+        if key is None and value is None:
+            yaml_tok_cconf = yaml.safe_dump(store_config, default_flow_style=False)
+            print(yaml_tok_cconf)
+            sys.exit(0)
+
+        if key is None and value:
+            sys.exit("Cannot specify --value without --key")
+
+        # key has to be set here based on above logical check
+        # throws an error if the key isn't known to the system
+        validator = cls.get_validator_for_key(key)
+
+        # no value, just key. Print the current value for key is set or empty if not set
+        if value is None:
+            v = None
+            if store_config:
+                v = str(store_config[key] if key in store_config else "")
+            print(yaml.safe_dump({key : v}, default_flow_style=False))
+            sys.exit(0)
+
+        v = validator(value)
+        store_config[key] = v
+
+        # update the database
+        db.update_store_config(store_config)
+
+    def __call__(self, args):
+
+        path = args['path']
+
+        with Db(path) as db:
+            ConfigCommand.config(db, args)

@@ -107,11 +107,11 @@ static unsigned char _config_yaml[] = {
 };
 static unsigned int _config_yaml_len = 53;
 
-static void test_config_parser_good(void **state) {
+static void test_config_parser_good_v1(void **state) {
     (void) state;
 
-    token_config config = { 0 };
-    bool res = parse_token_config_from_string(_config_yaml, _config_yaml_len,
+    token_config_v1 config = { 0 };
+    bool res = parse_token_config_from_string_v1(_config_yaml, _config_yaml_len,
             &config);
     assert_true(res);
     assert_true(config.is_initialized);
@@ -240,7 +240,7 @@ int main(int argc, char* argv[]) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_config_parser_empty_seq),
         cmocka_unit_test(test_attr_parser_good),
-        cmocka_unit_test(test_config_parser_good),
+        cmocka_unit_test(test_config_parser_good_v1),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
