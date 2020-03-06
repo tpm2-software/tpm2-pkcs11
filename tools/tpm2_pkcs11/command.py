@@ -16,7 +16,7 @@ class commandlet(object):
                 os.mkdir(store, 0o770);
             except FileExistsError:
                 return store
-            except:
+            except Exception:
                 # Keep trying
                 pass
             # Exists, use it
@@ -34,7 +34,7 @@ class commandlet(object):
                 os.mkdir(store, 0o770);
             except FileExistsError:
                 return store
-            except:
+            except Exception:
                 # Keep trying
                 pass
             # Exists, use it
