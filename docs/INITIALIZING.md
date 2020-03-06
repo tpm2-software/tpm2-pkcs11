@@ -3,6 +3,40 @@
 In order to use the tpm2-pkcs11 library, you need to initialize a store. The store contains
 metadata for the library on what tokens and subordinate objects to expose.
 
+PKCS#11 was designed to work with smart cards, and has a few concepts that are pivitol to understanding how to use it.
+The first concept is a *slot*. The slot, would be the physical smart card reader slot you would insert the smart card into.
+Then, for each slot, you can have a smart card inserted or not. So you could have N reader slots with X smart cards inserted
+where X <= N. For each smart card in X, it provides a *token*. The token is the actual device the PKCS#11 calls operate on.
+The token itself can be in one of two states, *initialized* or *not initialized*.
+
+The tpm2-pkcs11 library will always provide at least one *not-initialized* token that can be used to initialize the token.
+You can initialize the token with an external client via the PKCS11 interface call C_Initialize, like
+[pkcs11-tool](https://linux.die.net/man/1/pkcs11-tool) or you can use the provided
+[tpm2_ptool](https://github.com/tpm2-software/tpm2-pkcs11/tree/master/tools) to perform an initialization through a
+side-channel mechanism.
+
+Note, that most initializations can be done through C_Initialize() calls via tools like pkcs11-tool. However, more complex
+initializations are better handled throught tpm2_ptool.
+
+The tpm2-pkcs11 library requires some metadata to operate correctly. It stores this metadata in what is known as a *store*.
+The store is automatically searched for in the following locations:
+
+1. env variable TPM2_PKCS11_STORE
+  This is optional, and if not set is skipped. However, if you want a store in a custom path, this is how you set it.
+  a. Example: `export TPM2_PKCS11_STORE='path/to/where/i/want/the/store'`
+2. /etc/tpm2_pkcs11 or whatever was configured at build time with --with-storedir.
+3. Users $HOME/.tpm2_pkcs11 directory.
+4. Current Working Directory.
+
+If no existing store is found, it will:
+1. If env variable TPM2_PKCS11_STORE is set, attempt to use that path directory or create it if it doesn't exist.
+   On failure, it continues to number 2.
+2. /etc/tpm2_pkcs11 or whatever was configured at build time with --with-storedir.
+3. if $HOME is set, attempts to use that path directory. If the directory doesn't exist it will be created.
+   This almost always exceeds for most users, so this ends up as the default store most of the time. If it fails,
+   continues on to number 4.
+4. Use the Current Working Directory.
+
 To facilitate creating this store, a tool called [tpm2-ptool](../tools/tpm2_ptool.py) exists.
 
 The store itself defaults to `$HOME/.tpm2_pkcs11` unless specified via the environment variable
@@ -10,7 +44,7 @@ The store itself defaults to `$HOME/.tpm2_pkcs11` unless specified via the envir
 
 **IMPORTANT**
 * For all the illustrations below, we create a store under `~/tmp`.
-* We assume some working TPM connection. Under the hood the `tpm2-ptool` command calls `tpm2-tools`
+* We assume some working TPM connection. Under the hood the `tpm2_ptool` command calls `tpm2-tools`
   binaries. Thus configuring the `TCTI` is important. The easiest way to do this for testing is
   to use the IBM TPM Simulator and tpm2-abrmd as documented in
   [dependencies](BUILDING.md#step-1---satisfy-dependencies).
