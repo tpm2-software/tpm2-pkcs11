@@ -1040,7 +1040,7 @@ CK_RV mech_validate(tpm_ctx *tctx, CK_MECHANISM_PTR mech, attr_list *attrs) {
         CK_ULONG count = a->ulValueLen/sizeof(CK_MECHANISM_TYPE);
         CK_MECHANISM_TYPE_PTR mt = (CK_MECHANISM_TYPE_PTR)a->pValue;
 
-        bool found = true;
+        bool found = false;
 
         CK_ULONG i;
         for(i=0; i < count; i++) {
