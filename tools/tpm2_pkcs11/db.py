@@ -459,8 +459,8 @@ class Db(object):
 
             if old_version == 0:
                 self.db_init_new()
-                self.version = old_version
-                self.VERSION = old_version
+                self.version = VERSION
+                self.VERSION = VERSION
                 return False
             elif VERSION == old_version:
                 self.version = old_version
