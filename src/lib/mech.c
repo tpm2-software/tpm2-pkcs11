@@ -844,7 +844,7 @@ CK_RV rsa_pkcs_hash_synthesizer(CK_MECHANISM_PTR mech, attr_list *attrs, CK_BYTE
 
     size_t hash_len = utils_get_halg_size(mech->mechanism);
     if (!hash_len) {
-        LOGE("Unknown hash size, got 0x%x", mech->mechanism);
+        LOGE("Unknown hash size, got 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
@@ -1020,7 +1020,7 @@ CK_RV mech_validate(tpm_ctx *tctx, CK_MECHANISM_PTR mech, attr_list *attrs) {
 
     mdetail *m = mlookup(mech->mechanism);
     if (!m) {
-        LOGE("Mechanism not supported, got: 0x%x", mech->mechanism);
+        LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
@@ -1070,7 +1070,7 @@ CK_RV mech_synthesize(tpm_ctx *tctx,
 
     mdetail *m = mlookup(mech->mechanism);
     if (!m) {
-        LOGE("Mechanism not supported, got: 0x%x", mech->mechanism);
+        LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
@@ -1106,7 +1106,7 @@ CK_RV mech_is_synthetic(tpm_ctx *tctx, CK_MECHANISM_PTR mech,
 
     mdetail *m = mlookup(mech->mechanism);
     if (!m) {
-        LOGE("Mechanism not supported, got: 0x%x", mech->mechanism);
+        LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
@@ -1153,7 +1153,7 @@ CK_RV mech_get_digest_alg(CK_MECHANISM_PTR mech,
 
     mdetail *m = mlookup(mech->mechanism);
     if (!m) {
-        LOGE("Mechanism not supported, got: 0x%x", mech->mechanism);
+        LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
@@ -1172,7 +1172,7 @@ CK_RV mech_get_digester(CK_MECHANISM_PTR mech,
 
     mdetail *m = mlookup(mech->mechanism);
     if (!m) {
-        LOGE("Mechanism not supported, got: 0x%x", mech->mechanism);
+        LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
@@ -1193,7 +1193,7 @@ CK_RV mech_get_tpm_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech,
 
     mdetail *m = mlookup(mech->mechanism);
     if (!m) {
-        LOGE("Mechanism not supported, got: 0x%x", mech->mechanism);
+        LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
@@ -1211,7 +1211,7 @@ CK_RV mech_get_padding(CK_MECHANISM_PTR mech, int *padding) {
 
     mdetail *m = mlookup(mech->mechanism);
     if (!m) {
-        LOGE("Mechanism not supported, got: 0x%x", mech->mechanism);
+        LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
@@ -1262,7 +1262,7 @@ CK_RV mech_get_info(tpm_ctx *tctx, CK_MECHANISM_TYPE mech_type, CK_MECHANISM_INF
 
     mdetail *m = mlookup(mech_type);
     if (!m) {
-        LOGE("Mechanism not supported, got: 0x%x", mech_type);
+        LOGE("Mechanism not supported, got: 0x%lx", mech_type);
         return CKR_MECHANISM_INVALID;
     }
 
