@@ -981,7 +981,7 @@ error:
 #define DB_NAME "tpm2_pkcs11.sqlite3"
 #define PKCS11_STORE_ENV_VAR "TPM2_PKCS11_STORE"
 
-static CK_RV handle_env_var(char *path, size_t len, bool *skip, bool *fatal) {
+static CK_RV handle_env_var(char *path, size_t len, bool *skip) {
 
     *skip = false;
 
@@ -997,8 +997,6 @@ static CK_RV handle_env_var(char *path, size_t len, bool *skip, bool *fatal) {
                 l, len);
         return CKR_GENERAL_ERROR;
     }
-
-    *fatal = true;
 
     return CKR_OK;
 }
@@ -1057,39 +1055,49 @@ static CK_RV handle_path(char *path, size_t len, bool *skip) {
     return CKR_OK;
 }
 
-typedef CK_RV (*db_handler)(char *path, size_t len);
+typedef enum handler_idx handler_idx;
+enum handler_idx {
+    HANDLER_IDX_ENV,
+    HANDLER_IDX_STORE_DIR,
+    HANDLER_IDX_HOME,
+    HANDLER_IDX_CWD,
+    HANDLER_IDX_CNT,
+};
+
+typedef CK_RV (*db_handler)(char *path, size_t len, handler_idx index);
 
 static CK_RV db_for_path(char *path, size_t len, db_handler h) {
 
     /*
      * Search in the following order:
      * 1. ENV variable
+     * 2. TPM2_PKCS11_STORE_DIR
      * 2. $HOME/.tpm2_pkcs11
      * 3. cwd
-     * 4. TPM2_PKCS11_STORE_DIR
      */
 
-    unsigned i;
-    for (i=0; i < 4; i++) {
+    handler_idx i;
+    for (i=0; i < HANDLER_IDX_CNT; i++) {
 
         CK_RV rv = CKR_GENERAL_ERROR;
         bool skip = false;
-        bool fatal = false;
 
         switch (i) {
-        case 0:
-            rv = handle_env_var(path, len, &skip, &fatal);
+        case HANDLER_IDX_ENV:
+            rv = handle_env_var(path, len, &skip);
             break;
-        case 1:
-            rv = handle_home(path, len, &skip);
-            break;
-        case 2:
-            rv = handle_cwd(path, len, &skip);
-            break;
-        case 3:
+        case HANDLER_IDX_STORE_DIR:
             rv = handle_path(path, len, &skip);
             break;
-            /* no default */
+        case HANDLER_IDX_HOME:
+            rv = handle_home(path, len, &skip);
+            break;
+        case HANDLER_IDX_CWD:
+            rv = handle_cwd(path, len, &skip);
+            break;
+        default:
+            LOGE("Unknown handler_idx: %d", i);
+            return CKR_GENERAL_ERROR;
         }
 
         /* handler had fatal error, exit with return code */
@@ -1102,8 +1110,8 @@ static CK_RV db_for_path(char *path, size_t len, db_handler h) {
             continue;
         }
 
-        rv = h(path, len);
-        if (fatal || rv != CKR_TOKEN_NOT_PRESENT) {
+        rv = h(path, len, i);
+        if (rv != CKR_TOKEN_NOT_PRESENT) {
             return rv;
         }
     }
@@ -1111,8 +1119,9 @@ static CK_RV db_for_path(char *path, size_t len, db_handler h) {
     return CKR_TOKEN_NOT_PRESENT;
 }
 
-static CK_RV db_get_path_handler(char *path, size_t len) {
+static CK_RV db_get_path_handler(char *path, size_t len, handler_idx index) {
     UNUSED(len);
+    UNUSED(index);
 
     struct stat sb;
     int rc = stat(path, &sb);
@@ -1135,10 +1144,15 @@ static CK_RV db_get_existing(char *path, size_t len) {
     return db_for_path(path, len, db_get_path_handler);
 }
 
-static CK_RV db_create_handler(char *path, size_t len) {
+static CK_RV db_create_handler(char *path, size_t len, handler_idx index) {
     UNUSED(len);
 
     CK_RV rv = CKR_TOKEN_NOT_PRESENT;
+
+    /* nothing to do for index CWD */
+    if (index == HANDLER_IDX_CWD) {
+        return CKR_OK;
+    }
 
     char *pathdup = strdup(path);
     if (!pathdup) {
@@ -1147,22 +1161,68 @@ static CK_RV db_create_handler(char *path, size_t len) {
     }
 
     char *d = dirname(pathdup);
-    if (strcmp(d, ".")) {
+
+    if (index == HANDLER_IDX_ENV || index == HANDLER_IDX_HOME) {
 
         struct stat sb;
         int rc = stat(d, &sb);
-        if (rc) {
+        if (rc && errno != ENOENT) {
             LOGV("Could not stat db dir \"%s\", error: %s", d, strerror(errno));
-
             /* no db dir, keep looking */
             goto out;
         }
+
+        if (rc == 0) {
+            goto done;
+        }
+
+        rc = mkdir(d, S_IRWXU|S_IRWXG);
+        if (rc) {
+            LOGE("Could not mkdir \"%s\", error: %s", d, strerror(errno));
+            rv = HANDLER_IDX_ENV ? CKR_GENERAL_ERROR : CKR_TOKEN_NOT_PRESENT;
+            goto out;
+        }
+
+        /* success */
+        goto done;
     }
+
+    if (index == HANDLER_IDX_STORE_DIR) {
+
+        /* tests if it exists AND we can use it */
+        const char *test_file_path = TPM2_PKCS11_STORE_DIR"/.test";
+        FILE *f = fopen(test_file_path, "w+");
+        if (!f) {
+            /*
+             * we don't care about errors, we just skip it, but if it's
+             * an access issue, we will let the user know via LOGW.
+             * */
+            if (errno != ENOENT) {
+                const char *msg = (errno == EPERM || errno == EACCES) ?
+                        "Error checking access to \"%s\", skipping. error: %s" :
+                        "\"%s\" exists, but no access, skipping. error: %s";
+                LOGW(msg, TPM2_PKCS11_STORE_DIR,
+                        strerror(errno));
+            }
+            goto out;
+        }
+        /* all is well, unlink and move on */
+        fclose(f);
+        unlink(test_file_path);
+        goto done;
+    }
+
+    /* I don't know what it is fatal error */
+    assert(0);
+    LOGE("Unhandled search index: %d", index);
+    rv = CKR_GENERAL_ERROR;
+    goto out;
 
     /*
      * made it all the way through and found a dir I can use,
      * done searching. Now use it to create the db.
      */
+done:
     rv = CKR_OK;
 
 out:
@@ -1689,9 +1749,10 @@ static CK_RV db_new(sqlite3 **db) {
         rv = db_create(dbpath, sizeof(dbpath));
     }
 
-    if (rv == CKR_TOKEN_NOT_PRESENT) {
-        LOGV("Could not find pkcs11 store");
-        LOGV("Consider exporting "PKCS11_STORE_ENV_VAR" to point to a valid store directory");
+    if (rv != CKR_OK) {
+        LOGE("Could not find or create a pkcs11 store");
+        LOGE("Consider exporting "PKCS11_STORE_ENV_VAR" to point to a valid store directory");
+        return rv;
     }
 
     LOGV("Using sqlite3 DB: \"%s\"", dbpath);
