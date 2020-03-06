@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 import argparse
 import os
-
+import textwrap
 
 class commandlet(object):
     '''Decorator class for commandlet. You can add commandlets to the tool with this decorator.'''
@@ -86,12 +86,13 @@ class commandlet(object):
                 g.add_argument(
                     '--path',
                     type=os.path.expanduser,
-                    help='The location of the store directory. If not specified performs '
-                    +'a search by looking at environment variable TPM2_PKCS11_STORE '
-                    + 'and if not set then '
-                    + '/etc/tpm2_pkcs11 and if not found or no write access, then '
-                    + '$HOME/.tpm2_pkcs11 and if not found, then '
-                    + 'defaults to using the current working directory.',
+                    help=textwrap.dedent('''
+                    The location of the store directory. If specified, the directory MUST exist.
+                    If not specified performs a search by looking at environment variable
+                    TPM2_PKCS11_STORE and if not set then /etc/tpm2_pkcs11 and if not found or
+                    no write access, then $HOME/.tpm2_pkcs11 and if not found or cannot be created,
+                    then defaults to using the current working directory.
+                    '''),
                     default=commandlet.get_default_store_path())
 
         args = opt_parser.parse_args()
