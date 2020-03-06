@@ -401,11 +401,11 @@ static CK_RV attr_common_add_storage(attr_list **storage_attrs) {
     /* currently immutable */
     bool r = attr_list_add_bool(new_attrs, CKA_TOKEN, CK_TRUE);
     goto_error_false(r);
-    attr_list_add_bool(new_attrs, CKA_MODIFIABLE, CK_FALSE);
+    r = attr_list_add_bool(new_attrs, CKA_MODIFIABLE, CK_FALSE);
     goto_error_false(r);
-    attr_list_add_bool(new_attrs, CKA_COPYABLE, CK_TRUE);
+    r = attr_list_add_bool(new_attrs, CKA_COPYABLE, CK_TRUE);
     goto_error_false(r);
-    attr_list_add_bool(new_attrs, CKA_DESTROYABLE, CK_FALSE);
+    r = attr_list_add_bool(new_attrs, CKA_DESTROYABLE, CK_FALSE);
     goto_error_false(r);
 
     /* defaults */
@@ -414,13 +414,13 @@ static CK_RV attr_common_add_storage(attr_list **storage_attrs) {
 
     a = attr_get_attribute_by_type(*storage_attrs, CKA_PRIVATE);
     if (!a) {
-        attr_list_add_bool(new_attrs, CKA_PRIVATE, defpriv);
+        r = attr_list_add_bool(new_attrs, CKA_PRIVATE, defpriv);
         goto_error_false(r);
     }
 
     a = attr_get_attribute_by_type(*storage_attrs, CKA_LABEL);
     if (!a) {
-        attr_list_add_buf(new_attrs, CKA_LABEL, NULL, 0);
+        r = attr_list_add_buf(new_attrs, CKA_LABEL, NULL, 0);
         goto_error_false(r);
     }
 
