@@ -11,17 +11,33 @@ class commandlet(object):
 
         # always use the env variable no matter what
         if "TPM2_PKCS11_STORE" in os.environ:
-            return os.environ.get("TPM2_PKCS11_STORE")
-
-        # look for a store in home
-        if "HOME" in os.environ:
-            store = os.path.join(os.environ.get("HOME"), ".tpm2_pkcs11")
-            if os.path.exists(store):
+            store = os.environ.get("TPM2_PKCS11_STORE")
+            try:
+                os.mkdir(store, 0o770);
+            except FileExistsError:
                 return store
+            except:
+                # Keep trying
+                pass
+            # Exists, use it
+            return store
 
         # is their a system store and can I access it?
         store = "/etc/tpm2_pkcs11"
         if os.path.exists(store) and os.access(store, os.W_OK):
+            return store
+
+        # look for a store in home
+        if "HOME" in os.environ:
+            store = os.path.join(os.environ.get("HOME"), ".tpm2_pkcs11")
+            try:
+                os.mkdir(store, 0o770);
+            except FileExistsError:
+                return store
+            except:
+                # Keep trying
+                pass
+            # Exists, use it
             return store
 
         # nothing else available, use cwd
@@ -73,8 +89,8 @@ class commandlet(object):
                     help='The location of the store directory. If not specified performs '
                     +'a search by looking at environment variable TPM2_PKCS11_STORE '
                     + 'and if not set then '
-                    + '$HOME/.tpm2_pkcs11 and if not found, then '
                     + '/etc/tpm2_pkcs11 and if not found or no write access, then '
+                    + '$HOME/.tpm2_pkcs11 and if not found, then '
                     + 'defaults to using the current working directory.',
                     default=commandlet.get_default_store_path())
 
