@@ -97,7 +97,7 @@ CK_RV token_add_tobject(token *tok, tobject *t) {
 
         if (index == 0) {
             LOGE("Rollover, too many objects for token, id: %lu, label: %*s", tok->id,
-                    sizeof(tok->label), tok->label);
+                    (int)sizeof(tok->label), tok->label);
             return CKR_OK;
         }
 
