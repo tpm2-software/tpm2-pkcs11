@@ -1125,7 +1125,7 @@ CK_RV mech_is_hashing_needed(CK_MECHANISM_PTR mech,
 
     mdetail *m = mlookup(mech->mechanism);
     if (!m) {
-        LOGE("Mechanism not supported, got: 0x%x", mech->mechanism);
+        LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
