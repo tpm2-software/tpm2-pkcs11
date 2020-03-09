@@ -7,7 +7,17 @@ compiler:
 - gcc
 - clang
 env:
-  - PYTHON_INTERPRETER=python3.7
+  global:
+    - PYTHON_INTERPRETER=python3.7
+  matrix:
+    - DOCKER_TAG=ubuntu-16.04
+
+# only one build should report coverage stats
+matrix:
+  include:
+  - env: ENABLE_COVERAGE=true DOCKER_TAG=ubuntu-16.04
+    compiler: gcc
+
 script:
   - ./.ci/travis.run
 after_failure:
