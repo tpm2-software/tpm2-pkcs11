@@ -75,7 +75,7 @@ fi
 make -j$(nproc)
 make -j check
 
-if [[ "$CC" != clang* ]]; then
+if [[ "$ENABLE_COVERAGE" == "true" ]]; then
     bash <(curl -s https://codecov.io/bash)
 fi
 
