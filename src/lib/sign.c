@@ -158,6 +158,7 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
 
     sign_opdata *opdata = sign_opdata_new(mechanism, tobj);
     if (!opdata) {
+        tpm_opdata_free(&tpm_opdata);
         return CKR_HOST_MEMORY;
     }
 
