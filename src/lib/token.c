@@ -67,8 +67,8 @@ CK_RV token_add_tobject_last(token *tok, tobject *t) {
 
     CK_OBJECT_HANDLE handle = tok->tobjects.tail->obj_handle;
     if (handle == ~((CK_OBJECT_HANDLE)0)) {
-        LOGE("Too many objects for token, id: %lu, label: %*s", tok->id,
-                sizeof(tok->label), tok->label);
+        LOGE("Too many objects for token, id: %u, label: %*s", tok->id,
+                (int)sizeof(tok->label), tok->label);
         return CKR_OK;
     }
 
