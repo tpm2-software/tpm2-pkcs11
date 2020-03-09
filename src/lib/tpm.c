@@ -2695,7 +2695,7 @@ static CK_RV serialize_pub_priv_blobs(TPM2B_PUBLIC *pub,
     offset = 0;
     rc = Tss2_MU_TPM2B_PRIVATE_Marshal(priv, privb, sizeof(privb), &offset);
     if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Tss2_MU_TPM2B_PRIVATE_Marshal: %x", Tss2_RC_Decode(rc));
+        LOGE("Tss2_MU_TPM2B_PRIVATE_Marshal: %s", Tss2_RC_Decode(rc));
         return CKR_GENERAL_ERROR;
     }
 
