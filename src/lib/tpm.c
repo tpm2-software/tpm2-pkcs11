@@ -3180,7 +3180,7 @@ CK_RV tpm_create_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_
 
     TSS2_RC rval = Esys_TR_SetAuth(tpm->esys_ctx, hierarchy, &hieararchy_auth);
     if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_TR_SetAuth: %x:", Tss2_RC_Decode(rval));
+        LOGE("Esys_TR_SetAuth: %s:", Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
     }
 
