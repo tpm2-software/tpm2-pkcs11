@@ -753,7 +753,7 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
     if (v != CKO_PRIVATE_KEY
             && v != CKO_PUBLIC_KEY
             && v != CKO_SECRET_KEY) {
-        LOGE("Cannot use tobj id %lu in a crypto operation", tobj->id);
+        LOGE("Cannot use tobj id %u in a crypto operation", tobj->id);
         return CKR_KEY_HANDLE_INVALID;
     }
 
