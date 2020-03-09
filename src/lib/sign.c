@@ -101,7 +101,7 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
 
     check_pointer(mechanism);
 
-    LOGV("mechanism: 0x%x\n\thas_params: %s\n\tlen: %lu", mechanism->mechanism,
+    LOGV("mechanism: 0x%lx\n\thas_params: %s\n\tlen: %lu", mechanism->mechanism,
             mechanism->pParameter ? "yes" : "no", mechanism->ulParameterLen);
 
     CK_RV rv = CKR_GENERAL_ERROR;
