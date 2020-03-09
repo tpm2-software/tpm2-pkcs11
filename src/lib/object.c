@@ -470,7 +470,7 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
            /* If it's not found it defaults to empty. */
            t->pValue = NULL;
            t->ulValueLen = CK_UNAVAILABLE_INFORMATION;
-           LOGV("Invalid Attribute for tid %lu: type(%lu) ulValueLen(%lu), pData(%s)",
+           LOGV("Invalid Attribute for tid %u: type(%lu) ulValueLen(%lu), pData(%s)",
                    tobj->id, t->type, t->ulValueLen, t->pValue ? "non-null" : "null");
            rv = CKR_ATTRIBUTE_TYPE_INVALID;
        }
