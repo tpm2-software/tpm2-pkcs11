@@ -740,7 +740,7 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
     CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_CLASS);
     if (!a) {
         LOGE("All objects expected to have CKA_CLASS, missing"
-                " for tobj id: %lu", tobj->id);
+                " for tobj id: %u", tobj->id);
         return CKR_GENERAL_ERROR;
     }
 
