@@ -2922,7 +2922,7 @@ CK_RV tpm_get_algorithms (tpm_ctx *ctx, TPMS_CAPABILITY_DATA **capabilityData) {
             property, propertyCount, &moreData, capabilityData);
 
     if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_GetCapability: %x:", Tss2_RC_Decode(rval));
+        LOGE("Esys_GetCapability: %s:", Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
     }
 
