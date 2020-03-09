@@ -8,7 +8,7 @@
   * VerifyRecover support, known working with Public Key RSA objects and
     mechanism CKM_RSA_PKCS.
 
-### 1.1.0-RC1 - 2020-03-02
+### 1.1.0 - 2020-03-09
   * DB Schema Change from 1 to 3.
     - **Backup your DB before upgrading**
   * Support C_InitToken interface.
