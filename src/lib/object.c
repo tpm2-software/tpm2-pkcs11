@@ -576,7 +576,7 @@ CK_RV tobject_user_increment(tobject *tobj) {
 CK_RV tobject_user_decrement(tobject *tobj) {
 
     if (!tobj->active) {
-        LOGE("Returning a non-active tobject id: %lu", tobj->id);
+        LOGE("Returning a non-active tobject id: %u", tobj->id);
         return CKR_GENERAL_ERROR;
     }
 
