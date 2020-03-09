@@ -7,6 +7,9 @@
   * Fix Java PKCS11 Provider Signature Verification: #401
   * VerifyRecover support, known working with Public Key RSA objects and
     mechanism CKM_RSA_PKCS.
+  * db: Modfiy search and create behavior. See
+    [docs/INITIALIZING.md](https://github.com/tpm2-software/tpm2-pkcs11/blob/master/docs/INITIALIZING.md)
+    for details.
 
 ### 1.1.0 - 2020-03-09
   * DB Schema Change from 1 to 3.
