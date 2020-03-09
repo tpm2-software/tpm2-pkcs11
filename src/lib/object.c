@@ -564,7 +564,7 @@ attr_list *tobject_get_attrs(tobject *tobj) {
 CK_RV tobject_user_increment(tobject *tobj) {
 
     if (tobj->active == UINT_MAX) {
-       LOGE("tobject active at max count, cannot issue. id: %lu", tobj->id);
+       LOGE("tobject active at max count, cannot issue. id: %u", tobj->id);
        return CKR_GENERAL_ERROR;
     }
 
