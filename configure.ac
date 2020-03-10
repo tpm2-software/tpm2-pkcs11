@@ -133,6 +133,10 @@ AC_DEFUN([integration_test_checks], [
     AS_IF([test "x$expect" != "xyes"],
       [AC_MSG_ERROR([Integration tests enabled but expect executable not found.])])
 
+  AC_CHECK_PROG([pkcs11_tool], [pkcs11-tool], [yes], [no])
+    AS_IF([test "x$pkcs11_tool" != "xyes"],
+      [AC_MSG_ERROR([Integration tests enabled but pkcs11-tool executable not found.])])
+
   AS_IF([test "x$have_javac" = "xno"],
     [AC_MSG_ERROR([Integration tests enabled but no Java compiler was found])])
   AX_CHECK_CLASS([org.junit.Assert], ,
