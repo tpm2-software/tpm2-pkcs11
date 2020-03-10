@@ -3014,7 +3014,7 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
          * does equal hash length, so:
          *  - if fips mode is on, we can support it nativeley
          *  - if fips mode is off, we can synthesize it by applying the padding
-         *    and using rsa RSA.
+         *    and using raw RSA.
          */
         if (modes & TPMA_MODES_FIPS_140_2) {
            add_mech(CKM_RSA_PKCS_PSS);
