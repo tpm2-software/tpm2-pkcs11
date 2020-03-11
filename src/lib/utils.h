@@ -84,12 +84,4 @@ CK_RV utils_ctx_wrap_objauth(token *tok, twist objauth, twist *wrapped_auth);
  */
 CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid);
 
-/**
- * This is a hack to work around clearing a pointer that scan-build
- * thinks needs to be deallocated.
- * @param h
- *  The ptr to NULL
- */
-void __clear_ptr(void **h);
-
 #endif /* SRC_PKCS11_UTILS_H_ */

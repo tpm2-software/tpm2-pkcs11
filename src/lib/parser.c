@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
+#include "config.h"
+#include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,6 +49,15 @@ bool push_handler(handler_stack *state, handler h) {
     return true;
 }
 
+#ifdef __clang_analyzer__
+static inline void analyzer_free(void *p ) {
+    assert(0);
+    free(p);
+}
+#else
+#define analyzer_free(x) UNUSED(x)
+#endif
+
 bool pop_handler(handler_stack *state) {
 
     if (state->depth == 0) {
@@ -59,7 +70,7 @@ bool pop_handler(handler_stack *state) {
      * scan-build reports this as a leak of h, which is
      * invalid... you can't free fn pointers
      */
-    __clear_ptr((void **)&(state->h[state->depth]));
+    analyzer_free(state->h[state->depth]);
 
     if (state->depth == 0) {
         state->cur = NULL;
