@@ -428,8 +428,3 @@ CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid) {
 
     return CKR_OK;
 }
-
-void __clear_ptr(void **h) {
-    assert(h);
-    *h = NULL;
-}
