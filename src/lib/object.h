@@ -126,4 +126,6 @@ CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object);
 
 CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OBJECT_HANDLE *object);
 
+CK_RV object_init_from_attrs(tobject *tobj);
+
 #endif /* SRC_PKCS11_OBJECT_H_ */

@@ -845,3 +845,44 @@ CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OB
 
     return CKR_OK;
 }
+
+CK_RV object_init_from_attrs(tobject *tobj) {
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_OBJAUTH_ENC);
+    if (a && a->pValue && a->ulValueLen) {
+        tobj->objauth = twistbin_new(a->pValue, a->ulValueLen);
+        if (!tobj->objauth) {
+            LOGE("oom");
+            goto error;
+        }
+    }
+
+    a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_PUB_BLOB);
+    if (a && a->pValue && a->ulValueLen) {
+
+        tobj->pub = twistbin_new(a->pValue, a->ulValueLen);
+        if (!tobj->pub) {
+            LOGE("oom");
+            goto error;
+        }
+    }
+
+    a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_PRIV_BLOB);
+    if (a && a->pValue && a->ulValueLen) {
+
+        if (!tobj->pub) {
+            LOGE("objects with CKA_TPM2_PUB_BLOB should have CKA_TPM2_PRIV_BLOB");
+            goto error;
+        }
+
+        tobj->priv = twistbin_new(a->pValue, a->ulValueLen);
+        if (!tobj->priv) {
+            LOGE("oom");
+            goto error;
+        }
+    }
+
+    return CKR_OK;
+
+error:
+    return CKR_GENERAL_ERROR;
+}
