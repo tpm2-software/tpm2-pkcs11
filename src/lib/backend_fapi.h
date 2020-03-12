@@ -20,4 +20,6 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len);
 CK_RV backend_fapi_init_user(token *t, const twist sealdata,
                         const twist newauthhex, const twist newsalthex);
 
+CK_RV backend_fapi_add_object(token *t, tobject *tobj);
+
 #endif /* SRC_LIB_BACKEND_FAPI_H_ */

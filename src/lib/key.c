@@ -4,8 +4,8 @@
 #include <openssl/rand.h>
 
 #include "attrs.h"
+#include "backend.h"
 #include "checks.h"
-#include "db.h"
 #include "key.h"
 #include "list.h"
 #include "pkcs11.h"
@@ -298,13 +298,13 @@ CK_RV key_gen (
         goto out;
     }
 
-    rv = db_add_new_object(tok, new_public_tobj);
+    rv = backend_add_object(tok, new_public_tobj);
     if (rv != CKR_OK) {
         LOGE("Failed to add public object to db");
         goto out;
     }
 
-    rv = db_add_new_object(tok, new_private_tobj);
+    rv = backend_add_object(tok, new_private_tobj);
     if (rv != CKR_OK) {
         LOGE("Failed to add public object to db");
         goto out;

@@ -2,9 +2,12 @@
 
 #include "config.h"
 #include "backend_fapi.h"
+#include "emitter.h"
+#include "parser.h"
 #include <tss2/tss2_fapi.h>
 
 FAPI_CONTEXT *fctx = NULL;
+int objectids = 0;
 
 CK_RV backend_fapi_init(void) {
     if (fctx != NULL) {
@@ -142,7 +145,7 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
     char *pathlist, *path, *subpath, *strtokr_save = NULL;
     unsigned id;
     char *label;
-    uint8_t *tpm2bPublic, *tpm2bPrivate, *appdata;
+    uint8_t *tpm2bPublic, *tpm2bPrivate, *appdata, *yaml;
     size_t tpm2bPublicSize, tpm2bPrivateSize, appdata_len;
     twist pub, priv, blob;
     token *t;
@@ -232,6 +235,50 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
             LOGE("OOM");
             goto error;
         }
+
+        yaml = appdata + strlen((char *)appdata) + 1;
+
+        while ((size_t)(yaml - appdata) < appdata_len) {
+            LOGV("Current yaml at offset %zi / %zi is: %s",
+                 yaml - appdata, appdata_len, yaml);
+
+            tobject *tobj = tobject_new();
+            if (!tobj) {
+                LOGE("oom");
+                Fapi_Free(appdata);
+                goto error;
+            }
+
+            tobj->id = objectids;
+            objectids += 1;
+
+            if (!parse_attributes_from_string(yaml, strlen((char*)yaml), &tobj->attrs)) {
+                LOGE("Could not parse FAPI attrs, got: \"%s\"", yaml);
+                free(tobj);
+                Fapi_Free(appdata);
+                goto error;
+            }
+
+            rv = object_init_from_attrs(tobj);
+            if (rv != CKR_OK) {
+                LOGE("Object initialization failed");
+                free(tobj);
+                Fapi_Free(appdata);
+                goto error;
+            }
+
+            rv = token_add_tobject_last(tok, tobj);
+            if (rv != CKR_OK) {
+                LOGE("Failed to initialize tobject from FAPI");
+                free(tobj);
+                Fapi_Free(appdata);
+                goto error;
+            }
+
+            yaml += strlen((char *)yaml) + 1;
+            LOGV("\nCurrent next is: %zi / %zi", yaml - appdata, appdata_len);
+        }
+        Fapi_Free(appdata);
 
         rv = tpm_get_existing_primary(t->tctx, &t->pobject.handle, &blob);
         if (rv != CKR_OK) {
@@ -376,4 +423,68 @@ CK_RV backend_fapi_init_user(token *t, const twist sealdata,
     t->sealobject.userauthsalt = newsalthex;
 
     return CKR_OK;
+}
+
+/** Store a new object for a given token in the backend.
+ *
+ * See backend_add_object()
+ *
+ * The object is added to the AppData of the token object
+ * in the FAPI keystore. The different objects are separated
+ * by a \0 delimiter. The first element of the AppData is the
+ * salthex, so the first object starts after the first \0.
+ */
+CK_RV backend_fapi_add_object(token *t, tobject *tobj) {
+    TSS2_RC rc;
+    uint8_t *appdata, *newappdata;
+    size_t appdata_len, newappdata_len;
+
+    LOGE("Adding object to fapi token %i", t->id);
+
+    char *path = tss_path_from_id(t->id, "so");
+    if (!path) {
+        LOGE("OOM");
+        return CKR_GENERAL_ERROR;
+    }
+    char *attrs = emit_attributes_to_string(tobj->attrs);
+    if (!attrs) {
+        LOGE("OOM");
+        free(path);
+        return CKR_GENERAL_ERROR;
+    }
+
+    rc = Fapi_GetAppData(t->fapi.ctx, path, &appdata, &appdata_len);
+    if (rc) {
+        LOGE("Getting FAPI seal appdata failed.");
+        goto error;
+    }
+
+    newappdata_len = appdata_len + strlen(attrs) + 1;
+    newappdata = malloc(newappdata_len);
+    if (!newappdata) {
+        LOGE("OOM");
+        Fapi_Free(appdata);
+        goto error;
+    }
+
+    memcpy(&newappdata[0], &appdata[0], appdata_len);
+    memcpy(&newappdata[appdata_len], attrs, strlen(attrs));
+    newappdata[newappdata_len - 1] = '\0';
+    Fapi_Free(appdata);
+
+    rc = Fapi_SetAppData(t->fapi.ctx, path, newappdata, newappdata_len);
+    free(newappdata);
+    if (rc) {
+        LOGE("Getting FAPI seal appdata failed.");
+        goto error;
+    }
+
+    free(path);
+    free(attrs);
+    return CKR_OK;
+
+error:
+    free(path);
+    free(attrs);
+    return CKR_GENERAL_ERROR;
 }
