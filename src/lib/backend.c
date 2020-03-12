@@ -126,3 +126,26 @@ CK_RV backend_init_user(token *t, const twist sealdata,
         return CKR_GENERAL_ERROR;
     }
 }
+
+/** Store a new object for a given token in the backend.
+ *
+ * Note: Adding the the object to the ring buffer in the token
+ *       struct is done independantly.
+ *
+ * @param[in,out] t The token to add the object to.
+ * @param[in] tobj The object to store.
+ * @returns TODO
+ */
+CK_RV backend_add_object(token *t, tobject *tobj) {
+    switch (t->type) {
+    case token_type_esysdb:
+        LOGE("Adding object to token using esysdb backend.");
+        return backend_esysdb_add_object(t, tobj);
+    case token_type_fapi:
+        LOGE("Adding object to token using fapi backend.");
+        return backend_fapi_add_object(t, tobj);
+    default:
+        assert(1);
+        return CKR_GENERAL_ERROR;
+    }
+}

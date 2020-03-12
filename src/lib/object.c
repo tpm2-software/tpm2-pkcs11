@@ -6,6 +6,7 @@
 #include <openssl/obj_mac.h>
 
 #include "attrs.h"
+#include "backend.h"
 #include "checks.h"
 #include "db.h"
 #include "emitter.h"
@@ -731,7 +732,7 @@ static CK_RV handle_rsa_public(token *tok, CK_ATTRIBUTE_PTR templ, CK_ULONG coun
     tmp_attrs = NULL;
 
     /* add the object to the db */
-    rv = db_add_new_object(tok, obj);
+    rv = backend_add_object(tok, obj);
     if (rv != CKR_OK) {
         goto out;
     }

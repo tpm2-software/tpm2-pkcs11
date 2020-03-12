@@ -206,3 +206,12 @@ out:
 
     return rv;
 }
+
+/** Store a new object for a given token in the backend.
+ *
+ * See backend_add_object()
+ */
+CK_RV backend_esysdb_add_object(token *t, tobject *tobj) {
+    LOGV("Adding object to esysdb backend");
+    return db_add_new_object(t, tobj);
+}
