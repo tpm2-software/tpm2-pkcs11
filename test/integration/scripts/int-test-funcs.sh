@@ -112,3 +112,79 @@ daemon_stop ()
     fi
     return ${ret}
 }
+
+function setup_fapi() {
+    tempdir=`pwd`/$(mktemp -d tss2_fapi.XXXXXX)
+
+    KEYSTORE_USER=keystore_user
+    KEYSTORE_SYSTEM=keystore_system
+    LOG_DIR=log
+    PROFILE_NAME=P_RSA
+
+    mkdir -p $tempdir/$KEYSTORE_USER/policy $tempdir/$KEYSTORE_SYSTEM/policy \
+        $tempdir/$LOG_DIR
+
+cat > $tempdir/fapi_config.json <<EOF
+{
+    "profile_name": "${PROFILE_NAME}",
+    "profile_dir": "$tempdir/",
+    "user_dir": "$tempdir/${KEYSTORE_USER}",
+    "system_dir": "$tempdir/${KEYSTORE_SYSTEM}",
+    "tcti": "${TPM2_PKCS11_TCTI}",
+    "system_pcrs" : [],
+    "log_dir" : "$tempdir/${LOG_DIR}",
+}
+EOF
+
+    export TSS2_FAPICONF=$tempdir/fapi_config.json
+    export TEMP_DIR=$tempdir
+
+    setup_profile $tempdir
+}
+function setup_profile() {
+# Setup Profile
+cat > $tempdir/${PROFILE_NAME}.json <<EOF
+{
+    "type": "TPM2_ALG_RSA",
+    "nameAlg":"TPM2_ALG_SHA256",
+    "srk_template": "system,restricted,decrypt,0x81000001",
+    "srk_persistent": 1,
+    "ek_template":  "system,restricted,decrypt",
+    "ecc_signing_scheme": {
+        "scheme":"TPM2_ALG_ECDSA",
+        "details":{
+            "hashAlg":"TPM2_ALG_SHA256"
+        },
+    },
+    "rsa_signing_scheme": {
+        "scheme":"TPM2_ALG_RSAPSS",
+        "details":{
+            "hashAlg":"TPM2_ALG_SHA256"
+        }
+    },
+    "rsa_decrypt_scheme": {
+        "scheme":"TPM2_ALG_OAEP",
+        "details":{
+            "hashAlg":"TPM2_ALG_SHA256"
+        }
+    },
+    "sym_mode":"TPM2_ALG_CFB",
+    "sym_parameters": {
+        "algorithm":"TPM2_ALG_AES",
+        "keyBits":"128",
+        "mode":"TPM2_ALG_CFB"
+    },
+    "sym_block_size": 16,
+    "pcr_selection": [
+        { "hash": "TPM2_ALG_SHA1",
+          "pcrSelect": [ 9, 15, 13 ]
+        },
+        { "hash": "TPM2_ALG_SHA256",
+          "pcrSelect": [ 8, 16, 14 ]
+        }
+    ],
+    "exponent": 0,
+    "keyBits": 2048
+}
+EOF
+}

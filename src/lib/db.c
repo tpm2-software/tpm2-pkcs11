@@ -139,7 +139,7 @@ error:
     return NULL;
 }
 
-static int init_tobjects(token *tok) {
+int init_tobjects(token *tok) {
 
     const char *sql =
             "SELECT * FROM tobjects WHERE tokid=?";
