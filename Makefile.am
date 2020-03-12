@@ -74,6 +74,7 @@ AM_DISTCHECK_CONFIGURE_FLAGS = --with-p11kitconfigdir='$$(datarootdir)/p11kitcon
 # test harness configuration
 AM_TESTS_ENVIRONMENT = \
     T=$(abs_top_srcdir) \
+    PYTHON_INTERPRETER=@PYTHON_INTERPRETER@ \
     TEST_FUNC_LIB=$(srcdir)/test/integration/scripts/int-test-funcs.sh \
     TEST_FIXTURES=$(abs_top_srcdir)/test/integration/fixtures \
     PATH=$(abs_top_srcdir)/tools:./src:$(PATH) \
