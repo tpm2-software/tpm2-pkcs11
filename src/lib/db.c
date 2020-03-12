@@ -126,38 +126,10 @@ static tobject *db_tobject_new(sqlite3_stmt *stmt) {
 
     assert(tobj->id);
 
-    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_OBJAUTH_ENC);
-    if (a && a->pValue && a->ulValueLen) {
-        tobj->objauth = twistbin_new(a->pValue, a->ulValueLen);
-        if (!tobj->objauth) {
-            LOGE("oom");
-            goto error;
-        }
-    }
-
-    a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_PUB_BLOB);
-    if (a && a->pValue && a->ulValueLen) {
-
-        tobj->pub = twistbin_new(a->pValue, a->ulValueLen);
-        if (!tobj->pub) {
-            LOGE("oom");
-            goto error;
-        }
-    }
-
-    a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_PRIV_BLOB);
-    if (a && a->pValue && a->ulValueLen) {
-
-        if (!tobj->pub) {
-            LOGE("objects with CKA_TPM2_PUB_BLOB should have CKA_TPM2_PRIV_BLOB");
-            goto error;
-        }
-
-        tobj->priv = twistbin_new(a->pValue, a->ulValueLen);
-        if (!tobj->priv) {
-            LOGE("oom");
-            goto error;
-        }
+    CK_RV rv = object_init_from_attrs(tobj);
+    if (rv != CKR_OK) {
+        LOGE("Object initialization failed");
+        goto error;
     }
 
     return tobj;
