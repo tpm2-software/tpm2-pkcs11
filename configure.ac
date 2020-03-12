@@ -141,6 +141,11 @@ AC_DEFUN([integration_test_checks], [
     AS_IF([test "x$bash" != "xyes"],
       [AC_MSG_ERROR([Integration tests enabled but bash executable not found.])])
 
+  AM_PATH_PYTHON([3.7],
+    [AC_SUBST([PYTHON_INTERPRETER], [$PYTHON])],
+    [AC_MSG_ERROR([Integration tests enabled but python >= 3.7 executable not found.])]
+  )
+
   AS_IF([test "x$have_javac" = "xno"],
     [AC_MSG_ERROR([Integration tests enabled but no Java compiler was found])])
   AX_CHECK_CLASS([org.junit.Assert], ,
