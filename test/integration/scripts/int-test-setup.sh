@@ -184,7 +184,7 @@ if [ -z "${TSETUP_SCRIPT}" ]; then
     ret_test=$?
 else
 	echo "Run setup script ${TSETUP_SCRIPT}"
-    sh ${TSETUP_SCRIPT} --tmpdir=${SIM_TMP_DIR}
+    bash ${TSETUP_SCRIPT} --tmpdir=${SIM_TMP_DIR}
     ret_test=$?
     if [ $ret_test -ne 0 ]; then
         echo "Failed to run the setup script"
