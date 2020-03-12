@@ -10,6 +10,8 @@
   * db: Modfiy search and create behavior. See
     [docs/INITIALIZING.md](https://github.com/tpm2-software/tpm2-pkcs11/blob/master/docs/INITIALIZING.md)
     for details.
+  * Fix printf(3) format specifier errors.
+  * ci: increase CI coverage to: Fedora 30, Ubuntu 16.04, Ubuntu 18.04.
 
 ### 1.1.0 - 2020-03-09
   * DB Schema Change from 1 to 3.
