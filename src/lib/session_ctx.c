@@ -266,9 +266,10 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
         return CKR_OK;
     }
 
-
+    LOGV("token parent object handle is 0x%08x", tok->pobject.handle);
     CK_RV tmp = tpm_session_start(tok->tctx, tok->pobject.objauth, tok->pobject.handle);
     if (tmp != CKR_OK) {
+        LOGE("Could not start Auth Session with the TPM.");
         return tmp;
     }
 

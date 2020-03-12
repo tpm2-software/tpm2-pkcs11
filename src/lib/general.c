@@ -246,6 +246,7 @@ CK_RV general_init(void *init_args) {
 
     rv = slot_init();
     if (rv != CKR_OK) {
+        (void)backend_destroy();
         goto err;
     }
 

@@ -10,6 +10,8 @@
 #include "twist.h"
 #include "utils.h"
 
+#include <tss2/tss2_fapi.h>
+
 typedef struct token_config token_config;
 struct token_config {
     bool is_initialized;  /* token initialization state */
@@ -48,6 +50,11 @@ struct sealobject {
     uint32_t handle;
 };
 
+enum token_type {
+    token_type_esysdb = 0,
+    token_type_fapi
+};
+
 typedef struct token token;
 struct token {
 
@@ -55,7 +62,10 @@ struct token {
     unsigned pid;
     unsigned char label[32];
 
-    union { /* anon union for backend data */
+    enum token_type type;
+
+//TODO: uncomment union, once both backends are completely separated.
+//    union { /* anon union for backend data */
         struct {
             token_config config;
 
@@ -63,9 +73,14 @@ struct token {
 
             sealobject sealobject;
 
-            tpm_ctx *tctx;
         }; /* esysdb */
-    };
+        struct {
+            FAPI_CONTEXT *ctx;
+        } fapi;
+//    };
+
+    /* This context will be filled by fapi for use with esys-only commands. */
+    tpm_ctx *tctx;
 
     twist wappingkey;
 

@@ -5,11 +5,11 @@ ACLOCAL_AMFLAGS = -I m4 --install
 AM_CFLAGS       = $(INCLUDE_DIRS) $(EXTRA_CFLAGS) $(CODE_COVERAGE_CFLAGS) \
                   $(TSS2_ESYS_CFLAGS) $(TSS2_MU_CFLAGS) $(TSS2_TCTILDR_CFLAGS) \
 		  $(TSS2_RC_CFLAGS) $(SQLITE3_CFLAGS) $(PTHREAD_CFLAGS) \
-		  $(CRYPTO_CFLAGS) $(YAML_CFLAGS)
+		  $(CRYPTO_CFLAGS) $(YAML_CFLAGS) $(TSS2_FAPI_CFLAGS)
 
 AM_LDFLAGS      = $(EXTRA_LDFLAGS) $(CODE_COVERAGE_LIBS) $(TSS2_ESYS_LIBS) \
                   $(TSS2_MU_LIBS) $(TSS2_TCTILDR_LIBS) $(TSS2_RC_LIBS) \
-		  $(SQLITE3_LIBS) $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(YAML_LIBS)
+		  $(SQLITE3_LIBS) $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(YAML_LIBS) $(TSS2_FAPI_LIBS)
 
 check-programs: $(check_PROGRAMS)
 
@@ -133,6 +133,15 @@ check_PROGRAMS += \
 
 # add test scripts
 check_SCRIPTS += $(integration_scripts)
+
+#Cannot be part of $(integration_scripts) since its not EXTRA_DIST
+check_SCRIPTS += test/integration/pkcs11-tool-init-fapi.sh.nosetup
+
+test/integration/pkcs11-tool-init-fapi.sh.nosetup: test/integration/pkcs11-tool-init.sh.nosetup
+	$(AM_V_GEN)(echo "#!/usr/bin/env bash"; echo "export FAPI_PREVIEW=true"; cat $^)>$@ \
+		&& chmod +x "$@"
+
+CLEANFILES += test/integration/pkcs11-tool-init-fapi.sh.nosetup
 
 LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
 

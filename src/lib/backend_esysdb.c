@@ -19,6 +19,14 @@ CK_RV backend_esysdb_destroy(void) {
     return CKR_OK;
 }
 
+CK_RV backend_esysdb_ctx_new(token *t) {
+    return tpm_ctx_new(t->config.tcti, &t->tctx);
+}
+
+void backend_esysdb_ctx_free(token *t) {
+    tpm_ctx_free(t->tctx);
+}
+
 static CK_RV get_or_create_primary(token *t) {
 
     twist blob = NULL;
@@ -107,10 +115,94 @@ error:
     return rv;
 }
 
-/** Retrieve the all tokens available.
+/** Retrieve all esys tokens available.
  *
  * See backend_get_tokens()
  */
 CK_RV backend_esysdb_get_tokens(token **tok, size_t *len) {
     return db_get_tokens(tok, len);
+}
+
+static void change_token_mem_data(token *tok, bool is_so, uint32_t new_seal_handle,
+        twist newsalthex, twist newprivblob, twist newpubblob) {
+
+    tok->sealobject.handle = new_seal_handle;
+    twist *authsalt;
+    twist *priv;
+    twist *pub;
+
+    if (is_so) {
+        authsalt = &tok->sealobject.soauthsalt;
+        priv = &tok->sealobject.sopriv;
+        pub = &tok->sealobject.sopub;
+    } else {
+        authsalt = &tok->sealobject.userauthsalt;
+        priv = &tok->sealobject.userpriv;
+        pub = &tok->sealobject.userpub;
+    }
+
+    twist_free(*authsalt);
+    twist_free(*priv);
+
+    *authsalt = newsalthex;
+    *priv = newprivblob;
+
+    if (newpubblob) {
+        twist_free(*pub);
+        *pub = newpubblob;
+    }
+}
+
+/** Initialize the user PIN data for a given token.
+ *
+ * See backend_init_user()
+ */
+CK_RV backend_esysdb_init_user(token *tok, const twist sealdata,
+                        const twist newauthhex, const twist newsalthex) {
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    twist newpubblob = NULL;
+    twist newprivblob = NULL;
+
+    /* create a new seal object and seal the data */
+    uint32_t new_seal_handle = 0;
+
+    rv = tpm2_create_seal_obj(tok->tctx,
+            tok->pobject.objauth,
+            tok->pobject.handle,
+            newauthhex,
+            tok->sealobject.userpub,
+            sealdata,
+            &newpubblob,
+            &newprivblob,
+            &new_seal_handle);
+    if (rv != CKR_OK) {
+        goto out;
+    }
+
+    /* update the db data */
+    rv = db_update_for_pinchange(
+            tok,
+            false,
+            /* new seal object auth metadata */
+            newsalthex,
+
+            /* private and public blobs */
+            newprivblob,
+            newpubblob);
+    if (rv != CKR_OK) {
+        goto out;
+    }
+
+     /* update in-memory metadata for seal object and primary object */
+    change_token_mem_data(tok, false, new_seal_handle, newsalthex, newprivblob, newpubblob);
+
+out:
+    /* If the function failed, then these pointers ARE NOT CLAIMED and must be free'd */
+    if (rv != CKR_OK) {
+        twist_free(newprivblob);
+        twist_free(newpubblob);
+    }
+
+    return rv;
 }

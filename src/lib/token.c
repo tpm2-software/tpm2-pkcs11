@@ -34,7 +34,7 @@ CK_RV token_min_init(token *t) {
     /*
      * Initialize the per-token tpm context
      */
-    rv = tpm_ctx_new(t->config.tcti, &t->tctx);
+    rv = backend_ctx_new(t);
     if (rv != CKR_OK) {
         LOGE("Could not initialize tpm ctx: 0x%lx", rv);
         return rv;
@@ -229,7 +229,7 @@ void token_free(token *t) {
     }
     t->tobjects.head = t->tobjects.tail = NULL;
 
-    tpm_ctx_free(t->tctx);
+    backend_ctx_free(t);
     t->tctx = NULL;
 
     mutex_destroy(t->mutex);
@@ -576,9 +576,6 @@ CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
     twist newsalthex = NULL;
     twist newauthhex = NULL;
 
-    twist newpubblob = NULL;
-    twist newprivblob = NULL;
-
     twist sealdata = NULL;
 
     tnewpin = twistbin_new(newpin, newlen);
@@ -600,38 +597,10 @@ CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
         goto out;
     }
 
-    /* create a new seal object and seal the data */
-    uint32_t new_seal_handle = 0;
-
-    rv = tpm2_create_seal_obj(tok->tctx,
-            tok->pobject.objauth,
-            tok->pobject.handle,
-            newauthhex,
-            tok->sealobject.userpub,
-            sealdata,
-            &newpubblob,
-            &newprivblob,
-            &new_seal_handle);
+    rv = backend_init_user(tok, sealdata, newauthhex, newsalthex);
     if (rv != CKR_OK) {
         goto out;
     }
-
-    /* update the db data */
-    rv = db_update_for_pinchange(
-            tok,
-            false,
-            /* new seal object auth metadata */
-            newsalthex,
-
-            /* private and public blobs */
-            newprivblob,
-            newpubblob);
-    if (rv != CKR_OK) {
-        goto out;
-    }
-
-     /* update in-memory metadata for seal object and primary object */
-    change_token_mem_data(tok, false, new_seal_handle, newsalthex, newprivblob, newpubblob);
 
     rv = CKR_OK;
 
@@ -641,8 +610,6 @@ out:
     if (rv != CKR_OK) {
         twist_free(newkeysalthex);
         twist_free(newsalthex);
-        twist_free(newprivblob);
-        twist_free(newpubblob);
     }
 
     twist_free(sealdata);

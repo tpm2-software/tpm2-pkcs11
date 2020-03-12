@@ -175,6 +175,9 @@ echo ${TPM2TOOLS_TCTI}
 export TPM2_PKCS11_TCTI="tabrmd:${TABRMD_TEST_TCTI_CONF}"
 echo ${TPM2_PKCS11_TCTI}
 
+setup_fapi
+tss2_provision
+
 # if provided, run the test script
 if [ -z "${TSETUP_SCRIPT}" ]; then
     echo "No setup script provided"
@@ -198,6 +201,8 @@ else
         ret_test=$?
     fi
 fi
+
+tss2_list
 
 # This sleep is sadly necessary: If we kill the tabrmd w/o sleeping for a
 # second after the test finishes the simulator will die too. Bug in the
