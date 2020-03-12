@@ -3,28 +3,11 @@
 
 set -exo pipefail
 
+source "$T/test/integration/scripts/helpers.sh"
+
 PIN="myuserpin"
 token_label="label"
 key_label="rsa1"
-
-setup_asan()
-{
-    if [ "$ASAN_ENABLED" = "true" ]; then
-        # To get line numbers set up the asan symbolizer
-        clang_version=`$CC --version | head -n 1 | cut -d\  -f 3-3 | cut -d\. -f 1-3 | cut -d- -f 1-1`
-        # Sometimes the version string has an Ubuntu on the front of it and the field
-        # location changes
-        if [ $clang_version == "version" ]; then
-            clang_version=`$CC --version | head -n 1 | cut -d\  -f 4-4 | cut -d\. -f 1-3`
-        fi
-        echo "Detected clang version: $clang_version"
-        minor_maj=`echo "$clang_version" | cut -d\. -f 1-2`
-        export LD_PRELOAD=/usr/lib/llvm-$minor_maj/lib/clang/$clang_version/lib/linux/libclang_rt.asan-$(arch).so
-        echo "export LD_PRELOAD=\"$LD_PRELOAD\""
-        export ASAN_OPTIONS=detect_leaks=0
-        echo "turning off asan detection for running commands..."
-    fi
-}
 
 function cleanup() {
     rm -f objlist.yaml key.attrs.yaml certificate.der.hex certificate.der certificate.pem \
