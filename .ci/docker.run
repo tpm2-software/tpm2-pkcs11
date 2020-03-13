@@ -39,9 +39,8 @@ if [[ "$CC" == clang* ]]; then
     echo "No llvm symbolizer found at: $ASAN_SYMBOLIZER_PATH"
     unset ASAN_SYMBOLIZER_PATH
   fi
-else #GCC
-  export ENABLE_COVERAGE=true
-  echo "Exported ENABLE_COVERAGE=true"
+else
+  echo "Enabling Code Coverage"
   config_flags="--disable-hardening --enable-code-coverage"
 fi
 
