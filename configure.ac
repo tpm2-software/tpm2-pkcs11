@@ -112,6 +112,7 @@ m4_popdef([AC_MSG_ERROR])
 AC_DEFUN([integration_test_checks], [
 
   PKG_CHECK_MODULES([CMOCKA],[cmocka])
+  PKG_CHECK_MODULES([OPENSC_PKCS11],[opensc-pkcs11])
 
   AC_CHECK_PROG([tpm_server], [tpm_server], [yes], [no])
   AS_IF([test "x$tpm_server" != "xyes"],
