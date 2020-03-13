@@ -141,6 +141,10 @@ AC_DEFUN([integration_test_checks], [
     AS_IF([test "x$bash" != "xyes"],
       [AC_MSG_ERROR([Integration tests enabled but bash executable not found.])])
 
+  AC_CHECK_PROG([sqlite3], [sqlite3], [yes], [no])
+    AS_IF([test "x$sqlite3" != "xyes"],
+      [AC_MSG_ERROR([Integration tests enabled but sqlite3 executable not found.])])
+
   AM_PATH_PYTHON([3.7],
     [AC_SUBST([PYTHON_INTERPRETER], [$PYTHON])],
     [AC_MSG_ERROR([Integration tests enabled but python >= 3.7 executable not found.])]
