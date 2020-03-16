@@ -774,7 +774,19 @@ static bool tpm_loadexternal(tpm_ctx *ctx,
         TPM2B_PUBLIC *pub,
         uint32_t *handle) {
 
-    TSS2_RC rval = Esys_LoadExternal(
+    TSS2_RC rval;
+#ifdef ESYS_3
+    rval = Esys_LoadExternal(
+           ctx->esys_ctx,
+           ESYS_TR_NONE,
+           ESYS_TR_NONE,
+           ESYS_TR_NONE,
+           NULL,
+           pub,
+           ESYS_TR_RH_NULL,
+           handle);
+#else /* ESYS_3 */
+    rval = Esys_LoadExternal(
            ctx->esys_ctx,
            ESYS_TR_NONE,
            ESYS_TR_NONE,
@@ -783,6 +795,7 @@ static bool tpm_loadexternal(tpm_ctx *ctx,
            pub,
            TPM2_RH_NULL,
            handle);
+#endif /* ESYS_3 */
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Esys_LoadExternal: %s:", Tss2_RC_Decode(rval));
         return false;
