@@ -48,6 +48,10 @@ AC_DEFUN([do_esapi_manage_flags], [
 # Check for ESYS version below 2.2.1 which requires us to manage ESYS session flags
 PKG_CHECK_EXISTS([tss2-esys < 2.2.1], [do_esapi_manage_flags])
 
+# ESYS >= 3.0 uses a different ABI param hierarchy in Esys_LoadExternal()
+PKG_CHECK_EXISTS([tss2-esys >= 3.0],
+                 [AC_DEFINE([ESYS_3], [1], [Esys3])])
+
 # require sqlite3 and libcrypto
 PKG_CHECK_MODULES([SQLITE3],     [sqlite3])
 PKG_CHECK_MODULES([YAML],        [yaml-0.1])
