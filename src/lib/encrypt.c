@@ -54,7 +54,7 @@ void encrypt_op_data_free(encrypt_op_data **opdata) {
     }
 }
 
-CK_RV sw_encrypt_data_init(CK_MECHANISM *mechanism, tobject *tobj, sw_encrypt_data **enc_data) {
+CK_RV sw_encrypt_data_init(mdetail *mdtl, CK_MECHANISM *mechanism, tobject *tobj, sw_encrypt_data **enc_data) {
 
     EVP_PKEY *pkey = NULL;
     CK_RV rv = ssl_util_tobject_to_evp(&pkey, tobj);
@@ -63,21 +63,23 @@ CK_RV sw_encrypt_data_init(CK_MECHANISM *mechanism, tobject *tobj, sw_encrypt_da
     }
 
     int padding = 0;
-    rv = mech_get_padding(mechanism, &padding);
+    rv = mech_get_padding(mdtl, mechanism, &padding);
     if (rv != CKR_OK) {
         return rv;
     }
 
     const EVP_MD *md = NULL;
     bool is_hashing_needed = false;
-    rv = mech_is_hashing_needed(mechanism,
+    rv = mech_is_hashing_needed(
+            mdtl,
+            mechanism,
             &is_hashing_needed);
     if (rv != CKR_OK) {
         return rv;
     }
 
     if (is_hashing_needed) {
-        rv = mech_get_digester(mechanism, &md);
+        rv = mech_get_digester(mdtl, mechanism, &md);
         if (rv != CKR_OK) {
             return rv;
         }
@@ -187,9 +189,10 @@ static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata,
      */
     if (obj_class == CKO_PUBLIC_KEY) {
         opdata->use_sw = true;
-        rv = sw_encrypt_data_init(mechanism, tobj, &opdata->cryptopdata.sw_enc_data);
+        rv = sw_encrypt_data_init(tok->mdtl, mechanism, tobj, &opdata->cryptopdata.sw_enc_data);
     } else {
-        rv = mech_get_tpm_opdata(tok->tctx, mechanism, tobj,
+        rv = mech_get_tpm_opdata(tok->mdtl,
+                tok->tctx, mechanism, tobj,
                 &opdata->cryptopdata.tpm_opdata);
     }
 

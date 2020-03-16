@@ -412,7 +412,6 @@ bool handle_config_event(yaml_event_t *e,
             } else {
                 LOGE("Unknown key, got: \"%s\"\n",
                         state->key);
-                return false;
             }
 
             state->key[0] = '\0';

@@ -1144,9 +1144,10 @@ static void set_common_opdata(tpm_op_data *opdata, tpm_ctx *tctx, tobject *tobj,
     opdata->op_type = key_type;
 }
 
-CK_RV tpm_rsa_oaep_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_rsa_oaep_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
     assert(outdata);
     assert(mech);
+    UNUSED(m);
 
     /*
      * At the current moment, this is the only thing that cannot be flattened and requires PARAMS
@@ -1214,7 +1215,8 @@ CK_RV tpm_rsa_oaep_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tob
     return CKR_OK;
 }
 
-CK_RV tpm_rsa_pkcs_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_rsa_pkcs_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(m);
     UNUSED(mech);
     assert(outdata);
     assert(mech);
@@ -1234,7 +1236,9 @@ CK_RV tpm_rsa_pkcs_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tob
     return CKR_OK;
 }
 
-CK_RV tpm_rsa_pss_sha1_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_rsa_pss_sha1_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
     UNUSED(mech);
     assert(outdata);
     assert(mech);
@@ -1254,7 +1258,9 @@ CK_RV tpm_rsa_pss_sha1_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject 
     return CKR_OK;
 }
 
-CK_RV tpm_rsa_pss_sha256_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_rsa_pss_sha256_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
     UNUSED(mech);
     assert(outdata);
     assert(mech);
@@ -1274,7 +1280,9 @@ CK_RV tpm_rsa_pss_sha256_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobjec
     return CKR_OK;
 }
 
-CK_RV tpm_rsa_pss_sha384_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_rsa_pss_sha384_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
     UNUSED(mech);
     assert(outdata);
     assert(mech);
@@ -1294,7 +1302,9 @@ CK_RV tpm_rsa_pss_sha384_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobjec
     return CKR_OK;
 }
 
-CK_RV tpm_rsa_pss_sha512_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_rsa_pss_sha512_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
     UNUSED(mech);
     assert(outdata);
     assert(mech);
@@ -1314,7 +1324,9 @@ CK_RV tpm_rsa_pss_sha512_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobjec
     return CKR_OK;
 }
 
-CK_RV tpm_rsa_pkcs_sha1_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_rsa_pkcs_sha1_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
     UNUSED(mech);
     assert(outdata);
     assert(mech);
@@ -1334,7 +1346,9 @@ CK_RV tpm_rsa_pkcs_sha1_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject
     return CKR_OK;
 }
 
-CK_RV tpm_rsa_pkcs_sha256_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_rsa_pkcs_sha256_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
     UNUSED(mech);
     assert(outdata);
     assert(mech);
@@ -1354,7 +1368,9 @@ CK_RV tpm_rsa_pkcs_sha256_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobje
     return CKR_OK;
 }
 
-CK_RV tpm_rsa_pkcs_sha384_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_rsa_pkcs_sha384_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
     UNUSED(mech);
     assert(outdata);
     assert(mech);
@@ -1374,7 +1390,9 @@ CK_RV tpm_rsa_pkcs_sha384_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobje
     return CKR_OK;
 }
 
-CK_RV tpm_rsa_pkcs_sha512_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_rsa_pkcs_sha512_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
     UNUSED(mech);
     assert(outdata);
     assert(mech);
@@ -1394,7 +1412,9 @@ CK_RV tpm_rsa_pkcs_sha512_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobje
     return CKR_OK;
 }
 
-CK_RV tpm_ec_ecdsa_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_ec_ecdsa_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
     UNUSED(mech);
     assert(outdata);
     assert(mech);
@@ -1419,7 +1439,9 @@ CK_RV tpm_ec_ecdsa_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tob
     return CKR_OK;
 }
 
-CK_RV tpm_ec_ecdsa_sha1_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_ec_ecdsa_sha1_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
     UNUSED(mech);
     assert(outdata);
     assert(mech);
@@ -1455,7 +1477,9 @@ static CK_RV aes_common_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *to
     return CKR_OK;
 }
 
-CK_RV tpm_aes_cbc_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_aes_cbc_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
     assert(outdata);
     assert(mech);
 
@@ -1477,7 +1501,9 @@ CK_RV tpm_aes_cbc_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj
     return CKR_OK;
 }
 
-CK_RV tpm_aes_cfb_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_aes_cfb_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
     assert(outdata);
     assert(mech);
 
@@ -1499,7 +1525,9 @@ CK_RV tpm_aes_cfb_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj
     return CKR_OK;
 }
 
-CK_RV tpm_aes_ecb_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_aes_ecb_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
     assert(outdata);
     assert(mech);
 

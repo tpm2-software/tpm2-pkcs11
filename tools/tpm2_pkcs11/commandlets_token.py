@@ -12,6 +12,7 @@ from .command import Command
 from .command import commandlet
 from .db import Db
 from .utils import bytes_to_file
+from .utils import check_pss_signature
 from .utils import TemporaryDirectory
 from .utils import hash_pass
 from .utils import rand_hex_str
@@ -239,8 +240,13 @@ class AddTokenCommand(Command):
                 sosealauth['hash'],
                 seal=wrappingkey)
 
+            pss_sig_good = check_pss_signature(tpm2, tr_handle, pobject['objauth'])
+
             # If this succeeds, we update the token table
-            config = {'token-init': True}
+            config = {
+                'token-init': True,
+                'pss-sigs-good' : pss_sig_good
+            }
             tokid = db.addtoken(pobject['id'], config, label=label)
 
             # now we update the sealobject table with the tokid to seal objects mapping
@@ -250,13 +256,26 @@ class AddTokenCommand(Command):
     @staticmethod
     def do_token_noninit(db, args):
 
-        pid = args['pid']
+        with TemporaryDirectory() as d:
+            tpm2 = Tpm2(d)
 
-        pobject = db.getprimary(pid)
+            pid = args['pid']
 
-        config = [{'token-init': False}]
+            pobject = db.getprimary(pid)
 
-        db.addtoken(pobject['id'], config)
+            tr_handle = bytes_to_file(pobject['handle'], d)
+
+            pobjauth = pobject['objauth']
+
+            pss_sig_good = check_pss_signature(tpm2, tr_handle, pobjauth)
+
+            # If this succeeds, we update the token table
+            config = {
+                'token-init': False,
+                'pss-sigs-good' : pss_sig_good
+            }
+
+            db.addtoken(pobject['id'], config)
 
     def __call__(self, args):
 

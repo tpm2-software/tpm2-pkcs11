@@ -55,6 +55,8 @@ enum token_type {
     token_type_fapi
 };
 
+typedef struct mdetail mdetail;
+
 typedef struct token token;
 struct token {
 
@@ -92,6 +94,8 @@ struct token {
     session_table *s_table;
 
     token_login_state login_state;
+
+    mdetail *mdtl;
 
     void *mutex;
 };
