@@ -5,6 +5,7 @@
 
 #include <stdlib.h>
 
+#include "mech.h"
 #include "pkcs11.h"
 #include "tpm.h"
 #include "twist.h"
@@ -35,7 +36,8 @@ struct sw_encrypt_data {
 encrypt_op_data *encrypt_op_data_new(void);
 void encrypt_op_data_free(encrypt_op_data **opdata);
 
-CK_RV sw_encrypt_data_init(CK_MECHANISM *mechanism, tobject *tobj, sw_encrypt_data **enc_data);
+CK_RV sw_encrypt_data_init(mdetail *mdtl,
+        CK_MECHANISM *mechanism, tobject *tobj, sw_encrypt_data **enc_data);
 
 CK_RV encrypt_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key);
 static inline CK_RV encrypt_init(session_ctx *ctx, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {

@@ -37,27 +37,41 @@ enum mechanism_flags {
     mf_force_synthetic     = 1 << 11,
 };
 
+typedef struct mdetail_entry mdetail_entry;
+typedef struct nid_detail nid_detail;
+typedef struct rsa_detail rsa_detail;
+
+struct rsa_detail {
+    CK_ULONG bits;
+    bool supported;
+};
+
+struct nid_detail {
+    int nid;
+    bool supported;
+};
+
 /*
  * Validates that the mechanism parameters are sane and supported
  */
-typedef CK_RV (*fn_validator)(CK_MECHANISM_PTR mech, attr_list *attrs);
+typedef CK_RV (*fn_validator)(mdetail *details, CK_MECHANISM_PTR mech, attr_list *attrs);
 
 /*
  * Some crypto operations can be synthesized (padding done off hw and raw crypto performed)
  * This routine would do all those steps.
  */
-typedef CK_RV (*fn_synthesizer)(CK_MECHANISM_PTR mech, attr_list *attrs,
+typedef CK_RV (*fn_synthesizer)(mdetail *m,
+        CK_MECHANISM_PTR mech, attr_list *attrs,
         CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
 
 typedef CK_RV (*fn_get_halg)(CK_MECHANISM_PTR mech, CK_MECHANISM_TYPE *halg);
 
-typedef CK_RV (*fn_get_digester)(CK_MECHANISM_PTR mech, const EVP_MD **md);
+typedef CK_RV (*fn_get_digester)(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD **md);
 
-typedef CK_RV (*fn_get_tpm_opdata)(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **encdata);
+typedef CK_RV (*fn_get_tpm_opdata)(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **encdata);
 
-typedef struct mdetail mdetail;
-struct mdetail {
+struct mdetail_entry {
     CK_MECHANISM_TYPE type;
 
     fn_validator validator;
@@ -71,30 +85,33 @@ struct mdetail {
     mechanism_flags flags;
 };
 
-#define DO_INIT(tctx) \
-do { \
-    CK_RV rv = mech_init(tctx); \
-    if (rv != CKR_OK) { \
-        return rv; \
-    } \
-} while (0)
+struct mdetail {
+    size_t mdetail_len;
+    mdetail_entry *mech_entries;
 
-static CK_RV rsa_keygen_validator(CK_MECHANISM_PTR mech, attr_list *attrs);
-static CK_RV rsa_pkcs_validator(CK_MECHANISM_PTR mech, attr_list *attrs);
-static CK_RV rsa_pss_validator(CK_MECHANISM_PTR mech, attr_list *attrs);
-static CK_RV rsa_oaep_validator(CK_MECHANISM_PTR mech, attr_list *attrs);
-static CK_RV rsa_pkcs_hash_validator(CK_MECHANISM_PTR mech, attr_list *attrs);
-static CK_RV rsa_pss_hash_validator(CK_MECHANISM_PTR mech, attr_list *attrs);
-static CK_RV ecc_keygen_validator(CK_MECHANISM_PTR mech, attr_list *attrs);
-static CK_RV ecdsa_validator(CK_MECHANISM_PTR mech, attr_list *attrs);
-static CK_RV hash_validator(CK_MECHANISM_PTR mech, attr_list *attrs);
-static CK_RV rsa_pkcs_synthesizer(CK_MECHANISM_PTR mech, attr_list *attrs,
+    size_t rsa_detail_len;
+    rsa_detail *rsa_entries;
+
+    size_t nid_detail_len;
+    nid_detail *nid_entries;
+};
+
+static CK_RV rsa_keygen_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
+static CK_RV rsa_pkcs_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
+static CK_RV rsa_pss_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
+static CK_RV rsa_oaep_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
+static CK_RV rsa_pkcs_hash_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
+static CK_RV rsa_pss_hash_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
+static CK_RV ecc_keygen_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
+static CK_RV ecdsa_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
+static CK_RV hash_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
+static CK_RV rsa_pkcs_synthesizer(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs,
         CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
-static CK_RV rsa_pss_synthesizer(CK_MECHANISM_PTR mech, attr_list *attrs,
+static CK_RV rsa_pss_synthesizer(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs,
         CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
-static CK_RV rsa_pkcs_hash_synthesizer(CK_MECHANISM_PTR mech, attr_list *attrs,
+static CK_RV rsa_pkcs_hash_synthesizer(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs,
         CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
 static CK_RV rsa_pss_get_halg(CK_MECHANISM_PTR mech, CK_MECHANISM_TYPE_PTR halg);
@@ -104,18 +121,16 @@ static CK_RV sha256_get_halg(CK_MECHANISM_PTR mech, CK_MECHANISM_TYPE_PTR halg);
 static CK_RV sha384_get_halg(CK_MECHANISM_PTR mech, CK_MECHANISM_TYPE_PTR halg);
 static CK_RV sha512_get_halg(CK_MECHANISM_PTR mech, CK_MECHANISM_TYPE_PTR halg);
 
-static CK_RV rsa_pss_get_digester(CK_MECHANISM_PTR mech, const EVP_MD **md);
-static CK_RV rsa_oaep_get_digester(CK_MECHANISM_PTR mech, const EVP_MD **md);
-static CK_RV sha1_get_digester(CK_MECHANISM_PTR mech, const EVP_MD **md);
-static CK_RV sha256_get_digester(CK_MECHANISM_PTR mech, const EVP_MD **md);
-static CK_RV sha384_get_digester(CK_MECHANISM_PTR mech, const EVP_MD **md);
-static CK_RV sha512_get_digester(CK_MECHANISM_PTR mech, const EVP_MD **md);
+static CK_RV rsa_pss_get_digester(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD **md);
+static CK_RV rsa_oaep_get_digester(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD **md);
+static CK_RV sha1_get_digester(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD **md);
+static CK_RV sha256_get_digester(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD **md);
+static CK_RV sha384_get_digester(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD **md);
+static CK_RV sha512_get_digester(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD **md);
 
-static CK_RV tpm_rsa_pss_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata);
+static CK_RV tpm_rsa_pss_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata);
 
-static bool _g_is_initialized = false;
-
-static mdetail _g_mechs[MAX_MECHS] = {
+static const mdetail_entry _g_mechs_templ[] = {
 
     /* RSA */
     { .type = CKM_RSA_PKCS_KEY_PAIR_GEN, .validator = rsa_keygen_validator, .flags = mf_is_keygen|mf_rsa },
@@ -159,20 +174,14 @@ static mdetail _g_mechs[MAX_MECHS] = {
     { .type = CKM_SHA512, .flags = mf_is_digester|mf_aes, .validator = hash_validator, .get_digester = sha512_get_digester },
 };
 
-static struct {
-    CK_ULONG bits;
-    bool supported;
-} _g_rsa_keysizes [] = {
+rsa_detail _g_rsa_keysizes_templ [] = {
     { .bits = 1024 },
     { .bits = 2048 },
     { .bits = 3072 },
     { .bits = 4096 },
 };
 
-static struct {
-    int nid;
-    bool supported;
-} _g_ecc_curve_nids [] = {
+nid_detail _g_ecc_curve_nids_templ [] = {
     { .nid = NID_X9_62_prime192v1 },
     { .nid = NID_secp224r1        },
     { .nid = NID_X9_62_prime256v1 },
@@ -180,14 +189,11 @@ static struct {
     { .nid = NID_secp521r1,       },
 };
 
-#define _L(a) (a->ulValueLen/sizeof(CK_MECHANISM_TYPE))
-#define _P(a) ((CK_MECHANISM_TYPE_PTR)a->pValue)
-
-static mdetail *mlookup(CK_MECHANISM_TYPE t) {
+static mdetail_entry *mlookup(mdetail *details, CK_MECHANISM_TYPE t) {
 
     CK_ULONG i;
-    for (i=0; i < ARRAY_LEN(_g_mechs); i++) {
-        mdetail *m = &_g_mechs[i];
+    for (i=0; i < details->mdetail_len; i++) {
+        mdetail_entry *m = &details->mech_entries[i];
         if (m->type == t) {
             return m;
         }
@@ -195,6 +201,157 @@ static mdetail *mlookup(CK_MECHANISM_TYPE t) {
 
     return NULL;
 }
+
+static CK_RV mech_init(tpm_ctx *tctx, mdetail *m) {
+
+    /*
+     * Get the mechanisms
+     */
+    CK_MECHANISM_TYPE tpm_mechs[MAX_MECHS];
+    CK_ULONG tpm_mechs_len = ARRAY_LEN(tpm_mechs);
+    CK_RV rv = tpm2_getmechanisms(tctx, tpm_mechs, &tpm_mechs_len);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    assert(tpm_mechs_len <= m->mdetail_len);
+
+    /*
+     * Update whether or not the TPM supports it ot not
+     * and any other metadata
+     */
+    CK_ULONG i;
+    for (i=0; i < tpm_mechs_len; i++) {
+        CK_MECHANISM_TYPE t = tpm_mechs[i];
+        mdetail_entry *d = NULL;
+        CK_ULONG j;
+        for (j=0; j < m->mdetail_len; j++) {
+            d = &m->mech_entries[j];
+            if (d->type == t) {
+                d->flags |= mf_tpm_supported;
+                break;
+            }
+        }
+    }
+
+    mdetail_entry *d = mlookup(m, CKM_RSA_PKCS_KEY_PAIR_GEN);
+    if (d) {
+        /* get supported RSA key bit sizes */
+        for (i=0; i < m->rsa_detail_len; i++) {
+            rv = tpm_is_rsa_keysize_supported(tctx, m->rsa_entries[i].bits);
+            if (rv == CKR_MECHANISM_INVALID) {
+                continue;
+            }
+
+            if(rv == CKR_OK) {
+                m->rsa_entries[i].supported = true;
+                continue;
+            }
+
+            return rv;
+        }
+    } else {
+        LOGV("RSA Keygen not detected");
+    }
+
+    d = mlookup(m, CKM_EC_KEY_PAIR_GEN);
+    if (d) {
+        /* get supported ECC curves */
+        for (i=0; i < m->nid_detail_len; i++) {
+            rv = tpm_is_ecc_curve_supported(tctx, m->nid_entries[i].nid);
+            if (rv == CKR_MECHANISM_INVALID) {
+                continue;
+            }
+
+            if(rv == CKR_OK) {
+                m->nid_entries[i].supported = true;
+                continue;
+            }
+
+            return rv;
+        }
+    } else {
+        LOGV("EC Keygen not detected");
+    }
+
+    return CKR_OK;
+}
+
+void mdetail_free(mdetail **mdtl) {
+    if (!mdtl || !*mdtl) {
+        return;
+    }
+
+    mdetail *m = *mdtl;
+
+    free(m->mech_entries);
+    free(m->nid_entries);
+    free(m->rsa_entries);
+    free(m);
+    *mdtl = NULL;
+}
+
+CK_RV mdetail_new(tpm_ctx *ctx, mdetail **mout) {
+    assert(mout);
+
+    mdetail_entry *d = calloc(1, sizeof(_g_mechs_templ));
+    if (!d) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    nid_detail *n = calloc(1, sizeof(_g_ecc_curve_nids_templ));
+    if (!n) {
+        LOGE("oom");
+        free(d);
+        return CKR_HOST_MEMORY;
+    }
+
+    rsa_detail *r = calloc(1, sizeof(_g_rsa_keysizes_templ));
+    if (!r) {
+        LOGE("oom");
+        free(d);
+        free(n);
+        return CKR_HOST_MEMORY;
+    }
+
+    mdetail *m = calloc(1, sizeof(mdetail));
+    if (!m) {
+        LOGE("oom");
+        free(d);
+        free(n);
+        free(r);
+        return CKR_HOST_MEMORY;
+    }
+
+    memcpy(d, _g_mechs_templ, sizeof(_g_mechs_templ));
+    m->mdetail_len = ARRAY_LEN(_g_mechs_templ);
+    m->mech_entries = d;
+
+    memcpy(n, _g_ecc_curve_nids_templ, sizeof(_g_ecc_curve_nids_templ));
+    m->nid_detail_len = ARRAY_LEN(_g_ecc_curve_nids_templ);
+    m->nid_entries = n;
+
+    memcpy(r, _g_rsa_keysizes_templ, sizeof(_g_rsa_keysizes_templ));
+    m->rsa_detail_len = ARRAY_LEN(_g_rsa_keysizes_templ);
+    m->rsa_entries = r;
+
+    CK_RV rv = mech_init(ctx, m);
+    if (rv != CKR_OK) {
+        LOGE("mech_init failed: 0x%lx", rv);
+        free(d);
+        free(n);
+        free(r);
+        return rv;
+    }
+
+    *mout = m;
+
+    return CKR_OK;
+};
+
+#define _L(a) (a->ulValueLen/sizeof(CK_MECHANISM_TYPE))
+#define _P(a) ((CK_MECHANISM_TYPE_PTR)a->pValue)
 
 static CK_RV has_raw_rsa(attr_list *attrs) {
 
@@ -218,8 +375,9 @@ static CK_RV has_raw_rsa(attr_list *attrs) {
     return supported ? CKR_OK : CKR_MECHANISM_INVALID;
 }
 
-CK_RV hash_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
+CK_RV hash_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
     UNUSED(attrs);
+    UNUSED(m);
 
     /* hashers don't take params */
     if (mech->pParameter || mech->ulParameterLen) {
@@ -231,7 +389,8 @@ CK_RV hash_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
     return CKR_OK;
 }
 
-CK_RV rsa_pkcs_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
+CK_RV rsa_pkcs_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
+    UNUSED(m);
 
     /*
      * CKM_RSA_PKCS has the PKCS v1.5 signing structure computed by the client
@@ -244,7 +403,7 @@ CK_RV rsa_pkcs_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
     return has_raw_rsa(attrs);
 }
 
-CK_RV rsa_pkcs_hash_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
+CK_RV rsa_pkcs_hash_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
 
     /* CKM_<HASH>_RSA_PKCS takes no params */
     if (mech->pParameter || mech->ulParameterLen) {
@@ -252,25 +411,25 @@ CK_RV rsa_pkcs_hash_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
     }
 
     /* it needs to be supported */
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
+    mdetail_entry *d = mlookup(m, mech->mechanism);
+    if (!d) {
         return CKR_MECHANISM_INVALID;
     }
 
     /* if the TPM supports it natively, we're done */
-    if (m->flags & mf_tpm_supported) {
+    if (d->flags & mf_tpm_supported) {
         return CKR_OK;
     }
 
     return has_raw_rsa(attrs);
 }
 
-CK_RV rsa_pss_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
+CK_RV rsa_pss_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
     UNUSED(attrs);
 
     /* it needs to be supported */
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
+    mdetail_entry *d = mlookup(m, mech->mechanism);
+    if (!d) {
         return CKR_MECHANISM_INVALID;
     }
 
@@ -283,7 +442,7 @@ CK_RV rsa_pss_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
     }
 
     CK_MECHANISM_TYPE halg = 0;
-    CK_RV rv = m->get_halg(mech, &halg);
+    CK_RV rv = d->get_halg(mech, &halg);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -322,12 +481,12 @@ CK_RV rsa_pss_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
     return has_raw_rsa(attrs);
 }
 
-CK_RV rsa_oaep_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
+CK_RV rsa_oaep_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
     UNUSED(attrs);
 
     /* it needs to be supported */
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
+    mdetail_entry *d = mlookup(m, mech->mechanism);
+    if (!d) {
         return CKR_MECHANISM_INVALID;
     }
 
@@ -340,7 +499,7 @@ CK_RV rsa_oaep_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
     }
 
     CK_MECHANISM_TYPE halg = 0;
-    CK_RV rv = m->get_halg(mech, &halg);
+    CK_RV rv = d->get_halg(mech, &halg);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -366,24 +525,18 @@ CK_RV rsa_oaep_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
      * now that the OAEP portion IS supported AND the mechanism params check out,
      * is supported natively?
      */
-    if (m->flags & mf_tpm_supported) {
+    if (d->flags & mf_tpm_supported) {
         return CKR_OK;
     }
 
     return CKR_MECHANISM_INVALID;
 }
 
-CK_RV rsa_pss_hash_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
-
-    /* it needs to be supported */
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
-        return CKR_MECHANISM_INVALID;
-    }
+CK_RV rsa_pss_hash_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
 
     /* this may have an argument */
     if (mech->pParameter || mech->ulParameterLen) {
-        return rsa_pss_validator(mech, attrs);
+        return rsa_pss_validator(m, mech, attrs);
     }
 
     /*
@@ -393,13 +546,7 @@ CK_RV rsa_pss_hash_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
     return has_raw_rsa(attrs);
 }
 
-CK_RV rsa_keygen_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
-
-    /* it needs to be supported */
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
-        return CKR_MECHANISM_INVALID;
-    }
+CK_RV rsa_keygen_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
 
     /* this requires no argument */
     if (!mech->pParameter || !mech->ulParameterLen) {
@@ -414,9 +561,9 @@ CK_RV rsa_keygen_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
     CK_ULONG bits = a->ulValueLen * 8;
 
     CK_ULONG i;
-    for (i=0; i < ARRAY_LEN(_g_rsa_keysizes); i++) {
-        if (_g_rsa_keysizes[i].bits == bits) {
-            return _g_rsa_keysizes[i].supported ?
+    for (i=0; i < m->mdetail_len; i++) {
+        if (m->rsa_entries[i].bits == bits) {
+            return m->rsa_entries[i].supported ?
                     CKR_OK : CKR_ATTRIBUTE_VALUE_INVALID;
         }
     }
@@ -424,13 +571,7 @@ CK_RV rsa_keygen_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
     return CKR_ATTRIBUTE_VALUE_INVALID;
 }
 
-CK_RV ecc_keygen_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
-
-    /* it needs to be supported */
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
-        return CKR_MECHANISM_INVALID;
-    }
+CK_RV ecc_keygen_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
 
     /* this requires no argument */
     if (!mech->pParameter || !mech->ulParameterLen) {
@@ -449,9 +590,9 @@ CK_RV ecc_keygen_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
     }
 
     CK_ULONG i;
-    for (i=0; i < ARRAY_LEN(_g_rsa_keysizes); i++) {
-        if (_g_ecc_curve_nids[i].nid == nid) {
-            return _g_ecc_curve_nids[i].supported ?
+    for (i=0; i < m->nid_detail_len; i++) {
+        if (m->nid_entries[i].nid == nid) {
+            return m->nid_entries[i].supported ?
                     CKR_OK : CKR_MECHANISM_INVALID;
         }
     }
@@ -459,16 +600,11 @@ CK_RV ecc_keygen_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
     return CKR_MECHANISM_INVALID;
 }
 
-CK_RV ecdsa_validator(CK_MECHANISM_PTR mech, attr_list *attrs) {
+CK_RV ecdsa_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
     UNUSED(attrs);
+    UNUSED(m);
 
     /* ECDSA and ECDSA SHA1 are always supported */
-
-    /* it needs to be supported */
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
-        return CKR_MECHANISM_INVALID;
-    }
 
     /* this does not require an argument */
     if (mech->pParameter || mech->ulParameterLen) {
@@ -504,12 +640,6 @@ CK_RV sha512_get_halg(CK_MECHANISM_PTR mech, CK_MECHANISM_TYPE_PTR halg) {
 
 static CK_RV rsa_pss_get_halg(CK_MECHANISM_PTR mech, CK_MECHANISM_TYPE_PTR halg) {
 
-    /* this should never fail on the look up */
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
-        return CKR_GENERAL_ERROR;
-    }
-
     CK_RSA_PKCS_PSS_PARAMS_PTR params;
     SAFE_CAST(mech, params);
 
@@ -528,7 +658,7 @@ static CK_RV rsa_oaep_get_halg(CK_MECHANISM_PTR mech, CK_MECHANISM_TYPE_PTR halg
     return CKR_OK;
 }
 
-CK_RV rsa_pss_get_digester(CK_MECHANISM_PTR mech, const EVP_MD **md) {
+CK_RV rsa_pss_get_digester(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD **md) {
 
     CK_MECHANISM_TYPE halg = 0;
     CK_RV rv = rsa_pss_get_halg(mech, &halg);
@@ -536,15 +666,15 @@ CK_RV rsa_pss_get_digester(CK_MECHANISM_PTR mech, const EVP_MD **md) {
         return rv;
     }
 
-    mdetail *m = mlookup(halg);
-    if (!m) {
+    mdetail_entry *d = mlookup(m, halg);
+    if (!d) {
         return CKR_MECHANISM_INVALID;
     }
 
-    return m->get_digester(mech, md);
+    return d->get_digester(m, mech, md);
 }
 
-CK_RV rsa_oaep_get_digester(CK_MECHANISM_PTR mech, const EVP_MD **md) {
+CK_RV rsa_oaep_get_digester(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD **md) {
 
     CK_MECHANISM_TYPE halg = 0;
     CK_RV rv = rsa_oaep_get_halg(mech, &halg);
@@ -552,123 +682,48 @@ CK_RV rsa_oaep_get_digester(CK_MECHANISM_PTR mech, const EVP_MD **md) {
         return rv;
     }
 
-    mdetail *m = mlookup(halg);
-    if (!m) {
+    mdetail_entry *d = mlookup(m, halg);
+    if (!d) {
         return CKR_MECHANISM_INVALID;
     }
 
-    return m->get_digester(mech, md);
+    return d->get_digester(m, mech, md);
 }
 
-CK_RV sha1_get_digester(CK_MECHANISM_PTR mech, const EVP_MD **md) {
+CK_RV sha1_get_digester(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD **md) {
     UNUSED(mech);
+    UNUSED(m);
     *md = EVP_sha1();
     return CKR_OK;
 }
 
-CK_RV sha256_get_digester(CK_MECHANISM_PTR mech, const EVP_MD **md) {
+CK_RV sha256_get_digester(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD **md) {
     UNUSED(mech);
+    UNUSED(m);
     *md = EVP_sha256();
     return CKR_OK;
 }
 
-CK_RV sha384_get_digester(CK_MECHANISM_PTR mech, const EVP_MD **md) {
+CK_RV sha384_get_digester(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD **md) {
     UNUSED(mech);
+    UNUSED(m);
     *md = EVP_sha384();
     return CKR_OK;
 }
 
-CK_RV sha512_get_digester(CK_MECHANISM_PTR mech, const EVP_MD **md) {
+CK_RV sha512_get_digester(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD **md) {
     UNUSED(mech);
+    UNUSED(m);
     *md = EVP_sha512();
     return CKR_OK;
 }
 
-static CK_RV mech_init(tpm_ctx *tctx) {
-
-    if (_g_is_initialized) {
-        return CKR_OK;
-    }
-
-    /*
-     * Get the mechanisms
-     */
-    CK_MECHANISM_TYPE tpm_mechs[MAX_MECHS];
-    CK_ULONG tpm_mechs_len = ARRAY_LEN(tpm_mechs);
-    CK_RV rv = tpm2_getmechanisms(tctx, tpm_mechs, &tpm_mechs_len);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    assert(tpm_mechs_len <= ARRAY_LEN(_g_mechs));
-
-    /*
-     * Update whether or not the TPM supports it ot not
-     * and any other metadata
-     */
-    CK_ULONG i;
-    for (i=0; i < tpm_mechs_len; i++) {
-        CK_MECHANISM_TYPE t = tpm_mechs[i];
-        mdetail *m = NULL;
-        CK_ULONG j;
-        for (j=0; j < ARRAY_LEN(_g_mechs); j++) {
-            m = &_g_mechs[j];
-            if (m->type == t) {
-                m->flags |= mf_tpm_supported;
-                break;
-            }
-        }
-    }
-
-    mdetail *m = mlookup(CKM_RSA_PKCS_KEY_PAIR_GEN);
-    if (m) {
-        /* get supported RSA key bit sizes */
-        for (i=0; i < ARRAY_LEN(_g_rsa_keysizes); i++) {
-            rv = tpm_is_rsa_keysize_supported(tctx, _g_rsa_keysizes[i].bits);
-            if (rv == CKR_MECHANISM_INVALID) {
-                continue;
-            }
-
-            if(rv == CKR_OK) {
-                _g_rsa_keysizes[i].supported = true;
-                continue;
-            }
-
-            return rv;
-        }
-    } else {
-        LOGV("RSA Keygen not detected");
-    }
-
-    m = mlookup(CKM_EC_KEY_PAIR_GEN);
-    if (m) {
-        /* get supported ECC curves */
-        for (i=0; i < ARRAY_LEN(_g_ecc_curve_nids); i++) {
-            rv = tpm_is_ecc_curve_supported(tctx, _g_ecc_curve_nids[i].nid);
-            if (rv == CKR_MECHANISM_INVALID) {
-                continue;
-            }
-
-            if(rv == CKR_OK) {
-                _g_ecc_curve_nids[i].supported = true;
-                continue;
-            }
-
-            return rv;
-        }
-    } else {
-        LOGV("EC Keygen not detected");
-    }
-
-    _g_is_initialized = true;
-
-    return CKR_OK;
-}
-
-CK_RV rsa_pkcs_synthesizer(CK_MECHANISM_PTR mech, attr_list *attrs,
+CK_RV rsa_pkcs_synthesizer(mdetail *mdtl,
+        CK_MECHANISM_PTR mech, attr_list *attrs,
         CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen) {
     UNUSED(mech);
+    UNUSED(mdtl);
 
     CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(attrs, CKA_MODULUS_BITS);
     if (!a) {
@@ -705,12 +760,13 @@ CK_RV rsa_pkcs_synthesizer(CK_MECHANISM_PTR mech, attr_list *attrs,
     return CKR_OK;
 }
 
-CK_RV rsa_pss_synthesizer(CK_MECHANISM_PTR mech, attr_list *attrs,
+CK_RV rsa_pss_synthesizer(mdetail *mdtl,
+        CK_MECHANISM_PTR mech, attr_list *attrs,
         CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen) {
 
     const EVP_MD *md = NULL;
-    CK_RV rv = mech_get_digester(mech, &md);
+    CK_RV rv = mech_get_digester(mdtl, mech, &md);
     if (rv != CKR_OK) {
         LOGE("Could not get digester for mech: 0x%lx", mech->mechanism);
         return rv;
@@ -788,7 +844,8 @@ CK_RV rsa_pss_synthesizer(CK_MECHANISM_PTR mech, attr_list *attrs,
     return CKR_OK;
 }
 
-CK_RV rsa_pkcs_hash_synthesizer(CK_MECHANISM_PTR mech, attr_list *attrs, CK_BYTE_PTR inbuf, CK_ULONG inlen,
+CK_RV rsa_pkcs_hash_synthesizer(mdetail *mdtl,
+        CK_MECHANISM_PTR mech, attr_list *attrs, CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen) {
 
     assert(mech);
@@ -868,10 +925,10 @@ CK_RV rsa_pkcs_hash_synthesizer(CK_MECHANISM_PTR mech, attr_list *attrs, CK_BYTE
     memcpy(hdr_buf, hdr, hdr_size);
     memcpy(&hdr_buf[hdr_size], inbuf, hash_len);
 
-    return rsa_pkcs_synthesizer(mech, attrs, hdr_buf, total_size, outbuf, outlen);
+    return rsa_pkcs_synthesizer(mdtl, mech, attrs, hdr_buf, total_size, outbuf, outlen);
 }
 
-CK_RV tpm_rsa_pss_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+CK_RV tpm_rsa_pss_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
 
     check_pointer(mech);
     check_pointer(outdata);
@@ -882,8 +939,8 @@ CK_RV tpm_rsa_pss_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj
         return rv;
     }
 
-    mdetail *m = mlookup(halg);
-    if (!m) {
+    mdetail_entry *d = mlookup(m, halg);
+    if (!d) {
         return CKR_MECHANISM_INVALID;
     }
 
@@ -905,12 +962,12 @@ CK_RV tpm_rsa_pss_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj
         return CKR_MECHANISM_INVALID;
     }
 
-    m = mlookup(flat.mechanism);
-    if (!m) {
+    d = mlookup(m, flat.mechanism);
+    if (!d) {
         return CKR_MECHANISM_INVALID;
     }
 
-    return m->get_tpm_opdata(tctx, mech, tobj, outdata);
+    return d->get_tpm_opdata(m, tctx, mech, tobj, outdata);
 }
 
 static CK_RV get_rsa_mechinfo(tpm_ctx *tctx, CK_MECHANISM_INFO_PTR info) {
@@ -958,20 +1015,18 @@ static CK_RV get_aes_mechinfo(tpm_ctx *tctx, CK_MECHANISM_INFO_PTR info) {
     return CKR_OK;
 }
 
-static bool is_mech_supported(mdetail *m) {
+static bool is_mech_supported(mdetail_entry *d) {
 
-    mechanism_flags f = m->flags;
+    mechanism_flags f = d->flags;
 
     return (f & mf_tpm_supported) ||
            (f & mf_is_keygen)     ||
            (f & mf_is_digester);
 }
 
-CK_RV mech_get_supported(tpm_ctx *tctx, CK_MECHANISM_TYPE_PTR mechlist, CK_ULONG_PTR count) {
+CK_RV mech_get_supported(mdetail *m, CK_MECHANISM_TYPE_PTR mechlist, CK_ULONG_PTR count) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
-
-    DO_INIT(tctx);
 
     check_pointer(count);
 
@@ -980,11 +1035,11 @@ CK_RV mech_get_supported(tpm_ctx *tctx, CK_MECHANISM_TYPE_PTR mechlist, CK_ULONG
     CK_MECHANISM_TYPE tmp[MAX_MECHS];
 
     CK_ULONG i;
-    for (i=0; i < ARRAY_LEN(_g_mechs); i++) {
-        mdetail *m = &_g_mechs[i];
+    for (i=0; i < m->mdetail_len; i++) {
+        mdetail_entry *d = &m->mech_entries[i];
 
         /* is it supported ? */
-        bool is_supported = is_mech_supported(m);
+        bool is_supported = is_mech_supported(d);
         if (!is_supported) {
             continue;
         }
@@ -993,7 +1048,7 @@ CK_RV mech_get_supported(tpm_ctx *tctx, CK_MECHANISM_TYPE_PTR mechlist, CK_ULONG
 
         assert(supported <= ARRAY_LEN(tmp));
 
-        tmp[supported] = m->type;
+        tmp[supported] = d->type;
     }
 
     if (mechlist) {
@@ -1012,25 +1067,23 @@ out:
     return rv;
 }
 
-CK_RV mech_validate(tpm_ctx *tctx, CK_MECHANISM_PTR mech, attr_list *attrs) {
+CK_RV mech_validate(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
 
     check_pointer(mech);
 
-    DO_INIT(tctx);
-
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
+    mdetail_entry *d = mlookup(m, mech->mechanism);
+    if (!d) {
         LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
     /* if their is no validator, don't do anything but a look up */
-    if (!m->validator) {
+    if (!d->validator) {
         return CKR_OK;
     }
 
     /* if it's not a keygen template, make sure the object supports it */
-    if (!(m->flags & mf_is_keygen)) {
+    if (!(d->flags & mf_is_keygen)) {
         CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(attrs, CKA_ALLOWED_MECHANISMS);
         if (!a) {
             LOGE("Expected object to have: CKA_ALLOWED_MECHANISMS");
@@ -1056,20 +1109,19 @@ CK_RV mech_validate(tpm_ctx *tctx, CK_MECHANISM_PTR mech, attr_list *attrs) {
         }
     }
 
-    return m->validator(mech, attrs);
+    return d->validator(m, mech, attrs);
 }
 
-CK_RV mech_synthesize(tpm_ctx *tctx,
+CK_RV mech_synthesize(
+        mdetail *mdtl,
         CK_MECHANISM_PTR mech, attr_list *attrs,
         CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen) {
 
     check_pointer(mech);
 
-    DO_INIT(tctx);
-
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
+    mdetail_entry *d = mlookup(mdtl, mech->mechanism);
+    if (!d) {
         LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
@@ -1077,8 +1129,8 @@ CK_RV mech_synthesize(tpm_ctx *tctx,
     /* if it's supported by the tpm we don't need to call
      * the synthesizer, just memcpy in to out.
      */
-    if ((m->flags & mf_tpm_supported)
-            && !(m->flags & mf_force_synthetic)) {
+    if ((d->flags & mf_tpm_supported)
+            && !(d->flags & mf_force_synthetic)) {
         if (outbuf) {
             if (*outlen < inlen) {
                 return CKR_BUFFER_TOO_SMALL;
@@ -1089,53 +1141,55 @@ CK_RV mech_synthesize(tpm_ctx *tctx,
         return CKR_OK;
     }
 
-    if (!m->synthesizer) {
-        LOGE("Cannot synthesize mechanism: 0x%lx", m->type);
+    if (!d->synthesizer) {
+        LOGE("Cannot synthesize mechanism: 0x%lx", d->type);
         return CKR_MECHANISM_INVALID;
     }
 
-    return m->synthesizer(mech, attrs, inbuf, inlen, outbuf, outlen);
+    return d->synthesizer(mdtl, mech, attrs, inbuf, inlen, outbuf, outlen);
 }
 
-CK_RV mech_is_synthetic(tpm_ctx *tctx, CK_MECHANISM_PTR mech,
+CK_RV mech_is_synthetic(mdetail *m, CK_MECHANISM_PTR mech,
         bool *is_synthetic) {
 
+    check_pointer(m);
     check_pointer(mech);
+    check_pointer(is_synthetic);
 
-    DO_INIT(tctx);
-
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
+    mdetail_entry *d = mlookup(m, mech->mechanism);
+    if (!d) {
         LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
-    *is_synthetic = (!(m->flags & mf_tpm_supported))
-            || (m->flags & mf_is_synthetic)
-            || (m->flags & mf_force_synthetic);
+    *is_synthetic = (!(d->flags & mf_tpm_supported))
+            || (d->flags & mf_is_synthetic)
+            || (d->flags & mf_force_synthetic);
 
     return CKR_OK;
 }
 
-CK_RV mech_is_hashing_needed(CK_MECHANISM_PTR mech,
+CK_RV mech_is_hashing_needed(mdetail *m,
+        CK_MECHANISM_PTR mech,
         bool *is_hashing_needed) {
 
+    check_pointer(m);
     check_pointer(mech);
     check_pointer(is_hashing_needed);
 
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
+    mdetail_entry *d = mlookup(m, mech->mechanism);
+    if (!d) {
         LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
-    if (!m->get_halg) {
+    if (!d->get_halg) {
         *is_hashing_needed = false;
         return CKR_OK;
     }
 
     CK_MECHANISM_TYPE halg;
-    CK_RV rv = m->get_halg(mech, &halg);
+    CK_RV rv = d->get_halg(mech, &halg);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -1145,77 +1199,84 @@ CK_RV mech_is_hashing_needed(CK_MECHANISM_PTR mech,
     return CKR_OK;
 }
 
-CK_RV mech_get_digest_alg(CK_MECHANISM_PTR mech,
+CK_RV mech_get_digest_alg(mdetail *m,
+        CK_MECHANISM_PTR mech,
         CK_MECHANISM_TYPE *mech_type) {
 
+    check_pointer(m);
     check_pointer(mech);
     check_pointer(mech_type);
 
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
+    mdetail_entry *d = mlookup(m, mech->mechanism);
+    if (!d) {
         LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
-    if (!m->get_halg) {
+    if (!d->get_halg) {
+        LOGE("Mechanism 0x%lx has no get_halg()", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
-    return m->get_halg(mech, mech_type);
+    return d->get_halg(mech, mech_type);
 }
 
-CK_RV mech_get_digester(CK_MECHANISM_PTR mech,
+CK_RV mech_get_digester(
+        mdetail *mdtl,
+        CK_MECHANISM_PTR mech,
         const EVP_MD **md) {
 
     check_pointer(mech);
     check_pointer(md);
 
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
+    mdetail_entry *d = mlookup(mdtl, mech->mechanism);
+    if (!d) {
         LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
-    if (!m->get_digester) {
+    if (!d->get_digester) {
+        LOGE("Mechanism 0x%lx has no get_digester()", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
-    return m->get_digester(mech, md);
+    return d->get_digester(mdtl, mech, md);
 }
 
-CK_RV mech_get_tpm_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech,
+CK_RV mech_get_tpm_opdata(mdetail *mdtl,
+        tpm_ctx *tctx,
+        CK_MECHANISM_PTR mech,
         tobject *tobj, tpm_op_data **opdata) {
 
+    check_pointer(mdtl);
     check_pointer(tctx);
     check_pointer(opdata);
 
-    DO_INIT(tctx);
-
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
+    mdetail_entry *d = mlookup(mdtl, mech->mechanism);
+    if (!d) {
         LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
-    if (!m->get_tpm_opdata) {
+    if (!d->get_tpm_opdata) {
         return CKR_MECHANISM_INVALID;
     }
 
-    return m->get_tpm_opdata(tctx, mech, tobj, opdata);
+    return d->get_tpm_opdata(mdtl, tctx, mech, tobj, opdata);
 }
 
-CK_RV mech_get_padding(CK_MECHANISM_PTR mech, int *padding) {
+CK_RV mech_get_padding(mdetail *m, CK_MECHANISM_PTR mech, int *padding) {
 
     check_pointer(mech);
     check_pointer(padding);
 
-    mdetail *m = mlookup(mech->mechanism);
-    if (!m) {
+    mdetail_entry *d = mlookup(m, mech->mechanism);
+    if (!d) {
         LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
-    *padding = m->padding;
+    *padding = d->padding;
 
     return CKR_OK;
 }
@@ -1251,62 +1312,62 @@ CK_RV mech_get_label(CK_MECHANISM_PTR mech, twist *label) {
     return CKR_OK;
 }
 
-CK_RV mech_get_info(tpm_ctx *tctx, CK_MECHANISM_TYPE mech_type, CK_MECHANISM_INFO_PTR info) {
+CK_RV mech_get_info(mdetail *m, tpm_ctx *tctx,
+        CK_MECHANISM_TYPE mech_type, CK_MECHANISM_INFO_PTR info) {
 
+    check_pointer(m);
     check_pointer(tctx);
     check_pointer(info);
 
     memset(info, 0, sizeof(*info));
 
-    DO_INIT(tctx);
-
-    mdetail *m = mlookup(mech_type);
-    if (!m) {
+    mdetail_entry *d = mlookup(m, mech_type);
+    if (!d) {
         LOGE("Mechanism not supported, got: 0x%lx", mech_type);
         return CKR_MECHANISM_INVALID;
     }
 
-    if (m->flags & mf_is_keygen) {
-        info->flags |= (m->flags & mf_aes) ?
+    if (d->flags & mf_is_keygen) {
+        info->flags |= (d->flags & mf_aes) ?
                 CKF_GENERATE :
                 CKF_GENERATE_KEY_PAIR;
     }
 
-    if (m->flags & mf_tpm_supported) {
+    if (d->flags & mf_tpm_supported) {
         info->flags |= CKF_HW;
     }
 
-    if (m->flags & mf_sign) {
+    if (d->flags & mf_sign) {
         info->flags |= CKF_SIGN;
     }
 
-    if (m->flags & mf_verify) {
+    if (d->flags & mf_verify) {
         info->flags |= CKF_VERIFY;
     }
 
-    if (m->flags & mf_encrypt) {
+    if (d->flags & mf_encrypt) {
         info->flags |= CKF_ENCRYPT;
     }
 
-    if (m->flags & mf_decrypt) {
+    if (d->flags & mf_decrypt) {
         info->flags |= CKF_DECRYPT;
     }
 
     /* functions below here return */
-    if (m->flags & mf_is_digester) {
+    if (d->flags & mf_is_digester) {
         info->flags |= CKF_DIGEST;
         return CKR_OK;
     }
 
-    if (m->flags & mf_rsa) {
+    if (d->flags & mf_rsa) {
         return get_rsa_mechinfo(tctx, info);
     }
 
-    if (m->flags & mf_aes) {
+    if (d->flags & mf_aes) {
         return get_aes_mechinfo(tctx, info);
     }
 
-    if (m->flags & mf_ecc) {
+    if (d->flags & mf_ecc) {
         return get_ecc_mechinfo(tctx, info);
     }
 

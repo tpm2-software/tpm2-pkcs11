@@ -35,10 +35,11 @@ struct sign_opdata {
     const EVP_MD *md;
 };
 
-static sign_opdata *sign_opdata_new(CK_MECHANISM_PTR mechanism, tobject *tobj) {
+static sign_opdata *sign_opdata_new(mdetail *mdtl, CK_MECHANISM_PTR mechanism, tobject *tobj) {
 
     int padding = 0;
-    CK_RV rv = mech_get_padding(mechanism, &padding);
+    CK_RV rv = mech_get_padding(mdtl,
+            mechanism, &padding);
     if (rv != CKR_OK) {
         return NULL;
     }
@@ -46,14 +47,14 @@ static sign_opdata *sign_opdata_new(CK_MECHANISM_PTR mechanism, tobject *tobj) {
     const EVP_MD *md = NULL;
 
     bool is_hashing_needed = false;
-    rv = mech_is_hashing_needed(mechanism,
+    rv = mech_is_hashing_needed(mdtl, mechanism,
             &is_hashing_needed);
     if (rv != CKR_OK) {
         return NULL;
     }
 
     if (is_hashing_needed) {
-        rv = mech_get_digester(mechanism, &md);
+        rv = mech_get_digester(mdtl, mechanism, &md);
         if (rv != CKR_OK) {
             return NULL;
         }
@@ -120,14 +121,15 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
         return rv;
     }
 
-    rv = mech_validate(tok->tctx, mechanism, tobj->attrs);
+    rv = mech_validate(tok->mdtl, mechanism, tobj->attrs);
     if (rv != CKR_OK) {
         return rv;
     }
 
     digest_op_data *digest_opdata = NULL;
     bool is_hashing_needed = false;
-    rv = mech_is_hashing_needed(mechanism, &is_hashing_needed);
+    rv = mech_is_hashing_needed(tok->mdtl,
+            mechanism, &is_hashing_needed);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -149,14 +151,16 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
     /* TPM is only used on sign operations, not verify */
     tpm_op_data *tpm_opdata = NULL;
     if (op == operation_sign) {
-        rv = mech_get_tpm_opdata(tok->tctx, mechanism, tobj, &tpm_opdata);
+        rv = mech_get_tpm_opdata(tok->mdtl,
+                tok->tctx, mechanism, tobj, &tpm_opdata);
         if (rv != CKR_OK) {
             tpm_opdata_free(&tpm_opdata);
             return rv;
         }
     }
 
-    sign_opdata *opdata = sign_opdata_new(mechanism, tobj);
+    sign_opdata *opdata = sign_opdata_new(tok->mdtl,
+            mechanism, tobj);
     if (!opdata) {
         tpm_opdata_free(&tpm_opdata);
         return CKR_HOST_MEMORY;
@@ -174,7 +178,8 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
 
     if (op != operation_sign) {
         opdata->crypto_opdata->use_sw = true;
-        rv = sw_encrypt_data_init(mechanism, tobj, &opdata->crypto_opdata->cryptopdata.sw_enc_data);
+        rv = sw_encrypt_data_init(tok->mdtl,
+                mechanism, tobj, &opdata->crypto_opdata->cryptopdata.sw_enc_data);
         if (rv != CKR_OK) {
             sign_opdata_free(&opdata);
             return rv;
@@ -307,7 +312,8 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
     CK_ULONG syn_buf_len = sizeof(syn_buf);
     CK_ULONG digest_buf_len = twist_len(digest_buf);
 
-    rv = mech_synthesize(tok->tctx,
+    rv = mech_synthesize(
+            tok->mdtl,
             &opdata->mech, tobj->attrs,
             (CK_BYTE_PTR)digest_buf, digest_buf_len,
             syn_buf, &syn_buf_len);
@@ -316,7 +322,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
     }
 
     bool is_synthetic = false;
-    rv = mech_is_synthetic(tok->tctx, &opdata->mech,
+    rv = mech_is_synthetic(tok->mdtl, &opdata->mech,
             &is_synthetic);
     if (rv != CKR_OK) {
         goto session_out;

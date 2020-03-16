@@ -100,7 +100,7 @@ class InitCommand(Command):
                         # TODO: we need a sapi handle from esys tr to look into getcap to see if
                         # its persistent.
                         if isinstance(handle, int):
-                            tr_handle = tpm2.readpublic(handle)
+                            (_, tr_handle) = tpm2.readpublic(handle)
 
                             # verify handle is persistent
                             output = tpm2.getcap('handles-persistent')

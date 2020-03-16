@@ -5,10 +5,14 @@ import os
 import argparse
 import sys
 import shutil
+import yaml
 from tempfile import mkdtemp
 
+from cryptography import exceptions as crypto_exceptions
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import (Cipher, algorithms, modes)
+from cryptography.hazmat.primitives.asymmetric import (rsa, padding)
+from cryptography.hazmat.primitives import hashes
 
 from pyasn1_modules import pem, rfc2459
 from pyasn1.codec.der import decoder
@@ -321,9 +325,52 @@ def _pkcs11_to_str(value, prefix):
         return '0x{:X}'.format(cko_value)
 
 def pkcs11_cko_to_str(cko_value):
-    
+
     return _pkcs11_to_str(cko_value, 'CKO_')
-    
+
 def pkcs11_ckk_to_str(ckk_value):
-    
+
     return _pkcs11_to_str(ckk_value, 'CKK_')
+
+def check_pss_signature(tpm2, pctx, pauth):
+
+        (priv, pub, _) = tpm2.create(pctx, pauth=pauth)
+        kctx = tpm2.load(pctx, pauth, priv, pub)
+        (details, _) = tpm2.readpublic(kctx, False)
+        y = yaml.safe_load(details)
+        e = y['exponent'] if y['exponent'] != 0 else 65537
+        n = int(y['rsa'], 16)
+
+        pub_numbers = rsa.RSAPublicNumbers(e, n)
+        public_key = pub_numbers.public_key(default_backend())
+
+        message = b'message'
+        signature = tpm2.sign(kctx, 'sha256', 'rsapss', message)
+
+        try:
+            public_key.verify(
+                signature,
+                message,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=hashes.SHA256().digest_size
+                ),
+                hashes.SHA256()
+            )
+            return True
+        except crypto_exceptions.InvalidSignature:
+            # saltLen = key_size_bytes - hash_size_bytes - 2;
+            # If this fails, we're in some messed up position
+            # PSS sigs are neither hlen == slen nor max(slen),
+            # so we will fail loudly
+            public_key.verify(
+                signature,
+                message,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+
+            return False

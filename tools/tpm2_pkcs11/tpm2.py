@@ -13,7 +13,11 @@ class Tpm2(object):
     def __init__(self, tmp):
         self._tmp = tmp
 
-    def createprimary(self, ownerauth, objauth):
+    @property
+    def tmpdir(self):
+        return self._tmp
+
+    def createprimary(self, ownerauth=None, objauth=None):
         ctx = os.path.join(self._tmp, "context.out")
         cmd = [
             'tpm2_createprimary', '-c', ctx, '-g',
@@ -49,18 +53,21 @@ class Tpm2(object):
                                stderr)
         return tr_file
 
-    def readpublic(self, handle):
+    def readpublic(self, handle, get_tr_file=True):
 
         tr_file = os.path.join(self._tmp, "primary.handle")
 
-        cmd = ['tpm2_readpublic', '-c', str(handle), '-t', tr_file]
+        cmd = ['tpm2_readpublic', '-c', str(handle)]
+
+        if get_tr_file:
+            cmd.extend(['-t', tr_file])
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         stdout, stderr = p.communicate()
         if (p.wait()):
             raise RuntimeError("Could not execute tpm2_readpublic: %s",
                                stderr)
-        return tr_file
+        return (stdout, tr_file if get_tr_file else None)
 
     def load(self, pctx, pauth, priv, pub):
 
@@ -82,9 +89,11 @@ class Tpm2(object):
         #tpm2_load -C $file_primary_key_ctx  -u $file_load_key_pub  -r $file_load_key_priv -n $file_load_key_name -c $file_load_key_ctx
         if priv != None:
             cmd = [
-                'tpm2_load', '-C', str(pctx), '-P', pauth, '-u', pub, '-r',
+                'tpm2_load', '-C', str(pctx), '-u', pub, '-r',
                 priv, '-n', '/dev/null', '-c', ctx
             ]
+            if pauth is not None:
+                cmd.extend(['-P', pauth])
         else:
             cmd = ['tpm2_loadexternal', '-u', pub, '-c', ctx]
 
@@ -129,8 +138,8 @@ class Tpm2(object):
 
     def create(self,
                phandle,
-               pauth,
-               objauth,
+               pauth=None,
+               objauth=None,
                objattrs=None,
                seal=None,
                alg=None):
@@ -254,3 +263,30 @@ class Tpm2(object):
             raise RuntimeError("Could not execute tpm2_load: %s", stderr)
 
         return newpriv
+
+    def sign(self, ctx, halg, scheme, message):
+
+        sig = os.path.join(self._tmp, uuid.uuid4().hex + '.dat')
+
+        cmd = [
+            'tpm2_sign',
+            '-c',
+            str(ctx),
+            '-g', halg,
+            '-s', scheme,
+            '-f',
+            'plain',
+            '-o',
+            sig
+        ]
+
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, stdin=PIPE, env=os.environ)
+        stdout, stderr = p.communicate(input=str2bytes(message))
+        rc = p.wait()
+        if (rc != 0):
+            print("command: %s" % str(" ".join(cmd)))
+            raise RuntimeError("Could not execute tpm2_import: %s" %
+                               str(stderr))
+        data = open(sig, "rb").read()
+        os.unlink(sig)
+        return data

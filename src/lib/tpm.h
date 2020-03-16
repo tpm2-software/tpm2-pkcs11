@@ -18,8 +18,9 @@ typedef struct tpm_ctx tpm_ctx;
 
 typedef struct tpm_op_data tpm_op_data;
 
-/* forward reference */
+/* forward references */
 typedef union crypto_op_data crypto_op_data;
+typedef struct mdetail mdetail;
 
 /**
  * Destroys the system API context, and when the refcnt
@@ -93,24 +94,24 @@ bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle);
 
 CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen);
 
-CK_RV tpm_rsa_pkcs_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
-CK_RV tpm_rsa_oaep_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
-CK_RV tpm_rsa_pss_sha1_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
-CK_RV tpm_rsa_pss_sha256_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
-CK_RV tpm_rsa_pss_sha384_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
-CK_RV tpm_rsa_pss_sha512_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pkcs_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_oaep_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pss_sha1_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pss_sha256_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pss_sha384_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pss_sha512_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
 
-CK_RV tpm_rsa_pkcs_sha1_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
-CK_RV tpm_rsa_pkcs_sha256_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
-CK_RV tpm_rsa_pkcs_sha384_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
-CK_RV tpm_rsa_pkcs_sha512_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pkcs_sha1_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pkcs_sha256_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pkcs_sha384_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_rsa_pkcs_sha512_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
 
-CK_RV tpm_ec_ecdsa_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
-CK_RV tpm_ec_ecdsa_sha1_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_ec_ecdsa_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_ec_ecdsa_sha1_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
 
-CK_RV tpm_aes_cbc_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
-CK_RV tpm_aes_cfb_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
-CK_RV tpm_aes_ecb_get_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_aes_cbc_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_aes_cfb_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_aes_ecb_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
 
 void tpm_opdata_free(tpm_op_data **opdata);
 

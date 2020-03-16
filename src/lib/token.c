@@ -12,6 +12,7 @@
 #include "checks.h"
 #include "db.h"
 #include "list.h"
+#include "mech.h"
 #include "object.h"
 #include "pkcs11.h"
 #include "session.h"
@@ -37,6 +38,15 @@ CK_RV token_min_init(token *t) {
     rv = backend_ctx_new(t);
     if (rv != CKR_OK) {
         LOGE("Could not initialize tpm ctx: 0x%lx", rv);
+        return rv;
+    }
+
+    /*
+     * Initalize the per-token mechanism details table
+     */
+    rv = mdetail_new(t->tctx, &t->mdtl);
+    if (rv != CKR_OK) {
+        LOGE("Could not initialize tpm mdetails: 0x%lx", rv);
         return rv;
     }
 
@@ -237,6 +247,8 @@ void token_free(token *t) {
 
     free(t->config.tcti);
     t->config.tcti = NULL;
+
+    mdetail_free(&t->mdtl);
 }
 
 CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
@@ -302,6 +314,11 @@ CK_RV token_init(token *t, CK_BYTE_PTR pin, CK_ULONG pin_len, CK_BYTE_PTR label)
 
     twist newauth = NULL;
     twist newsalthex = NULL;
+
+    if (t->config.is_initialized) {
+        LOGE("Token already initialized");
+        return CKR_ARGUMENTS_BAD;
+    }
 
     twist sopin = twistbin_new(pin, pin_len);
     if (!sopin) {
