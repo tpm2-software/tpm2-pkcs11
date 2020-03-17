@@ -44,7 +44,7 @@ CK_RV token_min_init(token *t) {
     /*
      * Initalize the per-token mechanism details table
      */
-    rv = mdetail_new(t->tctx, &t->mdtl);
+    rv = mdetail_new(t->tctx, &t->mdtl, t->config.pss_sigs_good);
     if (rv != CKR_OK) {
         LOGE("Could not initialize tpm mdetails: 0x%lx", rv);
         return rv;

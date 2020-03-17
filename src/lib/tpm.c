@@ -31,6 +31,7 @@
 #include "pkcs11.h"
 #include "log.h"
 #include "mutex.h"
+#include "ssl_util.h"
 #include "tpm.h"
 
 #ifndef ESAPI_MANAGE_FLAGS
@@ -66,6 +67,75 @@
             }, \
         } \
     }
+
+static const TPM2B_PUBLIC rsa_template = {
+    .size = 0,
+    .publicArea = {
+        .type = TPM2_ALG_RSA,
+        .nameAlg = TPM2_ALG_SHA256,
+        .objectAttributes =
+                TPMA_OBJECT_FIXEDTPM
+              | TPMA_OBJECT_FIXEDPARENT
+              | TPMA_OBJECT_SENSITIVEDATAORIGIN
+              | TPMA_OBJECT_USERWITHAUTH
+              | TPMA_OBJECT_DECRYPT
+              | TPMA_OBJECT_SIGN_ENCRYPT,
+        .authPolicy = {
+             .size = 0,
+         },
+        .parameters.rsaDetail = {
+             .symmetric = {
+                 .algorithm = TPM2_ALG_NULL,
+             },
+             .scheme = {
+                  .scheme = TPM2_ALG_NULL
+              },
+             .keyBits = 2048,
+             .exponent = 0,
+         },
+        .unique.rsa = {
+             .size = 0,
+         },
+    },
+};
+
+static const TPM2B_PUBLIC ecc_template = {
+    .size = 0,
+    .publicArea = {
+        .type = TPM2_ALG_ECC,
+        .nameAlg = TPM2_ALG_SHA256,
+        .objectAttributes =
+            TPMA_OBJECT_FIXEDTPM
+            | TPMA_OBJECT_FIXEDPARENT
+            | TPMA_OBJECT_SENSITIVEDATAORIGIN
+            | TPMA_OBJECT_USERWITHAUTH
+            | TPMA_OBJECT_SIGN_ENCRYPT,
+        .authPolicy = {
+            .size = 0,
+        },
+        .parameters.eccDetail = {
+            .symmetric = {
+                .algorithm = TPM2_ALG_NULL,
+                .keyBits.aes = 0,
+                .mode.aes = 0,
+            },
+            .scheme = {
+                .scheme = TPM2_ALG_NULL,
+                .details = {
+                   // {.hashAlg = TPM2_ALG_SHA1}
+                }
+            },
+            .curveID = TPM2_ECC_NIST_P256,
+            .kdf = {.scheme =
+                TPM2_ALG_NULL,.details = {}
+            }
+        },
+        .unique.ecc = {
+            .x = {.size = 0,.buffer = {}},
+            .y = {.size = 0,.buffer = {}}
+        },
+    },
+};
 
 /**
  * Maps 4-byte manufacturer identifier to manufacturer name.
@@ -1865,7 +1935,7 @@ static TSS2_RC create_loaded(
         ESYS_TR parent,
         ESYS_TR session,
         TPM2B_SENSITIVE_CREATE *in_sens,
-        TPM2B_PUBLIC *in_pub,
+        const TPM2B_PUBLIC *in_pub,
         ESYS_TR *out_handle,
         TPM2B_PUBLIC **out_pub,
         TPM2B_PRIVATE **out_priv
@@ -2381,75 +2451,6 @@ static CK_RV tpm_data_init(CK_MECHANISM_PTR mechanism,
         attr_list *pubattrs,
         attr_list *privattrs,
         tpm_key_data *tpmdat) {
-
-    static const TPM2B_PUBLIC rsa_template = {
-        .size = 0,
-        .publicArea = {
-            .type = TPM2_ALG_RSA,
-            .nameAlg = TPM2_ALG_SHA256,
-            .objectAttributes =
-                    TPMA_OBJECT_FIXEDTPM
-                  | TPMA_OBJECT_FIXEDPARENT
-                  | TPMA_OBJECT_SENSITIVEDATAORIGIN
-                  | TPMA_OBJECT_USERWITHAUTH
-                  | TPMA_OBJECT_DECRYPT
-                  | TPMA_OBJECT_SIGN_ENCRYPT,
-            .authPolicy = {
-                 .size = 0,
-             },
-            .parameters.rsaDetail = {
-                 .symmetric = {
-                     .algorithm = TPM2_ALG_NULL,
-                 },
-                 .scheme = {
-                      .scheme = TPM2_ALG_NULL
-                  },
-                 .keyBits = 2048,
-                 .exponent = 0,
-             },
-            .unique.rsa = {
-                 .size = 0,
-             },
-        },
-    };
-
-    static const TPM2B_PUBLIC ecc_template = {
-        .size = 0,
-        .publicArea = {
-            .type = TPM2_ALG_ECC,
-            .nameAlg = TPM2_ALG_SHA256,
-            .objectAttributes =
-                TPMA_OBJECT_FIXEDTPM
-                | TPMA_OBJECT_FIXEDPARENT
-                | TPMA_OBJECT_SENSITIVEDATAORIGIN
-                | TPMA_OBJECT_USERWITHAUTH
-                | TPMA_OBJECT_SIGN_ENCRYPT,
-            .authPolicy = {
-                .size = 0,
-            },
-            .parameters.eccDetail = {
-                .symmetric = {
-                    .algorithm = TPM2_ALG_NULL,
-                    .keyBits.aes = 0,
-                    .mode.aes = 0,
-                },
-                .scheme = {
-                    .scheme = TPM2_ALG_NULL,
-                    .details = {
-                       // {.hashAlg = TPM2_ALG_SHA1}
-                    }
-                },
-                .curveID = TPM2_ECC_NIST_P256,
-                .kdf = {.scheme =
-                    TPM2_ALG_NULL,.details = {}
-                }
-            },
-            .unique.ecc = {
-                .x = {.size = 0,.buffer = {}},
-                .y = {.size = 0,.buffer = {}}
-            },
-        },
-    };
 
     memset(&tpmdat->priv, 0, sizeof(tpmdat->priv));
     memset(&tpmdat->pub,  0, sizeof(tpmdat->pub));
@@ -2999,6 +3000,31 @@ static CK_BBOOL is_algorithm_supported(TPMU_CAPABILITIES *capabilities, TPM2_ALG
            add_mech(mech); \
         }
 
+static CK_RV tpm2_get_modes(tpm_ctx *ctx, TPMA_MODES *modes) {
+
+    /* get the TPMA_MODES field from fixed properties */
+    TPMS_CAPABILITY_DATA *fixed_props = NULL;
+    CK_RV rv = tpm_get_properties(ctx, &fixed_props);
+    if (rv != CKR_OK) {
+        LOGE("Could not get fixed properties from TPM");
+        return rv;
+    }
+
+    TPML_TAGGED_TPM_PROPERTY *plist = &fixed_props->data.tpmProperties;
+    UINT32 i;
+    for (i = 0; i < plist->count; i++) {
+        TPM2_PT property = plist->tpmProperty[i].property;
+        if (property == TPM2_PT_MODES) {
+            *modes = plist->tpmProperty[i].value;
+            return CKR_OK;
+        }
+    }
+
+    /* if we don't find it, we just say modes is implicitly empty */
+    *modes = 0;
+    return CKR_OK;
+}
+
 CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULONG_PTR count){
     check_pointer(count);
     check_pointer(ctx);
@@ -3014,23 +3040,11 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
     TPMU_CAPABILITIES *algs= &capabilityData->data;
 
     /* get the TPMA_MODES field from fixed properties */
-    TPMS_CAPABILITY_DATA *fixed_props = NULL;
-    rv = tpm_get_properties(ctx, &fixed_props);
+    TPMA_MODES modes = 0;
+    rv = tpm2_get_modes(ctx, &modes);
     if (rv != CKR_OK) {
-        LOGE("Could not get fixed properties from TPM");
         Esys_Free(capabilityData);
         return rv;
-    }
-
-    TPMA_MODES modes = 0;
-    TPML_TAGGED_TPM_PROPERTY *plist = &fixed_props->data.tpmProperties;
-    UINT32 i;
-    for (i = 0; i < plist->count; i++) {
-        TPM2_PT property = plist->tpmProperty[i].property;
-        if (property == TPM2_PT_MODES) {
-            modes = plist->tpmProperty[i].value;
-            break;
-        }
     }
 
     /* RSA */
@@ -3281,5 +3295,116 @@ CK_RV tpm_create_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_
     *primary_handle = new_handle;
 
     return CKR_OK;
+}
+
+CK_RV tpm_get_pss_sig_state(tpm_ctx *tctx, tobject *tobj,
+        bool *pss_sigs_good) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    TPM2B_PRIVATE *out_priv = NULL;
+    TPM2B_PUBLIC *out_pub = NULL;
+    TPMT_SIGNATURE *signature = NULL;
+
+    EVP_PKEY_CTX *pkey_ctx = NULL;
+
+    /*
+     * do the fastest operation to figure this out front by checking,
+     * the hopefully cached, FIPS_140_2 mode bit
+     */
+    TPMA_MODES modes = 0;
+    rv = tpm2_get_modes(tctx, &modes);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    if (modes & TPMA_MODES_FIPS_140_2) {
+        *pss_sigs_good = true;
+        return CKR_OK;
+    }
+
+    /* Sign something using RSA PSS SHA256 */
+    static const TPM2B_DIGEST dgst = {
+        .size = 32,
+        .buffer = {
+            0xb5, 0xbb, 0x9d, 0x80, 0x14, 0xa0, 0xf9, 0xb1, 0xd6, 0x1e, 0x21, 0xe7,
+            0x96, 0xd7, 0x8d, 0xcc, 0xdf, 0x13, 0x52, 0xf2, 0x3c, 0xd3, 0x28, 0x12,
+            0xf4, 0x85, 0x0b, 0x87, 0x8a, 0xe4, 0x94, 0x4c
+        }
+    };
+
+    TPMT_SIG_SCHEME scheme = { 0 };
+    scheme.scheme = TPM2_ALG_RSAPSS;
+    scheme.details.rsapss.hashAlg = TPM2_ALG_SHA256;
+
+    TPMT_TK_HASHCHECK validation = {
+            .tag = TPM2_ST_HASHCHECK,
+            .hierarchy = TPM2_RH_NULL,
+            .digest = { 0 }
+    };
+
+    bool res = set_esys_auth(tctx->esys_ctx, tobj->tpm_handle,
+            tobj->unsealed_auth);
+    if (!res) {
+        return CKR_GENERAL_ERROR;
+    }
+
+    TSS2_RC rval = Esys_Sign(
+            tctx->esys_ctx,
+            tobj->tpm_handle,
+            ESYS_TR_PASSWORD,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            &dgst,
+            &scheme,
+            &validation,
+            &signature);
+    if (rval != TPM2_RC_SUCCESS) {
+        LOGE("Esys_Sign: %s", Tss2_RC_Decode(rval));
+        goto out;
+    }
+
+    EVP_PKEY *pkey = NULL;
+    rv = ssl_util_tobject_to_evp(&pkey, tobj);
+    if (rv != CKR_OK) {
+        goto out;
+    }
+
+    rv = ssl_util_setup_evp_pkey_ctx(pkey, RSA_PKCS1_PSS_PADDING, EVP_sha256(),
+            EVP_PKEY_verify_init, &pkey_ctx);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    int rc = EVP_PKEY_CTX_set_rsa_pss_saltlen(pkey_ctx, RSA_PSS_SALTLEN_DIGEST);
+    if (!rc) {
+        SSL_UTIL_LOGE("EVP_PKEY_CTX_set_rsa_pss_keygen_saltlen"
+                " RSA_PSS_SALTLEN_DIGEST failed");
+        goto out;
+    }
+
+    TPM2B_PUBLIC_KEY_RSA *sig = &signature->signature.rsapss.sig;
+
+    rc = EVP_PKEY_verify(pkey_ctx, sig->buffer, sig->size, dgst.buffer, dgst.size);
+    if (rc < 0) {
+        SSL_UTIL_LOGE("EVP_PKEY_verify failed");
+        goto out;
+    }
+
+    if (rc == 1) {
+        *pss_sigs_good = true;
+    } else {
+        *pss_sigs_good = false;
+    }
+
+    rv = CKR_OK;
+
+out:
+    EVP_PKEY_CTX_free(pkey_ctx);
+    Esys_Free(out_priv);
+    Esys_Free(out_pub);
+    Esys_Free(signature);
+
+    return rv;
 }
 

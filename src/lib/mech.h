@@ -5,6 +5,7 @@
 #include "attrs.h"
 #include "object.h"
 #include "pkcs11.h"
+#include "token.h"
 #include "tpm.h"
 
 #ifndef SRC_LIB_MECH_H_
@@ -12,7 +13,7 @@
 
 typedef struct mdetail mdetail;
 
-CK_RV mdetail_new(tpm_ctx *ctx, mdetail **mout);
+CK_RV mdetail_new(tpm_ctx *ctx, mdetail **mout, pss_config_state pss_sig_state);
 
 void mdetail_free(mdetail **mdtl);
 
@@ -53,5 +54,7 @@ CK_RV mech_get_padding(mdetail *mdtl,
         CK_MECHANISM_PTR mech, int *padding);
 
 CK_RV mech_get_label(CK_MECHANISM_PTR mech, twist *label);
+
+void mdetail_set_pss_status(mdetail *m, bool pss_sigs_good);
 
 #endif /* SRC_LIB_MECH_H_ */

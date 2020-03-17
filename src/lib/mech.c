@@ -139,7 +139,7 @@ static const mdetail_entry _g_mechs_templ[] = {
 
     { .type = CKM_RSA_PKCS,      .flags = mf_force_synthetic|mf_sign|mf_verify|mf_encrypt|mf_decrypt|mf_rsa, .validator = rsa_pkcs_validator, .synthesizer = rsa_pkcs_synthesizer, .get_tpm_opdata = tpm_rsa_pkcs_get_opdata, .padding = RSA_PKCS1_PADDING },
 
-    { .type = CKM_RSA_PKCS_PSS,  .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_validator,  .get_halg = rsa_pss_get_halg,  .get_digester = rsa_pss_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
+    { .type = CKM_RSA_PKCS_PSS,  .flags = mf_sign|mf_verify, .validator = rsa_pss_validator, .get_halg = rsa_pss_get_halg,  .get_digester = rsa_pss_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
 
     { .type = CKM_RSA_PKCS_OAEP, . flags = mf_encrypt|mf_decrypt|mf_rsa,  .validator = rsa_oaep_validator, .get_halg = rsa_oaep_get_halg, .get_digester = rsa_oaep_get_digester, .get_tpm_opdata = tpm_rsa_oaep_get_opdata, .padding = RSA_PKCS1_OAEP_PADDING },
 
@@ -148,10 +148,10 @@ static const mdetail_entry _g_mechs_templ[] = {
     { .type = CKM_SHA384_RSA_PKCS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pkcs_hash_validator, .synthesizer = rsa_pkcs_hash_synthesizer, .get_halg = sha384_get_halg, .get_digester = sha384_get_digester, .get_tpm_opdata = tpm_rsa_pkcs_sha384_get_opdata, .padding = RSA_PKCS1_PADDING },
     { .type = CKM_SHA512_RSA_PKCS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pkcs_hash_validator, .synthesizer = rsa_pkcs_hash_synthesizer, .get_halg = sha512_get_halg, .get_digester = sha512_get_digester, .get_tpm_opdata = tpm_rsa_pkcs_sha512_get_opdata, .padding = RSA_PKCS1_PADDING },
 
-    { .type = CKM_SHA1_RSA_PKCS_PSS,   .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha1_get_halg, .get_digester = sha1_get_digester,     .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha1_get_opdata,   .padding = RSA_PKCS1_PSS_PADDING },
-    { .type = CKM_SHA256_RSA_PKCS_PSS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha256_get_halg, .get_digester = sha256_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha256_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
-    { .type = CKM_SHA384_RSA_PKCS_PSS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha384_get_halg, .get_digester = sha384_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha384_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
-    { .type = CKM_SHA512_RSA_PKCS_PSS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha512_get_halg, .get_digester = sha512_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha512_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
+    { .type = CKM_SHA1_RSA_PKCS_PSS,   .flags = mf_sign|mf_verify, .validator = rsa_pss_hash_validator, .get_halg = sha1_get_halg, .get_digester = sha1_get_digester,     .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha1_get_opdata,   .padding = RSA_PKCS1_PSS_PADDING },
+    { .type = CKM_SHA256_RSA_PKCS_PSS, .flags = mf_sign|mf_verify, .validator = rsa_pss_hash_validator, .get_halg = sha256_get_halg, .get_digester = sha256_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha256_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
+    { .type = CKM_SHA384_RSA_PKCS_PSS, .flags = mf_sign|mf_verify, .validator = rsa_pss_hash_validator, .get_halg = sha384_get_halg, .get_digester = sha384_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha384_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
+    { .type = CKM_SHA512_RSA_PKCS_PSS, .flags = mf_sign|mf_verify, .validator = rsa_pss_hash_validator, .get_halg = sha512_get_halg, .get_digester = sha512_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha512_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
 
     /* EC */
     { .type = CKM_EC_KEY_PAIR_GEN, .flags = mf_is_keygen|mf_ecc,      .validator = ecc_keygen_validator },
@@ -174,14 +174,14 @@ static const mdetail_entry _g_mechs_templ[] = {
     { .type = CKM_SHA512, .flags = mf_is_digester|mf_aes, .validator = hash_validator, .get_digester = sha512_get_digester },
 };
 
-rsa_detail _g_rsa_keysizes_templ [] = {
+const rsa_detail _g_rsa_keysizes_templ [] = {
     { .bits = 1024 },
     { .bits = 2048 },
     { .bits = 3072 },
     { .bits = 4096 },
 };
 
-nid_detail _g_ecc_curve_nids_templ [] = {
+const nid_detail _g_ecc_curve_nids_templ [] = {
     { .nid = NID_X9_62_prime192v1 },
     { .nid = NID_secp224r1        },
     { .nid = NID_X9_62_prime256v1 },
@@ -291,7 +291,34 @@ void mdetail_free(mdetail **mdtl) {
     *mdtl = NULL;
 }
 
-CK_RV mdetail_new(tpm_ctx *ctx, mdetail **mout) {
+void mdetail_set_pss_status(mdetail *m, bool pss_sigs_good) {
+
+    CK_MECHANISM_TYPE mtypes[] = {
+        CKM_RSA_PKCS_PSS,
+        CKM_SHA1_RSA_PKCS_PSS,
+        CKM_SHA256_RSA_PKCS_PSS,
+        CKM_SHA384_RSA_PKCS_PSS,
+        CKM_SHA512_RSA_PKCS_PSS,
+    };
+
+    size_t i = 0;
+    for (i=0; i < ARRAY_LEN(mtypes); i++) {
+        CK_MECHANISM_TYPE t = mtypes[i];
+
+        mdetail_entry *d = mlookup(m, t);
+        assert(d);
+
+        if (pss_sigs_good) {
+            d->flags |= mf_tpm_supported;
+            d->flags &= ~mf_rsa;
+        } else {
+            d->flags &= ~mf_tpm_supported;
+            d->flags |= mf_rsa;
+        }
+    }
+}
+
+CK_RV mdetail_new(tpm_ctx *ctx, mdetail **mout, pss_config_state pss_sig_state) {
     assert(mout);
 
     mdetail_entry *d = calloc(1, sizeof(_g_mechs_templ));
@@ -336,13 +363,34 @@ CK_RV mdetail_new(tpm_ctx *ctx, mdetail **mout) {
     m->rsa_detail_len = ARRAY_LEN(_g_rsa_keysizes_templ);
     m->rsa_entries = r;
 
+    /*
+     * TODO
+     * make mech_init smarter by caching the various RSA and EC curve
+     * information in the YAML token config. Thus reduce TPM round trips.
+     * See https://github.com/tpm2-software/tpm2-pkcs11/issues/455
+     */
     CK_RV rv = mech_init(ctx, m);
     if (rv != CKR_OK) {
         LOGE("mech_init failed: 0x%lx", rv);
+        free(m);
         free(d);
         free(n);
         free(r);
         return rv;
+    }
+
+    /*
+     * Some tokens know their PSS state, always use it. The TPM backend code
+     * might get it wrong, as it *ONLY* checks TPMA_MODES in the properties.
+     * Else we will figure it out when we need to sign, which is when it really
+     * matters.
+     */
+    if (pss_sig_state != pss_config_state_unk) {
+        bool pss_sigs_good = (pss_sig_state == pss_config_state_good)
+                ? true : false;
+        LOGV("Updating mech detail table that PSS signatures are: %s",
+                pss_sigs_good ? "good" : "bad");
+        mdetail_set_pss_status(m, pss_sigs_good);
     }
 
     *mout = m;
