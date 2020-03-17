@@ -3062,7 +3062,9 @@ out:
 }
 
 void tpm_init(void) {
-    /* nothing to do */
+    tpms_fixed_property_cache = NULL;
+    tpms_alg_cache = NULL;
+    tpms_cc_cache = NULL;
 }
 
 void tpm_destroy(void) {
