@@ -46,6 +46,10 @@ static inline void *OPENSSL_memdup(const void *dup, size_t l) {
 
 #endif
 
+#ifndef RSA_PSS_SALTLEN_DIGEST
+#define RSA_PSS_SALTLEN_DIGEST -1
+#endif
+
 /* Utility APIs */
 
 #define SSL_UTIL_LOGE(m) LOGE("%s: %s", m, ERR_error_string(ERR_get_error(), NULL));
@@ -66,5 +70,12 @@ CK_RV ssl_util_verify_recover(EVP_PKEY *pkey,
         int padding, const EVP_MD *md,
         CK_BYTE_PTR signature, CK_ULONG signature_len,
         CK_BYTE_PTR data, CK_ULONG_PTR data_len);
+
+typedef int (*fn_EVP_PKEY_init)(EVP_PKEY_CTX *ctx);
+
+CK_RV ssl_util_setup_evp_pkey_ctx(EVP_PKEY *pkey,
+        int padding, const EVP_MD *md,
+        fn_EVP_PKEY_init init_fn,
+        EVP_PKEY_CTX **outpkey_ctx);
 
 #endif /* SRC_LIB_SSL_UTIL_H_ */

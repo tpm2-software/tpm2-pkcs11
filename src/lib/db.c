@@ -767,6 +767,61 @@ error:
     goto out;
 }
 
+CK_RV db_update_token_config(token *tok) {
+    assert(tok);
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    sqlite3_stmt *stmt = NULL;
+
+    char *config = emit_config_to_string(tok);
+    if (!config) {
+        LOGE("Could not get token config");
+        return CKR_GENERAL_ERROR;
+    }
+
+    const char *sql =
+          "UPDATE tokens SET"
+            " config=?"      // index: 1 type: TEXT (JSON)
+            " WHERE id=?;";  // Index 2 type: int
+    int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("%s", sqlite3_errmsg(global.db));
+        goto error;
+    }
+
+    rc = sqlite3_bind_text(stmt, 1, config, -1, SQLITE_STATIC);
+    gotobinderror(rc, "config");
+
+    rc = sqlite3_bind_int(stmt, 2, tok->id);
+    gotobinderror(rc, "id");
+
+    rc = sqlite3_finalize(stmt);
+    if (rc) {
+        LOGE("finalize");
+        /* finalizing again probably won't fix this */
+        goto out;
+    }
+
+    rv = CKR_OK;
+
+out:
+    free(config);
+    return rv;
+
+error:
+    rc = sqlite3_finalize(stmt);
+    if (rc != SQLITE_OK) {
+        LOGW("Could not finalize stmt: %d", rc);
+    }
+
+    rollback();
+
+    rv = CKR_GENERAL_ERROR;
+    goto out;
+
+}
+
 CK_RV db_add_token(token *tok) {
     assert(tok);
     assert(tok->id);
@@ -828,7 +883,7 @@ CK_RV db_add_token(token *tok) {
      *   - https://github.com/tpm2-software/tpm2-pkcs11/issues/371
      */
     rc = sqlite3_bind_int(stmt, 1, tok->id);
-    gotobinderror(rc, "pid");
+    gotobinderror(rc, "id");
 
     rc = sqlite3_bind_int(stmt, 2, tok->pid);
     gotobinderror(rc, "pid");

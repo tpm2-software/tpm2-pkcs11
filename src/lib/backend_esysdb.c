@@ -214,3 +214,12 @@ CK_RV backend_esysdb_add_object(token *t, tobject *tobj) {
     LOGV("Adding object to esysdb backend");
     return db_add_new_object(t, tobj);
 }
+
+/** Given a token with a config, persist it.
+ *
+ * See backend_update_token_config()
+ */
+CK_RV backend_esysdb_update_token_config (token *tok) {
+
+    return db_update_token_config(tok);
+}

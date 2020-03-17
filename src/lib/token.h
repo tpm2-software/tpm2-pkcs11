@@ -12,10 +12,18 @@
 
 #include <tss2/tss2_fapi.h>
 
+typedef enum pss_config_state pss_config_state;
+enum pss_config_state {
+    pss_config_state_unk = 0,
+    pss_config_state_bad,
+    pss_config_state_good,
+};
+
 typedef struct token_config token_config;
 struct token_config {
     bool is_initialized;  /* token initialization state */
     char *tcti;           /* token specific tcti config */
+    pss_config_state pss_sigs_good;
 };
 
 typedef struct session_table session_table;

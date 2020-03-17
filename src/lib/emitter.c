@@ -296,6 +296,30 @@ char *emit_config_to_string(token *t) {
         }
     }
 
+    /* add the pss signature state if known */
+    if (t->config.pss_sigs_good != pss_config_state_unk) {
+
+        key = yaml_document_add_scalar(&doc, (yaml_char_t *)YAML_STR_TAG,
+             (yaml_char_t *)"pss-sigs-good", -1, YAML_ANY_SCALAR_STYLE);
+        if (!key) {
+            LOGE("yaml_document_add_scalar for key failed");
+            goto doc_delete;
+        }
+
+        value = (t->config.pss_sigs_good == pss_config_state_good)
+                ? "true" : "false";
+
+        node = yaml_document_add_scalar(&doc, (yaml_char_t *)YAML_BOOL_TAG,
+             (yaml_char_t *)value, -1, YAML_ANY_SCALAR_STYLE);
+
+        rc = yaml_document_append_mapping_pair(&doc,
+                root, key, node);
+        if (!rc) {
+            LOGE("yaml_document_append_mapping_pair failed");
+            goto doc_delete;
+        }
+    }
+
     yaml_emitter_t emitter = { 0 };
 
     /* dummy dump the yaml to get size */

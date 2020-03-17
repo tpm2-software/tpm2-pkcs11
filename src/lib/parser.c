@@ -409,9 +409,13 @@ bool handle_config_event(yaml_event_t *e,
             } else if(!strcmp(state->key, "token-init")) {
                 config->is_initialized = !strcmp((const char *)e->data.scalar.value, "true")
                         ? true : false;
+            } else if(!strcmp(state->key, "pss-sigs-good")) {
+                config->pss_sigs_good = !strcmp((const char *)e->data.scalar.value, "true")
+                        ? pss_config_state_good : pss_config_state_bad;
             } else {
                 LOGE("Unknown key, got: \"%s\"\n",
                         state->key);
+                return false;
             }
 
             state->key[0] = '\0';

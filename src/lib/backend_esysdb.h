@@ -22,4 +22,6 @@ CK_RV backend_esysdb_init_user(token *t, const twist sealdata,
 
 CK_RV backend_esysdb_add_object(token *t, tobject *tobj);
 
+CK_RV backend_esysdb_update_token_config (token *tok);
+
 #endif /* SRC_LIB_BACKEND_ESYSDB_H_ */

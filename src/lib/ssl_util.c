@@ -369,9 +369,7 @@ error:
     return rv;
 }
 
-typedef int (*fn_EVP_PKEY_init)(EVP_PKEY_CTX *ctx);
-
-static CK_RV setup_evp_pkey_ctx(EVP_PKEY *pkey,
+CK_RV ssl_util_setup_evp_pkey_ctx(EVP_PKEY *pkey,
         int padding, const EVP_MD *md,
         fn_EVP_PKEY_init init_fn,
         EVP_PKEY_CTX **outpkey_ctx) {
@@ -419,7 +417,7 @@ static CK_RV do_sig_verify_rsa(EVP_PKEY *pkey,
     CK_RV rv = CKR_GENERAL_ERROR;
 
     EVP_PKEY_CTX *pkey_ctx = NULL;
-    rv = setup_evp_pkey_ctx(pkey, padding, md,
+    rv = ssl_util_setup_evp_pkey_ctx(pkey, padding, md,
             EVP_PKEY_verify_init, &pkey_ctx);
     if (rv != CKR_OK) {
         return rv;
@@ -548,7 +546,7 @@ CK_RV ssl_util_verify_recover(EVP_PKEY *pkey,
     }
 
     EVP_PKEY_CTX *pkey_ctx = NULL;
-    CK_RV rv = setup_evp_pkey_ctx(pkey, padding, md,
+    CK_RV rv = ssl_util_setup_evp_pkey_ctx(pkey, padding, md,
             EVP_PKEY_verify_recover_init, &pkey_ctx);
     if (rv != CKR_OK) {
         return rv;

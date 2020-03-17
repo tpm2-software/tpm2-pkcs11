@@ -24,4 +24,6 @@ CK_RV backend_init_user(token *t, const twist sealdata,
 
 CK_RV backend_add_object(token *t, tobject *tobj);
 
+CK_RV backend_update_token_config(token *t);
+
 #endif /* SRC_LIB_BACKEND_H_ */

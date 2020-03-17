@@ -10,6 +10,7 @@
  #include <openssl/rsa.h>
 
 #include "attrs.h"
+#include "backend.h"
 #include "checks.h"
 #include "digest.h"
 #include "encrypt.h"
@@ -151,6 +152,30 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
     /* TPM is only used on sign operations, not verify */
     tpm_op_data *tpm_opdata = NULL;
     if (op == operation_sign) {
+
+        /*
+         * Tokens added in previous versions may not have a known PSS signature
+         * state, so check and populate here.
+         */
+        bool pss_sigs_good = false;
+        pss_config_state pss_cfg = tok->config.pss_sigs_good;
+        if (pss_cfg == pss_config_state_unk) {
+            rv = tpm_get_pss_sig_state(tok->tctx, tobj,
+                    &pss_sigs_good);
+            if (rv != CKR_OK) {
+                LOGW("Could not determine PSS signature format,"
+                        "assuming maximized slen");
+                tok->config.pss_sigs_good = pss_sigs_good ?
+                        pss_config_state_good : pss_config_state_bad;
+            }
+
+            mdetail_set_pss_status(tok->mdtl, pss_sigs_good);
+            rv = backend_update_token_config(tok);
+            if (rv != CKR_OK) {
+                LOGW("Could not update token config backend, moving on");
+            }
+        }
+
         rv = mech_get_tpm_opdata(tok->mdtl,
                 tok->tctx, mechanism, tobj, &tpm_opdata);
         if (rv != CKR_OK) {
