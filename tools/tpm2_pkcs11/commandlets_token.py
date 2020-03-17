@@ -207,6 +207,8 @@ class AddTokenCommand(Command):
 
         # Verify pid is in db
         pobject = db.getprimary(pid)
+        if not pobject:
+            raise RuntimeError('No primary object id: %u' % (pid))
 
         with TemporaryDirectory() as d:
             tpm2 = Tpm2(d)
