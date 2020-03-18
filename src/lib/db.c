@@ -1148,7 +1148,12 @@ static CK_RV db_for_path(char *path, size_t len, db_handler h) {
 
 static CK_RV db_get_path_handler(char *path, size_t len, handler_idx index) {
     UNUSED(len);
-    UNUSED(index);
+
+    /* Always attempt to use ENV VAR */
+    if (index == HANDLER_IDX_ENV) {
+        LOGV("using "PKCS11_STORE_ENV_VAR"=\"%s\"", path);
+        return CKR_OK;
+    }
 
     struct stat sb;
     int rc = stat(path, &sb);
