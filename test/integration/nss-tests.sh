@@ -76,7 +76,9 @@ echo "Initializing temporary NSS DB"
 certutil -N -d . --empty-password
 
 echo "Adding PKCS11 module in $modpath to NSS configuration"
-echo | modutil -add tpm2 -libfile "$modpath" -dbdir .
+#modutil will first ask about a running browser which we acknowledge with \n
+#sometimes it will then ask because p11-kit already knows tpm2 which we then abort with q\n
+echo -ne "\nq\n" | modutil -add tpm2 -libfile "$modpath" -dbdir .
 
 echo "Adding S/MIME trust for test CA"
 certutil -A -d . -n testca -t ,C, -a -i "$CA_PEM"
