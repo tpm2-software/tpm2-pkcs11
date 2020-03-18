@@ -114,7 +114,7 @@ daemon_stop ()
 }
 
 function setup_fapi() {
-    tempdir=`pwd`/$(mktemp -d tss2_fapi.XXXXXX)
+    tempdir=${1:-$(mktemp -d tpm2-pkcs11-test-fapistore.XXXXXX)}
 
     KEYSTORE_USER=keystore_user
     KEYSTORE_SYSTEM=keystore_system

@@ -91,16 +91,20 @@ TESTS_CFLAGS = $(CMOCKA_CFLAGS)
 check_PROGRAMS =
 check_SCRIPTS =
 
-TEST_EXTENSIONS = .sh .int .nosetup .java
+TEST_EXTENSIONS = .sh .int .nosetup .java .fapi
 
 integration_scripts = \
     test/integration/pkcs11-tool.sh \
     test/integration/pkcs11-tool-init.sh.nosetup \
+    test/integration/pkcs11-tool-init-fapi.sh.fapi \
     test/integration/pkcs11-dbup.sh.nosetup \
     test/integration/tls-tests.sh \
     test/integration/openssl.sh \
     test/integration/pkcs11-javarunner.sh.java \
     test/integration/nss-tests.sh
+# Note that -fapi.sh.fapi is symlinked to .sh.nosetup
+# If we'd use the .fapi extension then .nosetup and .fapi overwrite each others .log
+# thus we use -fapi.sh.fapi as suffix.
 
 EXTRA_DIST += \
     $(integration_scripts) \
@@ -134,15 +138,6 @@ check_PROGRAMS += \
 # add test scripts
 check_SCRIPTS += $(integration_scripts)
 
-#Cannot be part of $(integration_scripts) since its not EXTRA_DIST
-check_SCRIPTS += test/integration/pkcs11-tool-init-fapi.sh.nosetup
-
-test/integration/pkcs11-tool-init-fapi.sh.nosetup: test/integration/pkcs11-tool-init.sh.nosetup
-	$(AM_V_GEN)(echo "#!/usr/bin/env bash"; echo "export FAPI_PREVIEW=true"; cat $^)>$@ \
-		&& chmod +x "$@"
-
-CLEANFILES += test/integration/pkcs11-tool-init-fapi.sh.nosetup
-
 LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
 
 AM_INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
@@ -153,6 +148,9 @@ SH_LOG_COMPILER=$(LOG_COMPILER)
 
 AM_NOSETUP_LOG_FLAGS = --tabrmd-tcti=mssim
 NOSETUP_LOG_COMPILER=$(LOG_COMPILER)
+
+AM_FAPI_LOG_FLAGS = --tabrmd-tcti=mssim
+FAPI_LOG_COMPILER=env FAPI_PREVIEW=true $(LOG_COMPILER)
 
 test_integration_pkcs_find_objects_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_find_objects_int_LDADD   = $(TESTS_LDADD)
