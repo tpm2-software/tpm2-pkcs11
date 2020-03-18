@@ -43,6 +43,7 @@ void backend_fapi_ctx_free(token *t) {
 #define PREFIX "/HS/SRK/tpm2-pkcs11-token-"
 
 static char * tss_path_from_id(unsigned id, const char *type) {
+    /* Allocate for PREFIX + type + "-" + id + '\0' */
     char *path = malloc(strlen(PREFIX) + strlen(type) + 1 + 8 + 1);
     if (!path) {
         return NULL;
@@ -62,6 +63,10 @@ CK_RV backend_fapi_create_token_seal(token *t, const twist hexwrappingkey,
     TSS2_RC rc;
 
     char *path = tss_path_from_id(t->id, "so");
+    if (!path) {
+        LOGE("No path constructed.");
+        return CKR_GENERAL_ERROR;
+    }
 
     rc = Fapi_CreateSeal(t->fapi.ctx, path,
                          NULL /*type*/, twist_len(hexwrappingkey),
@@ -301,7 +306,7 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
         /*********************************/
         path = tss_path_from_id(t->id, "usr");
         if (!path) {
-            LOGE("OOM");
+            LOGE("No path constructed.");
             goto error;
         }
         rc = Fapi_GetTpmBlobs(t->fapi.ctx, path, &tpm2bPublic, &tpm2bPublicSize,
@@ -366,6 +371,10 @@ CK_RV backend_fapi_init_user(token *t, const twist sealdata,
     TSS2_RC rc;
 
     char *path = tss_path_from_id(t->id, "usr");
+    if (!path) {
+        LOGE("No path constructed.");
+        return CKR_GENERAL_ERROR;
+    }
 
     rc = Fapi_CreateSeal(t->fapi.ctx, path,
                          NULL /*type*/, twist_len(sealdata),
@@ -453,7 +462,7 @@ CK_RV backend_fapi_add_object(token *t, tobject *tobj) {
 
     char *path = tss_path_from_id(t->id, "so");
     if (!path) {
-        LOGE("OOM");
+        LOGE("No path constructed.");
         return CKR_GENERAL_ERROR;
     }
     char *attrs = emit_attributes_to_string(tobj->attrs);
