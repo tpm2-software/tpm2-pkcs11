@@ -27,7 +27,6 @@ fi
 echo "modpath=$modpath"
 
 pkcs11_tool() {
-#  valgrind pkcs11-tool --module "$modpath" "$@"
   pkcs11-tool --module "$modpath" "$@"
   return $?
 }

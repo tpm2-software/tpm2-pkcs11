@@ -175,7 +175,7 @@ echo ${TPM2TOOLS_TCTI}
 export TPM2_PKCS11_TCTI="tabrmd:${TABRMD_TEST_TCTI_CONF}"
 echo ${TPM2_PKCS11_TCTI}
 
-setup_fapi
+setup_fapi ${SIM_TMP_DIR}
 tss2_provision
 
 # if provided, run the test script
