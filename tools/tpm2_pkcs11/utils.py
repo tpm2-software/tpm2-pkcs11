@@ -21,12 +21,8 @@ from pyasn1.codec.der import encoder as derenc
 
 from .pkcs11t import *  # noqa
 
-if sys.version_info.major < 3:
-    input = raw_input
-
 def str2bytes(s):
-    if isinstance(s, str) or \
-        (sys.version_info.major < 3 and isinstance(s, unicode)):
+    if isinstance(s, str):
         return s.encode()
     return s
 

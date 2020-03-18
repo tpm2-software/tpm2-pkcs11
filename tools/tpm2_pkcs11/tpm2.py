@@ -71,15 +71,13 @@ class Tpm2(object):
 
     def load(self, pctx, pauth, priv, pub):
 
-        t = unicode if sys.version_info.major < 3 else str
-
-        if priv != None and not isinstance(priv, t):
+        if priv != None and not isinstance(priv, str):
             sealprivf = NamedTemporaryFile()
             sealprivf.write(priv)
             sealprivf.flush()
             priv = sealprivf.name
 
-        if not isinstance(pub, t):
+        if not isinstance(pub, str):
             sealpubf = NamedTemporaryFile()
             sealpubf.write(pub)
             sealpubf.flush()
