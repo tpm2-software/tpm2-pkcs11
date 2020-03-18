@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: BSD-2-Clause
+
+set -x
+
+source "$T/test/integration/scripts/helpers.sh"
+
+tempdir=$(mktemp -d)
+
+function cleanup() {
+	rm -rf "$tempdir"
+}
+trap cleanup EXIT
+
+onerror() {
+  echo "$BASH_COMMAND on line ${BASH_LINENO[0]} failed: $?"
+  exit 1
+}
+trap onerror ERR
+
+setup_asan
+
+if [ -z "$modpath" ]; then
+  modpath="$PWD/src/.libs/libtpm2_pkcs11.so"
+fi
+
+function setup_spy() {
+    export PKCS11SPY="$modpath"
+    export PKCS11SPY_OUTPUT=${0}_pkcs11spy.log
+    modpath=${PKCS11SPY_LIB:-/usr/lib/x86_64-linux-gnu/pkcs11-spy.so}
+}
+
+if [ "${USE_PKCS11SPY:-no}" != "no" ]; then
+    setup_spy
+fi
+
+echo "modpath=$modpath"
+
+function p11_tool() {
+    p11tool -d 9999 $@
+}
+
+export HOME=${tempdir}
+mkdir -p $HOME/.config/pkcs11/modules
+echo "module: $modpath" >$HOME/.config/pkcs11/modules/tpm2-pkcs11.module
+
+export TPM2_PKCS11_STORE="$tempdir"
+
+echo "TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
+
+echo "testdata">${tempdir}/data
+
+echo "Should have uninitialized token"
+p11_tool --list-tokens
+if ! p11_tool --list-tokens | grep -q "Model: SW   TPM"; then
+  echo "p11tool did not find this token."
+  echo "If you are running a recent version of p11tool then you need to configure the module system-wide:"
+  echo "echo \"module: $TRAVIS_BUILD_DIR/build/src/.libs/libtpm2_pkcs11.so\" >/etc/pkcs11/modules/tpm2_pkcs11.module"
+  exit 77 #TEST SKIP
+fi
+echo "Found uninitialized token"
+
+echo "Getting token url"
+p11_tool --list-token-urls
+TOKENURL=$(p11_tool --list-token-urls | grep "SW%20%20%20TPM")
+echo "Got token url: ${TOKENURL}"
+
+echo "Testing mech and random function"
+p11_tool --list-mechanisms ${TOKENURL}
+test "$(p11tool -d 0 --generate-random=4096 ${TOKENURL} \
+            | wc -c)" == "4096"
+echo "Random function works"
+
+echo "Testing p11tool version >= 3.5.0 before we continue"
+#Older version of p11tool segfault during --initialize
+if [ "$(p11_tool --version=v | cut -d " " -f 2 | cut -d "." -f 1)" -lt "3" ]; then
+  echo "p11tool version < 3.5.0"
+  exit 77 #TEST SKIP
+fi
+if [ "$(p11_tool --version=v | cut -d " " -f 2 | cut -d "." -f 1)" -eq "3" ]; then
+  if [ "$(p11_tool --version=v | cut -d " " -f 2 | cut -d "." -f 2)" -lt "5" ]; then
+    echo "p11tool version < 3.5.0"
+    exit 77 #TEST SKIP
+  fi
+fi
+echo "p11tool version >= 3.5.0"
+
+echo "Initializing token"
+GNUTLS_SO_PIN=mynewsopin \
+p11_tool --initialize --label=mynewtoken ${TOKENURL}
+p11_tool --list-token-urls
+TOKENURL=$(p11_tool --list-token-urls | grep "mynewtoken")
+echo "Token initialized"
+
+echo "Initializing user pin"
+GNUTLS_SO_PIN=mynewsopin \
+GNUTLS_PIN=mynewuserpin \
+p11_tool --initialize-pin ${TOKENURL}
+echo "Userpin initialized"
+
+echo "Generating RSA keypair"
+GNUTLS_PIN=mynewuserpin \
+p11_tool --generate-rsa --bits 2048 --login --label="myrsakey" --outfile="${tempdir}/pubkey.pem" ${TOKENURL}
+p11_tool --list-all ${TOKENURL}
+echo "RSA Keypair generated"
+
+echo "Testing signing via openssl"
+osslconf="$tempdir/ossl.cnf"
+cat << EOF > "$osslconf"
+openssl_conf = openssl_init
+
+[openssl_init]
+engines = engine_section
+
+[engine_section]
+pkcs11 = pkcs11_section
+
+[pkcs11_section]
+engine_id = pkcs11
+MODULE_PATH = $modpath
+init = 0
+EOF
+export OPENSSL_CONF="$osslconf"
+
+openssl dgst -engine pkcs11 -keyform engine \
+        -sha256 -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:-1 \
+        -sign "$TOKENURL" -out ${tempdir}/sig -passin pass:mynewuserpin ${tempdir}/data
+
+openssl pkeyutl -sign -engine pkcs11 -keyform engine \
+        -inkey ${TOKENURL} -passin pass:mynewuserpin \
+        -in ${tempdir}/data -out ${tempdir}/sig
+echo "Signing tested"
+
+exit 0
