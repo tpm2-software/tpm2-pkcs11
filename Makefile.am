@@ -98,6 +98,8 @@ integration_scripts = \
     test/integration/pkcs11-tool.sh \
     test/integration/pkcs11-tool-init.sh.nosetup \
     test/integration/pkcs11-tool-init-fapi.sh.fapi \
+    test/integration/p11-tool.sh.nosetup \
+    test/integration/p11-tool-fapi.sh.fapi \
     test/integration/pkcs11-dbup.sh.nosetup \
     test/integration/tls-tests.sh \
     test/integration/openssl.sh \
