@@ -322,7 +322,7 @@ def _pkcs11_to_str(value, prefix):
     if value in inv_map:
         return inv_map[value]
     else:
-        return '0x{:X}'.format(cko_value)
+        return '0x{:X}'.format(value)
 
 def pkcs11_cko_to_str(cko_value):
 
