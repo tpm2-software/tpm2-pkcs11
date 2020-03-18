@@ -29,8 +29,6 @@ void backend_esysdb_ctx_free(token *t) {
 
 static CK_RV get_or_create_primary(token *t) {
 
-    twist blob = NULL;
-
     /* if there is no primary object ... */
     if (t->pid) {
         return CKR_OK;
@@ -49,6 +47,7 @@ static CK_RV get_or_create_primary(token *t) {
     }
 
     /* is their a PC client spec key ? */
+    twist blob = NULL;
     rv = tpm_get_existing_primary(t->tctx, &t->pobject.handle, &blob);
     if (rv != CKR_OK) {
         return rv;

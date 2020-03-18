@@ -16,11 +16,13 @@
 CK_RV backend_init(void) {
     LOGV("Initializing backends");
     CK_RV rv = backend_fapi_init();
-    if (rv)
+    if (rv) {
         return rv;
+    }
     rv = backend_esysdb_init();
-    if (rv)
+    if (rv) {
         backend_fapi_destroy();
+    }
     return rv;
 }
 
@@ -32,8 +34,9 @@ CK_RV backend_destroy(void) {
 
 CK_RV backend_ctx_new(token *t) {
     CK_RV rv = backend_fapi_ctx_new(t);
-    if (rv)
+    if (rv) {
         return rv;
+    }
     return backend_esysdb_ctx_new(t);
 }
 
@@ -75,20 +78,16 @@ CK_RV backend_create_token_seal(token *t, const twist hexwrappingkey,
  * @returns TODO
  */
 CK_RV backend_get_tokens(token **tok, size_t *len) {
-    CK_RV rv;
-
-    /* This is used to move the empty token to the end. */
-    /* TODO: Would be better to have a nicer way of doing so. */
-    token tmp;
-
-    rv = backend_esysdb_get_tokens(tok, len);
+    CK_RV rv = backend_esysdb_get_tokens(tok, len);
     if (rv) {
         LOGE("Getting tokens from esysdb backend failed.");
         return rv;
     }
     LOGV("Esysdb returned %zi token", *len);
 
-    tmp = (*tok)[*len - 1];
+    /* This is used to move the empty token to the end. */
+    /* TODO: Would be better to have a nicer way of doing so. */
+    token tmp = (*tok)[*len - 1];
     *len -= 1;
 
     rv = backend_fapi_add_tokens(*tok, len);
