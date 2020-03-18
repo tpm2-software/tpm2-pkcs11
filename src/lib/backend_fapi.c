@@ -153,7 +153,7 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
     char *pathlist;
 
     rc = Fapi_List(fctx, "/HS/SRK", &pathlist);
-    if (rc == 0x0006000a) {
+    if (rc == TSS2_FAPI_RC_IO_ERROR) {
         /* If no token seals were found, we're done here. */
         LOGV("No FAPI token seals found.");
         return CKR_OK;
@@ -311,7 +311,7 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
         }
         rc = Fapi_GetTpmBlobs(t->fapi.ctx, path, &tpm2bPublic, &tpm2bPublicSize,
                               &tpm2bPrivate, &tpm2bPrivateSize, NULL /* policy */);
-        if (rc == 0x00060020) {
+        if (rc == TSS2_FAPI_RC_KEY_NOT_FOUND) {
             LOGV("No user pin found for token %08x.", t->id);
             free(path);
             continue;
