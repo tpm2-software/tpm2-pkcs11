@@ -154,6 +154,12 @@ CK_RV backend_fapi_create_token_seal(token *t, const twist hexwrappingkey,
 
     /* FIXME Manually setting SRK handle here */
     t->pid = 0x81000001;
+    twist blob;
+    CK_RV rv = tpm_get_existing_primary(t->tctx, &t->pobject.handle, &blob);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+    twist_free(blob);
 
     return CKR_OK;
 }
