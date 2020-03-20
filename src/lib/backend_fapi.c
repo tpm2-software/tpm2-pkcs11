@@ -62,6 +62,9 @@ CK_RV backend_fapi_create_token_seal(token *t, const twist hexwrappingkey,
                        const twist newauth, const twist newsalthex) {
     TSS2_RC rc;
 
+    /* Prefixing fapi_ids in order to avoid collisions with esysdb */
+    t->id += 0x80;
+
     char *path = tss_path_from_id(t->id, "so");
     if (!path) {
         LOGE("No path constructed.");
