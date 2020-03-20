@@ -45,27 +45,27 @@ pkcs11_tool -I
 pkcs11_tool -T
 
 echo "Initializing token"
-pkcs11_tool --slot=1 --init-token --label=mynewtoken --so-pin=mynewsopin
+pkcs11_tool --slot-index=0 --init-token --label=mynewtoken --so-pin=mynewsopin
 echo "Token initialized"
 
 pkcs11_tool -T
 
 echo "Initializing user pin"
-pkcs11_tool --slot=1 --login --login-type="so" --init-pin --so-pin=mynewsopin --pin=mynewuserpin
+pkcs11_tool --slot-index=0 --login --login-type="so" --init-pin --so-pin=mynewsopin --pin=mynewuserpin
 echo "Userpin initialized"
 
 echo "Generating RSA keypair"
-pkcs11_tool --slot=1 --label="myrsakey" --login --pin=mynewuserpin --keypairgen
+pkcs11_tool --slot-index=0 --label="myrsakey" --login --pin=mynewuserpin --keypairgen
 echo "RSA Keypair generated"
 
 echo "Testing RSA signature"
 pkcs11_tool -v --list-objects --login --pin mynewuserpin
 
-pkcs11_tool -v --sign --login --slot=1 --label="myrsakey" --pin mynewuserpin \
+pkcs11_tool -v --sign --login --slot-index=0 --label="myrsakey" --pin mynewuserpin \
             --input-file ${tempdir}/data --output-file ${tempdir}/sig \
             --mechanism SHA256-RSA-PKCS
 
-pkcs11_tool -v --read-object --slot=1 --label="myrsakey" \
+pkcs11_tool -v --read-object --slot-index=0 --label="myrsakey" \
             --type pubkey --output-file ${tempdir}/pubkey.der \
     || exit 77
 #This fails on old pkcs11-tool versions, thus exit-skip here
