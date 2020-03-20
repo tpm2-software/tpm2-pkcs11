@@ -77,7 +77,19 @@ CK_RV backend_fapi_create_token_seal(token *t, const twist hexwrappingkey,
         return CKR_GENERAL_ERROR;
     }
 
-    rc = Fapi_SetDescription(t->fapi.ctx, path, (char*)&t->label[0]);
+    /* Turn trailing whitespaces into trailing \0; cause some software is weird */
+    for (size_t i = sizeof(t->label); i > 0; i--) {
+        if (t->label[i-1] != ' ') {
+            break;
+        }
+        t->label[i-1] = '\0';
+    }
+
+    char label[sizeof(t->label) + 1]; /* token-label length plus \0 */
+    label[sizeof(t->label)] = '\0';
+    memcpy(&label[0], &t->label[0], sizeof(t->label));
+
+    rc = Fapi_SetDescription(t->fapi.ctx, path, &label[0]);
     if (rc) {
         LOGE("Setting FAPI seal description failed.");
         Fapi_Delete(t->fapi.ctx, path);
@@ -185,6 +197,7 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
         LOGV("Found a token at %s", path);
 
         token *t = &tok[*len];
+        memset(t, 0, sizeof(*t));
         *len += 1;
 
         t->type = token_type_fapi;
@@ -385,7 +398,11 @@ CK_RV backend_fapi_init_user(token *t, const twist sealdata,
         return CKR_GENERAL_ERROR;
     }
 
-    rc = Fapi_SetDescription(t->fapi.ctx, path, (char*)&t->label[0]);
+    char label[sizeof(t->label) + 1]; /* token-label length plus \0 */
+    label[sizeof(t->label)] = '\0';
+    memcpy(&label[0], &t->label[0], sizeof(t->label));
+
+    rc = Fapi_SetDescription(t->fapi.ctx, path, &label[0]);
     if (rc) {
         LOGE("Setting FAPI seal description failed.");
         Fapi_Delete(t->fapi.ctx, path);
