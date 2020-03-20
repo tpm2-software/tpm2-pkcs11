@@ -114,6 +114,54 @@ AX_PROG_JAVAC()
 AX_PROG_JAVA()
 m4_popdef([AC_MSG_ERROR])
 
+AC_CHECK_PROG([tpm2_createprimary], [tpm2_createprimary], [yes], [no])
+  AS_IF([test "x$tpm2_createprimary" != "xyes"],
+    [AC_MSG_ERROR([tpm2_ptool requires tpm2_createprimary, but executable not found.])])
+
+AC_CHECK_PROG([tpm2_create], [tpm2_create], [yes], [no])
+  AS_IF([test "x$tpm2_create" != "xyes"],
+    [AC_MSG_ERROR([tpm2_ptool requires tpm2_create, but executable not found.])])
+
+AC_CHECK_PROG([tpm2_evictcontrol], [tpm2_evictcontrol], [yes], [no])
+  AS_IF([test "x$tpm2_evictcontrol" != "xyes"],
+    [AC_MSG_ERROR([tpm2_ptool requires tpm2_evictcontrol, but executable not found.])])
+
+AC_CHECK_PROG([tpm2_readpublic], [tpm2_readpublic], [yes], [no])
+  AS_IF([test "x$tpm2_readpublic" != "xyes"],
+    [AC_MSG_ERROR([tpm2_ptool requires tpm2_readpublic, but executable not found.])])
+
+AC_CHECK_PROG([tpm2_load], [tpm2_load], [yes], [no])
+  AS_IF([test "x$tpm2_load" != "xyes"],
+    [AC_MSG_ERROR([tpm2_ptool requires tpm2_load, but executable not found.])])
+
+AC_CHECK_PROG([tpm2_loadexternal], [tpm2_loadexternal], [yes], [no])
+  AS_IF([test "x$tpm2_loadexternal" != "xyes"],
+    [AC_MSG_ERROR([tpm2_ptool requires tpm2_loadexternal, but executable not found.])])
+
+AC_CHECK_PROG([tpm2_unseal], [tpm2_unseal], [yes], [no])
+  AS_IF([test "x$tpm2_unseal" != "xyes"],
+    [AC_MSG_ERROR([tpm2_ptool requires tpm2_unseal, but executable not found.])])
+
+AC_CHECK_PROG([tpm2_encryptdecrypt], [tpm2_encryptdecrypt], [yes], [no])
+  AS_IF([test "x$tpm2_encryptdecrypt" != "xyes"],
+    [AC_MSG_ERROR([tpm2_ptool requires tpm2_encryptdecrypt, but executable not found.])])
+
+AC_CHECK_PROG([tpm2_sign], [tpm2_sign], [yes], [no])
+  AS_IF([test "x$tpm2_sign" != "xyes"],
+    [AC_MSG_ERROR([tpm2_ptool requires tpm2_sign, but executable not found.])])
+
+AC_CHECK_PROG([tpm2_getcap], [tpm2_getcap], [yes], [no])
+  AS_IF([test "x$tpm2_getcap" != "xyes"],
+    [AC_MSG_ERROR([tpm2_ptool requires tpm2_getcap, but executable not found.])])
+
+AC_CHECK_PROG([tpm2_import], [tpm2_import], [yes], [no])
+  AS_IF([test "x$tpm2_import" != "xyes"],
+    [AC_MSG_ERROR([tpm2_ptool requires tpm2_import, but executable not found.])])
+
+AC_CHECK_PROG([tpm2_changeauth], [tpm2_changeauth], [yes], [no])
+  AS_IF([test "x$tpm2_changeauth" != "xyes"],
+    [AC_MSG_ERROR([tpm2_ptool requires tpm2_changeauth, but executable not found.])])
+
 AC_DEFUN([integration_test_checks], [
 
   PKG_CHECK_MODULES([CMOCKA],[cmocka])
