@@ -4,6 +4,8 @@
   * Fix PSS signatures. Non-FIPS mode TPMs produce PSS signatures with a
     max salt len that poses interoperability issues with verifying clients,
     notably TLS in OpenSSL.
+  * Handle Esys\_LoadExternal() API change where the hierarchy handle switches to an
+    ESYS\_TR rather than a TPM2\_RH\_.
 
 ### 1.1.0 - 2020-03-09
   * DB Schema Change from 1 to 3.
