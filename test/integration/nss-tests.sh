@@ -23,6 +23,7 @@ function pinentry() {
   cmd="$*"
   printf 'spawn %s\nexpect "Password or Pin"\nsend -- %s\\r\nexpect eof\n' \
 	  "$cmd" "$pin" | expect
+  exit $?
 }
 
 function cleanup() {
