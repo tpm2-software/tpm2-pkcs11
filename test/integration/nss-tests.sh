@@ -16,12 +16,20 @@ if [ "$ASAN_ENABLED" = "true" ]; then
 fi
 
 function pinentry() {
-  pin="$1"
-  shift
-  cmd="$*"
-  printf 'spawn %s\nexpect "Password or Pin"\nsend -- %s\\r\nexpect eof\n' \
-	  "$cmd" "$pin" | expect
-  exit $?
+  cat <<END | expect
+spawn $*
+expect {
+  "Password or Pin *label*" {
+    send -- "myuserpin\r"; exp_continue
+  } "Password or Pin *import-keys*" {
+    send -- "anotheruserpin\r"; exp_continue
+  } "Password or Pin *esys-tr*" {
+    send -- "userpin3\r"; exp_continue
+  } eof
+}
+catch wait result
+exit [ lindex \$result 3 ]
+END
 }
 
 function cleanup() {
@@ -81,20 +89,20 @@ echo "Importing S/MIME certificate to TPM2 token"
 tpm2_ptool addcert --label import-keys --key-label smimetest smimeclient.pem
 
 echo "Testing S/MIME certificate lookup in NSS DB via label"
-pinentry anotheruserpin certutil -L -d . -n import-keys:smimetest
+pinentry certutil -L -d . -n import-keys:smimetest
 
 # See: https://github.com/tpm2-software/tpm2-pkcs11/issues/444
-#echo "Testing S/MIME certificate lookup in NSS DB via mail address"
-#pinentry anotheruserpin certutil -L -d . --email testuser@example.org
+echo "Testing S/MIME certificate lookup in NSS DB via mail address"
+pinentry certutil -L -d . -h import-keys --email testuser@example.org
 
 echo "Testing if S/MIME certificate in NSS DB has user trust"
-pinentry anotheruserpin certutil -L -d . -h import-keys | \
+pinentry certutil -L -d . -h import-keys | \
    grep import-keys:smimetest | grep -q u,u,u
 
 echo "Testing if S/MIME certificate in NSS DB is valid for mail signing"
-pinentry anotheruserpin certutil -V -d . -n import-keys:smimetest -u S
+pinentry certutil -V -d . -n import-keys:smimetest -u S
 
 echo "Testing if S/MIME certificate in NSS DB is valid for mail reception"
-pinentry anotheruserpin certutil -V -d . -n import-keys:smimetest -u R
+pinentry certutil -V -d . -n import-keys:smimetest -u R
 
 exit 0
