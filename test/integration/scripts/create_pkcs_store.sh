@@ -122,36 +122,7 @@ echo "Adding 1 x509 Certificate under token \"label\""
 # verify the token and all the objects
 tpm2_ptool verify --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 
-#
-# Build an OpenSSL config file
-#
-modpath="$PWD/src/.libs/libtpm2_pkcs11.so"
-osslconf="$TPM2_PKCS11_STORE/ossl.cnf"
-cat << EOF > "$osslconf"
-openssl_conf = openssl_init
-
-[openssl_init]
-engines = engine_section
-
-[engine_section]
-pkcs11 = pkcs11_section
-
-[pkcs11_section]
-engine_id = pkcs11
-MODULE_PATH = $modpath
-PIN=myuserpin
-init = 0
-
-[ req ]
-distinguished_name = req_dn
-string_mask = utf8only
-utf8 = yes
-
-[ req_dn ]
-commonName = Mr Test Harness
-EOF
-
-export OPENSSL_CONF="$osslconf"
+export OPENSSL_CONF="$TEST_FIXTURES/ossl.cnf"
 
 #
 # generate cert
