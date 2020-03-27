@@ -45,7 +45,7 @@ input_password		= whatever
 output_password		= whatever
 
 [client]
-countryName		= FR
+countryName		= US
 stateOrProvinceName	= Radius
 localityName		= Somewhere
 organizationName	= Example Inc.
