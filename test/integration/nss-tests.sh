@@ -3,12 +3,10 @@
 
 set -xo pipefail
 
-CA_PEM="$TEST_FIXTURES/ca.pem"
-CA_KEY="$TEST_FIXTURES/ca.key"
-
-CLIENT_CNF="$TEST_FIXTURES/client.cnf"
-PASSWORD_CA=whatever
 EXT_FILE="$TEST_FIXTURES/smimeextensions"
+CLIENT_CNF="$TEST_FIXTURES/client.cnf"
+
+source "$T/test/integration/scripts/helpers.sh"
 
 export NSS_DEFAULT_DB_TYPE=sql
 
@@ -50,15 +48,13 @@ fi
 
 echo "modpath=$modpath"
 
-# make the DB
-touch index.txt
-touch index.txt.attr
-echo "03" >> serial
+# setup the CA BEFORE EXPORTING THE CA CONF for the clients
+setup_ca "03"
 
 echo "Creating S/MIME certificate for testuser@example.org"
 openssl req -new -newkey rsa:2048 -nodes -keyout smimeclient.key \
   -out smimeclient.csr \
-  -subj "/C=FR/ST=Radius/L=Somewhere/O=Example Inc./CN=smimetesting/emailAddress=testuser@example.org"
+  -subj "/C=US/ST=Radius/L=Somewhere/O=Example Inc./CN=smimetesting/emailAddress=testuser@example.org"
 
 echo "Signing S/MIME certificate with test CA"
 openssl ca -batch -keyfile "$CA_KEY" -cert "$CA_PEM" -in smimeclient.csr \

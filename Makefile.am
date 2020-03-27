@@ -79,6 +79,7 @@ AM_TESTS_ENVIRONMENT = \
     TEST_FIXTURES=$(abs_top_srcdir)/test/integration/fixtures \
     PATH=$(abs_top_srcdir)/tools:./src:$(PATH) \
     PYTHONPATH=$(abs_top_srcdir)/tools \
+    TPM2_PKCS11_MODULE=$(abs_builddir)/src/.libs/libtpm2_pkcs11.so \
     TEST_JAVA_ROOT=$(JAVAROOT) \
     PACKAGE_URL=$(PACKAGE_URL) \
     dbus-run-session
