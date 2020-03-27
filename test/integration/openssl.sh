@@ -108,32 +108,7 @@ openssl x509 -pubkey -noout -in "certificate.pem" > "pubkey.pem"
 # do an rsa-pss signature on data
 echo "sig data" > "data.txt"
 
-osslconf="$TPM2_PKCS11_STORE/ossl.cnf"
-cat << EOF > "$osslconf"
-openssl_conf = openssl_init
-
-[openssl_init]
-engines = engine_section
-
-[engine_section]
-pkcs11 = pkcs11_section
-
-[pkcs11_section]
-engine_id = pkcs11
-MODULE_PATH = $modpath
-PIN=$PIN
-init = 0
-
-[ req ]
-distinguished_name = req_dn
-string_mask = utf8only
-utf8 = yes
-
-[ req_dn ]
-commonName = Mr Test Harness
-EOF
-
-export OPENSSL_CONF="$osslconf"
+export OPENSSL_CONF="$TEST_FIXTURES/ossl.cnf"
 
 PKCS11_KEY="pkcs11:model=SW%20%20%20TPM;manufacturer=IBM;serial=0000000000000000;token=$token_label;object=$key_label;type=private"
 
