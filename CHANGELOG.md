@@ -1,6 +1,6 @@
 # Changelog
 
-### 1.2.0-RC0 - 2020-02-24
+### 1.2.0 - 2020-03-30
   * Fix PSS signatures. Non-FIPS mode TPMs produce PSS signatures with a
     max salt len that poses interoperability issues with verifying clients,
     notably TLS in OpenSSL.
