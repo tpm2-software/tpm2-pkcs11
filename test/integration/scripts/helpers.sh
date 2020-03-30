@@ -37,12 +37,11 @@ clear_asan() {
 }
 
 setup_ca() {
-  local SERIAL="${1:-02}"
-  export CA_PEM="ca.pem"
-  export CA_KEY="ca.key"
+  CA_DIR=`mktemp -d -t tpm2tmpca.XXXXXX`
 
-  export SERVER_PEM="server.pem"
-  export SERVER_KEY="server.key"
+  export CA_DIR
+  export CA_PEM="$CA_DIR/ca.pem"
+  export CA_KEY="$CA_DIR/ca.key"
 
   # Generate CA CERT and CA KEY
   openssl req \
@@ -54,20 +53,14 @@ setup_ca() {
     -out "$CA_PEM" \
     -subj "/C=US/ST=Radius/L=Somewhere/O=Example Inc./CN=example.com"
 
-  # Create the SERVER key
-  openssl genrsa -out "$SERVER_KEY" 2048
-  openssl req -new \
-    -key "$SERVER_KEY" \
-    -out server.csr \
-    -subj "/C=US/ST=Radius/L=Somewhere/O=Example Inc./CN=server.example.com"
-
-  # Create the SERVER certificate
-  openssl x509 -req -days 1460 -in server.csr \
-    -CA "$CA_PEM" -CAkey "$CA_KEY" \
-    -CAcreateserial -out "$SERVER_PEM"
-
   # make the DB
-  touch index.txt
-  touch index.txt.attr
-  echo "$SERIAL" >> serial
+  touch "$CA_DIR"/index.txt
+  touch "$CA_DIR"/index.txt.attr
+  echo "01" >> "$CA_DIR"/serial
+}
+
+cleanup_ca()
+{
+  test -n "$CA_DIR" || return 0
+  rm -rf "$CA_DIR"
 }
