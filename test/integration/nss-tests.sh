@@ -36,8 +36,8 @@ function cleanup() {
   if [ "$1" != "no-kill" ]; then
       pkill -P $$ || true
   fi
-  rm -f index.txt index.txt.attr serial serial.old index.txt.old index.txt.attr.old \
-        03.pem smimeclient.csr smimeclient.crt smimeclient.key smimeclient.pem \
+  cleanup_ca
+  rm -f smimeclient.csr smimeclient.crt smimeclient.key smimeclient.pem \
         pkcs11.txt cert9.db key4.db userpin.txt
 }
 trap cleanup EXIT
@@ -57,7 +57,7 @@ fi
 echo "modpath=$modpath"
 
 # setup the CA BEFORE EXPORTING THE CA CONF for the clients
-setup_ca "03"
+setup_ca
 
 echo "Creating S/MIME certificate for testuser@example.org"
 openssl req -new -newkey rsa:2048 -nodes -keyout smimeclient.key \

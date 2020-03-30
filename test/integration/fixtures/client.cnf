@@ -3,7 +3,7 @@ default_ca		= CA_default
 
 [ CA_default ]
 fixtures    = $ENV::TEST_FIXTURES
-dir			= ./
+dir			= $ENV::CA_DIR
 certs			= $dir
 crl_dir			= $dir/crl
 database		= $dir/index.txt

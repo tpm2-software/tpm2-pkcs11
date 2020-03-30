@@ -20,8 +20,8 @@ function cleanup() {
   if [ "$1" != "no-kill" ]; then
       pkill -P $$ || true
   fi
-  rm -f index.txt index.txt.attr serial serial.old index.txt.old index.txt.attr.old \
-        02.pem client.csr client.crt client_tpm.pem
+  cleanup_ca
+  rm -f server.csr server.crt server.key server.pem client.csr client.crt client_tpm.pem
 }
 trap cleanup EXIT
 
@@ -38,16 +38,21 @@ setup_ca
 
 export OPENSSL_CONF="$TEST_FIXTURES/ossl.cnf"
 
+# create and sign standard file-based cert for server
+openssl genrsa -out server.key 2048
+openssl req -new -key server.key -out server.csr -subj "/C=US/ST=Radius/L=Somewhere/O=Example Inc./CN=server.example.com"
+openssl ca -batch -keyfile "$CA_KEY" -cert "$CA_PEM" -in server.csr -out server.crt -config "$CLIENT_CNF"
+openssl x509 -in server.crt -out server.pem -outform pem
+
+# create and sign PKCS#11 cert for client
 openssl req -new -engine pkcs11 -keyform engine -key "$PKCS11_KEY" -out client.csr -subj "/C=US/ST=Radius/L=Somewhere/O=Example Inc./CN=testing/emailAddress=testing@123.com"
-
 openssl ca -batch -keyfile "$CA_KEY" -cert "$CA_PEM" -in client.csr -out client.crt -extensions xpclient_ext -extfile "$EXT_FILE" -config "$CLIENT_CNF"
-
 openssl x509 -in client.crt -out client_tpm.pem -outform pem
 
 # OpenSSL version 1.0.2g ends up in a state where it tries to read from stdin instead of the ssl connection.
 # Feeding it one byte as stdin avoids this condition which is described in more detail here:
 # https://github.com/tpm2-software/tpm2-pkcs11/pull/366
-openssl s_server -debug -CAfile "$CA_PEM" -cert "$SERVER_PEM" -key "$SERVER_KEY" -Verify 1 <<< '1' &
+openssl s_server -debug -CAfile "$CA_PEM" -cert server.pem -key server.key -Verify 1 <<< '1' &
 sleep 1
 
 # default connects to 127.0.0.1:443
