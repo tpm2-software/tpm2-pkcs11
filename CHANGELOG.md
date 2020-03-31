@@ -14,6 +14,7 @@
   * ci: increase CI coverage to: Fedora 30, Ubuntu 16.04, Ubuntu 18.04.
   * configure: check for Python version >= 3.7 and pass to Automake. No
     need to set PYTHON\_INTERPRETER anymore.
+  * Fix segfault/memory corruption bugs in C_Destroy().
 
 ### 1.1.0 - 2020-03-09
   * DB Schema Change from 1 to 3.
