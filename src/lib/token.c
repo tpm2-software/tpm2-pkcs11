@@ -178,8 +178,14 @@ void token_rm_tobject(token *tok, tobject *t) {
     assert(tok->tobjects.head);
     assert(tok->tobjects.tail);
 
-    if (t == tok->tobjects.head) {
-        tok->tobjects.head = list_entry(tok->tobjects.head->l.next, tobject, l);
+    /* only item in the list */
+    if (t == tok->tobjects.tail &&
+            t == tok->tobjects.head) {
+        /* just empty the list */
+        tok->tobjects.head = tok->tobjects.tail = NULL;
+    } else if (t == tok->tobjects.head) {
+        tok->tobjects.head = tok->tobjects.head->l.next ?
+                list_entry(tok->tobjects.head->l.next, tobject, l) : NULL;
     } else if (t == tok->tobjects.tail) {
         /*
          * remove the tail by setting the tail equal to the previous list object

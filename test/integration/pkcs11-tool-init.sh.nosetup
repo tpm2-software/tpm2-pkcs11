@@ -74,4 +74,14 @@ openssl dgst -verify ${tempdir}/pubkey.der -keyform DER -signature ${tempdir}/si
              -sigopt rsa_padding_mode:pkcs1 \
              ${tempdir}/data
 echo "RSA signature tested"
+
+#
+# Regression test for https://github.com/tpm2-software/tpm2-pkcs11/issues/399
+# Delete Private Key then Public Key.
+pkcs11_tool --delete-object --slot-index=0 --label="myrsakey" --pin=mynewuserpin --login --type=privkey
+pkcs11_tool --list-objects --slot-index=0
+
+pkcs11_tool --delete-object --slot-index=0 --label="myrsakey" --pin=mynewuserpin --login --type=pubkey
+pkcs11_tool --list-objects --slot-index=0
+
 exit 0
