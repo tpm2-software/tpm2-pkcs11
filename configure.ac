@@ -192,10 +192,6 @@ AC_DEFUN([integration_test_checks], [
     AS_IF([test "x$pkcs11_tool" != "xyes"],
       [AC_MSG_ERROR([Integration tests enabled but pkcs11-tool executable not found.])])
   
-  AC_CHECK_PROG([p11tool], [p11tool], [yes], [no])
-    AS_IF([test "x$p11tool" != "xyes"],
-      [AC_MSG_ERROR([Integration tests enabled but p11tool executable not found.])])
-
   AC_CHECK_PROG([bash], [bash], [yes], [no])
     AS_IF([test "x$bash" != "xyes"],
       [AC_MSG_ERROR([Integration tests enabled but bash executable not found.])])
