@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-
+#include "config.h"
+#include <assert.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdbool.h>
@@ -19,7 +20,6 @@
 
 #include <sqlite3.h>
 
-#include "config.h"
 #include "db.h"
 #include "emitter.h"
 #include "log.h"
@@ -820,6 +820,60 @@ error:
     rv = CKR_GENERAL_ERROR;
     goto out;
 
+}
+
+CK_RV db_update_tobject_attrs(tobject *tobj) {
+    assert(tobj);
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    sqlite3_stmt *stmt = NULL;
+
+    char *attr_str = emit_attributes_to_string(tobj->attrs);
+    if (!attr_str) {
+        LOGE("Could not emit tobject attributes");
+        return CKR_GENERAL_ERROR;
+    }
+
+    const char *sql =
+          "UPDATE tobjects SET"
+            " attrs=?"      // index: 1 type: TEXT (JSON)
+            " WHERE id=?;";  // Index 2 type: int
+    int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("%s", sqlite3_errmsg(global.db));
+        goto error;
+    }
+
+    rc = sqlite3_bind_text(stmt, 1, attr_str, -1, SQLITE_STATIC);
+    gotobinderror(rc, "attrs");
+
+    rc = sqlite3_bind_int(stmt, 2, tobj->id);
+    gotobinderror(rc, "id");
+
+    rc = sqlite3_finalize(stmt);
+    if (rc) {
+        LOGE("finalize");
+        /* finalizing again probably won't fix this */
+        goto out;
+    }
+
+    rv = CKR_OK;
+
+out:
+    free(attr_str);
+    return rv;
+
+error:
+    rc = sqlite3_finalize(stmt);
+    if (rc != SQLITE_OK) {
+        LOGW("Could not finalize stmt: %d", rc);
+    }
+
+    rollback();
+
+    rv = CKR_GENERAL_ERROR;
+    goto out;
 }
 
 CK_RV db_add_token(token *tok) {

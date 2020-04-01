@@ -84,6 +84,8 @@ CK_RV object_find_final(session_ctx *ctx);
 
 CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count);
 
+CK_RV object_set_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, unsigned long count);
+
 CK_ATTRIBUTE_PTR tobject_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR attr);
 
 CK_RV tobject_get_max_buf_size(tobject *tobj, size_t *maxsize);
