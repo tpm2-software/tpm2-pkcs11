@@ -221,6 +221,23 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
         return CKR_SESSION_READ_ONLY_EXISTS;
     }
 
+    /* so pin will NOT be set */
+    if (!tok->config.is_initialized) {
+        return CKR_OPERATION_NOT_INITIALIZED;
+    }
+
+    /* load seal object */
+    sealobject *sealobj = &tok->sealobject;
+    twist sealpub = is_user(user) ? sealobj->userpub : sealobj->sopub;
+    twist sealpriv = is_user(user) ? sealobj->userpriv : sealobj->sopriv;
+
+    if (is_user(user) && !sealpub && !sealpriv) {
+        return CKR_USER_PIN_NOT_INITIALIZED;
+    }
+
+    assert(sealpub);
+    assert(sealpriv);
+
     tpm_ctx *tpm = tok->tctx;
 
     /*
@@ -241,10 +258,10 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
             return CKR_OPERATION_NOT_INITIALIZED;
         }
 
-        /* we've verified that we did a full login already, so just verify pin */
-        sealobject *sealobj = &tok->sealobject;
-
-        /* do NOT free salt, this is owned by tobject lifesycle */
+        /*
+         * we've verified that we did a full login already, so just verify pin
+         * do NOT free salt, this is owned by tobject lifecycle
+         */
         twist sealsalt = is_user(user) ? sealobj->userauthsalt : sealobj->soauthsalt;
         twist tpin = twistbin_new(pin, pinlen);
         sealobjauth = utils_hash_pass(tpin, sealsalt);
@@ -274,11 +291,6 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
     }
 
     on_error_flush_session = true;
-
-    /* load seal object */
-    sealobject *sealobj = &tok->sealobject;
-    twist sealpub = is_user(user) ? sealobj->userpub : sealobj->sopub;
-    twist sealpriv = is_user(user) ? sealobj->userpriv : sealobj->sopriv;
 
     uint32_t pobj_handle = tok->pobject.handle;
     twist pobjauth = tok->pobject.objauth;
