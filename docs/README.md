@@ -14,8 +14,14 @@ as the cryptographic token.
 
 * [Building](BUILDING.md) - How to get it to build
 * [Initializing](INITIALIZING.md) - How to configure it
+* [Installing](INSTALL.md) - How to install it
 
 # Example Usages
 * [SSH](SSH.md) - How to configure and use it with SSH.
 * [P11](P11.md) - How to configure and use it with various P11 components.
 * [PKCS11-TOOL](PKCS11_TOOL.md) - How to configure and use it with OpenSC's pkcs11-tool.
+
+# Advanced Knowledge
+* [Architecture](ARCHITECTURE.md) - Internal Overview
+* [DB Upgrades](DB_UPGRADE.md) - What happens on a DB Version Upgrade
+* [Release Process](RELEASE.md) - How releases are conducted
