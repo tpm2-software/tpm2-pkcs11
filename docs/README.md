@@ -10,7 +10,7 @@ access cryptographic services from tokens/ devices such as hardware security
 modules (HSM), smart cards, etc. In this project we intend to use a TPM2 device
 as the cryptographic token.
 
-# Navigation
+# Getting Started
 
 * [Building](BUILDING.md) - How to get it to build
 * [Initializing](INITIALIZING.md) - How to configure it
