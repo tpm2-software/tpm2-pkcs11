@@ -180,10 +180,10 @@ CK_RV backend_init_user(token *t, const twist sealdata,
 CK_RV backend_add_object(token *t, tobject *tobj) {
     switch (t->type) {
     case token_type_esysdb:
-        LOGE("Adding object to token using esysdb backend.");
+        LOGV("Adding object to token using esysdb backend.");
         return backend_esysdb_add_object(t, tobj);
     case token_type_fapi:
-        LOGE("Adding object to token using fapi backend.");
+        LOGV("Adding object to token using fapi backend.");
         return backend_fapi_add_object(t, tobj);
     default:
         assert(1);
