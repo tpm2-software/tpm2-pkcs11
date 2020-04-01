@@ -25,6 +25,27 @@ void *type_calloc(size_t nmemb, size_t size, CK_BYTE type) {
     return ptr;
 }
 
+void *type_zrealloc(void *old_ptr, size_t size, CK_BYTE type) {
+
+    assert(size != 0);
+
+    // overflow safety here...
+    size_t total = size + 1;
+
+    CK_BYTE_PTR new_ptr = realloc(old_ptr, total);
+    if (!new_ptr) {
+        return NULL;
+    }
+
+    memset(new_ptr, 0, total);
+
+    new_ptr[total - 1] = type;
+
+    return new_ptr;
+}
+
+
+
 CK_BYTE type_from_ptr(void *ptr, size_t len) {
 
     if (!len || !ptr) {
@@ -70,4 +91,20 @@ void type_mem_cpy(void *dest, void *in, size_t size) {
     CK_BYTE got = type_from_ptr(dest, size);
     assert(check == got);
 #endif
+}
+
+const char *type_to_str(CK_BYTE type) {
+
+    switch(type) {
+    case TYPE_BYTE_INT:
+        return "int";
+    case TYPE_BYTE_BOOL:
+        return "bool";
+    case TYPE_BYTE_INT_SEQ:
+        return "int-seq";
+    case TYPE_BYTE_HEX_STR:
+        return "hex-str";
+    default:
+        return "unkown";
+    }
 }

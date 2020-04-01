@@ -549,11 +549,35 @@ static void test_all_cert_attrs(void **state) {
     }
 }
 
+static void test_set_attribute_value_multiple_okay(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+
+    CK_UTF8CHAR url [] = "http://fakeurl.com";
+    CK_UTF8CHAR label[]  = "mynewkeylabel";
+    CK_ATTRIBUTE template[] = {
+      {CKA_LABEL, label, sizeof(label) - 1},
+      {CKA_URL,   url,   sizeof(url) - 1},
+    };
+
+    CK_RV rv = C_SetAttributeValue(ti->hSession, ti->hObject, template, ARRAY_LEN(template));
+    assert_int_equal(rv, CKR_OK);
+
+    memset(label, 0, sizeof(label));
+    memset(url, 0, sizeof(label));
+
+    rv = C_GetAttributeValue(ti->hSession, ti->hObject, template, ARRAY_LEN(template));
+    assert_int_equal(rv, CKR_OK);
+
+    assert_memory_equal(template[0].pValue, "mynewkeylabel", template[0].ulValueLen);
+    assert_memory_equal(template[1].pValue, "http://fakeurl.com", template[1].ulValueLen);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_all_cert_attrs,
-                test_setup, test_teardown),
+            test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_all_pub_ecc_obj_attrs,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_all_priv_ecc_obj_attrs,
@@ -571,6 +595,9 @@ int main() {
         cmocka_unit_test_setup_teardown(test_get_attribute_value_invalid_attribute,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_get_attribute_value_multiple_fail,
+                test_setup, test_teardown),
+        /* this must go last as it modifies the key label */
+        cmocka_unit_test_setup_teardown(test_set_attribute_value_multiple_okay,
                 test_setup, test_teardown),
     };
 

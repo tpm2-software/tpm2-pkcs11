@@ -261,6 +261,10 @@ CK_ATTRIBUTE_PTR attr_get_attribute_by_type(attr_list *haystack, CK_ATTRIBUTE_TY
 CK_ATTRIBUTE_PTR attr_get_attribute_by_type_raw(CK_ATTRIBUTE_PTR haystack, CK_ULONG haystack_count,
         CK_ATTRIBUTE_TYPE needle);
 
+CK_RV attr_list_append_entry(attr_list **attrs, CK_ATTRIBUTE_PTR untrusted_attr);
+
+CK_RV attr_list_update_entry(attr_list *attrs, CK_ATTRIBUTE_PTR untrusted_attr);
+
 CK_RV attr_common_add_RSA_publickey(attr_list **public_attrs);
 
 CK_RV rsa_gen_mechs(attr_list *new_pub_attrs, attr_list *new_priv_attrs);

@@ -482,6 +482,61 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
     return rv;
 }
 
+CK_RV object_set_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
+
+    token *tok = session_ctx_get_token(ctx);
+    assert(tok);
+
+    tobject *tobj = NULL;
+    CK_RV rv = token_find_tobject(tok, object, &tobj);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    rv = tobject_user_increment(tobj);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    /*
+     * For each item:
+     * 1. If it exists, update the contents
+     * 2. If it is new, add it.
+     *
+     * XXX: Enforce whether or not attributes
+     * are settable, etc.
+     * We don't do this, because the TPM isn't really
+     * enforcing anything but it might be useful just
+     * to prevent oopsies.
+     *
+     * XXX: We also don't have transactional atomicity here,
+     * we update in memory one by one, so if it fails, the
+     * attrs could be half updated in memory. Also, if the
+     * db update fails, we could have in-memory delta with
+     * what is in the db.
+     */
+    CK_ULONG i;
+    for (i=0; i < count; i++) {
+
+        CK_ATTRIBUTE_PTR t = &templ[i];
+
+        CK_ATTRIBUTE_PTR found = attr_get_attribute_by_type(tobj->attrs, t->type);
+        rv = found ? attr_list_update_entry(tobj->attrs, t) :
+            attr_list_append_entry(&tobj->attrs, t);
+        if (rv != CKR_OK) {
+            goto out;
+        }
+    }
+
+    /* in memory is updated */
+    rv = db_update_tobject_attrs(tobj);
+
+out:
+    tobject_user_decrement(tobj);
+
+    return rv;
+}
+
 tobject *tobject_new(void) {
 
     tobject *tobj = calloc(1, sizeof(tobject));
