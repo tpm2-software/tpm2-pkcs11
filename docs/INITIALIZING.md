@@ -22,8 +22,8 @@ The tpm2-pkcs11 library requires some metadata to operate correctly. It stores t
 The store is automatically searched for in the following locations:
 
 1. env variable TPM2_PKCS11_STORE
-  This is optional, and if not set is skipped. However, if you want a store in a custom path, this is how you set it.
-  a. Example: `export TPM2_PKCS11_STORE='path/to/where/i/want/the/store'`
+  This is optional, and if not set is skipped. However, if you want a store in a custom path, this is how you set it:
+  - Example: `export TPM2_PKCS11_STORE='path/to/where/i/want/the/store'`
 2. /etc/tpm2_pkcs11 or whatever was configured at build time with --with-storedir.
 3. Users $HOME/.tpm2_pkcs11 directory.
 4. Current Working Directory.
@@ -51,7 +51,7 @@ The store itself defaults to `$HOME/.tpm2_pkcs11` unless specified via the envir
 
   Their is no requirement to use the simulator and abrmd, this is all configuration dependent.
 
-## Example Setup
+## Example Setup With tpm2_ptool
 I use the simulator and tpm2-abrmd to set all of this up, like so:
 ```sh
 tpm_server &
@@ -60,7 +60,7 @@ tpm2-abrmd --tcti=mssim &
 See the respective projects for details on how to get them running. Note that `tpm2-abrmd` uses dbus,
 and dbus configuration is required.
 
-## Step 1 - Initializing a Store and Creating a Slot
+### Step 1 - Initializing a Store and Creating a Slot
 
 Initializing a store creates a primary object under the owner hierarchy. Each primary object is mapped
 to a slot, and multiple initializations can occur for generating more than one slot.
@@ -77,7 +77,7 @@ The output of the command to *stdout* is important. It describes the id of the p
 that one can associate subsequent commands to. Again, to create N > 1 slots, just run this command
 N times.
 
-## Step 2 - Creating a Token
+### Step 2 - Creating a Token
 
 After creating a slot or slots, now one needs to create a token. This is accomplished with the `addtoken` command for `tpm2-ptool`,
 using the primary object ID from [Step 1](#step-1---initializing-a-store-and-creating-a-slot). A token is created and a unique
@@ -91,7 +91,7 @@ tpm2_ptool.py addtoken --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=my
 To create N tokens under a given `--pid` or primary object id, just run the command N times. Thus it is possible to have
 *S* number of slots, with *T* number of tokens under each slot.
 
-## Step 3 - Creating Objects Under a Token
+### Step 3 - Creating Objects Under a Token
 
 To create objects, like keys, under a token, the `tpm2-ptool` command-let `add` is invoked. You can direct which token
 to create the object under by using the `--label` option.
@@ -111,3 +111,97 @@ outputs to *stdout* the objects CKA_ID hex encoded.
 tpm2_ptool.py addkey --help
 ```
 And review the enumerated options allowed for `--algorithm`.
+
+## Example Setup With pkcs11-tool
+
+We start the simulator and tpm2-abrmd as show [here](#Example Setup With tpm2_ptool).
+I add an alias in my `~/.bashrc` file so that way pkcs11-tool is setup and running the tpm2-pkcs11 library.
+The alias is:
+```bash
+alias tpm2pkcs11-tool="pkcs11-tool --module $HOME/workspace/tpm2-pkcs11/src/.libs/libtpm2_pkcs11.so.0.0.0"
+```
+Alter that alias as needed, so that `--module` points to the location of the tpm2-pkc11 shared library.
+
+### Initialization Details
+
+This method of initialization does not provide the granularity of control over the primary key that
+`tpm2_ptool` does. The initialization will currently look to see if a *store* is already configured with
+a primary key, and if so uses the first one. If it is not, it attempts to use the *SRK* at address 0x81000000
+as defined by various TCG specifications:
+- https://trustedcomputinggroup.org/wp-content/uploads/TCG-TPM-v2.0-Provisioning-Guidance-Published-v1r1.pdf
+- https://trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf
+- https://trustedcomputinggroup.org/wp-content/uploads/TCG_PC_Client_Platform_TPM_Profile_PTP_2.0_r1.03_v22.pdf
+- https://trustedcomputinggroup.org/wp-content/uploads/RegistryOfReservedTPM2HandlesAndLocalities_v1p1_pub.pdf
+
+### Step 1 - Creating a Token
+
+Optional, list the current tokens to figure out what slot to use:
+```bash
+tpm2pkcs11-tool --list-token-slots
+Available slots:
+Slot 0 (0x1):                                 IBM
+  token state:   uninitialized
+```
+
+Initialize a token at Slot Index 0.
+```bash
+tpm2pkcs11-tool --slot-index=0 --init-token --label="my first token" --so-pin="mysopin"
+Token successfully initialized
+```
+
+Optional, list the tokens again:
+```bash
+tpm2pkcs11-tool --list-token-slots
+Available slots:
+Slot 0 (0x1): my first token                  IBM
+  token label        : my first token
+  token manufacturer : IBM
+  token model        : SW   TPM
+  token flags        : login required, rng, token initialized, PIN initialized
+  hardware version   : 1.46
+  firmware version   : 22.17
+  serial num         : 0000000000000000
+  pin min/max        : 0/128
+Slot 1 (0x2):                                 IBM
+  token state:   uninitialized
+```
+
+### Step 3 - Setting a User Pin
+
+One must set the userpin for the token after initalizing, like so:
+```bash
+tpm2pkcs11-tool --slot-index=0 --init-pin --so-pin="mysopin" --login --pin="myuserpin"
+Using slot with index 0 (0x1)
+User PIN successfully initialized
+```
+
+### Step 4 - Creating Objects Under a Token
+
+Optional, list objects:
+```bash
+tpm2pkcs11-tool --slot-index=0 --list-objects
+Using slot 0 with a present token (0x1)
+```
+
+Create an RSA Keypair:
+```bash
+tpm2pkcs11-tool --slot-index=0 --login --pin="myuserpin" --label="myrsakey" --keypairgen
+Using slot with index 0 (0x1)
+Key pair generated:
+Private Key Object; RSA 
+  label:      myrsakey
+  Usage:      decrypt, sign
+Public Key Object; RSA 2048 bits
+  label:      myrsakey
+  Usage:      encrypt, verify
+```
+
+Optional, list objects again:
+```bash
+tpm2pkcs11-tool --slot-index=0 --list-objects
+Using slot with index 0 (0x1)
+Public Key Object; RSA 2048 bits
+  label:      myrsakey
+  Usage:      encrypt, verify
+```
+Note: You will only see the public objects unless you login.
