@@ -15,6 +15,7 @@
   * configure: check for Python version >= 3.7 and pass to Automake. No
     need to set PYTHON\_INTERPRETER anymore.
   * Fix segfault/memory corruption bugs in C_Destroy().
+  * Fix segfault when no user pin is provisioned.
 
 ### 1.1.0 - 2020-03-09
   * DB Schema Change from 1 to 3.
