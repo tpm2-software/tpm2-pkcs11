@@ -402,7 +402,7 @@ static CK_RV attr_common_add_storage(attr_list **storage_attrs) {
     goto_error_false(r);
     r = attr_list_add_bool(new_attrs, CKA_COPYABLE, CK_TRUE);
     goto_error_false(r);
-    r = attr_list_add_bool(new_attrs, CKA_DESTROYABLE, CK_FALSE);
+    r = attr_list_add_bool(new_attrs, CKA_DESTROYABLE, CK_TRUE);
     goto_error_false(r);
 
     /* defaults */
