@@ -15,15 +15,12 @@ struct attr_list {
     CK_ATTRIBUTE_PTR attrs;
 };
 
-typedef bool (*typefn)(CK_ATTRIBUTE_PTR a, CK_BYTE type, attr_list *l);
-
-#define ADD_ATTR_HANDLER(t, m) { .type = t, .tfn = add_type_copy, .memtype = m }
+#define ADD_ATTR_HANDLER(t, m) { .type = t, .memtype = m }
 
 typedef struct attr_handler2 attr_handler2;
 struct attr_handler2 {
     CK_ATTRIBUTE_TYPE type;
     CK_BYTE memtype;
-    typefn tfn;
 };
 
 #define ALLOC_LEN 16
@@ -173,7 +170,7 @@ static attr_handler2 attr_handlers[] = {
     ADD_ATTR_HANDLER(CKA_TPM2_PRIV_BLOB, TYPE_BYTE_HEX_STR),
 };
 
-static attr_handler2 default_handler = { .tfn = add_type_copy, .memtype = 0 };
+static attr_handler2 default_handler = { .memtype = 0 };
 
 static attr_handler2 *attr_lookup(CK_ATTRIBUTE_TYPE t) {
 
@@ -285,7 +282,7 @@ bool attr_typify(CK_ATTRIBUTE_PTR attrs, CK_ULONG cnt, attr_list **copy) {
     for (i=0; i < cnt; i++) {
         CK_ATTRIBUTE_PTR a = &attrs[i];
         attr_handler2 *h = attr_lookup(a->type);
-        bool res = h->tfn(a, h->memtype, c);
+        bool res = add_type_copy(a, h->memtype, c);
         if (!res) {
             attr_list_free(c);
             return res;
@@ -1001,7 +998,7 @@ add_item:
         /* no - add it, shallow copy ok */
         h = attr_lookup(cur->type);
         assert(h);
-        r = h->tfn(cur, h->memtype, d);
+        r = add_type_copy(cur, h->memtype, d);
         if (!r) {
             attr_list_free(d);
             return CKR_GENERAL_ERROR;
