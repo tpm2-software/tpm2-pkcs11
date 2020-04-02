@@ -294,6 +294,55 @@ bool attr_typify(CK_ATTRIBUTE_PTR attrs, CK_ULONG cnt, attr_list **copy) {
     return true;
 }
 
+CK_RV attr_list_dup(attr_list *old, attr_list **new) {
+    assert(old);
+    assert(new);
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    /* create the container */
+    attr_list *tmp = calloc(1, sizeof(attr_list));
+    if (!tmp) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    /* create the attribute list */
+    tmp->attrs = calloc(old->max, sizeof(CK_ATTRIBUTE));
+    if (!tmp->attrs) {
+        LOGE("oom");
+        free(tmp);
+        return CKR_HOST_MEMORY;
+    }
+    tmp->max = old->max;
+
+    /* deep copy the attrs */
+    size_t i;
+    for (i=0; i < old->count; i++) {
+        CK_ATTRIBUTE_PTR o = &old->attrs[i];
+        CK_ATTRIBUTE_PTR n = &tmp->attrs[i];
+
+        n->type = o->type;
+        if (o->pValue && o->ulValueLen) {
+            rv = type_mem_dup(o->pValue, o->ulValueLen, &n->pValue);
+            if (rv != CKR_OK) {
+                goto error;
+            }
+            n->ulValueLen = o->ulValueLen;
+        }
+
+        tmp->count++;
+    }
+
+    *new = tmp;
+
+    return CKR_OK;
+
+error:
+    attr_list_free(tmp);
+    return rv;
+}
+
 CK_ATTRIBUTE_PTR attr_get_attribute_by_type_raw(CK_ATTRIBUTE_PTR haystack, CK_ULONG haystack_count,
         CK_ATTRIBUTE_TYPE needle) {
 

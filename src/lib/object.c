@@ -498,6 +498,13 @@ CK_RV object_set_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
         return rv;
     }
 
+    /* create a temp copy to work on so we have transactional atomicity */
+    attr_list *tmp = NULL;
+    rv = attr_list_dup(tobj->attrs, &tmp);
+    if (rv != CKR_OK) {
+        goto out;
+    }
+
     /*
      * For each item:
      * 1. If it exists, update the contents
@@ -508,28 +515,34 @@ CK_RV object_set_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
      * We don't do this, because the TPM isn't really
      * enforcing anything but it might be useful just
      * to prevent oopsies.
-     *
-     * XXX: We also don't have transactional atomicity here,
-     * we update in memory one by one, so if it fails, the
-     * attrs could be half updated in memory. Also, if the
-     * db update fails, we could have in-memory delta with
-     * what is in the db.
      */
     CK_ULONG i;
     for (i=0; i < count; i++) {
 
         CK_ATTRIBUTE_PTR t = &templ[i];
 
-        CK_ATTRIBUTE_PTR found = attr_get_attribute_by_type(tobj->attrs, t->type);
-        rv = found ? attr_list_update_entry(tobj->attrs, t) :
-            attr_list_append_entry(&tobj->attrs, t);
+        CK_ATTRIBUTE_PTR found = attr_get_attribute_by_type(tmp, t->type);
+        rv = found ? attr_list_update_entry(tmp, t) :
+            attr_list_append_entry(&tmp, t);
         if (rv != CKR_OK) {
             goto out;
         }
     }
 
     /* in memory is updated */
-    rv = db_update_tobject_attrs(tobj);
+    rv = db_update_tobject_attrs(tobj->id, tmp);
+    if (rv != CKR_OK) {
+        goto out;
+    }
+
+    /*
+     * everything completed successfully, swap the
+     * attribute pointers.
+     */
+    attr_list_free(tobj->attrs);
+    tobj->attrs = tmp;
+
+    rv = CKR_OK;
 
 out:
     tobject_user_decrement(tobj);
