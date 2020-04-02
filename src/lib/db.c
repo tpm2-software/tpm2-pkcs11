@@ -822,14 +822,14 @@ error:
 
 }
 
-CK_RV db_update_tobject_attrs(tobject *tobj) {
-    assert(tobj);
+CK_RV db_update_tobject_attrs(unsigned id, attr_list *attrs) {
+    assert(attrs);
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
     sqlite3_stmt *stmt = NULL;
 
-    char *attr_str = emit_attributes_to_string(tobj->attrs);
+    char *attr_str = emit_attributes_to_string(attrs);
     if (!attr_str) {
         LOGE("Could not emit tobject attributes");
         return CKR_GENERAL_ERROR;
@@ -848,7 +848,7 @@ CK_RV db_update_tobject_attrs(tobject *tobj) {
     rc = sqlite3_bind_text(stmt, 1, attr_str, -1, SQLITE_STATIC);
     gotobinderror(rc, "attrs");
 
-    rc = sqlite3_bind_int(stmt, 2, tobj->id);
+    rc = sqlite3_bind_int(stmt, 2, id);
     gotobinderror(rc, "id");
 
     rc = sqlite3_finalize(stmt);

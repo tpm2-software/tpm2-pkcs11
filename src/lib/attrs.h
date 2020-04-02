@@ -40,6 +40,17 @@ struct attr_handler {
 attr_list *attr_list_new(void);
 
 /**
+ * Duplicates an attribute list.
+ * @param old
+ *  The attribute list to duplicate.
+ * @param new
+ *  The new attribute list, thats a duplicate of old.
+ * @return
+ *  CKR_OK on success.
+ */
+CK_RV attr_list_dup(attr_list *old, attr_list **new);
+
+/**
  * Adds a buffer to the attribute list and adds type data.
  * @param l
  *  The list to add to.

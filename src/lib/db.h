@@ -5,6 +5,7 @@
 
 #include <sqlite3.h>
 
+#include "attrs.h"
 #include "pkcs11.h"
 #include "token.h"
 #include "twist.h"
@@ -51,6 +52,6 @@ CK_RV db_add_token(token *tok);
 
 CK_RV db_update_token_config(token *tok);
 
-CK_RV db_update_tobject_attrs(tobject *tobj);
+CK_RV db_update_tobject_attrs(unsigned id, attr_list *attrs);
 
 #endif /* SRC_PKCS11_LIB_DB_H_ */
