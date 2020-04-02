@@ -398,7 +398,7 @@ static CK_RV attr_common_add_storage(attr_list **storage_attrs) {
     /* currently immutable */
     bool r = attr_list_add_bool(new_attrs, CKA_TOKEN, CK_TRUE);
     goto_error_false(r);
-    r = attr_list_add_bool(new_attrs, CKA_MODIFIABLE, CK_FALSE);
+    r = attr_list_add_bool(new_attrs, CKA_MODIFIABLE, CK_TRUE);
     goto_error_false(r);
     r = attr_list_add_bool(new_attrs, CKA_COPYABLE, CK_TRUE);
     goto_error_false(r);
