@@ -39,7 +39,7 @@ struct twist_hdr {
 };
 
 #define safe_add(r, a, b) __builtin_add_overflow(a, b, &r)
-#define safe_mul(r, a, b) __builtin_mull_overflow(a, b, &r)
+#define safe_mul(r, a, b) __builtin_mul_overflow(a, b, &r)
 
 static inline twist_hdr *from_twist_to_hdr(twist tstring) {
 	return (twist_hdr *) (tstring - sizeof(char *));
@@ -388,13 +388,20 @@ twist twistbin_create(const binarybuffer data[], size_t len) {
 
 static twist hexlify(const char *data, size_t datalen) {
 
-    twist_hdr *hdr = internal_realloc(NULL, datalen * 2);
+    size_t bytes = 0;
+    bool fail = safe_mul(bytes, datalen, 2);
+    if (fail) {
+        return NULL;
+    }
+
+    twist_hdr *hdr = internal_realloc(NULL, bytes);
     if (!hdr) {
         return NULL;
     }
 
     size_t i;
     for (i = 0; i < datalen; i++) {
+        /* cannot overflow or alloc math on bytes would fail */
         sprintf(hdr->data + (i * 2), "%02x", 255 & data[i]);
     }
 

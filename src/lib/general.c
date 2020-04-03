@@ -37,7 +37,7 @@ static void parse_lib_version(CK_BYTE *major, CK_BYTE *minor) {
     char *split = strchr(buf, '.');
     if (split) {
         split[0] = '\0';
-        minor_str = split + 1;
+        minor_str = &split[1];
     }
 
     if (!major_str[0] || !minor_str[0]) {

@@ -6,14 +6,15 @@
 
 #include "pkcs11.h"
 #include "typed_memory.h"
+#include "utils.h"
 
 void *type_calloc(size_t nmemb, size_t size, CK_BYTE type) {
 
     assert(size != 0);
 
-    // overflow safety here...
-    size_t total = nmemb * size;
-    total += 1;
+    size_t total = 0;
+    safe_mul(total, nmemb, size);
+    safe_adde(total, 1);
 
     CK_BYTE_PTR ptr = (CK_BYTE_PTR)calloc(1, total);
     if (!ptr) {
@@ -85,10 +86,11 @@ void type_mem_cpy(void *dest, void *in, size_t size) {
     assert(in);
     assert(dest);
     assert(size);
-    memcpy(dest, in, size + 1);
+    safe_adde(size, 1);
+    memcpy(dest, in, size);
 #ifndef NDEBUG
-    CK_BYTE check = type_from_ptr(in, size);
-    CK_BYTE got = type_from_ptr(dest, size);
+    CK_BYTE check = type_from_ptr(in, size - 1);
+    CK_BYTE got = type_from_ptr(dest, size - 1);
     assert(check == got);
 #endif
 }

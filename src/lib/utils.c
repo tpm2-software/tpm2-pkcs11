@@ -108,8 +108,15 @@ static twist encrypt_parts_to_twist(CK_BYTE tag[16], CK_BYTE iv[12], CK_BYTE_PTR
      * create a buffer with enough space for hex encoded <iv>:<tag>:<ctext>
      * (note + 3 is for 2 : delimiters and a NULL byte.
      */
-    size_t constructed_len = twist_len(taghex) + twist_len(ivhex)
-            + twist_len(ctexthex) + 3;
+    size_t a = twist_len(taghex);
+    size_t b = twist_len(ivhex);
+    size_t c = twist_len(ctexthex);
+
+    size_t constructed_len = 0;
+    safe_add(constructed_len, a, b);
+    safe_adde(constructed_len, c);
+    safe_adde(constructed_len, 3);
+
     constructed = twist_calloc(constructed_len);
     if (!constructed) {
         LOGE("oom");
@@ -213,7 +220,7 @@ twist aes256_gcm_decrypt(const twist key, const twist objauth) {
 
     objcopy = twist_dup(objauth);
     if (!objcopy) {
-        LOGE("oom");
+        LOGE("oom0");
         return NULL;
     }
 
@@ -423,7 +430,7 @@ CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid) {
         return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 
-    * nid = OBJ_obj2nid(a);
+    *nid = OBJ_obj2nid(a);
     ASN1_OBJECT_free(a);
 
     return CKR_OK;
