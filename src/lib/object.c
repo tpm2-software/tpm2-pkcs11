@@ -3,6 +3,7 @@
 #include <limits.h>
 #include <stdlib.h>
 
+#include <openssl/crypto.h>
 #include <openssl/obj_mac.h>
 
 #include "attrs.h"
@@ -36,11 +37,22 @@ void tobject_free(tobject *tobj) {
         return;
     }
 
-    twist_free(tobj->objauth);
+    /* cleanse the ENCRYPTED objauth so it goes away */
+    if (tobj->objauth) {
+        OPENSSL_cleanse((void *)tobj->objauth, twist_len(tobj->objauth));
+        twist_free(tobj->objauth);
+        tobj->objauth = NULL;
+    }
+
     twist_free(tobj->priv);
     twist_free(tobj->pub);
 
-    twist_free(tobj->unsealed_auth);
+    /* cleanse the PLAINTEXT objauth so it goes away */
+    if (tobj->unsealed_auth) {
+        OPENSSL_cleanse((void *)tobj->unsealed_auth, twist_len(tobj->unsealed_auth));
+        twist_free(tobj->unsealed_auth);
+        tobj->unsealed_auth = NULL;
+    }
 
     attr_list *a = tobject_get_attrs(tobj);
     attr_list_free(a);
