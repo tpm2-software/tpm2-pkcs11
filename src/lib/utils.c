@@ -167,7 +167,7 @@ twist aes256_gcm_encrypt(twist keybin, twist plaintextbin) {
     }
 
     int len = 0;
-    ret = EVP_EncryptUpdate(ctx, (CK_BYTE_PTR )ctextbin, &len, (CK_BYTE_PTR )plaintextbin, twist_len(plaintextbin));
+    ret = EVP_EncryptUpdate(ctx, ctextbin, &len, (CK_BYTE_PTR )plaintextbin, twist_len(plaintextbin));
     if (!ret) {
         LOGE("EVP_EncryptUpdate failed");
         goto out;
