@@ -239,3 +239,26 @@ CK_RV backend_update_tobject_attrs(token *tok, tobject *tobj, attr_list *attrs) 
         return CKR_GENERAL_ERROR;
     }
 }
+
+/**
+ * Removes a tobject from the backend.
+ * @param tok
+ *  The token to remove from.
+ * @param tobj
+ *  The tobject to remove.
+ * @return
+ *  CKR_OK on success, anything else is an error.
+ */
+CK_RV backend_rm_tobject(token *tok, tobject *tobj) {
+
+    switch (tok->type) {
+    case token_type_esysdb:
+        return backend_esysdb_rm_tobject(tobj);
+    case token_type_fapi:
+        LOGE("Not supported on FAPI");
+        return CKR_FUNCTION_NOT_SUPPORTED;
+    default:
+        assert(1);
+        return CKR_GENERAL_ERROR;
+    }
+}

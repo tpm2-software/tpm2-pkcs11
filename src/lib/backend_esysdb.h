@@ -26,4 +26,6 @@ CK_RV backend_esysdb_update_token_config (token *tok);
 
 CK_RV backend_esysdb_update_tobject_attrs(tobject *tobj, attr_list *attrs);
 
+CK_RV backend_esysdb_rm_tobject(tobject *tobj);
+
 #endif /* SRC_LIB_BACKEND_ESYSDB_H_ */
