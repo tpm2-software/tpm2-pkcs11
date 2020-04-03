@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <openssl/crypto.h>
+
 #include "attrs.h"
 #include "log.h"
 #include "mutex.h"
@@ -369,8 +371,13 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
 
     /* clear the wrapping key */
     assert(tok->wappingkey);
-    twist_free(tok->wappingkey);
-    tok->wappingkey = NULL;
+
+    /* cleanse the wrapping key */
+    if (tok->wappingkey) {
+        OPENSSL_cleanse((void *)tok->wappingkey, twist_len(tok->wappingkey));
+        twist_free(tok->wappingkey);
+        tok->wappingkey = NULL;
+    }
 
     /*
      * Ok now start evicting TPM objects from the right
