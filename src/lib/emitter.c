@@ -22,16 +22,23 @@ static int output_handler(void *data, unsigned char *buffer, size_t size) {
 
     yaml_emitter_state *s = (yaml_emitter_state *)data;
 
-    /* todo overflow safety */
-    size_t newsize = s->size + size;
-    void *ptr = realloc(s->buf, newsize + 1);
+    size_t newsize = 0;
+    safe_add(newsize, s->size, size);
+
+    size_t newsize_1 = 0;
+    safe_add(newsize_1, newsize, 1);
+
+    void *ptr = realloc(s->buf, newsize_1);
     if (!ptr) {
         free(s->buf);
         return 0;
     }
     s->buf = ptr;
 
-    memset(&s->buf[s->size], 0, size + 1);
+    size_t size_1 = 0;
+    safe_add(size_1, size, 1);
+
+    memset(&s->buf[s->size], 0, size_1);
     memcpy(&s->buf[s->size], buffer, size);
 
     s->size = newsize;

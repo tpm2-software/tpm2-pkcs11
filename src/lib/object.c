@@ -152,7 +152,10 @@ CK_RV tobject_get_max_buf_size(tobject *tobj, size_t *maxsize) {
         /* an R or S with a high bit set needs an extra nul byte so it's not negative (twos comp)*/
         static const unsigned EXTRA = 1U;
 
-        unsigned tmp = ((keysize + INT_HDR + EXTRA) * 2); /* x2 1 for R and 1 for S */
+        unsigned tmp = 0;
+        safe_add(tmp, keysize, INT_HDR);
+        safe_adde(tmp, EXTRA);
+        safe_mule(tmp, 2);
 
         tmp += SEQ_HDR;
 

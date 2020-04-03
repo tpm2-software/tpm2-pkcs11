@@ -424,6 +424,7 @@ static CK_RV tpm_get_properties(tpm_ctx *ctx, TPMS_CAPABILITY_DATA **d) {
         return CKR_GENERAL_ERROR;
     }
 
+    /* this cannot overflow */
     if (!capabilityData ||
         capabilityData->data.tpmProperties.count < TPM2_PT_VENDOR_STRING_4 - TPM2_PT_FIXED + 1) {
         LOGE("TPM did not reply with correct amount of capabilities");
@@ -470,7 +471,7 @@ CK_RV tpm_find_max_rsa_keysize(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR max
 
     TPM2_KEY_BITS i;
     for(i=2; i < 5; i++) {
-        input.parameters.rsaDetail.keyBits = 1024 * i; /* 2048, 3072, 4096... */
+        input.parameters.rsaDetail.keyBits = 1024 * i; /* 2048, 3072, 4096... (cannot overflow)*/
         TSS2_RC rval = Esys_TestParms(tctx->esys_ctx,
                 ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &input);
         if (rval != TSS2_RC_SUCCESS) {
@@ -1012,19 +1013,21 @@ static CK_RV flatten_ecdsa(TPMS_SIGNATURE_ECDSA *ecdsa, CK_BYTE_PTR sig, CK_ULON
         return CKR_DEVICE_ERROR;
     }
 
+    /* this can't overflow, but it doesn't hurt */
+    CK_ULONG rs = 0;
+    safe_add(rs, R->size, S->size);
+    *siglen = rs;
+
     if (!sig) {
-        *siglen = R->size + S->size;
         return CKR_OK;
     }
 
-    if (R->size + S->size > *siglen) {
-        *siglen = R->size + S->size;
+    if (rs > *siglen) {
         return CKR_BUFFER_TOO_SMALL;
     }
 
     memcpy(sig, R->buffer, R->size);
     memcpy(sig + R->size, S->buffer, S->size);
-    *siglen = R->size + S->size;
     return CKR_OK;
 }
 
@@ -2685,7 +2688,9 @@ static CK_RV tpm_object_data_populate_ecc(TPM2B_PUBLIC *out_pub, tpm_object_data
      * TODO get better link to documentation around this or build
      * with OSSL.
      */
-    char *padded_data = malloc(len + 2);
+    size_t tmp = 0;
+    safe_add(tmp, len, 2);
+    char *padded_data = malloc(tmp);
     if (!padded_data) {
         LOGE("oom");
         goto out;
@@ -2695,8 +2700,9 @@ static CK_RV tpm_object_data_populate_ecc(TPM2B_PUBLIC *out_pub, tpm_object_data
     padded_data[1] = len;
     memcpy(&padded_data[2], mydata, len);
 
+    safe_adde(len, 2);
     bool r = attr_list_add_buf(objdata->attrs, CKA_EC_POINT,
-            (CK_BYTE_PTR)padded_data, len + 2);
+            (CK_BYTE_PTR)padded_data, len);
     free(padded_data);
     if (!r) {
         goto out;

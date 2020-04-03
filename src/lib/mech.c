@@ -606,7 +606,8 @@ CK_RV rsa_keygen_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) 
         return CKR_TEMPLATE_INCOMPLETE;
     }
 
-    CK_ULONG bits = a->ulValueLen * 8;
+    CK_ULONG bits = 0;
+    safe_mul(bits, a->ulValueLen, 8);
 
     CK_ULONG i;
     for (i=0; i < m->mdetail_len; i++) {
@@ -958,7 +959,8 @@ CK_RV rsa_pkcs_hash_synthesizer(mdetail *mdtl,
                 "got: %lu, expected: %lu", inlen, hash_len);
     }
 
-    size_t total_size = hdr_size + hash_len;
+    size_t total_size = 0;
+    safe_add(total_size, hdr_size, hash_len);
 
     CK_BYTE hdr_buf[4096];
     if (total_size > sizeof(hdr_buf)) {
@@ -1104,7 +1106,9 @@ CK_RV mech_get_supported(mdetail *m, CK_MECHANISM_TYPE_PTR mechlist, CK_ULONG_PT
             rv = CKR_BUFFER_TOO_SMALL;
             goto out;
         }
-        memcpy(mechlist, tmp, supported * sizeof(mechlist[0]));
+        size_t bytes = 0;
+        safe_mul(bytes, supported, sizeof(mechlist[0]));
+        memcpy(mechlist, tmp, bytes);
     }
 
     rv = CKR_OK;

@@ -44,7 +44,12 @@ void backend_fapi_ctx_free(token *t) {
 
 static char * tss_path_from_id(unsigned id, const char *type) {
     /* Allocate for PREFIX + type + "-" + id + '\0' */
-    char *path = malloc(strlen(PREFIX) + strlen(type) + 1 + 8 + 1);
+    size_t size = 0;
+    safe_add(size, strlen(PREFIX), strlen(type));
+    safe_adde(size, strlen(PREFIX));
+    safe_adde(size, 1 + 8 + 1);
+
+    char *path = malloc(size);
     if (!path) {
         return NULL;
     }
@@ -88,7 +93,7 @@ CK_RV backend_fapi_create_token_seal(token *t, const twist hexwrappingkey,
         t->label[i-1] = '\0';
     }
 
-    char label[sizeof(t->label) + 1]; /* token-label length plus \0 */
+    char label[sizeof(t->label) + 1]; /* token-label length plus \0, cannot overflow */
     label[sizeof(t->label)] = '\0';
     memcpy(&label[0], &t->label[0], sizeof(t->label));
 
@@ -100,7 +105,9 @@ CK_RV backend_fapi_create_token_seal(token *t, const twist hexwrappingkey,
         return CKR_GENERAL_ERROR;
     }
 
-    size_t appdata_len = twist_len(newsalthex) + 1;
+    size_t appdata_len = 0;
+    safe_add(appdata_len, twist_len(newsalthex), 1);
+
     uint8_t *appdata = malloc(appdata_len);
     if (!appdata) {
         LOGE("oom");
@@ -271,7 +278,9 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
             goto error;
         }
 
-        uint8_t *yaml = appdata + strlen((char *)appdata) + 1;
+        size_t offset = 0;
+        safe_add(offset, strlen((char *)appdata), 1);
+        uint8_t *yaml = &appdata[offset];
 
         while ((size_t)(yaml - appdata) < appdata_len) {
             LOGV("Current yaml at offset %zi / %zi is: %s",
@@ -310,7 +319,9 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
                 goto error;
             }
 
-            yaml += strlen((char *)yaml) + 1;
+            size_t offset = 0;
+            safe_add(offset, strlen((char *)yaml), 1);
+            yaml += offset;
             LOGV("\nCurrent next is: %zi / %zi", yaml - appdata, appdata_len);
         }
         Fapi_Free(appdata);
@@ -407,7 +418,7 @@ CK_RV backend_fapi_init_user(token *t, const twist sealdata,
         return CKR_GENERAL_ERROR;
     }
 
-    char label[sizeof(t->label) + 1]; /* token-label length plus \0 */
+    char label[sizeof(t->label) + 1]; /* token-label length plus \0, no overflow possible */
     label[sizeof(t->label)] = '\0';
     memcpy(&label[0], &t->label[0], sizeof(t->label));
 
@@ -419,7 +430,9 @@ CK_RV backend_fapi_init_user(token *t, const twist sealdata,
         return CKR_GENERAL_ERROR;
     }
 
-    size_t appdata_len = twist_len(newsalthex) + 1;
+    size_t appdata_len = 0;
+    safe_add(appdata_len, twist_len(newsalthex), 1);
+
     uint8_t *appdata = malloc(appdata_len);
     if (!appdata) {
         LOGE("oom");
@@ -506,7 +519,9 @@ CK_RV backend_fapi_add_object(token *t, tobject *tobj) {
         goto error;
     }
 
-    size_t newappdata_len = appdata_len + strlen(attrs) + 1;
+    size_t newappdata_len = 0;
+    safe_add(newappdata_len, appdata_len, strlen(attrs));
+    safe_adde(newappdata_len, 1);
     uint8_t *newappdata = malloc(newappdata_len);
     if (!newappdata) {
         LOGE("OOM");

@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "log.h"
 #include "pkcs11.h"
 #include "twist.h"
 
@@ -83,5 +84,10 @@ CK_RV utils_ctx_wrap_objauth(token *tok, twist objauth, twist *wrapped_auth);
  *  CKR_OK on success.
  */
 CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid);
+
+#define safe_add(r, a, b) do { if (__builtin_add_overflow(a, b, &r)) { LOGE("overflow"); abort(); } } while(0)
+#define safe_adde(r, a)   do { if (__builtin_add_overflow(a, r, &r)) { LOGE("overflow"); abort(); } } while(0)
+#define safe_mul(r, a, b) do { if (__builtin_mul_overflow(a, b, &r)) { LOGE("overflow"); abort(); } } while(0)
+#define safe_mule(r, a)   do { if (__builtin_mul_overflow(a, r, &r)) { LOGE("overflow"); abort(); } } while(0)
 
 #endif /* SRC_PKCS11_UTILS_H_ */

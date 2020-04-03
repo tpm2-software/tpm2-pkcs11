@@ -41,11 +41,7 @@ static bool _attr_list_add(attr_list *l,
         }
 
         size_t bytes = 0;
-        res = __builtin_mul_overflow(l->max, sizeof(*l->attrs), &bytes);
-        if (res) {
-            LOGE("mul overflow\n");
-            return false;
-        }
+        safe_mul(bytes, l->max, sizeof(*l->attrs));
 
         void *tmp = realloc(l->attrs, bytes);
         if (!tmp) {
@@ -60,7 +56,8 @@ static bool _attr_list_add(attr_list *l,
          * If the mul operation didn't overflow above, then
          * mul cannot overflow here, so use regular mul
          */
-        memset(&l->attrs[l->count], 0, sizeof(*l->attrs) * ALLOC_LEN);
+        safe_mul(bytes, ALLOC_LEN, sizeof(*l->attrs));
+        memset(&l->attrs[l->count], 0, bytes);
     }
 
     /* only hex strings and sequences can be empty */
@@ -336,7 +333,9 @@ attr_list *attr_list_append_attrs(
     /* todo safe addition */
     CK_ULONG old_len = attr_list_get_count(old_attrs);
     CK_ULONG new_len = attr_list_get_count(*new_attrs);
-    CK_ULONG total_len = new_len + old_len;
+
+    CK_ULONG total_len = 0;
+    safe_add(total_len, new_len, old_len);
 
     if (!new_len) {
         attr_list_free(*new_attrs);
@@ -348,10 +347,14 @@ attr_list *attr_list_append_attrs(
     if (total_len > old_attrs->max) {
 
         size_t blocks = total_len / ALLOC_LEN;
-        blocks += total_len % ALLOC_LEN ? 1 : 0;
+        safe_adde(blocks, total_len % ALLOC_LEN ? 1 : 0);
 
-        CK_ULONG alloc_items = blocks * ALLOC_LEN;
-        void *tmp = realloc(old_attrs->attrs, alloc_items * sizeof(CK_ATTRIBUTE));
+        CK_ULONG alloc_items = 0;
+        safe_mul(alloc_items, blocks, ALLOC_LEN);
+
+        size_t bytes = 0;
+        safe_mul(bytes, alloc_items, sizeof(CK_ATTRIBUTE));
+        void *tmp = realloc(old_attrs->attrs, bytes);
         if (!tmp) {
             return NULL;
         }
@@ -360,12 +363,17 @@ attr_list *attr_list_append_attrs(
 
         /* clear the delta */
         size_t delta = alloc_items - old_attrs->max;
-        memset(clear_point, 0, delta * sizeof(CK_ATTRIBUTE));
+        safe_mul(bytes, delta, sizeof(CK_ATTRIBUTE));
+        memset(clear_point, 0, bytes);
         old_attrs->max = alloc_items;
     }
 
     CK_ATTRIBUTE_PTR cpy_point = &old_attrs->attrs[old_len];
-    memcpy(cpy_point, (*new_attrs)->attrs, new_len * sizeof(CK_ATTRIBUTE));
+
+    size_t bytes = 0;
+    safe_mul(bytes, new_len,  sizeof(CK_ATTRIBUTE));
+
+    memcpy(cpy_point, (*new_attrs)->attrs, bytes);
 
     old_attrs->count = total_len;
 
@@ -581,10 +589,12 @@ CK_RV attr_common_add_RSA_publickey(attr_list **public_attrs) {
     if (!a) {
         a = attr_get_attribute_by_type(*public_attrs, CKA_MODULUS);
         if (!a) {
-            LOGE("Expeted object to have CKA_MODULUS");
+            LOGE("Expected object to have CKA_MODULUS");
             goto error;
         }
-        CK_ULONG modulus_bits = a->ulValueLen * 8;
+
+        CK_ULONG modulus_bits = 0;
+        safe_mul(modulus_bits, a->ulValueLen, 8);
         bool r = attr_list_add_int(new_attrs, CKA_MODULUS_BITS, modulus_bits);
         goto_error_false(r);
     }
@@ -735,7 +745,8 @@ static CK_RV attr_common_add_RSA_privatekey(attr_list **private_attrs) {
         a = attr_get_attribute_by_type(*private_attrs, CKA_MODULUS);
         /* we checked above this cant fail */
         assert(a);
-        CK_ULONG modulus_bits = a->ulValueLen * 8;
+        CK_ULONG modulus_bits = 0;
+        safe_mul(modulus_bits, a->ulValueLen, 8);
         bool r = attr_list_add_int(new_attrs, CKA_MODULUS_BITS, modulus_bits);
         goto_error_false(r);
     }
