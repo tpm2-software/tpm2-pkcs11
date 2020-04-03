@@ -293,7 +293,7 @@ twist aes256_gcm_decrypt(const twist key, const twist objauth) {
         goto out;
     }
 
-    ret = EVP_DecryptFinal_ex(ctx, ((CK_BYTE_PTR )plaintext) + len, &len);
+    ret = EVP_DecryptFinal_ex(ctx, &((CK_BYTE_PTR )plaintext)[len], &len);
     if (!ret) {
         LOGE("AES GCM verification failed!");
         goto out;
