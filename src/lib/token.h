@@ -92,7 +92,7 @@ struct token {
     /* This context will be filled by fapi for use with esys-only commands. */
     tpm_ctx *tctx;
 
-    twist wappingkey;
+    twist wrappingkey;
 
     struct {
         tobject *head;
