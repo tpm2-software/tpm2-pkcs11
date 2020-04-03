@@ -28,4 +28,6 @@ CK_RV backend_update_token_config(token *t);
 
 CK_RV backend_update_tobject_attrs(token *tok, tobject *tobj, attr_list *attrs);
 
+CK_RV backend_rm_tobject(token *tok, tobject *tobj);
+
 #endif /* SRC_LIB_BACKEND_H_ */

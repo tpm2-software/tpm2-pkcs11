@@ -676,7 +676,7 @@ CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object) {
         return CKR_FUNCTION_FAILED;
     }
 
-    rv = db_delete_object(tobj);
+    rv = backend_rm_tobject(tok, tobj);
     if (rv != CKR_OK) {
         return rv;
     }
