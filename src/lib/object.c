@@ -529,8 +529,8 @@ CK_RV object_set_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
         }
     }
 
-    /* in memory is updated */
-    rv = db_update_tobject_attrs(tobj->id, tmp);
+    /* in memory is updated, so update the persistent store */
+    rv = backend_update_tobject_attrs(tok, tobj, tmp);
     if (rv != CKR_OK) {
         goto out;
     }
