@@ -206,8 +206,8 @@ CK_RV backend_update_token_config(token *t) {
         LOGW("Updating token config using esysdb backend.");
         return backend_esysdb_update_token_config(t);
     case token_type_fapi:
-        LOGW("Updating token config using fapi backend.");
-        return CKR_OK;
+        LOGE("Not supported on FAPI");
+        return CKR_FUNCTION_NOT_SUPPORTED;
     default:
         assert(1);
         return CKR_GENERAL_ERROR;
