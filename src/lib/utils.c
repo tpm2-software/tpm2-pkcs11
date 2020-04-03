@@ -176,7 +176,7 @@ twist aes256_gcm_encrypt(twist keybin, twist plaintextbin) {
     assert((size_t)len == twist_len(plaintextbin));
 
     int left = 0;
-    ret = EVP_EncryptFinal_ex(ctx, ctextbin + len, &left);
+    ret = EVP_EncryptFinal_ex(ctx, &ctextbin[len], &left);
     if (!ret) {
         LOGE("AES GCM verification failed!");
         goto out;
