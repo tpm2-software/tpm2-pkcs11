@@ -614,7 +614,7 @@ CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
     }
 
     /* we store the seal data in hex form, but it's in binary form in memory, so convert it */
-    sealdata = twist_hexlify(tok->wappingkey);
+    sealdata = twist_hexlify(tok->wrappingkey);
     if (!sealdata) {
         LOGE("oom");
         goto out;

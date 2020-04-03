@@ -389,7 +389,7 @@ CK_RV utils_ctx_unwrap_objauth(token *tok, twist objauth, twist *unwrapped_auth)
         return CKR_OK;
     }
 
-    twist tmp = aes256_gcm_decrypt(tok->wappingkey, objauth);
+    twist tmp = aes256_gcm_decrypt(tok->wrappingkey, objauth);
     if (!tmp) {
         return CKR_GENERAL_ERROR;
     }
@@ -403,7 +403,7 @@ CK_RV utils_ctx_wrap_objauth(token *tok, twist data, twist *wrapped_auth) {
     assert(tok);
     assert(data);
 
-    twist wrapped = aes256_gcm_encrypt(tok->wappingkey, data);
+    twist wrapped = aes256_gcm_encrypt(tok->wrappingkey, data);
     if (!wrapped) {
         return CKR_GENERAL_ERROR;
     }

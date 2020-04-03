@@ -323,9 +323,9 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
         goto error;
     }
 
-    tok->wappingkey = twistbin_unhexlify(wrappingkeyhex);
+    tok->wrappingkey = twistbin_unhexlify(wrappingkeyhex);
     twist_free(wrappingkeyhex);
-    if (!tok->wappingkey) {
+    if (!tok->wrappingkey) {
         LOGE("Expected internal wrapping key in base 16 format");
         goto error;
     }
@@ -370,13 +370,13 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
     }
 
     /* clear the wrapping key */
-    assert(tok->wappingkey);
+    assert(tok->wrappingkey);
 
     /* cleanse the wrapping key */
-    if (tok->wappingkey) {
-        OPENSSL_cleanse((void *)tok->wappingkey, twist_len(tok->wappingkey));
-        twist_free(tok->wappingkey);
-        tok->wappingkey = NULL;
+    if (tok->wrappingkey) {
+        OPENSSL_cleanse((void *)tok->wrappingkey, twist_len(tok->wrappingkey));
+        twist_free(tok->wrappingkey);
+        tok->wrappingkey = NULL;
     }
 
     /*
