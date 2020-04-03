@@ -223,3 +223,8 @@ CK_RV backend_esysdb_update_token_config (token *tok) {
 
     return db_update_token_config(tok);
 }
+
+CK_RV backend_esysdb_update_tobject_attrs(tobject *tobj, attr_list *attrs) {
+
+    return db_update_tobject_attrs(tobj->id, attrs);
+}

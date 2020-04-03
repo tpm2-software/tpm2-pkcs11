@@ -213,3 +213,29 @@ CK_RV backend_update_token_config(token *t) {
         return CKR_GENERAL_ERROR;
     }
 }
+/** Given a token and tobject, will persist the new attributes.
+ *
+ * @param tok
+ *  The token to persist to.
+ * @param tobj
+ *  The tobject to persist.
+ * @param attrs
+ *  The new attributes to persist.
+ * @return
+ *  CKR_OK on success, anything else is an error.
+ */
+CK_RV backend_update_tobject_attrs(token *tok, tobject *tobj, attr_list *attrs) {
+
+    switch (tok->type) {
+    case token_type_esysdb:
+        LOGV("Adding object to token using esysdb backend.");
+        LOGW("Updating token config using esysdb backend.");
+        return backend_esysdb_update_tobject_attrs(tobj, attrs);
+    case token_type_fapi:
+        LOGE("Not supported on FAPI");
+        return CKR_FUNCTION_NOT_SUPPORTED;
+    default:
+        assert(1);
+        return CKR_GENERAL_ERROR;
+    }
+}
