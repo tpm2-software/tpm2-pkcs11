@@ -85,9 +85,24 @@ CK_RV utils_ctx_wrap_objauth(token *tok, twist objauth, twist *wrapped_auth);
  */
 CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid);
 
+/*
+ * Work around bugs in clang not including the builtins, and when asan is enabled
+ * ending up in a nightmare of having both the ASAN and BUILTINS defined and linked
+ * properly.
+ *  See:
+ *  - https://bugs.llvm.org/show_bug.cgi?id=16404
+ *  - https://lists.gnu.org/archive/html/bug-gnulib/2019-08/msg00076.html
+ */
+#ifdef DISABLE_OVERFLOW_BUILTINS
+#define safe_add(r, a, b) do { r = a + b; } while(0)
+#define safe_adde(r, a)   do { r += a;    } while(0)
+#define safe_mul(r, a, b) do { r = a * b; } while(0)
+#define safe_mule(r, a)   do { r *= a;    } while(0)
+#else
 #define safe_add(r, a, b) do { if (__builtin_add_overflow(a, b, &r)) { LOGE("overflow"); abort(); } } while(0)
 #define safe_adde(r, a)   do { if (__builtin_add_overflow(a, r, &r)) { LOGE("overflow"); abort(); } } while(0)
 #define safe_mul(r, a, b) do { if (__builtin_mul_overflow(a, b, &r)) { LOGE("overflow"); abort(); } } while(0)
 #define safe_mule(r, a)   do { if (__builtin_mul_overflow(a, r, &r)) { LOGE("overflow"); abort(); } } while(0)
+#endif
 
 #endif /* SRC_PKCS11_UTILS_H_ */

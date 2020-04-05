@@ -17,7 +17,7 @@ fi
 # If it's clang, enable asan
 if [[ "$CC" == clang* ]]; then
   echo "Detecting clang, enable asan"
-  export CFLAGS="-O1 -g -fsanitize=address -fno-omit-frame-pointer"
+  export CFLAGS="-O1 -g -fsanitize=address -fno-omit-frame-pointer -DDISABLE_OVERFLOW_BUILTINS"
   echo "Exported CFLAGS=$CFLAGS"
   config_flags="--disable-hardening"
   echo "Disabled configure option hardening"
