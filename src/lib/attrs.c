@@ -831,7 +831,11 @@ CK_RV rsa_gen_mechs(attr_list *new_pub_attrs, attr_list *new_priv_attrs) {
         CKM_SHA256_RSA_PKCS,
         CKM_SHA384_RSA_PKCS,
         CKM_SHA512_RSA_PKCS,
-        CKM_RSA_PKCS_PSS
+        CKM_RSA_PKCS_PSS,
+        CKM_SHA1_RSA_PKCS_PSS,
+        CKM_SHA256_RSA_PKCS_PSS,
+        CKM_SHA384_RSA_PKCS_PSS,
+        CKM_SHA512_RSA_PKCS_PSS,
     };
 
     if (new_pub_attrs) {
