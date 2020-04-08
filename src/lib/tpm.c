@@ -3311,7 +3311,7 @@ CK_RV tpm_get_pss_sig_state(tpm_ctx *tctx, tobject *tobj,
     TPM2B_PRIVATE *out_priv = NULL;
     TPM2B_PUBLIC *out_pub = NULL;
     TPMT_SIGNATURE *signature = NULL;
-
+    EVP_PKEY *pkey = NULL;
     EVP_PKEY_CTX *pkey_ctx = NULL;
 
     /*
@@ -3370,7 +3370,6 @@ CK_RV tpm_get_pss_sig_state(tpm_ctx *tctx, tobject *tobj,
         goto out;
     }
 
-    EVP_PKEY *pkey = NULL;
     rv = ssl_util_tobject_to_evp(&pkey, tobj);
     if (rv != CKR_OK) {
         goto out;
@@ -3407,6 +3406,7 @@ CK_RV tpm_get_pss_sig_state(tpm_ctx *tctx, tobject *tobj,
 
 out:
     EVP_PKEY_CTX_free(pkey_ctx);
+    EVP_PKEY_free(pkey);
     Esys_Free(out_priv);
     Esys_Free(out_pub);
     Esys_Free(signature);
