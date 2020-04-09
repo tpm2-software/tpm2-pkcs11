@@ -68,6 +68,13 @@
         } \
     }
 
+/*
+ * The provisioning guidance states that this 0x81000001 should be the SRK
+ * See:
+ *   - https://trustedcomputinggroup.org/wp-content/uploads/TCG-TPM-v2.0-Provisioning-Guidance-Published-v1r1.pdf
+ */
+#define DEFAULT_SRK_HANDLE 0x81000001
+
 static const TPM2B_PUBLIC rsa_template = {
     .size = 0,
     .publicArea = {
@@ -3152,20 +3159,12 @@ CK_RV tpm_get_existing_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *pr
     assert(tpm->esys_ctx);
     assert(primary_blob);
 
-    /* The provisioning guidance states that this handle should be the SRK
-     * 0x81000001
-     *
-     * See:
-     *   - https://trustedcomputinggroup.org/wp-content/uploads/TCG-TPM-v2.0-Provisioning-Guidance-Published-v1r1.pdf
-     *
-     */
-
     ESYS_TR handle = ESYS_TR_NONE;
 
     TSS2_RC rval =
     Esys_TR_FromTPMPublic(
         tpm->esys_ctx,
-        0x81000001,
+        DEFAULT_SRK_HANDLE,
         ESYS_TR_NONE,
         ESYS_TR_NONE,
         ESYS_TR_NONE,
@@ -3286,7 +3285,7 @@ CK_RV tpm_create_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_
             ESYS_TR_PASSWORD,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
-            TPM2_PERSISTENT_FIRST,
+            DEFAULT_SRK_HANDLE,
             &new_handle);
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Esys_EvictControl: %s:", Tss2_RC_Decode(rval));
