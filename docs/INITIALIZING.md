@@ -126,7 +126,7 @@ Alter that alias as needed, so that `--module` points to the location of the tpm
 
 This method of initialization does not provide the granularity of control over the primary key that
 `tpm2_ptool` does. The initialization will currently look to see if a *store* is already configured with
-a primary key, and if so uses the first one. If it is not, it attempts to use the *SRK* at address 0x81000000
+a primary key, and if so uses the first one. If it is not, it attempts to use the *SRK* at address 0x81000001
 as defined by various TCG specifications:
 - https://trustedcomputinggroup.org/wp-content/uploads/TCG-TPM-v2.0-Provisioning-Guidance-Published-v1r1.pdf
 - https://trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf
