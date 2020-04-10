@@ -1,6 +1,9 @@
 # Changelog
 
 ### next - next
+  * C_InitToken: Fix improper SRK handle of 0x81000000, it should be 0x81000001.
+  * Fix a leak in in tpm.c of an EVP_PKEY object.
+  * C_GenerateKeyPair: was not adding PSS signatures as supported by RSA objects, add it.
   * Fix PSS signatures. Non-FIPS mode TPMs produce PSS signatures with a
     max salt len that poses interoperability issues with verifying clients,
     notably TLS in OpenSSL.
