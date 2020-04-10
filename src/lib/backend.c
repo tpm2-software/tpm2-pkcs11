@@ -203,7 +203,6 @@ CK_RV backend_update_token_config(token *t) {
     switch (t->type) {
     case token_type_esysdb:
         LOGV("Adding object to token using esysdb backend.");
-        LOGW("Updating token config using esysdb backend.");
         return backend_esysdb_update_token_config(t);
     case token_type_fapi:
         LOGE("Not supported on FAPI");
@@ -229,7 +228,6 @@ CK_RV backend_update_tobject_attrs(token *tok, tobject *tobj, attr_list *attrs) 
     switch (tok->type) {
     case token_type_esysdb:
         LOGV("Adding object to token using esysdb backend.");
-        LOGW("Updating token config using esysdb backend.");
         return backend_esysdb_update_tobject_attrs(tobj, attrs);
     case token_type_fapi:
         LOGE("Not supported on FAPI");
