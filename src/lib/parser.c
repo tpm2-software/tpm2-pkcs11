@@ -144,6 +144,11 @@ static bool yaml_convert_hex_str(attr_list *l, CK_ATTRIBUTE_TYPE type, const yam
 
 bool on_map_scalar_event(yaml_event_t *e, handler_state *state, attr_list *l) {
 
+    if (!e->data.scalar.tag) {
+        LOGE("e->data.scalar.tag is NULL");
+        return false;
+    }
+
     if (!state->is_value) {
         if (!is_yaml_int(e->data.scalar.tag)) {
             LOGE("key should always be int, got: \"%s\"", e->data.scalar.tag);
