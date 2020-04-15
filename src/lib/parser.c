@@ -210,11 +210,7 @@ bool on_seq_scalar_event(yaml_event_t *e, handler_state *state, attr_list *l) {
     }
 
     size_t bytes = 0;
-    bool res = __builtin_mul_overflow(state->cnt, sizeof(CK_ULONG), &bytes);
-    if (res) {
-        LOGE("mul overflow");
-        return false;
-    }
+    safe_mul(bytes, state->cnt, sizeof(CK_ULONG));
 
     void *tmp = realloc(state->seqbuf, bytes);
     if (!tmp) {

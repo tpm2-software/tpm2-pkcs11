@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# BILLS WORK
+
+TEST_EXTENSIONS += .fuzz
+
+if FUZZING
+
+JOBS := $(shell nproc)
+
+AM_FUZZ_LOG_FLAGS="-runs=1000000 -jobs=$(JOBS)"
+FUZZ_LOG_COMPILER=$(top_srcdir)/test/fuzz/scripts/fuzz-runner.sh
+
+test_fuzz_yaml_parser_fuzz_CFLAGS    = $(AM_CFLAGS) $(FUZZING_CFLAGS)
+test_fuzz_yaml_parser_fuzz_LDADD     = $(libtpm2_test_pkcs11)
+test_fuzz_yaml_parser_fuzz_SOURCES   = test/fuzz/yaml-parser.fuzz.c
+
+fuzz_PROGRAMS = test/fuzz/yaml-parser.fuzz
+
+# make check will run the fuzz targets
+check_PROGRAMS += $(fuzz_PROGRAMS)
+
+fuzzdir = $(srcdir)
+fuzz-targets: $(fuzz_PROGRAMS)
+
+endif # FUZZING

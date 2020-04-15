@@ -71,6 +71,27 @@ endif
 
 AM_DISTCHECK_CONFIGURE_FLAGS = --with-p11kitconfigdir='$$(datarootdir)/p11kitconfigdir' --with-p11kitmoduledir='$$(libdir)'
 
+#
+# Due to limitations in how cmocka works, we build a separate library here so we
+# can have a PKCS11 shared object with undefined calls into the rest of the lib
+# code. This allows us to deploy a single library, but be able to intercept calls
+# during linking with ld wrap to mock out various functions.
+#
+# UNIT, INTEGRATION and/or FUZZ can use this library.
+#
+
+# src/lib stuff as a seperate archive
+libtpm2_test_pkcs11 = src/libtpm2_test_pkcs11.la
+src_libtpm2_test_pkcs11_la_LIBADD =  $(AM_LDFLAGS) $(libtpm2_test_internal)
+src_libtpm2_test_pkcs11_la_SOURCES = $(LIB_PKCS11_SRC)
+
+# Internal Testing Unit
+libtpm2_test_internal = src/libtpm2_test_internal.la
+src_libtpm2_test_internal_la_LIBADD = $(AM_LDFLAGS)
+src_libtpm2_test_internal_la_SOURCES = $(LIB_PKCS11_INTERNAL_LIB_SRC)
+
+noinst_LTLIBRARIES = $(libtpm2_test_pkcs11) $(libtpm2_test_internal)
+
 # test harness configuration
 AM_TESTS_ENVIRONMENT = \
     T=$(abs_top_srcdir) \
@@ -92,165 +113,15 @@ TESTS_CFLAGS = $(CMOCKA_CFLAGS)
 check_PROGRAMS =
 check_SCRIPTS =
 
-TEST_EXTENSIONS = .sh .int .nosetup .java .fapi
+# include integration tests
+include Makefile-integration.am
 
-integration_scripts = \
-    test/integration/pkcs11-tool.sh \
-    test/integration/pkcs11-tool-init.sh.nosetup \
-    test/integration/pkcs11-tool-init-fapi.sh.fapi \
-    test/integration/p11-tool.sh.nosetup \
-    test/integration/p11-tool-fapi.sh.fapi \
-    test/integration/pkcs11-dbup.sh.nosetup \
-    test/integration/tls-tests.sh \
-    test/integration/openssl.sh \
-    test/integration/pkcs11-javarunner.sh.java \
-    test/integration/nss-tests.sh
-# Note that -fapi.sh.fapi is symlinked to .sh.nosetup
-# If we'd use the .fapi extension then .nosetup and .fapi overwrite each others .log
-# thus we use -fapi.sh.fapi as suffix.
+# include unit tests
+include Makefile-unit.am
 
-EXTRA_DIST += \
-    $(integration_scripts) \
-    test/integration/test.h \
-    test/integration/fixtures
-
-### Integration Tests ###
-if ENABLE_INTEGRATION
-
-#
-# Common integration test static lib
-#
-LIB_TEST := test/integration/libtest.a
-noinst_LIBRARIES = $(LIB_TEST)
-test_integration_libtest_a_SOURCES = $(LIB_SRC)
-test_integration_libtest_a_CFLAGS = -fPIC $(AM_CFLAGS)
-TESTS_LDADD += $(LIB_TEST)
-
-check_PROGRAMS += \
-    test/integration/pkcs-find-objects.int \
-    test/integration/pkcs-get-mechanism.int \
-    test/integration/pkcs-get-attribute-value.int \
-    test/integration/pkcs-login-logout.int \
-    test/integration/pkcs-sign-verify.int \
-    test/integration/pkcs-initialize-finalize.int \
-    test/integration/pkcs-misc.int \
-    test/integration/pkcs-crypt.int \
-    test/integration/pkcs-keygen.int \
-    test/integration/pkcs-session-state.int
-
-# add test scripts
-check_SCRIPTS += $(integration_scripts)
-
-LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
-
-AM_INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
-INT_LOG_COMPILER=$(LOG_COMPILER)
-
-AM_SH_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
-SH_LOG_COMPILER=$(LOG_COMPILER)
-
-AM_NOSETUP_LOG_FLAGS = --tabrmd-tcti=mssim
-NOSETUP_LOG_COMPILER=$(LOG_COMPILER)
-
-AM_FAPI_LOG_FLAGS = --tabrmd-tcti=mssim
-FAPI_LOG_COMPILER=env FAPI_PREVIEW=true $(LOG_COMPILER)
-
-test_integration_pkcs_find_objects_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
-test_integration_pkcs_find_objects_int_LDADD   = $(TESTS_LDADD)
-test_integration_pkcs_find_objects_int_SOURCES = test/integration/pkcs-find-objects.int.c test/integration/test.c
-
-test_integration_pkcs_get_mechanism_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
-test_integration_pkcs_get_mechanism_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_get_mechanism_int_SOURCES = test/integration/pkcs-get-mechanism.int.c test/integration/test.c
-
-test_integration_pkcs_get_attribute_value_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
-test_integration_pkcs_get_attribute_value_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_get_attribute_value_int_SOURCES = test/integration/pkcs-get-attribute-value.int.c test/integration/test.c
-
-test_integration_pkcs_login_logout_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
-test_integration_pkcs_login_logout_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_login_logout_int_SOURCES = test/integration/pkcs-login-logout.int.c test/integration/test.c
-
-test_integration_pkcs_sign_verify_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
-test_integration_pkcs_sign_verify_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_sign_verify_int_SOURCES = test/integration/pkcs-sign-verify.int.c test/integration/test.c
-
-test_integration_pkcs_initialize_finalize_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
-test_integration_pkcs_initialize_finalize_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_initialize_finalize_int_SOURCES = test/integration/pkcs-initialize-finalize.int.c test/integration/test.c
-
-test_integration_pkcs_misc_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
-test_integration_pkcs_misc_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_misc_int_SOURCES = test/integration/pkcs-misc.int.c test/integration/test.c
-
-test_integration_pkcs_crypt_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
-test_integration_pkcs_crypt_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_crypt_int_SOURCES = test/integration/pkcs-crypt.int.c test/integration/test.c
-
-test_integration_pkcs_keygen_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
-test_integration_pkcs_keygen_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_keygen_int_SOURCES = test/integration/pkcs-keygen.int.c test/integration/test.c
-
-test_integration_pkcs_session_state_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
-test_integration_pkcs_session_state_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
-test_integration_pkcs_session_state_int_SOURCES = test/integration/pkcs-session-state.c test/integration/test.c
-
-#
-# Java Tests
-#
-AM_JAVA_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
-JAVA_LOG_COMPILER=$(LOG_COMPILER)
-dist_noinst_JAVA = test/integration/PKCS11JavaTests.java
-CLEANFILES += test/integration/PKCS11JavaTests.class
-
-endif
-# END INTEGRATION
-
-### Unit Tests ###
-if UNIT
-
-#
-# Due to limitations in how cmocka works, we build a seperate library here so we
-# can have a PKCS11 shared object with undefined calls into the rest of the lib
-# code. This allows us to deploy a single library, but be able to dissect it for
-# testing.
-#
-### PKCS#11 TEST Library Definitions ###
-libtpm2_test_internal = src/libtpm2_test_internal.la
-src_libtpm2_test_internal_la_LIBADD = $(AM_LDFLAGS)
-src_libtpm2_test_internal_la_SOURCES = $(LIB_PKCS11_INTERNAL_LIB_SRC)
-
-libtpm2_test_pkcs11 = src/libtpm2_test_pkcs11.la
-src_libtpm2_test_pkcs11_la_LIBADD =  $(AM_LDFLAGS) $(libtpm2_test_internal)
-src_libtpm2_test_pkcs11_la_SOURCES = $(LIB_PKCS11_SRC)
-
-noinst_LTLIBRARIES = $(libtpm2_test_pkcs11) $(libtpm2_test_internal)
-
-## End of test libraries, start tests ##
-
-check_PROGRAMS += \
-    test/unit/test_twist\
-    test/unit/test_log \
-    test/unit/test_parser \
-    test/unit/test_attr
-
-test_unit_test_twist_CFLAGS    = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
-test_unit_test_twist_LDADD     = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
-test_unit_test_log_CFLAGS      = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
-test_unit_test_log_LDADD       = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
-test_unit_test_parser_CFLAGS   = $(AM_CFLAGS) $(YAML_CFLAGS) $(CMOCKA_CFLAGS)
-test_unit_test_parser_LDADD    = $(CMOCKA_LIBS) $(YAML_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
-test_unit_test_attr_CFLAGS   = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
-test_unit_test_attr_LDADD    = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
-
-endif
-# END UNIT
+# Include fuzz tests
+include Makefile-fuzz.am
 
 TESTS= \
     $(check_PROGRAMS) \
     $(check_SCRIPTS)
-
-### Helper Functions ###
-define make_parent_dir
-    if [ ! -d $(dir $1) ]; then mkdir -p $(dir $1); fi
-endef
