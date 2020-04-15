@@ -82,6 +82,58 @@ AC_ARG_ENABLE(
     [build cmocka unit tests])],,
   [enable_unit=no])
 
+AC_ARG_ENABLE([fuzzing],
+            [AS_HELP_STRING([--enable-fuzzing],
+                            [build the fuzz tests])],,
+            [enable_fuzzing=no])
+AM_CONDITIONAL([FUZZING], [test "x$enable_fuzzing" != xno])
+
+AC_ARG_ENABLE([hardening],
+  [AS_HELP_STRING([--disable-hardening],
+    [Disable compiler and linker options to frustrate memory corruption exploits])],,
+  [enable_hardening="yes"])
+
+AC_ARG_ENABLE([overflow],
+            [AS_HELP_STRING([--disable-overflow],
+                            [Disable builtin overflow checks (enabled by default)])],,
+            ,[enable_overflow=yes])
+
+AS_IF([test "x$enable_overflow" = "xno"],
+	AC_DEFINE([DISABLE_OVERFLOW_BUILTINS], [], [Define to disable built in overflow math]))
+
+AC_DEFUN([add_hardened_c_flag], [
+  AX_CHECK_COMPILE_FLAG([$1],
+    [EXTRA_CFLAGS="$EXTRA_CFLAGS $1"],
+    [AC_MSG_ERROR([Cannot enable $1, consider configuring with --disable-hardening])]
+  )
+])
+
+AC_DEFUN([fuzzing_checks],[
+  AC_CHECK_PROG([nproc], [nproc], [yes], [no])
+    AS_IF([test "x$nproc" != "xyes"],
+      [AC_MSG_ERROR([Fuzz tests require nproc.])])
+
+    # Add these to AM_CFLAGS to everyone gets built
+    # smartly (extra info and instrumentation)
+    add_hardened_c_flag([-fsanitize=address])
+    add_hardened_c_flag([-g])
+    add_hardened_c_flag([-O0])
+
+    AX_CHECK_COMPILE_FLAG([-fsanitize=fuzzer],
+      [FUZZING_CFLAGS="$FUZZING_CFLAGS -fsanitize=fuzzer"],
+      [AC_MSG_ERROR([Cannot enable -fsanitize=fuzzer])]
+    )
+
+    AC_SUBST([FUZZING_CFLAGS])
+
+    # Disable hardening flags
+    AC_MSG_NOTICE(["Disabling hardening --disable-hardening for --enable-fuzzing"])
+    enable_hardening=no
+])
+
+AS_IF([test "x$enable_fuzzing" = "xyes"],
+    [fuzzing_checks])
+
 AC_DEFUN([unit_test_checks],[
 
   PKG_CHECK_MODULES([CMOCKA],[cmocka])
@@ -318,22 +370,10 @@ AM_CONDITIONAL([HAVE_P11KIT], [test "x$have_p11kit" = "xyes"])
 
 # END P11 CONFIG
 
-AC_ARG_ENABLE([hardening],
-  [AS_HELP_STRING([--disable-hardening],
-    [Disable compiler and linker options to frustrate memory corruption exploits])],,
-  [enable_hardening="yes"])
-
 # Good information on adding flags, and dealing with compilers can be found here:
 #   https://github.com/zcash/zcash/issues/1832
 #   https://github.com/kmcallister/autoharden/
 AS_IF([test x"$enable_hardening" != xno], [
-
-  AC_DEFUN([add_hardened_c_flag], [
-    AX_CHECK_COMPILE_FLAG([$1],
-      [EXTRA_CFLAGS="$EXTRA_CFLAGS $1"],
-      [AC_MSG_ERROR([Cannot enable $1, consider configuring with --disable-hardening])]
-    )
-  ])
 
   AC_DEFUN([add_hardened_ld_flag], [
     AX_CHECK_LINK_FLAG([$1],

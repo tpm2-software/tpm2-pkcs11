@@ -1,5 +1,8 @@
 /* src/lib/config.h.in.  Generated from configure.ac by autoheader.  */
 
+/* Define to disable built in overflow math */
+#undef DISABLE_OVERFLOW_BUILTINS
+
 /* ESAPI versions below 2.2.1 are known to require manual session flag
    management. */
 #undef ESAPI_MANAGE_FLAGS

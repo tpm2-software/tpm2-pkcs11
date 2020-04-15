@@ -83,3 +83,9 @@ m4/*
 # Java class files
 *.class
 *.stamp
+
+# fuzz logs
+fuzz-*.log
+
+# Fuzz Executables
+test/fuzz/*.fuzz

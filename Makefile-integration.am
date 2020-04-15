@@ -1,0 +1,104 @@
+TEST_EXTENSIONS = .sh .int .nosetup .java .fapi
+
+integration_scripts = \
+    test/integration/pkcs11-tool.sh \
+    test/integration/pkcs11-tool-init.sh.nosetup \
+    test/integration/pkcs11-tool-init-fapi.sh.fapi \
+    test/integration/p11-tool.sh.nosetup \
+    test/integration/p11-tool-fapi.sh.fapi \
+    test/integration/pkcs11-dbup.sh.nosetup \
+    test/integration/tls-tests.sh \
+    test/integration/openssl.sh \
+    test/integration/pkcs11-javarunner.sh.java \
+    test/integration/nss-tests.sh
+# Note that -fapi.sh.fapi is symlinked to .sh.nosetup
+# If we'd use the .fapi extension then .nosetup and .fapi overwrite each others .log
+# thus we use -fapi.sh.fapi as suffix.
+
+EXTRA_DIST += \
+    $(integration_scripts) \
+    test/integration/test.h \
+    test/integration/fixtures
+
+### Integration Tests ###
+if ENABLE_INTEGRATION
+
+check_PROGRAMS += \
+    test/integration/pkcs-find-objects.int \
+    test/integration/pkcs-get-mechanism.int \
+    test/integration/pkcs-get-attribute-value.int \
+    test/integration/pkcs-login-logout.int \
+    test/integration/pkcs-sign-verify.int \
+    test/integration/pkcs-initialize-finalize.int \
+    test/integration/pkcs-misc.int \
+    test/integration/pkcs-crypt.int \
+    test/integration/pkcs-keygen.int \
+    test/integration/pkcs-session-state.int
+
+# add test scripts
+check_SCRIPTS += $(integration_scripts)
+
+LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
+
+AM_INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
+INT_LOG_COMPILER=$(LOG_COMPILER)
+
+AM_SH_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
+SH_LOG_COMPILER=$(LOG_COMPILER)
+
+AM_NOSETUP_LOG_FLAGS = --tabrmd-tcti=mssim
+NOSETUP_LOG_COMPILER=$(LOG_COMPILER)
+
+AM_FAPI_LOG_FLAGS = --tabrmd-tcti=mssim
+FAPI_LOG_COMPILER=env FAPI_PREVIEW=true $(LOG_COMPILER)
+
+test_integration_pkcs_find_objects_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_find_objects_int_LDADD   = $(TESTS_LDADD)
+test_integration_pkcs_find_objects_int_SOURCES = test/integration/pkcs-find-objects.int.c test/integration/test.c
+
+test_integration_pkcs_get_mechanism_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_get_mechanism_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_get_mechanism_int_SOURCES = test/integration/pkcs-get-mechanism.int.c test/integration/test.c
+
+test_integration_pkcs_get_attribute_value_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_get_attribute_value_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_get_attribute_value_int_SOURCES = test/integration/pkcs-get-attribute-value.int.c test/integration/test.c
+
+test_integration_pkcs_login_logout_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_login_logout_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_login_logout_int_SOURCES = test/integration/pkcs-login-logout.int.c test/integration/test.c
+
+test_integration_pkcs_sign_verify_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_sign_verify_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_sign_verify_int_SOURCES = test/integration/pkcs-sign-verify.int.c test/integration/test.c
+
+test_integration_pkcs_initialize_finalize_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_initialize_finalize_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_initialize_finalize_int_SOURCES = test/integration/pkcs-initialize-finalize.int.c test/integration/test.c
+
+test_integration_pkcs_misc_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_misc_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_misc_int_SOURCES = test/integration/pkcs-misc.int.c test/integration/test.c
+
+test_integration_pkcs_crypt_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_crypt_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_crypt_int_SOURCES = test/integration/pkcs-crypt.int.c test/integration/test.c
+
+test_integration_pkcs_keygen_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_keygen_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_keygen_int_SOURCES = test/integration/pkcs-keygen.int.c test/integration/test.c
+
+test_integration_pkcs_session_state_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_session_state_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_session_state_int_SOURCES = test/integration/pkcs-session-state.c test/integration/test.c
+
+#
+# Java Tests
+#
+AM_JAVA_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
+JAVA_LOG_COMPILER=$(LOG_COMPILER)
+dist_noinst_JAVA = test/integration/PKCS11JavaTests.java
+CLEANFILES += test/integration/PKCS11JavaTests.class
+
+endif
+# END INTEGRATION
