@@ -297,13 +297,13 @@ bool parse_attributes(yaml_parser_t *parser, attr_list **attrs) {
         }
 
         /* handle events */
-        res = handle_attr_event(&event, a, &state);
+        bool tmp_res = handle_attr_event(&event, a, &state);
 
         if(event.type != YAML_STREAM_END_EVENT) {
             yaml_event_delete(&event);
         }
 
-        if (!res) {
+        if (!tmp_res) {
             goto error;
         }
 
