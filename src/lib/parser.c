@@ -187,6 +187,11 @@ bool on_map_scalar_event(yaml_event_t *e, handler_state *state, attr_list *l) {
 bool on_seq_scalar_event(yaml_event_t *e, handler_state *state, attr_list *l) {
     UNUSED(l);
 
+    if (!e->data.scalar.tag) {
+        LOGE("Scalara tag is null");
+        return false;
+    }
+
     if (strcmp((const char *)e->data.scalar.tag, YAML_INT_TAG)) {
         LOGE("Attribute type key should always be int, got: \"%s\"",
                 e->data.scalar.tag);
