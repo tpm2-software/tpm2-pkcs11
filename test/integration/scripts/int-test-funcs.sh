@@ -132,6 +132,7 @@ cat > $tempdir/fapi_config.json <<EOF
     "system_dir": "$tempdir/${KEYSTORE_SYSTEM}",
     "tcti": "${TPM2_PKCS11_TCTI}",
     "system_pcrs" : [],
+    "ek_cert_less": "yes",
     "log_dir" : "$tempdir/${LOG_DIR}",
 }
 EOF
