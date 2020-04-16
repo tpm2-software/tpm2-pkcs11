@@ -571,6 +571,97 @@ error:
     return CKR_GENERAL_ERROR;
 }
 
+/** Given a token and tobject, will persist the new attributes in fapi backend.
+ *
+ * see backend_update_tobject_attrs().
+ */
+CK_RV backend_fapi_update_tobject_attrs(token *t, tobject *tobj, attr_list *attrlist) {
+    TSS2_RC rc;
+
+    char *path = tss_path_from_id(t->id, "so");
+    if (!path) {
+        LOGE("No path constructed.");
+        return CKR_GENERAL_ERROR;
+    }
+
+    uint8_t *appdata;
+    size_t appdata_len;
+    rc = Fapi_GetAppData(t->fapi.ctx, path, &appdata, &appdata_len);
+    if (rc) {
+        LOGE("Getting FAPI seal appdata failed.");
+        goto error;
+    }
+
+    /* Skip over soauthvalue (the first element of appData) */
+    size_t tobj_start = strlen((char*)appdata) + 1;
+
+    /* Find the offset of the tobj to delete */
+    while (1) {
+        if (tobj_start + 9 >= appdata_len) {
+            LOGE("tobj not found in appdata.");
+            goto error;
+        }
+
+        unsigned id;
+        if (sscanf((char*)&appdata[tobj_start], "%08x:", &id) != 1) {
+            LOGE("bad tobject.");
+            goto error;
+        }
+
+        if (id == tobj->id) {
+            LOGV("Object found at offset %zi.", tobj_start);
+            break;
+        }
+
+        safe_adde(tobj_start, strlen((char*)&appdata[tobj_start]));
+        safe_adde(tobj_start, 1);
+    }
+
+    size_t tobj_len = strlen((char*)&appdata[tobj_start]);
+
+    char *attrs = emit_attributes_to_string(attrlist);
+    if (!attrs) {
+        LOGE("OOM");
+        free(path);
+        return CKR_GENERAL_ERROR;
+    }
+
+    size_t newappdata_len = appdata_len - tobj_len;
+    safe_adde(newappdata_len, 9); /* id as 8byte hex and ':' */
+    safe_adde(newappdata_len, strlen(attrs));
+    safe_adde(newappdata_len, 1); /* terminating '\0' */
+    uint8_t *newappdata = malloc(newappdata_len);
+    if (!newappdata) {
+        LOGE("OOM");
+        Fapi_Free(appdata);
+        goto error;
+    }
+
+    memcpy(&newappdata[0], &appdata[0], tobj_start);
+    sprintf((char*)&newappdata[appdata_len], "%08x:", tobj->id);
+    memcpy(&newappdata[appdata_len + 9], attrs, strlen(attrs));
+    newappdata[tobj_start + 9 + strlen(attrs)] = '\0';
+    memcpy(&newappdata[tobj_start + 9 + strlen(attrs) + 1],
+           &appdata[tobj_start + tobj_len],
+           appdata_len - tobj_start - tobj_len);
+    newappdata[newappdata_len - 1] = '\0';
+    Fapi_Free(appdata);
+
+    rc = Fapi_SetAppData(t->fapi.ctx, path, newappdata, newappdata_len);
+    Fapi_Free(newappdata);
+    if (rc) {
+        LOGE("Getting FAPI seal appdata failed.");
+        goto error;
+    }
+
+    free(path);
+    return CKR_OK;
+
+error:
+    free(path);
+    return CKR_GENERAL_ERROR;
+}
+
 /** Removes a tobject from the fapi backend.
  *
  * See backend_rm_tobject().
