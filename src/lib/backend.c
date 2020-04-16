@@ -253,8 +253,7 @@ CK_RV backend_rm_tobject(token *tok, tobject *tobj) {
     case token_type_esysdb:
         return backend_esysdb_rm_tobject(tobj);
     case token_type_fapi:
-        LOGE("Not supported on FAPI");
-        return CKR_FUNCTION_NOT_SUPPORTED;
+        return backend_fapi_rm_tobject(tok, tobj);
     default:
         assert(1);
         return CKR_GENERAL_ERROR;

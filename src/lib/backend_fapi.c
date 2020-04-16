@@ -570,3 +570,69 @@ error:
     free(attrs);
     return CKR_GENERAL_ERROR;
 }
+
+/** Removes a tobject from the fapi backend.
+ *
+ * See backend_rm_tobject().
+ */
+CK_RV backend_fapi_rm_tobject(token *t, tobject *tobj) {
+    TSS2_RC rc;
+
+    char *path = tss_path_from_id(t->id, "so");
+    if (!path) {
+        LOGE("No path constructed.");
+        return CKR_GENERAL_ERROR;
+    }
+
+    uint8_t *appdata;
+    size_t appdata_len;
+    rc = Fapi_GetAppData(t->fapi.ctx, path, &appdata, &appdata_len);
+    if (rc) {
+        LOGE("Getting FAPI seal appdata failed.");
+        goto error;
+    }
+
+    /* Skip over soauthvalue (the first element of appData) */
+    size_t tobj_start = strlen((char*)appdata) + 1;
+
+    /* Find the offset of the tobj to delete */
+    while (1) {
+        if (tobj_start + 9 >= appdata_len) {
+            LOGE("tobj not found in appdata.");
+            goto error;
+        }
+
+        unsigned id;
+        if (sscanf((char*)&appdata[tobj_start], "%08x:", &id) != 1) {
+            LOGE("bad tobject.");
+            goto error;
+        }
+
+        if (id == tobj->id) {
+            LOGV("Object found at offset %zi.", tobj_start);
+            break;
+        }
+
+        safe_adde(tobj_start, strlen((char*)&appdata[tobj_start]));
+        safe_adde(tobj_start, 1);
+    }
+
+    size_t tobj_len = strlen((char*)&appdata[tobj_start]);
+    memmove(&appdata[tobj_start - 1], &appdata[tobj_start + tobj_len],
+            appdata_len - tobj_start - tobj_len);
+    appdata_len -= tobj_len + 1;
+
+    rc = Fapi_SetAppData(t->fapi.ctx, path, appdata, appdata_len);
+    Fapi_Free(appdata);
+    if (rc) {
+        LOGE("Getting FAPI seal appdata failed.");
+        goto error;
+    }
+
+    free(path);
+    return CKR_OK;
+
+error:
+    free(path);
+    return CKR_GENERAL_ERROR;
+}

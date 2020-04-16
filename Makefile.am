@@ -139,8 +139,6 @@ check_PROGRAMS += \
 # add test scripts
 check_SCRIPTS += $(integration_scripts)
 
-XFAIL_TESTS = test/integration/pkcs11-tool-init-fapi.sh.fapi
-
 LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
 
 AM_INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
