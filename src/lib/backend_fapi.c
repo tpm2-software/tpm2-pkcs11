@@ -8,7 +8,7 @@
 #include <tss2/tss2_fapi.h>
 
 FAPI_CONTEXT *fctx = NULL;
-int objectids = 0;
+unsigned maxobjectid = 0;
 
 CK_RV backend_fapi_init(void) {
     if (fctx) {
@@ -283,8 +283,15 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
         uint8_t *yaml = &appdata[offset];
 
         while ((size_t)(yaml - appdata) < appdata_len) {
-            LOGV("Current yaml at offset %zi / %zi is: %s",
+            LOGV("Current tobj at offset %zi / %zi is: %s",
                  yaml - appdata, appdata_len, yaml);
+
+            if (((size_t)(yaml - appdata) > appdata_len - 9) ||
+                    (strlen((char*)yaml) < 10)) {
+                LOGE("Incomplete tobj in appdata");
+                Fapi_Free(appdata);
+                goto error;
+            }
 
             tobject *tobj = tobject_new();
             if (!tobj) {
@@ -293,10 +300,17 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
                 goto error;
             }
 
-            tobj->id = objectids;
-            objectids += 1;
+            if (sscanf((char*)yaml, "%08x:", &tobj->id) != 1) {
+                LOGE("Could not scan tobj id");
+                free(tobj);
+                Fapi_Free(appdata);
+                goto error;
+            }
 
-            if (!parse_attributes_from_string(yaml, strlen((char*)yaml), &tobj->attrs)) {
+            maxobjectid = (maxobjectid > tobj->id)? maxobjectid : tobj->id;
+
+            if (!parse_attributes_from_string(&yaml[9], strlen((char*)&yaml[9]),
+                                              &tobj->attrs)) {
                 LOGE("Could not parse FAPI attrs, got: \"%s\"", yaml);
                 free(tobj);
                 Fapi_Free(appdata);
@@ -504,6 +518,10 @@ CK_RV backend_fapi_add_object(token *t, tobject *tobj) {
         LOGE("No path constructed.");
         return CKR_GENERAL_ERROR;
     }
+
+    safe_adde(maxobjectid, 1);
+    tobj->id = maxobjectid;
+
     char *attrs = emit_attributes_to_string(tobj->attrs);
     if (!attrs) {
         LOGE("OOM");
@@ -519,9 +537,10 @@ CK_RV backend_fapi_add_object(token *t, tobject *tobj) {
         goto error;
     }
 
-    size_t newappdata_len = 0;
-    safe_add(newappdata_len, appdata_len, strlen(attrs));
-    safe_adde(newappdata_len, 1);
+    size_t newappdata_len = appdata_len;
+    safe_adde(newappdata_len, 9); /* id as 8byte hex and ':' */
+    safe_adde(newappdata_len, strlen(attrs));
+    safe_adde(newappdata_len, 1); /* terminating '\0' */
     uint8_t *newappdata = malloc(newappdata_len);
     if (!newappdata) {
         LOGE("OOM");
@@ -530,7 +549,8 @@ CK_RV backend_fapi_add_object(token *t, tobject *tobj) {
     }
 
     memcpy(&newappdata[0], &appdata[0], appdata_len);
-    memcpy(&newappdata[appdata_len], attrs, strlen(attrs));
+    sprintf((char*)&newappdata[appdata_len], "%08x:", tobj->id);
+    memcpy(&newappdata[appdata_len + 9], attrs, strlen(attrs));
     newappdata[newappdata_len - 1] = '\0';
     Fapi_Free(appdata);
 
