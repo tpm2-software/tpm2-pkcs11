@@ -230,8 +230,7 @@ CK_RV backend_update_tobject_attrs(token *tok, tobject *tobj, attr_list *attrs) 
         LOGV("Adding object to token using esysdb backend.");
         return backend_esysdb_update_tobject_attrs(tobj, attrs);
     case token_type_fapi:
-        LOGE("Not supported on FAPI");
-        return CKR_FUNCTION_NOT_SUPPORTED;
+        return backend_fapi_update_tobject_attrs(tok, tobj, attrs);
     default:
         assert(1);
         return CKR_GENERAL_ERROR;

@@ -22,6 +22,8 @@ CK_RV backend_fapi_init_user(token *t, const twist sealdata,
 
 CK_RV backend_fapi_add_object(token *t, tobject *tobj);
 
+CK_RV backend_fapi_update_tobject_attrs(token *tok, tobject *tobj, attr_list *attrlist);
+
 CK_RV backend_fapi_rm_tobject(token *tok, tobject *tobj);
 
 #endif /* SRC_LIB_BACKEND_FAPI_H_ */
