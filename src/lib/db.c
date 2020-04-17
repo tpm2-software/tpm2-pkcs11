@@ -1072,6 +1072,20 @@ static CK_RV handle_env_var(char *path, size_t len, bool *skip) {
         return CKR_OK;
     }
 
+    /*
+     * It's an in memory db, use it:
+     *   - https://www.sqlite.org/inmemorydb.html
+     */
+    if (!strncmp(env_path, "file::memory", 12) || !strcmp(env_path, ":memory:")) {
+        unsigned l = snprintf(path, len, "%s", env_path);
+        if (l >= len) {
+            LOGE("Completed DB path was over-length, got %d expected less than %lu",
+                l, len);
+            return CKR_GENERAL_ERROR;
+        }
+        return CKR_OK;
+    }
+
     unsigned l = snprintf(path, len, "%s/%s", env_path, DB_NAME);
     if (l >= len) {
         LOGE("Completed DB path was over-length, got %d expected less than %lu",
@@ -1779,10 +1793,17 @@ static CK_RV db_setup(sqlite3 **xdb, const char *dbpath) {
      *  - init a new db
      *  - upgrade an existing db
      */
+
+    const char *pname = sqlite3_db_filename(*xdb, NULL);
+    bool is_in_mem_db = !pname || pname[0] == '\0';
+
     char lockpath[PATH_MAX];
-    FILE *f = take_lock(dbpath, lockpath);
-    if (!f) {
-        return CKR_GENERAL_ERROR;
+    FILE *f = NULL;
+    if (!is_in_mem_db) {
+        f = take_lock(dbpath, lockpath);
+        if (!f) {
+            return CKR_GENERAL_ERROR;
+        }
     }
 
     CK_RV rv = db_verify_update_ok(dbpath);
@@ -1823,7 +1844,10 @@ out:
             "https://github.com/tpm2-software/tpm2-pkcs11/blob/master/docs/DB_UPGRADE.md.");
     }
 
-    release_lock(f, lockpath);
+    if (!is_in_mem_db) {
+        assert(f);
+        release_lock(f, lockpath);
+    }
     return rv;
 }
 
