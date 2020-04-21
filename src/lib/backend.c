@@ -5,6 +5,12 @@
 #include "backend_esysdb.h"
 #include "backend_fapi.h"
 
+static bool is_fapi_preview_enabled(void) {
+
+    const char *env = getenv("FAPI_PREVIEW");
+    return env && ((!strcmp(env, "yes") || !strcmp(env, "true")));
+}
+
 /* This file includes the logic for selecting, aggregating and
  * distributing calls to different backends.
  * For now this will only be the esysdb backend that uses tss2-esys
@@ -19,9 +25,16 @@ static bool esysdb_init = false;
 CK_RV backend_init(void) {
     LOGV("Initializing backends");
 
+    bool is_fapi_preview = is_fapi_preview_enabled();
+
     CK_RV rv = backend_fapi_init();
     if (rv) {
-        LOGW("FAPI backend was not initialized.");
+        static const char *msg = "FAPI backend was not initialized.";
+        if (is_fapi_preview) {
+            LOGE(msg);
+            return rv;
+        }
+        LOGW(msg);
     } else {
         fapi_init = true;
     }
@@ -43,12 +56,18 @@ CK_RV backend_init(void) {
 CK_RV backend_destroy(void) {
     LOGV("Destroying backends");
     CK_RV rv = CKR_OK;
+
+    bool is_fapi_preview = is_fapi_preview_enabled();
+
     if (fapi_init) {
         rv = backend_fapi_destroy();
+        if (!is_fapi_preview) {
+            rv = CKR_OK;
+        }
     }
     if (esysdb_init) {
         CK_RV rv2 = backend_esysdb_destroy();
-        if (!rv) {
+        if (rv2 != CKR_OK) {
             rv = rv2;
         }
     }
@@ -84,8 +103,9 @@ void backend_ctx_free(token *t) {
  */
 CK_RV backend_create_token_seal(token *t, const twist hexwrappingkey,
                        const twist newauth, const twist newsalthex) {
-    const char *env = getenv("FAPI_PREVIEW");
-    if (env && (!strcmp(env, "yes") || !strcmp(env, "true"))) {
+
+    bool is_fapi_preview = is_fapi_preview_enabled();
+    if (is_fapi_preview) {
         if (!fapi_init) {
             LOGE("FAPI backend not initialized.");
             return CKR_GENERAL_ERROR;
@@ -114,6 +134,14 @@ CK_RV backend_get_tokens(token **tok, size_t *len) {
     CK_RV rv = CKR_GENERAL_ERROR;
     token tmp;
 
+    bool is_fapi_preview = is_fapi_preview_enabled();
+
+    /* make sure tmp has a path to be populated */
+    if (!esysdb_init && !fapi_init) {
+        LOGE("No backend initialized");
+        return CKR_GENERAL_ERROR;
+    }
+
     if (esysdb_init) {
         rv = backend_esysdb_get_tokens(tok, len);
         if (rv) {
@@ -131,9 +159,15 @@ CK_RV backend_get_tokens(token **tok, size_t *len) {
     if (fapi_init) {
         rv = backend_fapi_add_tokens(*tok, len);
         if (rv) {
-            LOGE("Getting tokens from fapi backend failed.");
-            token_free_list(*tok, *len);
-            return rv;
+            static const char *msg = "Getting tokens from fapi backend failed.";
+            if (is_fapi_preview) {
+                LOGE(msg);
+                token_free_list(*tok, *len);
+                return rv;
+            } else {
+                LOGW(msg);
+                rv = CKR_OK;
+            }
         }
     }
 
