@@ -79,7 +79,7 @@ AS_IF([test "x$esapi_sf" = "xyes"],
 AC_ARG_ENABLE(
   [unit],
   [AS_HELP_STRING([--enable-unit],
-    [build cmocka unit tests])],,
+    [build unit tests])],,
   [enable_unit=no])
 
 AC_ARG_ENABLE([fuzzing],
@@ -136,8 +136,6 @@ AS_IF([test "x$enable_fuzzing" = "xyes"],
 
 AC_DEFUN([unit_test_checks],[
 
-  PKG_CHECK_MODULES([CMOCKA],[cmocka])
-
   AC_DEFINE([UNIT_TESTING], [1],
     [Define when unit testing. libtwist uses this to define a debug interface for alloc failures])
 ]) # end function unit_test_checks
@@ -146,6 +144,11 @@ AS_IF([test "x$enable_unit" = "xyes"],
        [unit_test_checks])
 
 AM_CONDITIONAL([UNIT], [test "x$enable_unit" = "xyes"])
+
+# All the tests leverage CMOCKA, so if any testing is enabled, look for it
+AS_IF([test "x$enable_unit" = "xyes" -o "x$enable_integration" = "xyes" -o "x$enable_fuzzing" = "xyes"],
+    [ PKG_CHECK_MODULES([CMOCKA],[cmocka]) ]
+)
 
 # END ENABLE UNIT
 

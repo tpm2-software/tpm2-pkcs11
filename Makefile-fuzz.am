@@ -1,7 +1,25 @@
 # SPDX-License-Identifier: BSD-2-Clause
-# BILLS WORK
 
 TEST_EXTENSIONS += .fuzz
+
+WRAP_LD_FLAGS := \
+    -Wl,--wrap=Esys_Initialize \
+    -Wl,--wrap=backend_fapi_init \
+    -Wl,--wrap=Tss2_TctiLdr_Initialize \
+    -Wl,--wrap=Tss2_TctiLdr_Finalize \
+    -Wl,--wrap=Esys_GetCapability \
+    -Wl,--wrap=Esys_TestParms \
+    -Wl,--wrap=Esys_Finalize \
+    -Wl,--wrap=Esys_TR_FromTPMPublic \
+    -Wl,--wrap=Esys_TR_Serialize \
+    -Wl,--wrap=Esys_TR_Deserialize \
+    -Wl,--wrap=Esys_TR_SetAuth \
+    -Wl,--wrap=Esys_StartAuthSession \
+    -Wl,--wrap=Esys_TRSess_SetAttributes \
+    -Wl,--wrap=Esys_TRSess_GetAttributes \
+    -Wl,--wrap=Esys_CreateLoaded \
+    -Wl,--wrap=Esys_Create \
+    -Wl,--wrap=Esys_FlushContext 
 
 if FUZZING
 
@@ -14,7 +32,14 @@ test_fuzz_yaml_parser_fuzz_CFLAGS    = $(AM_CFLAGS) $(FUZZING_CFLAGS)
 test_fuzz_yaml_parser_fuzz_LDADD     = $(libtpm2_test_pkcs11)
 test_fuzz_yaml_parser_fuzz_SOURCES   = test/fuzz/yaml-parser.fuzz.c
 
-fuzz_PROGRAMS = test/fuzz/yaml-parser.fuzz
+test_fuzz_init_token_fuzz_CFLAGS    = $(AM_CFLAGS) $(FUZZING_CFLAGS) $(CMOCKA_CFLAGS) -I$(srcdir)/test/fake-tpm
+test_fuzz_init_token_fuzz_LDFLAGS   = $(WRAP_LD_FLAGS)
+test_fuzz_init_token_fuzz_LDADD     = $(libtpm2_test_pkcs11) $(AM_LDFLAGS) $(CMOCKA_LIBS)
+test_fuzz_init_token_fuzz_SOURCES   = test/fuzz/init-token.fuzz.c
+
+fuzz_PROGRAMS = \
+    test/fuzz/yaml-parser.fuzz \
+    test/fuzz/init-token.fuzz
 
 # make check will run the fuzz targets
 check_PROGRAMS += $(fuzz_PROGRAMS)
