@@ -108,6 +108,13 @@ AC_DEFUN([add_hardened_c_flag], [
   )
 ])
 
+AC_ARG_WITH(
+  [fuzzing-flags],
+  [AS_HELP_STRING([--with-fuzzing-flags=FLAGS],[flags to pass to libfuzzer executables])],
+    [FUZZING_FLAGS="$with_fuzzing_flags"],
+    [FUZZING_FLAGS="-max_total_time=30"]
+)
+
 AC_DEFUN([fuzzing_checks],[
     
     # Add these to AM_CFLAGS to everyone gets built
@@ -127,6 +134,8 @@ AC_DEFUN([fuzzing_checks],[
     AC_MSG_NOTICE(["Disabling hardening --disable-hardening for --enable-fuzzing"])
     enable_hardening=no
 ])
+
+AC_SUBST([FUZZING_FLAGS])
 
 AS_IF([test "x$enable_fuzzing" = "xyes"],
     [fuzzing_checks])
