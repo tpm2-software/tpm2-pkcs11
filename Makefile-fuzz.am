@@ -23,8 +23,6 @@ WRAP_LD_FLAGS := \
 
 if FUZZING
 
-JOBS := $(shell nproc)
-
 AM_FUZZ_LOG_FLAGS=$(FUZZING_FLAGS)
 FUZZ_LOG_COMPILER=$(top_srcdir)/test/fuzz/scripts/fuzz-runner.sh
 
