@@ -15,11 +15,15 @@ env:
     - DOCKER_TAG=fedora-30
     - DOCKER_TAG=opensuse-leap
 
-# only one build should report coverage stats
+# only one build should:
+#  - report coverage stats
+#  - Perform fuzzing
 matrix:
   include:
   - env: ENABLE_COVERAGE=true DOCKER_TAG=ubuntu-18.04
     compiler: gcc
+  - env: ENABLE_FUZZING=true DOCKER_TAG=fedora-30
+    compiler: clang
 
 script:
   - ./.ci/travis.run

@@ -7,7 +7,7 @@ if FUZZING
 
 JOBS := $(shell nproc)
 
-AM_FUZZ_LOG_FLAGS="-runs=1000000 -jobs=$(JOBS)"
+AM_FUZZ_LOG_FLAGS="-max_total_time=30 -jobs=$(JOBS)"
 FUZZ_LOG_COMPILER=$(top_srcdir)/test/fuzz/scripts/fuzz-runner.sh
 
 test_fuzz_yaml_parser_fuzz_CFLAGS    = $(AM_CFLAGS) $(FUZZING_CFLAGS)
