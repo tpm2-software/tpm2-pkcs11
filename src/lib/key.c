@@ -241,7 +241,7 @@ CK_RV key_gen (
         goto out;
     }
 
-    rv = utils_ctx_wrap_objauth(tok, newauthhex, &newwrapped_auth);
+    rv = utils_ctx_wrap_objauth(tok->wrappingkey, newauthhex, &newwrapped_auth);
     if (rv != CKR_OK) {
         LOGE("Failed to wrap new object auth");
         goto out;

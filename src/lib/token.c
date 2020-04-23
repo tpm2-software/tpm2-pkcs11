@@ -698,7 +698,7 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
         return CKR_GENERAL_ERROR;
     }
 
-    rv = utils_ctx_unwrap_objauth(tok, tobj->objauth,
+    rv = utils_ctx_unwrap_objauth(tok->wrappingkey, tobj->objauth,
             &tobj->unsealed_auth);
     if (rv != CKR_OK) {
         LOGE("Error unwrapping tertiary object auth");
