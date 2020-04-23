@@ -32,6 +32,10 @@ test_fuzz_yaml_parser_fuzz_CFLAGS    = $(AM_CFLAGS) $(FUZZING_CFLAGS)
 test_fuzz_yaml_parser_fuzz_LDADD     = $(libtpm2_test_pkcs11)
 test_fuzz_yaml_parser_fuzz_SOURCES   = test/fuzz/yaml-parser.fuzz.c
 
+test_fuzz_utils_ctx_unwrap_objauth_fuzz_CFLAGS  = $(AM_CFLAGS) $(CMOCKA_CFLAGS) $(FUZZING_CFLAGS)
+test_fuzz_utils_ctx_unwrap_objauth_fuzz_LDADD   = $(libtpm2_test_pkcs11) $(CMOCKA_LIBS)
+test_fuzz_utils_ctx_unwrap_objauth_fuzz_SOURCES = test/fuzz/utils-ctx-unwrap-objauth.c
+
 test_fuzz_init_token_fuzz_CFLAGS    = $(AM_CFLAGS) $(FUZZING_CFLAGS) $(CMOCKA_CFLAGS) -I$(srcdir)/test/fake-tpm
 test_fuzz_init_token_fuzz_LDFLAGS   = $(WRAP_LD_FLAGS)
 test_fuzz_init_token_fuzz_LDADD     = $(libtpm2_test_pkcs11) $(AM_LDFLAGS) $(CMOCKA_LIBS)
@@ -39,7 +43,8 @@ test_fuzz_init_token_fuzz_SOURCES   = test/fuzz/init-token.fuzz.c
 
 fuzz_PROGRAMS = \
     test/fuzz/yaml-parser.fuzz \
-    test/fuzz/init-token.fuzz
+    test/fuzz/init-token.fuzz \
+    test/fuzz/utils-ctx-unwrap-objauth.fuzz
 
 # make check will run the fuzz targets
 check_PROGRAMS += $(fuzz_PROGRAMS)

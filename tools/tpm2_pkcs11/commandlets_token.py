@@ -127,6 +127,8 @@ class VerifyCommand(Command):
 
                 verify_output['pin']['user'] = {'seal-auth' : usersealauth['hash'] }
 
+            print(wrappingkeyauth)
+
             wrapper = AESAuthUnwrapper(wrappingkeyauth)
 
             tobjs = db.gettertiary(token['id'])
@@ -153,6 +155,7 @@ class VerifyCommand(Command):
                 if encauth:
                     encauth=encauth.decode()
                     tpm2.load(tr_handle, pobjauth, priv, pub)
+                    print(encauth)
                     tobjauth = wrapper.unwrap(encauth).decode()
 
                 verify_output['objects'].append({

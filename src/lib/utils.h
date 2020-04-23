@@ -69,10 +69,8 @@ static inline CK_RV utils_new_random_object_auth(twist *newauthhex) {
     return utils_setup_new_object_auth(NULL, newauthhex, NULL);
 }
 
-typedef struct tpm_ctx tpm_ctx;
-typedef struct token token;
-CK_RV utils_ctx_unwrap_objauth(token *tok, twist objauth, twist *unwrapped_auth);
-CK_RV utils_ctx_wrap_objauth(token *tok, twist objauth, twist *wrapped_auth);
+CK_RV utils_ctx_unwrap_objauth(twist wrappingkey, twist objauth, twist *unwrapped_auth);
+CK_RV utils_ctx_wrap_objauth(twist wrappingkey, twist objauth, twist *wrapped_auth);
 
 /**
  * Given an attribute of CKA_EC_PARAMS returns the nid value.

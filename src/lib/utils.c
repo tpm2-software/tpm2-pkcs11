@@ -387,8 +387,8 @@ twist utils_get_rand_hex_str(size_t size) {
     return hex;
 }
 
-CK_RV utils_ctx_unwrap_objauth(token *tok, twist objauth, twist *unwrapped_auth) {
-    assert(tok);
+CK_RV utils_ctx_unwrap_objauth(twist wrappingkey, twist objauth, twist *unwrapped_auth) {
+    assert(wrappingkey);
     assert(unwrapped_auth);
 
     if (!objauth) {
@@ -396,7 +396,7 @@ CK_RV utils_ctx_unwrap_objauth(token *tok, twist objauth, twist *unwrapped_auth)
         return CKR_OK;
     }
 
-    twist tmp = aes256_gcm_decrypt(tok->wrappingkey, objauth);
+    twist tmp = aes256_gcm_decrypt(wrappingkey, objauth);
     if (!tmp) {
         return CKR_GENERAL_ERROR;
     }
@@ -406,11 +406,11 @@ CK_RV utils_ctx_unwrap_objauth(token *tok, twist objauth, twist *unwrapped_auth)
     return CKR_OK;
 }
 
-CK_RV utils_ctx_wrap_objauth(token *tok, twist data, twist *wrapped_auth) {
-    assert(tok);
+CK_RV utils_ctx_wrap_objauth(twist wrappingkey, twist data, twist *wrapped_auth) {
+    assert(wrappingkey);
     assert(data);
 
-    twist wrapped = aes256_gcm_encrypt(tok->wrappingkey, data);
+    twist wrapped = aes256_gcm_encrypt(wrappingkey, data);
     if (!wrapped) {
         return CKR_GENERAL_ERROR;
     }

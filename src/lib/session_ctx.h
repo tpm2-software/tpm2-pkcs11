@@ -50,6 +50,7 @@ void session_ctx_free(session_ctx *ctx);
  * @return
  *  CKR_OK on success.
  */
+typedef struct token token;
 CK_RV session_ctx_new(session_ctx **ctx, token *tok, CK_FLAGS flags);
 
 /**
