@@ -22,14 +22,10 @@ if [ "$ENABLE_FUZZING" == "true" ]; then
   exit 0
 fi
 
-
 # If it's clang, enable asan
 if [[ "$CC" == clang* ]]; then
   echo "Detecting clang, enable asan"
-  export CFLAGS="-O1 -g -fsanitize=address -fno-omit-frame-pointer -DDISABLE_OVERFLOW_BUILTINS"
-  echo "Exported CFLAGS=$CFLAGS"
-  config_flags="--disable-hardening"
-  echo "Disabled configure option hardening"
+  config_flags="--enable-asan"
   export ASAN_ENABLED=true
   echo "Exported ASAN_ENABLED=$ASAN_ENABLED"
   # To get line numbers set up the asan symbolizer
@@ -47,6 +43,14 @@ if [[ "$CC" == clang* ]]; then
   else
     echo "No llvm symbolizer found at: $ASAN_SYMBOLIZER_PATH"
     unset ASAN_SYMBOLIZER_PATH
+  fi
+  # clang, you fickle beast, under version 9 I know you don't like building in the CRT
+  # for things like __builtin_mul (undefined references to __muloti4)
+  major_ver=$(echo $clang_version | cut -d'.' -f 1-1)
+  if [ "$major_ver" -lt 9 ]; then
+    echo "Detecting clang less than version 9, enabling --disable-overflow"
+    config_flags="$config_flags --disable-overflow"
+    echo "config_flags: $config_flags"
   fi
 else
   echo "Enabling Code Coverage"
