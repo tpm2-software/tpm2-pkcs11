@@ -109,10 +109,7 @@ AC_DEFUN([add_hardened_c_flag], [
 ])
 
 AC_DEFUN([fuzzing_checks],[
-  AC_CHECK_PROG([nproc], [nproc], [yes], [no])
-    AS_IF([test "x$nproc" != "xyes"],
-      [AC_MSG_ERROR([Fuzz tests require nproc.])])
-
+    
     # Add these to AM_CFLAGS to everyone gets built
     # smartly (extra info and instrumentation)
     add_hardened_c_flag([-fsanitize=address])
