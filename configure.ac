@@ -88,6 +88,11 @@ AC_ARG_ENABLE([fuzzing],
             [enable_fuzzing=no])
 AM_CONDITIONAL([FUZZING], [test "x$enable_fuzzing" != xno])
 
+AC_ARG_ENABLE([asan],
+            [AS_HELP_STRING([--enable-asan],
+                            [Enable asan build, useful for testing])],,
+            [enable_asan=no])
+
 AC_ARG_ENABLE([hardening],
   [AS_HELP_STRING([--disable-hardening],
     [Disable compiler and linker options to frustrate memory corruption exploits])],,
@@ -133,6 +138,20 @@ AC_DEFUN([fuzzing_checks],[
 
 AS_IF([test "x$enable_fuzzing" = "xyes"],
     [fuzzing_checks])
+
+AC_DEFUN([asan_checks],[
+
+    add_hardened_c_flag([-fsanitize=address])
+    add_hardened_c_flag([-g])
+    add_hardened_c_flag([-O0])
+
+    # Disable hardening flags
+    AC_MSG_NOTICE(["Disabling hardening --disable-hardening for --enable-fuzzing"])
+    enable_hardening=no
+])
+
+AS_IF([test "x$enable_asan" = "xyes"],
+    [asan_checks])
 
 AC_DEFUN([unit_test_checks],[
 
