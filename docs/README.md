@@ -20,6 +20,7 @@ as the cryptographic token.
 * [SSH](SSH.md) - How to configure and use it with SSH.
 * [P11](P11.md) - How to configure and use it with various P11 components.
 * [PKCS11-TOOL](PKCS11_TOOL.md) - How to configure and use it with OpenSC's pkcs11-tool.
+* [EAP-TLS](EAP-TLS.md) - How to configure and use it for Wi-Fi authentication using EAP-TLS.
 
 # Advanced Knowledge
 * [Architecture](ARCHITECTURE.md) - Internal Overview
