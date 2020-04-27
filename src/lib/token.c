@@ -399,10 +399,9 @@ void token_unlock(token *t) {
     mutex_unlock_fatal(t->mutex);
 }
 
-static void change_token_mem_data(token *tok, bool is_so, uint32_t new_seal_handle,
+static void change_token_mem_data(token *tok, bool is_so,
         twist newsalthex, twist newprivblob, twist newpubblob) {
 
-    tok->sealobject.handle = new_seal_handle;
     twist *authsalt;
     twist *priv;
     twist *pub;
@@ -490,19 +489,20 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
         }
         session_started = true;
 
-        assert(!tok->sealobject.handle);
+    }
 
-        sealobject *sealobj = &tok->sealobject;
+    sealobject *sealobj = &tok->sealobject;
 
-        twist sealpub = is_so ? sealobj->sopub : sealobj->userpub;
-        twist sealpriv = is_so ? sealobj->sopriv : sealobj->userpriv;
+    twist sealpub = is_so ? sealobj->sopub : sealobj->userpub;
+    twist sealpriv = is_so ? sealobj->sopriv : sealobj->userpriv;
 
-        bool res = tpm_loadobj(tok->tctx, tok->pobject.handle, tok->pobject.objauth,
-                sealpub, sealpriv, &sealobj->handle);
-        if (!res) {
-            rv = CKR_GENERAL_ERROR;
-            goto out;
-        }
+    uint32_t sealhandle;
+
+    bool res = tpm_loadobj(tok->tctx, tok->pobject.handle, tok->pobject.objauth,
+            sealpub, sealpriv, &sealhandle);
+    if (!res) {
+        rv = CKR_GENERAL_ERROR;
+        goto out;
     }
 
     /*
@@ -510,25 +510,12 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
      *
      * This private blob will update table sealobjects (user|so)priv
      */
-    rv = tpm_changeauth(tok->tctx, tok->pobject.handle, tok->sealobject.handle,
+    rv = tpm_changeauth(tok->tctx, tok->pobject.handle, sealhandle,
             oldauth, newauthhex,
             &newprivblob);
     twist_free(oldauth);
+    tpm_flushcontext(tok->tctx, sealhandle);
     if (rv != CKR_OK) {
-        goto out;
-    }
-
-    /*
-     * Step 5 - load up a new seal object with the new private blob
-     */
-    twist pubblob = is_so ? tok->sealobject.sopub : tok->sealobject.userpub;
-
-    /* load and update new seal object */
-    uint32_t new_seal_handle = 0;
-    bool res = tpm_loadobj(tok->tctx, tok->pobject.handle, tok->pobject.objauth,
-                pubblob, newprivblob,
-                &new_seal_handle);
-    if (!res) {
         goto out;
     }
 
@@ -554,7 +541,7 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
     /*
      * step 6 - update in-memory metadata for seal object and primary object
      */
-    change_token_mem_data(tok, is_so, new_seal_handle, newsalthex, newprivblob, NULL);
+    change_token_mem_data(tok, is_so, newsalthex, newprivblob, NULL);
 
     rv = CKR_OK;
 
@@ -565,13 +552,6 @@ out:
         if (rv != CKR_OK) {
             LOGE("Could not stop session with TPM");
         }
-        bool result = tpm_flushcontext(tok->tctx, tok->sealobject.handle);
-        if (!result) {
-            LOGW("Could not evict the seal object");
-            assert(0);
-            rv = CKR_GENERAL_ERROR;
-        }
-        tok->sealobject.handle = 0;
     }
 
     /* If the function failed, then these pointers ARE NOT CLAIMED and must be free'd */
