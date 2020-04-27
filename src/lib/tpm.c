@@ -292,6 +292,10 @@ static bool set_esys_auth(ESYS_CONTEXT *esys_ctx, ESYS_TR handle, twist auth) {
     return true;
 }
 
+bool tpm_session_active(tpm_ctx *ctx) {
+    return (!!ctx->hmac_session);
+}
+
 CK_RV tpm_session_start(tpm_ctx *ctx, twist auth, uint32_t handle) {
 
     assert(!ctx->hmac_session);
