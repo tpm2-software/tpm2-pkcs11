@@ -183,6 +183,77 @@ tobject *session_ctx_opdata_get_tobject(session_ctx *ctx) {
     return ctx->opdata.tobj;
 }
 
+CK_RV unseal_wrapping_key(token *tok, bool user, twist tpin) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+    bool on_error_flush_session = false;
+
+    sealobject *sealobj = &tok->sealobject;
+    twist sealpub = is_user(user) ? sealobj->userpub : sealobj->sopub;
+    twist sealpriv = is_user(user) ? sealobj->userpriv : sealobj->sopriv;
+
+    if (is_user(user) && !sealpub && !sealpriv) {
+        return CKR_USER_PIN_NOT_INITIALIZED;
+    }
+
+    assert(sealpub);
+    assert(sealpriv);
+
+    if (!tpm_session_active(tok->tctx)) {
+        LOGV("token parent object handle is 0x%08x", tok->pobject.handle);
+        CK_RV tmp = tpm_session_start(tok->tctx, tok->pobject.objauth, tok->pobject.handle);
+        if (tmp != CKR_OK) {
+            LOGE("Could not start Auth Session with the TPM.");
+            return tmp;
+        }
+
+        on_error_flush_session = true;
+
+        uint32_t pobj_handle = tok->pobject.handle;
+        twist pobjauth = tok->pobject.objauth;
+
+        bool res = tpm_loadobj(tok->tctx, pobj_handle, pobjauth, sealpub, sealpriv, &sealobj->handle);
+        if (!res) {
+            goto error;
+        }
+
+        on_error_flush_session = true;
+    }
+
+    twist sealsalt = is_user(user) ? sealobj->userauthsalt : sealobj->soauthsalt;
+    twist sealobjauth = utils_hash_pass(tpin, sealsalt);
+    if (!sealobjauth) {
+        rv = CKR_HOST_MEMORY;
+        goto error;
+    }
+
+    twist wrappingkeyhex = tpm_unseal(tok->tctx, sealobj->handle, sealobjauth);
+    twist_free(sealobjauth);
+    if (!wrappingkeyhex) {
+        rv = CKR_PIN_INCORRECT;
+        goto error;
+    }
+
+    if (tok->wrappingkey) {
+        twist_free(wrappingkeyhex);
+    } else {
+        tok->wrappingkey = twistbin_unhexlify(wrappingkeyhex);
+        twist_free(wrappingkeyhex);
+        if (!tok->wrappingkey) {
+            LOGE("Expected internal wrapping key in base 16 format");
+            goto error;
+        }
+    }
+
+    return CKR_OK;
+
+error:
+    if (on_error_flush_session) {
+        tpm_session_stop(tok->tctx);
+    }
+
+    return rv;
+}
 
 CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK_ULONG pinlen) {
 
@@ -191,10 +262,6 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
             && user != CKU_CONTEXT_SPECIFIC) {
         return CKR_USER_TYPE_INVALID;
     }
-
-    bool on_error_flush_session = false;
-
-    twist sealobjauth = NULL;
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -228,29 +295,12 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
         return CKR_OPERATION_NOT_INITIALIZED;
     }
 
-    /* load seal object */
-    sealobject *sealobj = &tok->sealobject;
-    twist sealpub = is_user(user) ? sealobj->userpub : sealobj->sopub;
-    twist sealpriv = is_user(user) ? sealobj->userpriv : sealobj->sopriv;
-
-    if (is_user(user) && !sealpub && !sealpriv) {
-        return CKR_USER_PIN_NOT_INITIALIZED;
-    }
-
-    assert(sealpub);
-    assert(sealpriv);
-
-    tpm_ctx *tpm = tok->tctx;
-
     /*
      * context specific logins require an active object
      * also the session state DOESN'T change, so we set
      * a flag that its a context specific login in the
      * session state for tracking so we can logout when
      * done and check state when an operation is occurring.
-     *
-     * XXX This can be refactored with the rest of this function
-     * to not dup the code.
      */
     if (user == CKU_CONTEXT_SPECIFIC) {
 
@@ -259,75 +309,18 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
         if (!is_active || !ctx->opdata.tobj) {
             return CKR_OPERATION_NOT_INITIALIZED;
         }
-
-        /*
-         * we've verified that we did a full login already, so just verify pin
-         * do NOT free salt, this is owned by tobject lifecycle
-         */
-        twist sealsalt = is_user(user) ? sealobj->userauthsalt : sealobj->soauthsalt;
-        twist tpin = twistbin_new(pin, pinlen);
-        sealobjauth = utils_hash_pass(tpin, sealsalt);
-        twist_free(tpin);
-        if (!sealobjauth) {
-            return CKR_HOST_MEMORY;
-        }
-
-        twist wrappingkeyhex = tpm_unseal(tpm, sealobj->handle, sealobjauth);
-        twist_free(sealobjauth);
-        if (!wrappingkeyhex) {
-            return CKR_PIN_INCORRECT;
-        }
-        twist_free(wrappingkeyhex);
-
-        /* object use verified */
-        ctx->opdata.tobj->is_authenticated = true;
-
-        return CKR_OK;
-    }
-
-    LOGV("token parent object handle is 0x%08x", tok->pobject.handle);
-    CK_RV tmp = tpm_session_start(tok->tctx, tok->pobject.objauth, tok->pobject.handle);
-    if (tmp != CKR_OK) {
-        LOGE("Could not start Auth Session with the TPM.");
-        return tmp;
-    }
-
-    on_error_flush_session = true;
-
-    uint32_t pobj_handle = tok->pobject.handle;
-    twist pobjauth = tok->pobject.objauth;
-
-    bool res = tpm_loadobj(tpm, pobj_handle, pobjauth, sealpub, sealpriv, &sealobj->handle);
-    if (!res) {
-        goto error;
     }
 
     twist tpin = twistbin_new(pin, pinlen);
     if (!tpin) {
-        rv = CKR_HOST_MEMORY;
-        goto error;
+        return CKR_HOST_MEMORY;
     }
 
-    /* derive the sealed obj auth for use in tpm_unseal to get the wrapping key auth*/
-    twist sealsalt = is_user(user) ? sealobj->userauthsalt : sealobj->soauthsalt;
-    sealobjauth = utils_hash_pass(tpin, sealsalt);
+    rv = unseal_wrapping_key(tok, is_user(user), tpin);
     twist_free(tpin);
-    if (!sealobjauth) {
-        rv = CKR_HOST_MEMORY;
-        goto error;
-    }
-
-    twist wrappingkeyhex = tpm_unseal(tpm, sealobj->handle, sealobjauth);
-    if (!wrappingkeyhex) {
-        rv = CKR_PIN_INCORRECT;
-        goto error;
-    }
-
-    tok->wrappingkey = twistbin_unhexlify(wrappingkeyhex);
-    twist_free(wrappingkeyhex);
-    if (!tok->wrappingkey) {
-        LOGE("Expected internal wrapping key in base 16 format");
-        goto error;
+    if (rv != CKR_OK) {
+        LOGE("Error unsealing wrapping key");
+        return rv;
     }
 
     /*
@@ -336,7 +329,10 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
      * state does not change. This is because C_Login(USER) should have already occured
      * and is validated above.
      */
-    if (user != CKU_CONTEXT_SPECIFIC) {
+    if (user == CKU_CONTEXT_SPECIFIC) {
+        /* object use verified */
+        ctx->opdata.tobj->is_authenticated = true;
+    } else {
         tok->login_state = user == CKU_USER ? token_user_logged_in : token_so_logged_in;
 
         /*
@@ -345,18 +341,7 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
         session_table_login_event(tok->s_table, user);
     }
 
-    on_error_flush_session = false;
-    rv = CKR_OK;
-
-error:
-
-    if (on_error_flush_session) {
-        tpm_session_stop(tok->tctx);
-    }
-
-    twist_free(sealobjauth);
-
-    return rv;
+    return CKR_OK;
 }
 
 CK_RV session_ctx_logout(session_ctx *ctx) {
