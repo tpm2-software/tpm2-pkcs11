@@ -91,7 +91,7 @@ CK_RV backend_esysdb_create_token_seal(token *t, const twist hexwrappingkey,
     /* we have a primary object, create the seal object underneath it */
     rv = tpm2_create_seal_obj(t->tctx, t->pobject.objauth, t->pobject.handle,
             newauth, NULL, hexwrappingkey, &t->sealobject.sopub,
-            &t->sealobject.sopriv, &t->sealobject.handle);
+            &t->sealobject.sopriv);
     if (rv != CKR_OK) {
         LOGE("Could not create SO seal object");
         goto error;
@@ -122,10 +122,9 @@ CK_RV backend_esysdb_get_tokens(token **tok, size_t *len) {
     return db_get_tokens(tok, len);
 }
 
-static void change_token_mem_data(token *tok, bool is_so, uint32_t new_seal_handle,
+static void change_token_mem_data(token *tok, bool is_so,
         twist newsalthex, twist newprivblob, twist newpubblob) {
 
-    tok->sealobject.handle = new_seal_handle;
     twist *authsalt;
     twist *priv;
     twist *pub;
@@ -164,8 +163,6 @@ CK_RV backend_esysdb_init_user(token *tok, const twist sealdata,
     twist newprivblob = NULL;
 
     /* create a new seal object and seal the data */
-    uint32_t new_seal_handle = 0;
-
     rv = tpm2_create_seal_obj(tok->tctx,
             tok->pobject.objauth,
             tok->pobject.handle,
@@ -173,8 +170,7 @@ CK_RV backend_esysdb_init_user(token *tok, const twist sealdata,
             tok->sealobject.userpub,
             sealdata,
             &newpubblob,
-            &newprivblob,
-            &new_seal_handle);
+            &newprivblob);
     if (rv != CKR_OK) {
         goto out;
     }
@@ -194,7 +190,7 @@ CK_RV backend_esysdb_init_user(token *tok, const twist sealdata,
     }
 
      /* update in-memory metadata for seal object and primary object */
-    change_token_mem_data(tok, false, new_seal_handle, newsalthex, newprivblob, newpubblob);
+    change_token_mem_data(tok, false, newsalthex, newprivblob, newpubblob);
 
 out:
     /* If the function failed, then these pointers ARE NOT CLAIMED and must be free'd */

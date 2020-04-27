@@ -37,8 +37,8 @@ static void test(void **state) {
     will_return_always(__wrap_Esys_StartAuthSession, TSS2_RC_SUCCESS);
     // will_return_always(__wrap_Esys_TRSess_GetAttributes, TSS2_RC_SUCCESS);
     will_return_always(__wrap_Esys_TRSess_SetAttributes, TSS2_RC_SUCCESS);
-    will_return_always(__wrap_Esys_CreateLoaded, TSS2_RC_SUCCESS);
-    // will_return_always(__wrap_Esys_Create, TSS2_RC_SUCCESS);
+    // will_return_always(__wrap_Esys_CreateLoaded, TSS2_RC_SUCCESS);
+    will_return_always(__wrap_Esys_Create, TSS2_RC_SUCCESS);
     will_return_always(__wrap_Esys_FlushContext, TSS2_RC_SUCCESS);
 
     CK_RV rv = C_Initialize(NULL);

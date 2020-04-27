@@ -54,8 +54,6 @@ struct sealobject {
     twist sopub;
     twist sopriv;
     twist soauthsalt;
-
-    uint32_t handle;
 };
 
 enum token_type {

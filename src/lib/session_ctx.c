@@ -208,16 +208,15 @@ CK_RV unseal_wrapping_key(token *tok, bool user, twist tpin) {
         }
 
         on_error_flush_session = true;
+    }
 
-        uint32_t pobj_handle = tok->pobject.handle;
-        twist pobjauth = tok->pobject.objauth;
+    uint32_t pobj_handle = tok->pobject.handle;
+    twist pobjauth = tok->pobject.objauth;
+    uint32_t sealhandle;
 
-        bool res = tpm_loadobj(tok->tctx, pobj_handle, pobjauth, sealpub, sealpriv, &sealobj->handle);
-        if (!res) {
-            goto error;
-        }
-
-        on_error_flush_session = true;
+    bool res = tpm_loadobj(tok->tctx, pobj_handle, pobjauth, sealpub, sealpriv, &sealhandle);
+    if (!res) {
+        goto error;
     }
 
     twist sealsalt = is_user(user) ? sealobj->userauthsalt : sealobj->soauthsalt;
@@ -227,8 +226,9 @@ CK_RV unseal_wrapping_key(token *tok, bool user, twist tpin) {
         goto error;
     }
 
-    twist wrappingkeyhex = tpm_unseal(tok->tctx, sealobj->handle, sealobjauth);
+    twist wrappingkeyhex = tpm_unseal(tok->tctx, sealhandle, sealobjauth);
     twist_free(sealobjauth);
+    tpm_flushcontext(tok->tctx, sealhandle);
     if (!wrappingkeyhex) {
         rv = CKR_PIN_INCORRECT;
         goto error;
@@ -389,14 +389,6 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
             }
         }
     }
-
-    /* evict the seal object */
-    bool result = tpm_flushcontext(tpm, tok->sealobject.handle);
-    if (!result) {
-        LOGW("Could not evict the seal object");
-        assert(0);
-    }
-    tok->sealobject.handle = 0;
 
     /*
      * State transition all sessions in the table

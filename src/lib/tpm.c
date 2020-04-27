@@ -1980,7 +1980,7 @@ static TSS2_RC create_loaded(
         check_cc = false;
     }
 
-    if (use_create_loaded) {
+    if (out_handle && use_create_loaded) {
 
         size_t offset = 0;
         TPM2B_TEMPLATE template = { .size = 0 };
@@ -2038,6 +2038,9 @@ static TSS2_RC create_loaded(
         assert(*out_priv);
         assert(*out_pub);
 
+        if (!out_handle)
+            return TSS2_RC_SUCCESS;
+
         rval = Esys_Load(ectx,
                 parent,
                 session, ESYS_TR_NONE, ESYS_TR_NONE,
@@ -2053,7 +2056,7 @@ static TSS2_RC create_loaded(
     return TSS2_RC_SUCCESS;
 }
 
-CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handle, twist objauth, twist oldpubblob, twist sealdata, twist *newpubblob, twist *newprivblob, uint32_t *handle) {
+CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handle, twist objauth, twist oldpubblob, twist sealdata, twist *newpubblob, twist *newprivblob) {
 
     bool started_session = false;
 
@@ -2123,7 +2126,7 @@ CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handl
             ctx->hmac_session,
             &sensitive,
             &pub,
-            handle,
+            NULL,
             &newpub,
             &newpriv
     );
