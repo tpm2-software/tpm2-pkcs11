@@ -10,7 +10,6 @@
 #include "attrs.h"
 #include "backend.h"
 #include "checks.h"
-#include "db.h"
 #include "list.h"
 #include "mech.h"
 #include "object.h"
@@ -18,7 +17,6 @@
 #include "session.h"
 #include "session_table.h"
 #include "slot.h"
-#include "tpm.h"
 #include "token.h"
 #include "utils.h"
 
@@ -401,53 +399,15 @@ void token_unlock(token *t) {
     mutex_unlock_fatal(t->mutex);
 }
 
-static void change_token_mem_data(token *tok, bool is_so,
-        twist newsalthex, twist newprivblob, twist newpubblob) {
-
-    twist *authsalt;
-    twist *priv;
-    twist *pub;
-
-    if (is_so) {
-        authsalt = &tok->esysdb.sealobject.soauthsalt;
-        priv = &tok->esysdb.sealobject.sopriv;
-        pub = &tok->esysdb.sealobject.sopub;
-    } else {
-        authsalt = &tok->esysdb.sealobject.userauthsalt;
-        priv = &tok->esysdb.sealobject.userpriv;
-        pub = &tok->esysdb.sealobject.userpub;
-    }
-
-    twist_free(*authsalt);
-    twist_free(*priv);
-
-    *authsalt = newsalthex;
-    *priv = newprivblob;
-
-    if (newpubblob) {
-        twist_free(*pub);
-        *pub = newpubblob;
-    }
-}
-
 CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
-
-    /* new seal auth data */
-    twist newsalthex = NULL;
-    twist newauthhex = NULL;
-
-    twist newprivblob = NULL;
 
     /* pin data */
     twist toldpin = NULL;
     twist tnewpin = NULL;
 
-    bool session_started = false;
-
     bool is_so = token_is_so_logged_in(tok);
-    bool is_anyone_logged_in = token_is_any_user_logged_in(tok);
 
     toldpin = twistbin_new(oldpin, oldlen);
     if (!toldpin) {
@@ -461,108 +421,13 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
         goto out;
     }
 
-    /*
-     * Step 1 - Generate a new sealing auth value derived from pin and salt
-     *
-     * This will be used to update the sealobjects table, the columns:
-     *  - (so|user)authsalt  --> newsalt
-     */
-    rv = utils_setup_new_object_auth(tnewpin, &newauthhex, &newsalthex);
+    rv = backend_token_changeauth(tok, !is_so, toldpin, tnewpin);
     if (rv != CKR_OK) {
+        LOGE("Changing token auth");
         goto out;
     }
-
-    /*
-     * Step 2 - Generate the current auth value from oldpin
-     */
-    twist oldsalt = is_so ? tok->esysdb.sealobject.soauthsalt : tok->esysdb.sealobject.userauthsalt;
-
-    twist oldauth = utils_hash_pass(toldpin, oldsalt);
-    if (!oldauth) {
-        goto out;
-    }
-
-    /* if no one is logged in, we need to start a session with the TPM */
-    if (!is_anyone_logged_in) {
-        rv = tpm_session_start(tok->tctx, tok->pobject.objauth, tok->pobject.handle);
-        if (rv != CKR_OK) {
-            LOGE("Could not start session with TPM");
-            goto out;
-        }
-        session_started = true;
-
-    }
-
-    sealobject *sealobj = &tok->esysdb.sealobject;
-
-    twist sealpub = is_so ? sealobj->sopub : sealobj->userpub;
-    twist sealpriv = is_so ? sealobj->sopriv : sealobj->userpriv;
-
-    uint32_t sealhandle;
-
-    bool res = tpm_loadobj(tok->tctx, tok->pobject.handle, tok->pobject.objauth,
-            sealpub, sealpriv, &sealhandle);
-    if (!res) {
-        rv = CKR_GENERAL_ERROR;
-        goto out;
-    }
-
-    /*
-     * Step 3- Call tpm2_changeauth and get a new private object portion
-     *
-     * This private blob will update table sealobjects (user|so)priv
-     */
-    rv = tpm_changeauth(tok->tctx, tok->pobject.handle, sealhandle,
-            oldauth, newauthhex,
-            &newprivblob);
-    twist_free(oldauth);
-    tpm_flushcontext(tok->tctx, sealhandle);
-    if (rv != CKR_OK) {
-        goto out;
-    }
-
-    /*
-     * Step X - update the db data
-     */
-    rv = db_update_for_pinchange(
-            tok,
-            is_so,
-
-            /* new seal object auth metadata */
-            newsalthex,
-
-            /* private and public blobs */
-            newprivblob,
-            NULL);
-    if (rv != CKR_OK) {
-        goto out;
-    }
-
-    /* TODO: consider calling unload on old seal object handle and WARN on failure */
-
-    /*
-     * step 6 - update in-memory metadata for seal object and primary object
-     */
-    change_token_mem_data(tok, is_so, newsalthex, newprivblob, NULL);
-
-    rv = CKR_OK;
 
 out:
-
-    if (session_started) {
-        rv = tpm_session_stop(tok->tctx);
-        if (rv != CKR_OK) {
-            LOGE("Could not stop session with TPM");
-        }
-    }
-
-    /* If the function failed, then these pointers ARE NOT CLAIMED and must be free'd */
-    if (rv != CKR_OK) {
-        twist_free(newsalthex);
-        twist_free(newprivblob);
-    }
-
-    twist_free(newauthhex);
 
     twist_free(toldpin);
     twist_free(tnewpin);

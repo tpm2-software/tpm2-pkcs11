@@ -28,4 +28,6 @@ CK_RV backend_fapi_rm_tobject(token *tok, tobject *tobj);
 
 CK_RV backend_fapi_token_unseal_wrapping_key(token *tok, bool user, twist tpin);
 
+CK_RV backend_fapi_token_changeauth(token *tok, bool user, twist toldpin, twist tnewpin);
+
 #endif /* SRC_LIB_BACKEND_FAPI_H_ */

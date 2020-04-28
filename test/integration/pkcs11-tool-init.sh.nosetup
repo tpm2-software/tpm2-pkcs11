@@ -75,6 +75,11 @@ openssl dgst -verify ${tempdir}/pubkey.der -keyform DER -signature ${tempdir}/si
              ${tempdir}/data
 echo "RSA signature tested"
 
+echo "Change PIN test"
+pkcs11_tool --change-pin --slot-index=0 --pin=mynewuserpin --login --new-pin=temppin
+pkcs11_tool --change-pin --slot-index=0 --pin=temppin --login --new-pin=mynewuserpin
+echo "PIN change tested"
+
 #
 # Regression test for https://github.com/tpm2-software/tpm2-pkcs11/issues/399
 # Delete Private Key then Public Key.
