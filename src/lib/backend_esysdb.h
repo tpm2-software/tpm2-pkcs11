@@ -28,4 +28,6 @@ CK_RV backend_esysdb_update_tobject_attrs(tobject *tobj, attr_list *attrs);
 
 CK_RV backend_esysdb_rm_tobject(tobject *tobj);
 
+CK_RV backend_esysdb_token_unseal_wrapping_key(token *tok, bool user, twist tpin);
+
 #endif /* SRC_LIB_BACKEND_ESYSDB_H_ */

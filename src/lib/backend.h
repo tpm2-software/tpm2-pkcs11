@@ -30,4 +30,6 @@ CK_RV backend_update_tobject_attrs(token *tok, tobject *tobj, attr_list *attrs);
 
 CK_RV backend_rm_tobject(token *tok, tobject *tobj);
 
+CK_RV backend_token_unseal_wrapping_key(token *tok, bool user, twist tpin);
+
 #endif /* SRC_LIB_BACKEND_H_ */

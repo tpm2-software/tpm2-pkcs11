@@ -292,3 +292,27 @@ CK_RV backend_rm_tobject(token *tok, tobject *tobj) {
         return CKR_GENERAL_ERROR;
     }
 }
+
+/** Unseal a token's wrapping key.
+ *
+ * Unseal a token's wrapping key as part of the Login process.
+ * The wrapping key is then used to decrypt the individual tobjects'
+ * auth values.
+ *
+ * @param[in,out] tok The token to remove from.
+ * @param[in] user Whether to unseal from the user or so seal.
+ * @param[in] tpin The pin value to use for unsealing.
+ * @return CKR_OK on success, anything else is an error.
+ */
+CK_RV backend_token_unseal_wrapping_key(token *tok, bool user, twist tpin) {
+
+    switch (tok->type) {
+    case token_type_esysdb:
+        return backend_esysdb_token_unseal_wrapping_key(tok, user, tpin);
+    case token_type_fapi:
+        return backend_fapi_token_unseal_wrapping_key(tok, user, tpin);
+    default:
+        assert(1);
+        return CKR_GENERAL_ERROR;
+    }
+}
