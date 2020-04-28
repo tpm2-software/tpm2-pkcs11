@@ -90,14 +90,14 @@ CK_RV backend_esysdb_create_token_seal(token *t, const twist hexwrappingkey,
 
     /* we have a primary object, create the seal object underneath it */
     rv = tpm2_create_seal_obj(t->tctx, t->pobject.objauth, t->pobject.handle,
-            newauth, NULL, hexwrappingkey, &t->sealobject.sopub,
-            &t->sealobject.sopriv);
+            newauth, NULL, hexwrappingkey, &t->esysdb.sealobject.sopub,
+            &t->esysdb.sealobject.sopriv);
     if (rv != CKR_OK) {
         LOGE("Could not create SO seal object");
         goto error;
     }
 
-    t->sealobject.soauthsalt = newsalthex;
+    t->esysdb.sealobject.soauthsalt = newsalthex;
 
     /* TODO get TCTI config from ENV var and use throughout this process */
     t->config.is_initialized = true;
@@ -130,13 +130,13 @@ static void change_token_mem_data(token *tok, bool is_so,
     twist *pub;
 
     if (is_so) {
-        authsalt = &tok->sealobject.soauthsalt;
-        priv = &tok->sealobject.sopriv;
-        pub = &tok->sealobject.sopub;
+        authsalt = &tok->esysdb.sealobject.soauthsalt;
+        priv = &tok->esysdb.sealobject.sopriv;
+        pub = &tok->esysdb.sealobject.sopub;
     } else {
-        authsalt = &tok->sealobject.userauthsalt;
-        priv = &tok->sealobject.userpriv;
-        pub = &tok->sealobject.userpub;
+        authsalt = &tok->esysdb.sealobject.userauthsalt;
+        priv = &tok->esysdb.sealobject.userpriv;
+        pub = &tok->esysdb.sealobject.userpub;
     }
 
     twist_free(*authsalt);
@@ -167,7 +167,7 @@ CK_RV backend_esysdb_init_user(token *tok, const twist sealdata,
             tok->pobject.objauth,
             tok->pobject.handle,
             newauthhex,
-            tok->sealobject.userpub,
+            tok->esysdb.sealobject.userpub,
             sealdata,
             &newpubblob,
             &newprivblob);
@@ -239,7 +239,7 @@ CK_RV backend_esysdb_token_unseal_wrapping_key(token *tok, bool user, twist tpin
     CK_RV rv = CKR_GENERAL_ERROR;
     bool on_error_flush_session = false;
 
-    sealobject *sealobj = &tok->sealobject;
+    sealobject *sealobj = &tok->esysdb.sealobject;
     twist sealpub = user ? sealobj->userpub : sealobj->sopub;
     twist sealpriv = user ? sealobj->userpriv : sealobj->sopriv;
 

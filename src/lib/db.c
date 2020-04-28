@@ -387,7 +387,7 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
             continue;
         }
 
-        rc = init_sealobjects(t->id, &t->sealobject);
+        rc = init_sealobjects(t->id, &t->esysdb.sealobject);
         if (rc != SQLITE_OK) {
             goto error;
         }
@@ -984,15 +984,15 @@ CK_RV db_add_token(token *tok) {
     rc = sqlite3_bind_int(stmt, 1, tok->id);
     gotobinderror(rc, "tokid");
 
-    rc = sqlite3_bind_text(stmt, 2, tok->sealobject.soauthsalt, -1, SQLITE_STATIC);
+    rc = sqlite3_bind_text(stmt, 2, tok->esysdb.sealobject.soauthsalt, -1, SQLITE_STATIC);
     gotobinderror(rc, "soauthsalt");
 
-    rc = sqlite3_bind_blob(stmt, 3, tok->sealobject.sopriv,
-            twist_len(tok->sealobject.sopriv), SQLITE_STATIC);
+    rc = sqlite3_bind_blob(stmt, 3, tok->esysdb.sealobject.sopriv,
+            twist_len(tok->esysdb.sealobject.sopriv), SQLITE_STATIC);
     gotobinderror(rc, "sopriv");
 
-    rc = sqlite3_bind_blob(stmt, 4, tok->sealobject.sopub,
-            twist_len(tok->sealobject.sopub), SQLITE_STATIC);
+    rc = sqlite3_bind_blob(stmt, 4, tok->esysdb.sealobject.sopub,
+            twist_len(tok->esysdb.sealobject.sopub), SQLITE_STATIC);
     gotobinderror(rc, "sopub");
 
     rc = sqlite3_step(stmt);
