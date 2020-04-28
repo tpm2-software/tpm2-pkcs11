@@ -23,22 +23,18 @@ static void test(void **state) {
      */
     setenv("TPM2_PKCS11_STORE", ":memory:", 1);
 
-    will_return_always(__wrap_backend_fapi_init, CKR_GENERAL_ERROR);
-    will_return_always(__wrap_Esys_Initialize, TSS2_RC_SUCCESS);
-    will_return_always(__wrap_Tss2_TctiLdr_Initialize, TSS2_RC_SUCCESS);
-    will_return_always(__wrap_Tss2_TctiLdr_Finalize, TSS2_RC_SUCCESS);
-    //will_return_always(__wrap_Esys_GetCapability, TSS2_RC_SUCCESS);
-    will_return_always(__wrap_Esys_Finalize, TSS2_RC_SUCCESS);
-    will_return_always(__wrap_Esys_TR_FromTPMPublic, TSS2_RC_SUCCESS);
-    will_return_always(__wrap_Esys_TR_Serialize, TSS2_RC_SUCCESS);
-    // will_return_always(__wrap_Esys_TR_Deserialize, TSS2_RC_SUCCESS);
-    will_return_always(__wrap_Esys_TR_SetAuth, TSS2_RC_SUCCESS);
-    will_return_always(__wrap_Esys_StartAuthSession, TSS2_RC_SUCCESS);
-    // will_return_always(__wrap_Esys_TRSess_GetAttributes, TSS2_RC_SUCCESS);
-    will_return_always(__wrap_Esys_TRSess_SetAttributes, TSS2_RC_SUCCESS);
-    // will_return_always(__wrap_Esys_CreateLoaded, TSS2_RC_SUCCESS);
-    will_return_always(__wrap_Esys_Create, TSS2_RC_SUCCESS);
-    will_return_always(__wrap_Esys_FlushContext, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_backend_fapi_init, CKR_GENERAL_ERROR);
+    will_return_maybe(__wrap_Esys_Initialize, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Tss2_TctiLdr_Initialize, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Tss2_TctiLdr_Finalize, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_Finalize, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_TR_FromTPMPublic, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_TR_Serialize, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_TR_SetAuth, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_StartAuthSession, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_TRSess_SetAttributes, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_Create, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_FlushContext, TSS2_RC_SUCCESS);
 
     CK_RV rv = C_Initialize(NULL);
     assert_int_equal(rv, CKR_OK);
