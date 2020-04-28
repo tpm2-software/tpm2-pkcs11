@@ -72,20 +72,20 @@ struct token {
 
     enum token_type type;
 
-//TODO: uncomment union, once both backends are completely separated.
-//    union { /* anon union for backend data */
+    token_config config;
+
+    pobject pobject;
+
+    union { /* anon union for backend data */
         struct {
-            token_config config;
-
-            pobject pobject;
-
             sealobject sealobject;
-
-        }; /* esysdb */
+        } esysdb; /* esysdb */
         struct {
             FAPI_CONTEXT *ctx;
+            twist userauthsalt;
+            twist soauthsalt;
         } fapi;
-//    };
+    };
 
     /* This context will be filled by fapi for use with esys-only commands. */
     tpm_ctx *tctx;

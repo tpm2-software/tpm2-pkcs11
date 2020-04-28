@@ -77,9 +77,12 @@ CK_RV backend_destroy(void) {
 }
 
 CK_RV backend_ctx_new(token *t) {
-    CK_RV rv = backend_fapi_ctx_new(t);
-    if (rv) {
-        return rv;
+    bool is_fapi_preview = is_fapi_preview_enabled();
+    if (is_fapi_preview) {
+        CK_RV rv = backend_fapi_ctx_new(t);
+        if (rv) {
+            return rv;
+        }
     }
     return backend_esysdb_ctx_new(t);
 }

@@ -31,6 +31,7 @@ CK_RV backend_fapi_destroy(void) {
 }
 
 CK_RV backend_fapi_ctx_new(token *t) {
+    t->type = token_type_fapi;
     t->fapi.ctx = fctx;
     return CKR_OK;
 }
@@ -127,30 +128,7 @@ CK_RV backend_fapi_create_token_seal(token *t, const twist hexwrappingkey,
         return CKR_GENERAL_ERROR;
     }
 
-    uint8_t *tpm2bPublic;
-    size_t tpm2bPublicSize;
-    uint8_t *tpm2bPrivate;
-    size_t tpm2bPrivateSize;
-    rc = Fapi_GetTpmBlobs(t->fapi.ctx, path, &tpm2bPublic, &tpm2bPublicSize,
-                          &tpm2bPrivate, &tpm2bPrivateSize, NULL /* policy */);
-    free(path);
-    if (rc) {
-        LOGE("Getting the TPM data blobs failed.");
-        return CKR_GENERAL_ERROR;
-    }
-
-    twist pub = twistbin_new(tpm2bPublic, tpm2bPublicSize);
-    Fapi_Free(tpm2bPublic);
-    twist priv = twistbin_new(tpm2bPrivate, tpm2bPrivateSize);
-    Fapi_Free(tpm2bPrivate);
-    if (!pub || !priv) {
-        LOGE("Out of memory");
-        return CKR_GENERAL_ERROR;
-    }
-
-    t->sealobject.sopub = pub;
-    t->sealobject.sopriv = priv;
-    t->sealobject.soauthsalt = newsalthex;
+    t->fapi.soauthsalt = newsalthex;
 
     t->type = token_type_fapi;
 
@@ -240,29 +218,6 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
         /* FIXME Manually setting SRK handle here */
         t->pid = 0x81000001;
 
-        uint8_t *tpm2bPublic;
-        size_t tpm2bPublicSize;
-        uint8_t *tpm2bPrivate;
-        size_t tpm2bPrivateSize;
-        rc = Fapi_GetTpmBlobs(t->fapi.ctx, path, &tpm2bPublic, &tpm2bPublicSize,
-                              &tpm2bPrivate, &tpm2bPrivateSize, NULL /* policy */);
-        if (rc) {
-            LOGE("Getting the TPM data blobs failed.");
-            goto error;
-        }
-
-        twist pub = twistbin_new(tpm2bPublic, tpm2bPublicSize);
-        Fapi_Free(tpm2bPublic);
-        twist priv = twistbin_new(tpm2bPrivate, tpm2bPrivateSize);
-        Fapi_Free(tpm2bPrivate);
-        if (!pub || !priv) {
-            LOGE("Out of memory");
-            goto error;
-        }
-
-        t->sealobject.sopub = pub;
-        t->sealobject.sopriv = priv;
-
         uint8_t *appdata;
         size_t appdata_len;
 
@@ -272,9 +227,10 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
             goto error;
         }
 
-        t->sealobject.soauthsalt = twistbin_new(appdata, strlen((char *)appdata));
-        if (!t->sealobject.soauthsalt) {
+        t->fapi.soauthsalt = twistbin_new(appdata, strlen((char *)appdata));
+        if (!t->fapi.soauthsalt) {
             LOGE("OOM");
+            Fapi_Free(appdata);
             goto error;
         }
 
@@ -356,41 +312,21 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
             LOGE("No path constructed.");
             goto error;
         }
-        rc = Fapi_GetTpmBlobs(t->fapi.ctx, path, &tpm2bPublic, &tpm2bPublicSize,
-                              &tpm2bPrivate, &tpm2bPrivateSize, NULL /* policy */);
-        if (rc == TSS2_FAPI_RC_KEY_NOT_FOUND) {
-            LOGV("No user pin found for token %08x.", t->id);
-            free(path);
-            continue;
-        }
-        if (rc) {
-            LOGE("Getting the TPM data blobs failed.");
-            free(path);
-            return CKR_GENERAL_ERROR;
-        }
-        LOGV("Adding user pin at %s", path);
-
-        pub = twistbin_new(tpm2bPublic, tpm2bPublicSize);
-        Fapi_Free(tpm2bPublic);
-        priv = twistbin_new(tpm2bPrivate, tpm2bPrivateSize);
-        Fapi_Free(tpm2bPrivate);
-        if (!pub || !priv) {
-            LOGE("Out of memory");
-            goto error;
-        }
-
-        t->sealobject.userpub = pub;
-        t->sealobject.userpriv = priv;
 
         rc = Fapi_GetAppData(t->fapi.ctx, path, &appdata, NULL);
+        free(path);
+        if (rc == TSS2_FAPI_RC_KEY_NOT_FOUND) {
+            LOGV("No user pin found for token %08x.", t->id);
+            continue;
+        }
         if (rc) {
             LOGE("Getting FAPI seal appdata failed.");
             goto error;
         }
 
-        t->sealobject.userauthsalt = twistbin_new(appdata, strlen((char *)appdata));
+        t->fapi.userauthsalt = twistbin_new(appdata, strlen((char *)appdata));
         Fapi_Free(appdata);
-        if (!t->sealobject.userauthsalt) {
+        if (!t->fapi.userauthsalt) {
             LOGE("OOM");
             goto error;
         }
@@ -403,6 +339,7 @@ out:
     return rv;
 
 error:
+    Fapi_Free(pathlist);
     if (rv == CKR_OK) {
         rv = CKR_GENERAL_ERROR;
     }
@@ -466,35 +403,10 @@ CK_RV backend_fapi_init_user(token *t, const twist sealdata,
         return CKR_GENERAL_ERROR;
     }
 
-    uint8_t *tpm2bPublic;
-    size_t tpm2bPublicSize;
-    uint8_t *tpm2bPrivate;
-    size_t tpm2bPrivateSize;
-
-    rc = Fapi_GetTpmBlobs(t->fapi.ctx, path, &tpm2bPublic, &tpm2bPublicSize,
-                          &tpm2bPrivate, &tpm2bPrivateSize, NULL /* policy */);
     free(path);
-    if (rc) {
-        LOGE("Getting the TPM data blobs failed.");
-        return CKR_GENERAL_ERROR;
-    }
+    twist_free(t->fapi.userauthsalt);
 
-    twist pub = twistbin_new(tpm2bPublic, tpm2bPublicSize);
-    Fapi_Free(tpm2bPublic);
-    twist priv = twistbin_new(tpm2bPrivate, tpm2bPrivateSize);
-    Fapi_Free(tpm2bPrivate);
-    if (!pub || !priv) {
-        LOGE("Out of memory");
-        return CKR_GENERAL_ERROR;
-    }
-
-    twist_free(t->sealobject.userpub);
-    twist_free(t->sealobject.userpriv);
-    twist_free(t->sealobject.userauthsalt);
-
-    t->sealobject.userpub = pub;
-    t->sealobject.userpriv = priv;
-    t->sealobject.userauthsalt = newsalthex;
+    t->fapi.userauthsalt = newsalthex;
 
     return CKR_OK;
 }
@@ -769,7 +681,7 @@ CK_RV backend_fapi_token_unseal_wrapping_key(token *tok, bool user, twist tpin) 
         return CKR_HOST_MEMORY;
     }
 
-    twist sealsalt = user ? tok->sealobject.userauthsalt : tok->sealobject.soauthsalt;
+    twist sealsalt = user ? tok->fapi.userauthsalt : tok->fapi.soauthsalt;
     twist sealobjauth = utils_hash_pass(tpin, sealsalt);
     if (!sealobjauth) {
         rv = CKR_HOST_MEMORY;

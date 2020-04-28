@@ -233,7 +233,9 @@ void token_free(token *t) {
     twist_free(t->pobject.objauth);
     t->pobject.objauth = NULL;
 
-    sealobject_free(&t->sealobject);
+    if (t->type == token_type_esysdb) {
+        sealobject_free(&t->esysdb.sealobject);
+    }
 
     if (t->tobjects.head) {
         list *cur = &t->tobjects.head->l;
@@ -407,13 +409,13 @@ static void change_token_mem_data(token *tok, bool is_so,
     twist *pub;
 
     if (is_so) {
-        authsalt = &tok->sealobject.soauthsalt;
-        priv = &tok->sealobject.sopriv;
-        pub = &tok->sealobject.sopub;
+        authsalt = &tok->esysdb.sealobject.soauthsalt;
+        priv = &tok->esysdb.sealobject.sopriv;
+        pub = &tok->esysdb.sealobject.sopub;
     } else {
-        authsalt = &tok->sealobject.userauthsalt;
-        priv = &tok->sealobject.userpriv;
-        pub = &tok->sealobject.userpub;
+        authsalt = &tok->esysdb.sealobject.userauthsalt;
+        priv = &tok->esysdb.sealobject.userpriv;
+        pub = &tok->esysdb.sealobject.userpub;
     }
 
     twist_free(*authsalt);
@@ -473,7 +475,7 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
     /*
      * Step 2 - Generate the current auth value from oldpin
      */
-    twist oldsalt = is_so ? tok->sealobject.soauthsalt : tok->sealobject.userauthsalt;
+    twist oldsalt = is_so ? tok->esysdb.sealobject.soauthsalt : tok->esysdb.sealobject.userauthsalt;
 
     twist oldauth = utils_hash_pass(toldpin, oldsalt);
     if (!oldauth) {
@@ -491,7 +493,7 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
 
     }
 
-    sealobject *sealobj = &tok->sealobject;
+    sealobject *sealobj = &tok->esysdb.sealobject;
 
     twist sealpub = is_so ? sealobj->sopub : sealobj->userpub;
     twist sealpriv = is_so ? sealobj->sopriv : sealobj->userpriv;
