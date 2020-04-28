@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
-TEST_EXTENSIONS += .fuzz
+TEST_EXTENSIONS += .fuzz .fuzz32
 
 WRAP_LD_FLAGS := \
     -Wl,--wrap=Esys_Initialize \
@@ -23,8 +23,10 @@ WRAP_LD_FLAGS := \
 
 if FUZZING
 
+FUZZ_RUNNER := $(top_srcdir)/test/fuzz/scripts/fuzz-runner.sh
+
 AM_FUZZ_LOG_FLAGS=$(FUZZING_FLAGS)
-FUZZ_LOG_COMPILER=$(top_srcdir)/test/fuzz/scripts/fuzz-runner.sh
+FUZZ_LOG_COMPILER=$(FUZZ_RUNNER)
 
 test_fuzz_yaml_parser_fuzz_CFLAGS    = $(AM_CFLAGS) $(FUZZING_CFLAGS)
 test_fuzz_yaml_parser_fuzz_LDADD     = $(libtpm2_test_pkcs11)
@@ -39,9 +41,18 @@ test_fuzz_init_token_sopin_fuzz_LDFLAGS   = $(WRAP_LD_FLAGS)
 test_fuzz_init_token_sopin_fuzz_LDADD     = $(libtpm2_test_pkcs11) $(AM_LDFLAGS) $(CMOCKA_LIBS)
 test_fuzz_init_token_sopin_fuzz_SOURCES   = test/fuzz/init-token-sopin.fuzz.c
 
+AM_FUZZ32_LOG_FLAGS=$(FUZZING_FLAGS) -max_len=32
+FUZZ32_LOG_COMPILER=$(FUZZ_RUNNER)
+
+test_fuzz_init_token_label_fuzz32_CFLAGS    = $(AM_CFLAGS) $(FUZZING_CFLAGS) $(CMOCKA_CFLAGS) -I$(srcdir)/test/fake-tpm
+test_fuzz_init_token_label_fuzz32_LDFLAGS   = $(WRAP_LD_FLAGS)
+test_fuzz_init_token_label_fuzz32_LDADD     = $(libtpm2_test_pkcs11) $(AM_LDFLAGS) $(CMOCKA_LIBS)
+test_fuzz_init_token_label_fuzz32_SOURCES   = test/fuzz/init-token-label.fuzz32.c
+
 fuzz_PROGRAMS = \
     test/fuzz/yaml-parser.fuzz \
     test/fuzz/init-token-sopin.fuzz \
+    test/fuzz/init-token-label.fuzz32 \
     test/fuzz/utils-ctx-unwrap-objauth.fuzz
 
 # make check will run the fuzz targets
