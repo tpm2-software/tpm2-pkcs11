@@ -655,6 +655,7 @@ static TSS2_RC auth_cb(FAPI_CONTEXT *context, char const *description, char **au
         /* Using strstr because description may be prefixed with a crypto profile */
         if (strstr(description, at->path)) {
             /* Current FAPI falsely uses char ** instead of const char ** for return. */
+            //TODO remove strdup once we switch to FAPI 3.0
             *auth = strdup((char*) at->auth);
             if (!*auth) {
                 return TSS2_FAPI_RC_MEMORY;
@@ -755,5 +756,111 @@ CK_RV backend_fapi_token_unseal_wrapping_key(token *tok, bool user, twist tpin) 
 
 error:
     free(path);
+    return rv;
+}
+
+CK_RV backend_fapi_token_changeauth(token *tok, bool user, twist toldpin, twist tnewpin) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+    TSS2_RC rc;
+
+    char *path = tss_path_from_id(tok->id, user ? "usr":"so");
+    if (!path) {
+        LOGE("No path constructed.");
+        return CKR_HOST_MEMORY;
+    }
+
+    twist newsalthex = NULL;
+    twist newauthhex = NULL;
+    twist oldauth = NULL;
+
+    rv = utils_setup_new_object_auth(tnewpin, &newauthhex, &newsalthex);
+    if (rv != CKR_OK) {
+        goto out;
+    }
+    rv = CKR_GENERAL_ERROR;
+
+    oldauth = utils_hash_pass(toldpin, user ? tok->fapi.userauthsalt : tok->fapi.soauthsalt);
+    if (!oldauth) {
+        goto out;
+    }
+
+    char label[sizeof(tok->label) + 1]; /* token-label length plus \0, cannot overflow */
+    label[sizeof(tok->label)] = '\0';
+    memcpy(&label[0], &tok->label[0], sizeof(tok->label));
+
+    /* FAPI may return the description (which is the label) or the path.
+       Thus we register our auth value for either. */
+    struct authtable authtable[] = {
+        { path, (char *)oldauth },
+        { &label[0], (char *)oldauth },
+        { NULL, NULL } };
+
+    rc = Fapi_SetAuthCB(tok->fapi.ctx, auth_cb, &authtable[0]);
+    if (rc) {
+        LOGE("Fapi_SetAuthCB failed.");
+        goto out;
+    }
+
+    LOGV("Attempting to change auth value for %s", path);
+
+    rc = Fapi_ChangeAuth(tok->fapi.ctx, path, newauthhex);
+    //TODO: Reenable once we switch to FAPI 3.0
+    //Fapi_SetAuthCB(tok->fapi.ctx, NULL, NULL);
+    if (rc) {
+        LOGE("Fapi_ChangeAuth failed.");
+        goto out;
+    }
+
+    uint8_t *appdata;
+    size_t appdata_len;
+
+    rc = Fapi_GetAppData(tok->fapi.ctx, path, &appdata, &appdata_len);
+    if (rc) {
+        LOGE("Getting FAPI seal appdata failed.");
+        goto out;
+    }
+
+    size_t newappdata_len = appdata_len - strlen((char*)appdata);
+    safe_adde(newappdata_len, twist_len(newsalthex));
+    uint8_t *newappdata = malloc(newappdata_len);
+    if (!newappdata) {
+        Fapi_Free(appdata);
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+    memcpy(newappdata, newsalthex, twist_len(newsalthex));
+    memcpy(&newappdata[twist_len(newsalthex)], &appdata[strlen((char*)appdata)],
+           appdata_len - strlen((char*)appdata));
+
+    Fapi_Free(appdata);
+
+    rc = Fapi_SetAppData(tok->fapi.ctx, path, newappdata, newappdata_len);
+    free(newappdata);
+    if (rc) {
+        LOGE("Setting FAPI seal appdata failed.");
+        goto out;
+    }
+
+    if (user) {
+        twist_free(tok->fapi.userauthsalt);
+        tok->fapi.userauthsalt = newsalthex;
+    } else {
+        twist_free(tok->fapi.soauthsalt);
+        tok->fapi.soauthsalt = newsalthex;
+    }
+
+    rv = CKR_OK;
+
+out:
+    free(path);
+
+    if (rv != CKR_OK) {
+        twist_free(newsalthex);
+    }
+
+    twist_free(oldauth);
+    twist_free(newauthhex);
+
     return rv;
 }

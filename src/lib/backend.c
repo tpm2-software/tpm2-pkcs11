@@ -319,3 +319,23 @@ CK_RV backend_token_unseal_wrapping_key(token *tok, bool user, twist tpin) {
         return CKR_GENERAL_ERROR;
     }
 }
+
+/** Change the authValue of a token's seal blob.
+ *
+ * @param[in,out] tok The token to remove from.
+ * @param[in] user Whether to unseal from the user or so seal.
+ * @param[in] tpin The pin value to use for unsealing.
+ * @return CKR_OK on success, anything else is an error.
+ */
+CK_RV backend_token_changeauth(token *tok, bool user, twist toldpin, twist tnewpin) {
+
+    switch (tok->type) {
+    case token_type_esysdb:
+        return backend_esysdb_token_changeauth(tok, user, toldpin, tnewpin);
+    case token_type_fapi:
+        return backend_fapi_token_changeauth(tok, user, toldpin, tnewpin);
+    default:
+        assert(1);
+        return CKR_GENERAL_ERROR;
+    }
+}
