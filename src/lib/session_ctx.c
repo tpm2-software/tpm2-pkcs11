@@ -15,9 +15,9 @@
 #include "session_ctx.h"
 #include "session_table.h"
 #include "token.h"
-#include "tpm.h"
 #include "twist.h"
 #include "utils.h"
+#include "backend.h"
 
 struct session_ctx {
 
@@ -183,78 +183,6 @@ tobject *session_ctx_opdata_get_tobject(session_ctx *ctx) {
     return ctx->opdata.tobj;
 }
 
-CK_RV unseal_wrapping_key(token *tok, bool user, twist tpin) {
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-    bool on_error_flush_session = false;
-
-    sealobject *sealobj = &tok->sealobject;
-    twist sealpub = is_user(user) ? sealobj->userpub : sealobj->sopub;
-    twist sealpriv = is_user(user) ? sealobj->userpriv : sealobj->sopriv;
-
-    if (is_user(user) && !sealpub && !sealpriv) {
-        return CKR_USER_PIN_NOT_INITIALIZED;
-    }
-
-    assert(sealpub);
-    assert(sealpriv);
-
-    if (!tpm_session_active(tok->tctx)) {
-        LOGV("token parent object handle is 0x%08x", tok->pobject.handle);
-        CK_RV tmp = tpm_session_start(tok->tctx, tok->pobject.objauth, tok->pobject.handle);
-        if (tmp != CKR_OK) {
-            LOGE("Could not start Auth Session with the TPM.");
-            return tmp;
-        }
-
-        on_error_flush_session = true;
-    }
-
-    uint32_t pobj_handle = tok->pobject.handle;
-    twist pobjauth = tok->pobject.objauth;
-    uint32_t sealhandle;
-
-    bool res = tpm_loadobj(tok->tctx, pobj_handle, pobjauth, sealpub, sealpriv, &sealhandle);
-    if (!res) {
-        goto error;
-    }
-
-    twist sealsalt = is_user(user) ? sealobj->userauthsalt : sealobj->soauthsalt;
-    twist sealobjauth = utils_hash_pass(tpin, sealsalt);
-    if (!sealobjauth) {
-        rv = CKR_HOST_MEMORY;
-        goto error;
-    }
-
-    twist wrappingkeyhex = tpm_unseal(tok->tctx, sealhandle, sealobjauth);
-    twist_free(sealobjauth);
-    tpm_flushcontext(tok->tctx, sealhandle);
-    if (!wrappingkeyhex) {
-        rv = CKR_PIN_INCORRECT;
-        goto error;
-    }
-
-    if (tok->wrappingkey) {
-        twist_free(wrappingkeyhex);
-    } else {
-        tok->wrappingkey = twistbin_unhexlify(wrappingkeyhex);
-        twist_free(wrappingkeyhex);
-        if (!tok->wrappingkey) {
-            LOGE("Expected internal wrapping key in base 16 format");
-            goto error;
-        }
-    }
-
-    return CKR_OK;
-
-error:
-    if (on_error_flush_session) {
-        tpm_session_stop(tok->tctx);
-    }
-
-    return rv;
-}
-
 CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK_ULONG pinlen) {
 
     if (user != CKU_SO
@@ -316,7 +244,7 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
         return CKR_HOST_MEMORY;
     }
 
-    rv = unseal_wrapping_key(tok, is_user(user), tpin);
+    rv = backend_token_unseal_wrapping_key(tok, is_user(user), tpin);
     twist_free(tpin);
     if (rv != CKR_OK) {
         LOGE("Error unsealing wrapping key");

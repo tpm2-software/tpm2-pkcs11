@@ -727,3 +727,121 @@ error:
     free(path);
     return CKR_GENERAL_ERROR;
 }
+
+struct authtable {
+    const char *path;
+    const char *auth;
+};
+
+static TSS2_RC auth_cb(FAPI_CONTEXT *context, char const *description, char **auth, void *userData) {
+    (void)(context);
+    LOGV("Searching auth value for %s", description);
+
+    struct authtable *at = (struct authtable *) userData;
+
+    for (; at->path != NULL; at = &at[1]) {
+        /* Using strstr because description may be prefixed with a crypto profile */
+        if (strstr(description, at->path)) {
+            /* Current FAPI falsely uses char ** instead of const char ** for return. */
+            *auth = strdup((char*) at->auth);
+            if (!*auth) {
+                return TSS2_FAPI_RC_MEMORY;
+            }
+            return TSS2_RC_SUCCESS;
+        }
+    }
+
+    return TSS2_FAPI_RC_AUTHORIZATION_UNKNOWN;
+}
+
+/** Unseal a token's wrapping key.
+ *
+ * see backend_token_unseal_wrapping_key()
+ */
+CK_RV backend_fapi_token_unseal_wrapping_key(token *tok, bool user, twist tpin) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+    TSS2_RC rc;
+
+    char *path = tss_path_from_id(tok->id, user ? "usr":"so");
+    if (!path) {
+        LOGE("No path constructed.");
+        return CKR_HOST_MEMORY;
+    }
+
+    twist sealsalt = user ? tok->sealobject.userauthsalt : tok->sealobject.soauthsalt;
+    twist sealobjauth = utils_hash_pass(tpin, sealsalt);
+    if (!sealobjauth) {
+        rv = CKR_HOST_MEMORY;
+        goto error;
+    }
+
+    char label[sizeof(tok->label) + 1]; /* token-label length plus \0, cannot overflow */
+    label[sizeof(tok->label)] = '\0';
+    memcpy(&label[0], &tok->label[0], sizeof(tok->label));
+
+    /* FAPI may return the description (which is the label) or the path.
+       Thus we register our auth value for either. */
+    struct authtable authtable[] = {
+        { path, (char *)sealobjauth },
+        { &label[0], (char *)sealobjauth },
+        { NULL, NULL } };
+
+    rc = Fapi_SetAuthCB(tok->fapi.ctx, auth_cb, &authtable[0]);
+    if (rc) {
+        twist_free(sealobjauth);
+        LOGE("Fapi_SetAuthCB failed.");
+        goto error;
+    }
+
+    uint8_t *data;
+    size_t size;
+    rc = Fapi_Unseal(tok->fapi.ctx, path, &data, &size);
+    //TODO: Reenable once we switch to FAPI 3.0
+    //Fapi_SetAuthCB(tok->fapi.ctx, NULL, NULL);
+    twist_free(sealobjauth);
+    if (user && rc == TSS2_FAPI_RC_PATH_NOT_FOUND) {
+        rv = CKR_USER_PIN_NOT_INITIALIZED;
+        goto error;
+    }
+    if (rc) {
+        LOGE("Fapi_Unseal failed.");
+        goto error;
+    }
+
+    twist wrappingkeyhex = twistbin_new(data, size);
+    Fapi_Free(data);
+    if (!wrappingkeyhex) {
+        rv = CKR_HOST_MEMORY;
+        goto error;
+    }
+
+    if (tok->wrappingkey) {
+        twist_free(wrappingkeyhex);
+    } else {
+        tok->wrappingkey = twistbin_unhexlify(wrappingkeyhex);
+        twist_free(wrappingkeyhex);
+        if (!tok->wrappingkey) {
+            LOGE("Expected internal wrapping key in base 16 format");
+            goto error;
+        }
+    }
+
+    free(path);
+
+    /* Since tobject are esysdb backed, they need an active session. */
+    if (!tpm_session_active(tok->tctx)) {
+        LOGV("token parent object handle is 0x%08x", tok->pobject.handle);
+        CK_RV tmp = tpm_session_start(tok->tctx, tok->pobject.objauth, tok->pobject.handle);
+        if (tmp != CKR_OK) {
+            LOGE("Could not start Auth Session with the TPM.");
+            return tmp;
+        }
+    }
+
+    return CKR_OK;
+
+error:
+    free(path);
+    return rv;
+}
