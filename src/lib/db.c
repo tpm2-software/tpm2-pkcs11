@@ -851,6 +851,12 @@ CK_RV db_update_tobject_attrs(unsigned id, attr_list *attrs) {
     rc = sqlite3_bind_int(stmt, 2, id);
     gotobinderror(rc, "id");
 
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        LOGE("Could not execute stmt");
+        goto error;
+    }
+
     rc = sqlite3_finalize(stmt);
     if (rc) {
         LOGE("finalize");
