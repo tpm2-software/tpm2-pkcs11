@@ -264,7 +264,6 @@ CK_RV backend_update_tobject_attrs(token *tok, tobject *tobj, attr_list *attrs) 
 
     switch (tok->type) {
     case token_type_esysdb:
-        LOGV("Adding object to token using esysdb backend.");
         return backend_esysdb_update_tobject_attrs(tobj, attrs);
     case token_type_fapi:
         return backend_fapi_update_tobject_attrs(tok, tobj, attrs);
