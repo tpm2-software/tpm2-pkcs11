@@ -541,7 +541,6 @@ CK_RV backend_fapi_update_tobject_attrs(token *t, tobject *tobj, attr_list *attr
     size_t newappdata_len = appdata_len - tobj_len;
     safe_adde(newappdata_len, 9); /* id as 8byte hex and ':' */
     safe_adde(newappdata_len, strlen(attrs));
-    safe_adde(newappdata_len, 1); /* terminating '\0' */
     uint8_t *newappdata = malloc(newappdata_len);
     if (!newappdata) {
         LOGE("OOM");
@@ -550,17 +549,16 @@ CK_RV backend_fapi_update_tobject_attrs(token *t, tobject *tobj, attr_list *attr
     }
 
     memcpy(&newappdata[0], &appdata[0], tobj_start);
-    sprintf((char*)&newappdata[appdata_len], "%08x:", tobj->id);
-    memcpy(&newappdata[appdata_len + 9], attrs, strlen(attrs));
-    newappdata[tobj_start + 9 + strlen(attrs)] = '\0';
+    sprintf((char*)&newappdata[tobj_start], "%08x:%s", tobj->id, attrs);
     memcpy(&newappdata[tobj_start + 9 + strlen(attrs) + 1],
            &appdata[tobj_start + tobj_len],
-           appdata_len - tobj_start - tobj_len);
+           appdata_len - tobj_start - tobj_len - 1);
     newappdata[newappdata_len - 1] = '\0';
+
     Fapi_Free(appdata);
 
     rc = Fapi_SetAppData(t->fapi.ctx, path, newappdata, newappdata_len);
-    Fapi_Free(newappdata);
+    free(newappdata);
     if (rc) {
         LOGE("Getting FAPI seal appdata failed.");
         goto error;
