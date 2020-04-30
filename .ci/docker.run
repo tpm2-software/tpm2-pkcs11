@@ -17,7 +17,7 @@ fi
 if [ "$ENABLE_FUZZING" == "true" ]; then
   echo "Enabling fuzz build"
   ./bootstrap
-  ./configure --enable-fuzzing
+  ./configure --enable-fuzzing --enable-debug
   make -j4 check
   exit 0
 fi
