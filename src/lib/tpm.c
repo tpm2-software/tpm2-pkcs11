@@ -362,21 +362,9 @@ CK_RV tpm_session_stop(tpm_ctx *ctx) {
     return CKR_OK;
 }
 
-CK_RV tpm_ctx_new(const char *config, tpm_ctx **tctx) {
+CK_RV tpm_ctx_new_fromtcti(void *tcti, tpm_ctx **tctx) {
 
     ESYS_CONTEXT *esys = NULL;
-    TSS2_TCTI_CONTEXT *tcti = NULL;
-
-    /* no specific config, try environment */
-    if (!config) {
-        config = getenv(TPM2_PKCS11_TCTI);
-    }
-
-    LOGV("tcti=%s", config ? config : "(null)");
-    TSS2_RC rc = Tss2_TctiLdr_Initialize(config, &tcti);
-    if (rc != TSS2_RC_SUCCESS) {
-        return CKR_GENERAL_ERROR;
-    }
 
     tpm_ctx *t = calloc(1, sizeof(*t));
     if (!t) {
@@ -407,6 +395,24 @@ CK_RV tpm_ctx_new(const char *config, tpm_ctx **tctx) {
 error:
     tpm_ctx_free(t);
     return CKR_GENERAL_ERROR;
+}
+
+CK_RV tpm_ctx_new(const char *config, tpm_ctx **tctx) {
+
+    TSS2_TCTI_CONTEXT *tcti = NULL;
+
+    /* no specific config, try environment */
+    if (!config) {
+        config = getenv(TPM2_PKCS11_TCTI);
+    }
+
+    LOGV("tcti=%s", config ? config : "(null)");
+    TSS2_RC rc = Tss2_TctiLdr_Initialize(config, &tcti);
+    if (rc != TSS2_RC_SUCCESS) {
+        return CKR_GENERAL_ERROR;
+    }
+
+    return tpm_ctx_new_fromtcti(tcti, tctx);
 }
 
 static CK_RV tpm_get_properties(tpm_ctx *ctx, TPMS_CAPABILITY_DATA **d) {

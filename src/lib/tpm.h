@@ -44,6 +44,8 @@ void tpm_ctx_free(tpm_ctx *ctx);
  */
 CK_RV tpm_ctx_new(const char *tcti, tpm_ctx **tctx);
 
+CK_RV tpm_ctx_new_fromtcti(void *tcti, tpm_ctx **tctx);
+
 /**
  * Retrieves Spec Version, FW Version, Manufacturer and Model from TPM
  * and populates the provided CK_TOKEN_INFO structure.

@@ -31,9 +31,17 @@ CK_RV backend_fapi_destroy(void) {
 }
 
 CK_RV backend_fapi_ctx_new(token *t) {
+    TSS2_TCTI_CONTEXT *tcti;
+
+    TSS2_RC rc = Fapi_GetTcti(fctx, &tcti);
+    if (rc) {
+        LOGE("Getting FAPI's tcti context");
+        return CKR_GENERAL_ERROR;
+    }
+
     t->type = token_type_fapi;
     t->fapi.ctx = fctx;
-    return CKR_OK;
+    return tpm_ctx_new_fromtcti(tcti, &t->tctx);
 }
 
 void backend_fapi_ctx_free(token *t) {
