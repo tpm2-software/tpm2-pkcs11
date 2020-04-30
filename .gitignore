@@ -88,4 +88,5 @@ m4/*
 fuzz-*.log
 
 # Fuzz Executables
-test/fuzz/*.fuzz*
+test/fuzz/*.fuzz
+test/fuzz/*.fuzz32
