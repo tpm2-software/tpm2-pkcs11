@@ -884,7 +884,6 @@ error:
 
 CK_RV db_add_token(token *tok) {
     assert(tok);
-    assert(tok->id);
 
     /* This function is only called from token_initialize, hence... */
     assert(tok->config.is_initialized);
@@ -914,12 +913,11 @@ CK_RV db_add_token(token *tok) {
 
     const char *sql =
           "INSERT INTO tokens ("
-            "id,"         // index: 1 type: INT
-            "pid, "       // index: 2 type: INT
-            "label,"      // index: 3 type: TEXT
-            "config"      // index: 4 type: TEXT (JSON)
+            "pid, "       // index: 1 type: INT
+            "label,"      // index: 2 type: TEXT
+            "config"      // index: 3 type: TEXT (JSON)
           ") VALUES ("
-            "?,?,?,?"
+            "?,?,?"
           ");";
 
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
@@ -933,25 +931,13 @@ CK_RV db_add_token(token *tok) {
         goto error;
     }
 
-    /*
-     * we specify the id since we have an in-memory id that we need to use
-     * This will also cause the constraint that primary key's are unique to
-     * fail if someone comes in and initializes a token with this id.
-     *
-     * XXX
-     * We should consider relaxing this:
-     *   - https://github.com/tpm2-software/tpm2-pkcs11/issues/371
-     */
-    rc = sqlite3_bind_int(stmt, 1, tok->id);
-    gotobinderror(rc, "id");
-
-    rc = sqlite3_bind_int(stmt, 2, tok->pid);
+    rc = sqlite3_bind_int(stmt, 1, tok->pid);
     gotobinderror(rc, "pid");
 
-    rc = sqlite3_bind_text(stmt, 3, label_buf, -1, SQLITE_STATIC);
+    rc = sqlite3_bind_text(stmt, 2, label_buf, -1, SQLITE_STATIC);
     gotobinderror(rc, "config");
 
-    rc = sqlite3_bind_text(stmt, 4, config, -1, SQLITE_STATIC);
+    rc = sqlite3_bind_text(stmt, 3, config, -1, SQLITE_STATIC);
     gotobinderror(rc, "label");
 
     rc = sqlite3_step(stmt);
@@ -971,7 +957,7 @@ CK_RV db_add_token(token *tok) {
         goto error;
     }
 
-    assert(tok->id == id);
+    tok->id = id;
 
     rc = sqlite3_finalize(stmt);
     gotobinderror(rc, "finalize");
