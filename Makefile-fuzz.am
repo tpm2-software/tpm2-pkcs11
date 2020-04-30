@@ -57,10 +57,16 @@ test_fuzz_init_token_label_fuzz32_LDFLAGS   = $(WRAP_LD_FLAGS)
 test_fuzz_init_token_label_fuzz32_LDADD     = $(libtpm2_test_pkcs11) $(AM_LDFLAGS) $(CMOCKA_LIBS)
 test_fuzz_init_token_label_fuzz32_SOURCES   = test/fuzz/init-token-label.fuzz32.c
 
+test_fuzz_db_token_label_fuzz32_CFLAGS    = $(AM_CFLAGS) $(FUZZING_CFLAGS) $(CMOCKA_CFLAGS) -I$(srcdir)/test/fake-tpm
+test_fuzz_db_token_label_fuzz32_LDFLAGS   = $(WRAP_LD_FLAGS)
+test_fuzz_db_token_label_fuzz32_LDADD     = $(libtpm2_test_pkcs11) $(AM_LDFLAGS) $(CMOCKA_LIBS)
+test_fuzz_db_token_label_fuzz32_SOURCES   = test/fuzz/db-token-label.fuzz32.c
+
 fuzz_PROGRAMS = \
     test/fuzz/yaml-parser.fuzz \
     test/fuzz/init-token-sopin.fuzz \
     test/fuzz/init-pin.fuzz \
+    test/fuzz/db-token-label.fuzz32 \
     test/fuzz/init-token-label.fuzz32 \
     test/fuzz/utils-ctx-unwrap-objauth.fuzz
 
