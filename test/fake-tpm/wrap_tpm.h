@@ -21,6 +21,24 @@
 
 #include "utils.h"
 
+static inline void set_default_tpm(void) {
+    will_return_maybe(__wrap_backend_fapi_init, CKR_GENERAL_ERROR);
+    will_return_maybe(__wrap_Esys_Initialize, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Tss2_TctiLdr_Initialize, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Tss2_TctiLdr_Finalize, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_Finalize, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_TR_FromTPMPublic, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_TR_Serialize, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_TR_SetAuth, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_StartAuthSession, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_TRSess_SetAttributes, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_Create, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_FlushContext, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_Load, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_TRSess_GetAttributes, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_Unseal, TSS2_RC_SUCCESS);
+}
+
 TSS2_RC __wrap_Esys_Create(
         ESYS_CONTEXT *esysContext,
         ESYS_TR parentHandle,
@@ -1217,9 +1235,12 @@ TSS2_RC __wrap_Esys_Unseal(
         return TSS2_ESYS_RC_MEMORY;
     }
 
-    /* callers of this expect a 32 byte AES256 key */
-    data->size = 32;
-    memset(data->buffer, 'K', data->size);
+    /* callers of this expect a 32 byte AES256 key in hex */
+    static const char key[] = "884c740971d77b883f043805d474c2d91c2780f463c4ead387905ef3f8a03f34";
+    data->size = sizeof(key) - 1;
+    memcpy(data->buffer, key, sizeof(key) - 1);
+
+    *outData = data;
 
     return rc;
 }

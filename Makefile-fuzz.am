@@ -19,7 +19,10 @@ WRAP_LD_FLAGS := \
     -Wl,--wrap=Esys_TRSess_GetAttributes \
     -Wl,--wrap=Esys_CreateLoaded \
     -Wl,--wrap=Esys_Create \
-    -Wl,--wrap=Esys_FlushContext 
+    -Wl,--wrap=Esys_FlushContext \
+    -Wl,--wrap=Esys_Load \
+    -Wl,--wrap=Esys_TRSess_GetAttributes \
+    -Wl,--wrap=Esys_Unseal
 
 if FUZZING
 
@@ -41,6 +44,11 @@ test_fuzz_init_token_sopin_fuzz_LDFLAGS   = $(WRAP_LD_FLAGS)
 test_fuzz_init_token_sopin_fuzz_LDADD     = $(libtpm2_test_pkcs11) $(AM_LDFLAGS) $(CMOCKA_LIBS)
 test_fuzz_init_token_sopin_fuzz_SOURCES   = test/fuzz/init-token-sopin.fuzz.c
 
+test_fuzz_init_pin_fuzz_CFLAGS    = $(AM_CFLAGS) $(FUZZING_CFLAGS) $(CMOCKA_CFLAGS) -I$(srcdir)/test/fake-tpm
+test_fuzz_init_pin_fuzz_LDFLAGS   = $(WRAP_LD_FLAGS)
+test_fuzz_init_pin_fuzz_LDADD     = $(libtpm2_test_pkcs11) $(AM_LDFLAGS) $(CMOCKA_LIBS)
+test_fuzz_init_pin_fuzz_SOURCES   = test/fuzz/init-pin.fuzz.c
+
 AM_FUZZ32_LOG_FLAGS=$(FUZZING_FLAGS) -max_len=32
 FUZZ32_LOG_COMPILER=$(FUZZ_RUNNER)
 
@@ -52,6 +60,7 @@ test_fuzz_init_token_label_fuzz32_SOURCES   = test/fuzz/init-token-label.fuzz32.
 fuzz_PROGRAMS = \
     test/fuzz/yaml-parser.fuzz \
     test/fuzz/init-token-sopin.fuzz \
+    test/fuzz/init-pin.fuzz \
     test/fuzz/init-token-label.fuzz32 \
     test/fuzz/utils-ctx-unwrap-objauth.fuzz
 
