@@ -29,6 +29,7 @@ static inline void set_default_tpm(void) {
     will_return_maybe(__wrap_Esys_Finalize, TSS2_RC_SUCCESS);
     will_return_maybe(__wrap_Esys_TR_FromTPMPublic, TSS2_RC_SUCCESS);
     will_return_maybe(__wrap_Esys_TR_Serialize, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_TR_Deserialize, TSS2_RC_SUCCESS);
     will_return_maybe(__wrap_Esys_TR_SetAuth, TSS2_RC_SUCCESS);
     will_return_maybe(__wrap_Esys_StartAuthSession, TSS2_RC_SUCCESS);
     will_return_maybe(__wrap_Esys_TRSess_SetAttributes, TSS2_RC_SUCCESS);
@@ -1164,6 +1165,8 @@ TSS2_RC __wrap_Esys_TR_Serialize(
     return rc;
 }
 
+static TPMA_SESSION _session_flags;
+
 TSS2_RC __wrap_Esys_TRSess_GetAttributes(
         ESYS_CONTEXT *esysContext,
         ESYS_TR session,
@@ -1177,7 +1180,7 @@ TSS2_RC __wrap_Esys_TRSess_GetAttributes(
         return rc;
     }
 
-    *flags = 0xDE;
+    *flags = _session_flags;
 
     return rc;
 }
@@ -1191,9 +1194,7 @@ TSS2_RC __wrap_Esys_TRSess_SetAttributes(
     UNUSED(esysContext);
     UNUSED(session);
 
-    /* I think we can just bitbucket all this */
-    UNUSED(flags);
-    UNUSED(mask);
+    _session_flags = flags & mask;
 
     return mock();
 }

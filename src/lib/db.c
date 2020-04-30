@@ -1705,6 +1705,12 @@ static void release_lock(FILE *f, char *lockpath) {
     UNUSED(fclose(f));
 }
 
+#ifndef NDBEBUG
+void db_debug_set_db(sqlite3 *db) {
+    global.db = db;
+}
+#endif
+
 CK_RV db_init_new(sqlite3 *db) {
 
     const char *sql[] = {
