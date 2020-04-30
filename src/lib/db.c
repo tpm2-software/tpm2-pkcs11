@@ -304,6 +304,14 @@ error:
     return rc;
 }
 
+#ifndef NDEBUG
+__attribute__((weak))
+#endif
+void db_get_label(token *t, sqlite3_stmt *stmt, int iCol) {
+    snprintf((char *)t->label, sizeof(t->label), "%s",
+                        sqlite3_column_text(stmt, iCol));
+}
+
 CK_RV db_get_tokens(token **tok, size_t *len) {
 
     size_t cnt = 0;
@@ -348,8 +356,7 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
                 t->pid = sqlite3_column_int(stmt, i);
 
             } else if (!strcmp(name, "label")) {
-                snprintf((char *)t->label, sizeof(t->label), "%s",
-                        sqlite3_column_text(stmt, i));
+                db_get_label(t, stmt, i);
 
             } else if (!strcmp(name, "config")) {
                 int bytes = sqlite3_column_bytes(stmt, i);
@@ -1698,7 +1705,7 @@ static void release_lock(FILE *f, char *lockpath) {
     UNUSED(fclose(f));
 }
 
-static CK_RV db_init_new(sqlite3 *db) {
+CK_RV db_init_new(sqlite3 *db) {
 
     const char *sql[] = {
         "CREATE TABLE tokens("
@@ -1843,7 +1850,10 @@ out:
     return rv;
 }
 
-static CK_RV db_new(sqlite3 **db) {
+#ifndef NDEBUG
+__attribute__((weak))
+#endif
+CK_RV db_new(sqlite3 **db) {
 
     char dbpath[PATH_MAX];
     CK_RV rv = db_get_existing(dbpath, sizeof(dbpath));

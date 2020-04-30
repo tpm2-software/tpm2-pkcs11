@@ -2,10 +2,14 @@
 #ifndef SRC_LIB_BACKEND_FAPI_H_
 #define SRC_LIB_BACKEND_FAPI_H_
 
+#include "config.h"
 #include "pkcs11.h"
 #include "twist.h"
 #include "token.h"
 
+#ifndef NDEBUG
+__attribute__((weak))
+#endif
 CK_RV backend_fapi_init(void);
 CK_RV backend_fapi_destroy(void);
 
