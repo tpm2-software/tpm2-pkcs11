@@ -35,7 +35,7 @@ AC_CONFIG_FILES([Makefile lib/tpm2-pkcs11.pc])
 AC_CONFIG_HEADERS([src/lib/config.h])
 
 # test for TSS dependecies
-PKG_CHECK_MODULES([TSS2_FAPI],   [tss2-fapi])
+PKG_CHECK_MODULES([TSS2_FAPI],   [tss2-fapi >= 3.0])
 PKG_CHECK_MODULES([TSS2_ESYS],   [tss2-esys >= 2.0])
 PKG_CHECK_MODULES([TSS2_MU],     [tss2-mu])
 PKG_CHECK_MODULES([TSS2_TCTILDR], [tss2-tctildr])
