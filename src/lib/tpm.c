@@ -813,13 +813,40 @@ CK_RV tpm_stirrandom(tpm_ctx *ctx, CK_BYTE_PTR seed, CK_ULONG seed_len) {
     return CKR_OK;
 }
 
-bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle) {
+bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle, uint32_t *tpmHandle) {
 
     TSS2_RC rval = Esys_TR_Deserialize(ctx->esys_ctx,
                         (uint8_t *)handle_blob,
                         twist_len(handle_blob), handle);
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Esys_TR_Deserialize: %s:", Tss2_RC_Decode(rval));
+        return false;
+    }
+
+    if (tpmHandle) {
+        rval = Esys_TR_GetTpmHandle(ctx->esys_ctx, *handle, tpmHandle);
+        if (rval != TSS2_RC_SUCCESS) {
+            LOGE("Esys_TR_GetTpmHandle: %s:", Tss2_RC_Decode(rval));
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool tpm_contextload_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle) {
+    TPMS_CONTEXT blob;
+
+    TSS2_RC rval = Tss2_MU_TPMS_CONTEXT_Unmarshal((uint8_t *)handle_blob, twist_len(handle_blob),
+                                                  NULL, &blob);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Tss2_MU_TPMS_CONTEXT_Unmarshal: %s:", Tss2_RC_Decode(rval));
+        return false;
+    }
+
+    rval = Esys_ContextLoad(ctx->esys_ctx, &blob, handle);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_ContextLoad: %s:", Tss2_RC_Decode(rval));
         return false;
     }
 

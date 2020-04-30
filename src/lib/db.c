@@ -210,7 +210,7 @@ static int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
     }
 
 
-    bool res = tpm_deserialize_handle(tpm, blob, &pobj->handle);
+    bool res = tpm_deserialize_handle(tpm, blob, &pobj->handle, NULL);
     twist_free(blob);
     if (!res) {
         /* just set a general error as rc could be success right now */

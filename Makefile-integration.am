@@ -50,7 +50,7 @@ AM_NOSETUP_LOG_FLAGS = --tabrmd-tcti=mssim
 NOSETUP_LOG_COMPILER=$(LOG_COMPILER)
 
 AM_FAPI_LOG_FLAGS = --tabrmd-tcti=mssim
-FAPI_LOG_COMPILER=env FAPI_PREVIEW=true $(LOG_COMPILER)
+FAPI_LOG_COMPILER=env TPM2_PKCS11_BACKEND=fapi $(LOG_COMPILER)
 
 test_integration_pkcs_find_objects_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_find_objects_int_LDADD   = $(TESTS_LDADD)

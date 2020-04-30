@@ -93,7 +93,9 @@ bool tpm_flushcontext(tpm_ctx *ctx, uint32_t handle);
 
 twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth);
 
-bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle);
+bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle, uint32_t *tpmHandle);
+
+bool tpm_contextload_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle);
 
 CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen);
 
