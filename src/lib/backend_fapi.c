@@ -10,7 +10,7 @@
 FAPI_CONTEXT *fctx = NULL;
 unsigned maxobjectid = 0;
 
-static CK_RV get_key(FAPI_CONTEXT *fctx, tpm_ctx *tctx, const char *path, uint32_t *esysHandle, uint32_t *tpmHandle) {
+static CK_RV get_key(FAPI_CONTEXT *fapictx, tpm_ctx *tctx, const char *path, uint32_t *esysHandle, uint32_t *tpmHandle) {
 
     bool ret;
     TSS2_RC rc;
@@ -18,7 +18,7 @@ static CK_RV get_key(FAPI_CONTEXT *fctx, tpm_ctx *tctx, const char *path, uint32
     uint8_t *data;
     size_t length;
 
-    rc = Fapi_GetEsysBlob(fctx, path, &type, &data, &length);
+    rc = Fapi_GetEsysBlob(fapictx, path, &type, &data, &length);
     if (rc != TSS2_RC_SUCCESS) {
         LOGE("Cannot get Esys blob for key %s", path);
         return CKR_GENERAL_ERROR;
@@ -709,18 +709,16 @@ struct authtable {
     const char *auth;
 };
 
-static TSS2_RC auth_cb(FAPI_CONTEXT *context, char const *description, char **auth, void *userData) {
-    (void)(context);
+static TSS2_RC auth_cb(const char *path, char const *description, const char **auth, void *userData) {
+
     LOGV("Searching auth value for %s", description);
 
     struct authtable *at = (struct authtable *) userData;
 
     for (; at->path != NULL; at = &at[1]) {
         /* Using strstr because description may be prefixed with a crypto profile */
-        if (strstr(description, at->path)) {
-            /* Current FAPI falsely uses char ** instead of const char ** for return. */
-            //TODO remove strdup once we switch to FAPI 3.0
-            *auth = strdup((char*) at->auth);
+        if (strstr(path, at->path)) {
+            *auth = at->auth;
             if (!*auth) {
                 return TSS2_FAPI_RC_MEMORY;
             }
@@ -774,8 +772,7 @@ CK_RV backend_fapi_token_unseal_wrapping_key(token *tok, bool user, twist tpin) 
     uint8_t *data;
     size_t size;
     rc = Fapi_Unseal(tok->fapi.ctx, path, &data, &size);
-    //TODO: Reenable once we switch to FAPI 3.0
-    //Fapi_SetAuthCB(tok->fapi.ctx, NULL, NULL);
+    Fapi_SetAuthCB(tok->fapi.ctx, NULL, NULL);
     twist_free(sealobjauth);
     if (user && rc == TSS2_FAPI_RC_PATH_NOT_FOUND) {
         rv = CKR_USER_PIN_NOT_INITIALIZED;
@@ -869,8 +866,7 @@ CK_RV backend_fapi_token_changeauth(token *tok, bool user, twist toldpin, twist 
     LOGV("Attempting to change auth value for %s", path);
 
     rc = Fapi_ChangeAuth(tok->fapi.ctx, path, newauthhex);
-    //TODO: Reenable once we switch to FAPI 3.0
-    //Fapi_SetAuthCB(tok->fapi.ctx, NULL, NULL);
+    Fapi_SetAuthCB(tok->fapi.ctx, NULL, NULL);
     if (rc) {
         LOGE("Fapi_ChangeAuth failed.");
         goto out;
