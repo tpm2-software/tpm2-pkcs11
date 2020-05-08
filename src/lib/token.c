@@ -381,7 +381,11 @@ out:
 
 error:
     token_free(t);
-    token_min_init(t);
+    CK_RV rv2 = token_min_init(t);
+    if (rv2 != CKR_OK) {
+        LOGE("Could not re-create empty token");
+        rv = rv2;
+    }
     t->config.is_initialized = false;
     goto out;
 }

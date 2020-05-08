@@ -540,14 +540,14 @@ CK_RV object_set_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
         rv = found ? attr_list_update_entry(tmp, t) :
             attr_list_append_entry(&tmp, t);
         if (rv != CKR_OK) {
-            goto out;
+            goto error;
         }
     }
 
     /* in memory is updated, so update the persistent store */
     rv = backend_update_tobject_attrs(tok, tobj, tmp);
     if (rv != CKR_OK) {
-        goto out;
+        goto error;
     }
 
     /*
@@ -563,6 +563,10 @@ out:
     tobject_user_decrement(tobj);
 
     return rv;
+
+error:
+    attr_list_free(tmp);
+    goto out;
 }
 
 tobject *tobject_new(void) {
