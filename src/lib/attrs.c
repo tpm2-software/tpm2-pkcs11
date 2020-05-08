@@ -1172,6 +1172,10 @@ CK_RV attr_list_update_entry(attr_list *attrs, CK_ATTRIBUTE_PTR untrusted_attr) 
     attr_handler2 *handler = attr_lookup(t);
 
     CK_ATTRIBUTE_PTR found = attr_get_attribute_by_type(attrs, t);
+    if (!found) {
+        LOGE("Attribute entry not found");
+        return CKR_GENERAL_ERROR;
+    }
 
     /* the existing type memory should match the expected type memory */
     CK_BYTE expected_memory_type = type_from_ptr(found->pValue,
