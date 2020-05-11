@@ -119,12 +119,31 @@ GNUTLS_PIN=mynewuserpin \
 p11_tool --initialize-pin ${TOKENURL}
 echo "Userpin initialized"
 
+echo "Initializing token2"
+GNUTLS_SO_PIN=mynewsopin \
+p11_tool --initialize --label=mynewtoken2 $(p11_tool --list-token-urls | grep "SW%20%20%20TPM" | tail -n 1)
+TOKENURL2=$(p11_tool --list-token-urls | grep "mynewtoken2")
+echo "Token2 initialized"
+
+echo "Initializing user pin2"
+GNUTLS_SO_PIN=mynewsopin \
+GNUTLS_PIN=mynewuserpin \
+p11_tool --initialize-pin ${TOKENURL2}
+echo "Userpin2 initialized"
+
 echo "Generating RSA keypair"
 GNUTLS_PIN=mynewuserpin \
 p11_tool --generate-rsa --bits 2048 --login --label="myrsakey" --outfile="${tempdir}/pubkey.pem" ${TOKENURL}
 GNUTLS_PIN=mynewuserpin \
 p11_tool --login --list-all ${TOKENURL}
 echo "RSA Keypair generated"
+
+echo "Generating RSA keypair2"
+GNUTLS_PIN=mynewuserpin \
+p11_tool --generate-rsa --bits 2048 --login --label="my2rsakey" --outfile="${tempdir}/pubkey2.pem" ${TOKENURL2}
+GNUTLS_PIN=mynewuserpin \
+p11_tool --login --list-all ${TOKENURL2}
+echo "RSA Keypair2 generated"
 
 echo "Change the keypair label"
 GNUTLS_PIN=mynewuserpin \
