@@ -129,9 +129,6 @@ CK_RV backend_fapi_create_token_seal(token *t, const twist hexwrappingkey,
                        const twist newauth, const twist newsalthex) {
     TSS2_RC rc;
 
-    /* Prefixing fapi_ids in order to avoid collisions with esysdb */
-    t->id += 0x80;
-
     char *path = tss_path_from_id(t->id, "so");
     if (!path) {
         LOGE("No path constructed.");
@@ -291,6 +288,8 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
         memcpy(&t->label[0], label, strlen(label));
         Fapi_Free(label);
 
+        LOGV("Parsing objects for token %i:%s", t->id, &t->label[0]);
+
         uint8_t *appdata;
         size_t appdata_len;
 
@@ -354,7 +353,7 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
                 goto error;
             }
 
-            rv = token_add_tobject_last(tok, tobj);
+            rv = token_add_tobject_last(t, tobj);
             if (rv != CKR_OK) {
                 LOGE("Failed to initialize tobject from FAPI");
                 free(tobj);
@@ -489,7 +488,7 @@ CK_RV backend_fapi_init_user(token *t, const twist sealdata,
 CK_RV backend_fapi_add_object(token *t, tobject *tobj) {
     TSS2_RC rc;
 
-    LOGE("Adding object to fapi token %i", t->id);
+    LOGV("Adding object to fapi token %i", t->id);
 
     char *path = tss_path_from_id(t->id, "so");
     if (!path) {
