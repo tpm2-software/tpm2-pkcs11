@@ -333,7 +333,6 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
         return rc;
     }
 
-    bool has_uninit_token = false;
     size_t row = 0;
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 
@@ -389,7 +388,6 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
         }
 
         if (!t->config.is_initialized) {
-            has_uninit_token = true;
             LOGV("skipping further initialization of token tid: %u", t->id);
             continue;
         }
@@ -406,21 +404,6 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
 
         /* token initialized, bump cnt */
         cnt++;
-    }
-
-    /* if their was no unitialized token in the db, add it */
-    if (!has_uninit_token) {
-        if (cnt >= MAX_TOKEN_CNT) {
-            LOGE("Too many tokens, must have less than %d", MAX_TOKEN_CNT);
-            goto error;
-        }
-
-        token *t = &tmp[cnt++];
-        t->id = cnt;
-        CK_RV rv = token_min_init(t);
-        if (rv != CKR_OK) {
-            goto error;
-        }
     }
 
     *tok = tmp;

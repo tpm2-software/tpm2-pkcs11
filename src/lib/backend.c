@@ -153,7 +153,6 @@ CK_RV backend_create_token_seal(token *t, const twist hexwrappingkey,
  */
 CK_RV backend_get_tokens(token **tok, size_t *len) {
     CK_RV rv = CKR_GENERAL_ERROR;
-    token tmp;
 
     enum backend backend = get_backend();
 
@@ -170,11 +169,6 @@ CK_RV backend_get_tokens(token **tok, size_t *len) {
             return rv;
         }
         LOGV("Esysdb returned %zi token", *len);
-
-        /* This is used to move the empty token to the end. */
-        /* TODO: Would be better to have a nicer way of doing so. */
-        tmp = (*tok)[*len - 1];
-        *len -= 1;
     }
 
     if (fapi_init) {
@@ -187,14 +181,35 @@ CK_RV backend_get_tokens(token **tok, size_t *len) {
                 return rv;
             } else {
                 LOGW(msg);
-                rv = CKR_OK;
             }
+        }
+        LOGV("FAPI + Esysdb returned %zi token", *len);
+    }
+
+    /* -1 for starting at id 1 and -1 for the empty token */
+    if (*len >= MAX_TOKEN_CNT - 2) {
+        LOGW("Too many tokens, must have less than %d to show empty tokens", MAX_TOKEN_CNT - 1);
+        return CKR_OK;
+    }
+
+    token *t = &(*tok)[*len];
+
+    for (t->id = 1; t->id < MAX_TOKEN_CNT; t->id += 1) {
+        size_t i = 0;
+        for (; i < *len; i++) {
+            if (((*tok)[i]).id == t->id) {
+                break;
+            }
+        }
+        if (i == *len) {
+            break;
         }
     }
 
-    if (esysdb_init) {
-        (*tok)[*len] = tmp;
-        *len += 1;
+    *len += 1;
+    rv = token_min_init(t);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     LOGV("Esysdb + FAPI returned %zi token", *len);

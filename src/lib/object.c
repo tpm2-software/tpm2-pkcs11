@@ -316,6 +316,7 @@ CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, CK_ULONG count)
     assert(tok);
 
     if (!tok->tobjects.head) {
+        LOGV("Token %i contains no objects.", tok->id);
         goto empty;
     }
 
