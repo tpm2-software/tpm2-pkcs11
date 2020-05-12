@@ -334,7 +334,7 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
     }
 
     size_t row = 0;
-    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
 
         if (cnt >= MAX_TOKEN_CNT) {
             LOGE("Too many tokens, must have less than %d", MAX_TOKEN_CNT);
@@ -382,7 +382,7 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
         }
 
         /* tokens in the DB store already have an associated primary object */
-        int rc = init_pobject(t->pid, &t->pobject, t->tctx);
+        rc = init_pobject(t->pid, &t->pobject, t->tctx);
         if (rc != SQLITE_OK) {
             goto error;
         }
