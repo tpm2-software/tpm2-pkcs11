@@ -25,12 +25,12 @@ trap onerror ERR
 #
 pushd "$tempdir"
 
-oldver=1.0
+oldver=1.0.3
 if ! wget "$PACKAGE_URL/releases/download/$oldver/tpm2-pkcs11-$oldver.tar.gz"; then
     echo "Could not download old version tpm2-pkcs11-$oldver.tar.gz"
     exit 77
 fi
-if ! sha256sum "tpm2-pkcs11-$oldver.tar.gz" | grep -q ^883d976f7f1d3c1097612615916ce4d4568545eb658f59c445ce3d475d391e9f; then
+if ! sha256sum "tpm2-pkcs11-$oldver.tar.gz" | grep -q ^6542049c0cc217b4372da52ea207fcb22e15afb2e76b9dc2f3d126b3147780c7; then
     echo "Integrity check of tpm2-pkcs11-$oldver.tar.gz failed"
     exit 99
 fi
