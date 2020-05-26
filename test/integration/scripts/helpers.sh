@@ -5,7 +5,7 @@ setup_asan() {
   if [ "$ASAN_ENABLED" != "true" ]; then
     return 0
   fi
-  
+
   # To get line numbers set up the asan symbolizer
   clang_version=`$CC --version | head -n 1 | cut -d\  -f 3-3 | cut -d\. -f 1-3 | cut -d- -f 1-1`
   # Sometimes the version string has an Ubuntu on the front of it and the field
@@ -15,11 +15,20 @@ setup_asan() {
   fi
   echo "Detected clang version: $clang_version"
   minor_maj=`echo "$clang_version" | cut -d\. -f 1-2`
+  maj=`echo "$clang_version" | cut -d\. -f 1-1`
 
   p="/usr/lib/llvm-$minor_maj/lib/clang/$clang_version/lib/linux/libclang_rt.asan-$(arch).so"
   echo "Looking for libasan to LD_PRELOAD at: $p"
   if [ ! -f "$p" ]; then
+    p="/usr/lib/llvm-$maj/lib/clang/$clang_version/lib/linux/libclang_rt.asan-$(arch).so"
+  fi
+  if [ ! -f "$p" ]; then
     p="/usr/lib64/clang/$clang_version/lib/linux/libclang_rt.asan-$(arch).so"
+  fi
+
+  if [ ! -f "$p" ]; then
+    echo "Couldn't find libasan.so"
+    return -1
   fi
   echo "Found libasan at: $p"
 
@@ -27,7 +36,7 @@ setup_asan() {
   echo "export LD_PRELOAD=\"$LD_PRELOAD\""
   export ASAN_OPTIONS=detect_leaks=0
   echo "turning off asan detection for running commands..."
-  
+
   return 0
 }
 
