@@ -6,8 +6,8 @@
 #of p11-tool p11-kit and libasan (clang). Consider using gcc or exporting
 #ASAN_ENABLED=false
 
-if [ "${DOCKER_TAG:-nodocker}" = "fedora-30" ]; then
-  echo "p11-tool on fedora with libasan/clang is dysfunctional"
+if [[ "${DOCKER_TAG:-nodocker}" = "fedora-30" || "${DOCKER_TAG:-nodocker}" = "ubuntu-20.04" ]]; then
+  echo "p11-tool on fedora-30 or ubuntu-20.04 with clang is dysfunctional even without asan"
   ASAN_ENABLED=false
   #Even without ASAN the dlopen does not work on p11-tool/p11-kit at this moment
 fi
@@ -72,8 +72,8 @@ if ! p11_tool --list-tokens | grep -q "Model: SW   TPM"; then
   echo "If you are running a recent version of p11tool then you need to configure the module system-wide:"
   echo "echo \"module: $TRAVIS_BUILD_DIR/build/src/.libs/libtpm2_pkcs11.so\" >/etc/pkcs11/modules/tpm2_pkcs11.module"
 
-  if [ "${DOCKER_TAG:-nodocker}" = "fedora-30" ]; then
-    echo "p11-tool on fedora with clang is dysfunctional even without asan"
+  if [[ "${DOCKER_TAG:-nodocker}" = "fedora-30" || "${DOCKER_TAG:-nodocker}" = "ubuntu-20.04" ]]; then
+    echo "p11-tool on fedora-30 or ubuntu-20.04 with clang is dysfunctional even without asan"
     exit 77 #TEST SKIP
   else
     exit 99 #TEST ERROR
