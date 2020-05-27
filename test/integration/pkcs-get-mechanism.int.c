@@ -149,7 +149,7 @@ void test_get_mechanism_info_good(void **state) {
         assert_int_equal(rv, CKR_OK);
 
         assert_int_equal(mech_info.ulMinKeySize, 1024);
-        assert_int_equal(mech_info.ulMaxKeySize, 2048);
+        assert_in_range(mech_info.ulMaxKeySize, 2048, 3072);
         assert_int_equal(mech_info.flags, rsa_mechs[i].flags);
     }
 
