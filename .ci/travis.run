@@ -5,7 +5,6 @@ set -e
 
 if [ "$TRAVIS_BRANCH" != "coverity_scan" ]; then
 
-  docker pull tpm2software/tpm2-tss
   #
   # Docker starts you in a cloned repo of your project with the PR checkout out.
   # We want those changes IN the docker image, so use the -v option to mount the
@@ -17,7 +16,7 @@ if [ "$TRAVIS_BRANCH" != "coverity_scan" ]; then
   #
   ci_env=`bash <(curl -s https://codecov.io/env)`
   docker run $ci_env --cap-add=SYS_PTRACE --env-file .ci/docker.env \
-    -v `pwd`:/workspace/tpm2-pkcs11 tpm2software/tpm2-tss \
+    -v `pwd`:/workspace/tpm2-pkcs11 tpm2software/tpm2-tss:ubuntu-16.04 \
     /bin/bash -c '/workspace/tpm2-pkcs11/.ci/docker.run'
 
 else
@@ -40,11 +39,9 @@ else
       mv cov-analysis-* cov-analysis
     fi
 
-    docker pull tpm2software/tpm2-tss
-
     # perform the scan
     docker run --env-file .ci/docker.env \
-      -v `pwd`:/workspace/tpm2-pkcs11 tpm2software/tpm2-tss \
+      -v `pwd`:/workspace/tpm2-pkcs11 tpm2software/tpm2-tss:ubuntu-16.04 \
       /bin/bash -c '/workspace/tpm2-pkcs11/.ci/coverity.run'
 
     # upload the results
