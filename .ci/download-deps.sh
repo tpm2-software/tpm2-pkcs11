@@ -5,7 +5,8 @@ function get_deps() {
 
 	# The list order is important and thus we can't use the keys of the dictionary as order is not preserved.
 	local github_deps=("tpm2-tss" "tpm2-abrmd" "tpm2-tools")
-	declare -A local config_flags=( ["tpm2-tss"]="--disable-doxygen-doc CFLAGS=-g" ["tpm2-abrmd"]="CFLAGS=-g" ["tpm2-tools"]="--disable-hardening CFLAGS=-g")
+	declare -A local config_flags=( ["tpm2-tss"]="--disable-doxygen-doc --enable-debug" ["tpm2-abrmd"]="--enable-debug" ["tpm2-tools"]="--disable-hardening --enable-debug")
+	declare -A local versions=( ["tpm2-tss"]="2.3.2" ["tpm2-abrmd"]="2.1.0" ["tpm2-tools"]="4.0")
 
 	echo "pwd starting: `pwd`"
 	pushd "$1"
@@ -18,7 +19,8 @@ function get_deps() {
 			echo "Skipping project "$p", already downloaded"
 			continue
 		fi
-		git clone "https://github.com/tpm2-software/$p.git"
+		v=${versions[$p]}
+		git clone --depth 1 --branch $v "https://github.com/tpm2-software/$p.git"
 
 		pushd "$p"
 
