@@ -1,6 +1,6 @@
 # Changelog
 
-### 1.0.2-RC0 - 2020-06-02
+### 1.0.2 - 2020-06-09
 
   * Fix build issue about unused variable config. Notably fixes gcc10 builds.
 
