@@ -1,5 +1,9 @@
 # Changelog
 
+### 1.1.1-RC0 - 2020-06-09
+
+  * test/pkcs-get-mechanism: allow a maximum key size of 3072 bits.
+
 ### 1.1.0 - 2020-03-09
   * DB Schema Change from 1 to 3.
     - **Backup your DB before upgrading**
