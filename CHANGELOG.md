@@ -45,7 +45,11 @@
   * release: add missing tests to tarball no matter configure options.
   * test: fix invalid flags on CKM_SHA512_RSA_PKCS causing test failures.
   * Switch OASIS pkcs11 headers to FSF Unlimited License Headers.
-    
+
+### 1.0.2 - 2020-06-09
+
+  * Fix build issue about unused variable config. Notably fixes gcc10 builds.
+
 ### 1.0.1 - 2020-1-6
 
   * stop linking against libdl
