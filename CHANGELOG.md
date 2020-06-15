@@ -1,6 +1,6 @@
 # Changelog
 
-### 1.0.3-RC0 - 2020-06-09
+### 1.0.3 - 2020-06-15
 
   * test/pkcs-get-mechanism: allow a maximum key size of 3072 bits.
 
