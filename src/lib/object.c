@@ -21,7 +21,7 @@
 typedef struct tobject_match_list tobject_match_list;
 struct tobject_match_list {
     CK_OBJECT_HANDLE tobj_handle;
-    CK_OBJECT_CLASS class;
+    CK_BBOOL cka_private;
     tobject_match_list *next;
 };
 
@@ -278,13 +278,7 @@ static CK_RV do_match_set(tobject_match_list *match_cur, tobject *tobj) {
         return CKR_GENERAL_ERROR;
     }
 
-    CK_OBJECT_CLASS objclass;
-    CK_RV rv = attr_CK_ULONG(a, &objclass);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    match_cur->class = objclass;
+    match_cur->cka_private = attr_list_get_CKA_PRIVATE(tobj->attrs, CK_FALSE);
 
     return CKR_OK;
 }
@@ -377,11 +371,6 @@ out:
     return rv;
 }
 
-static bool is_not_public(tobject_match_list *match) {
-
-    return match->class == CKO_SECRET_KEY || match->class == CKO_PRIVATE_KEY;
-}
-
 CK_RV object_find(session_ctx *ctx, CK_OBJECT_HANDLE *object, CK_ULONG max_object_count, CK_ULONG_PTR object_count) {
 
     check_pointer(object);
@@ -404,8 +393,8 @@ CK_RV object_find(session_ctx *ctx, CK_OBJECT_HANDLE *object, CK_ULONG max_objec
         // Get the current object, and grab it's id for the object handle
         CK_OBJECT_HANDLE handle = opdata->cur->tobj_handle;
 
-        // filter out CKO_PRIVATE and CKO_SECRET if not logged in
-        if (!token_is_user_logged_in(tok) && is_not_public(opdata->cur)) {
+        // filter out CKA_PRIVATE set to CK_TRUE if not logged in
+        if (opdata->cur->cka_private && !token_is_user_logged_in(tok)) {
             opdata->cur = opdata->cur->next;
             continue;
         }
