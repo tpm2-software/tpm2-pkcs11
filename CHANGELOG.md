@@ -23,6 +23,13 @@
   * Support for selectable backend using TPM2_PKCS11_BACKEND=esysdb being current version.
   * Support for backend fapi that uses the tss2-fapi keystore instead of an sqlite db.
 
+### 1.2.0 - 2020-03-30
+  * Fix PSS signatures. Non-FIPS mode TPMs produce PSS signatures with a
+    max salt len that poses interoperability issues with verifying clients,
+    notably TLS in OpenSSL.
+  * Handle Esys\_LoadExternal() API change where the hierarchy handle switches to an
+    ESYS\_TR rather than a TPM2\_RH\_.
+
 ### 1.1.1 - 2020-06-19
 
   * test/pkcs-get-mechanism: allow a maximum key size of 3072 bits.
