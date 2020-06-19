@@ -46,6 +46,10 @@
   * test: fix invalid flags on CKM_SHA512_RSA_PKCS causing test failures.
   * Switch OASIS pkcs11 headers to FSF Unlimited License Headers.
 
+### 1.0.3 - 2020-06-15
+
+  * test/pkcs-get-mechanism: allow a maximum key size of 3072 bits.
+
 ### 1.0.2 - 2020-06-09
 
   * Fix build issue about unused variable config. Notably fixes gcc10 builds.
