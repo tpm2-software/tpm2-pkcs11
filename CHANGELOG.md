@@ -23,6 +23,10 @@
   * Support for selectable backend using TPM2_PKCS11_BACKEND=esysdb being current version.
   * Support for backend fapi that uses the tss2-fapi keystore instead of an sqlite db.
 
+### 1.1.1 - 2020-06-19
+
+  * test/pkcs-get-mechanism: allow a maximum key size of 3072 bits.
+
 ### 1.1.0 - 2020-03-09
   * DB Schema Change from 1 to 3.
     - **Backup your DB before upgrading**
