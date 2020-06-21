@@ -621,10 +621,12 @@ class ListObjectsCommand(Command):
             y = yaml.safe_load(o['attrs'])
             d = {
                 'id': o['id'],
-                'CKA_ID' : y[CKA_ID],
                 'CKA_LABEL' : binascii.unhexlify(y[CKA_LABEL]).decode(),
                 'CKA_CLASS' : pkcs11_cko_to_str(y[CKA_CLASS]),
             }
+
+            if CKA_ID in y:
+                d['CKA_ID'] = y[CKA_ID],
 
             if CKA_KEY_TYPE in y:
                 d['CKA_KEY_TYPE'] = pkcs11_ckk_to_str(y[CKA_KEY_TYPE])
