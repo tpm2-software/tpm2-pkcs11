@@ -14,6 +14,11 @@
 #define CKA_TPM2_OBJAUTH_ENC (CKA_VENDOR_DEFINED|CKA_VENDOR_TPM2_DEFINED|0x1UL)
 #define CKA_TPM2_PUB_BLOB    (CKA_VENDOR_DEFINED|CKA_VENDOR_TPM2_DEFINED|0x2UL)
 #define CKA_TPM2_PRIV_BLOB   (CKA_VENDOR_DEFINED|CKA_VENDOR_TPM2_DEFINED|0x3UL)
+#define CKA_TPM2_ENC_BLOB    (CKA_VENDOR_DEFINED|CKA_VENDOR_TPM2_DEFINED|0x4UL)
+
+/* Invalid values for error detection */
+#define CK_OBJECT_CLASS_BAD (~(CK_OBJECT_CLASS)0)
+#define CKA_KEY_TYPE_BAD    (~(CK_KEY_TYPE)0)
 
 /**
  * The heart of any PKCS11 object is it's attribute list. This list
@@ -113,6 +118,16 @@ CK_ATTRIBUTE_PTR attr_list_get_ptr(attr_list *l);
  *  The attribute list to free.
  */
 void attr_list_free(attr_list *attrs);
+
+/**
+ * Scrubs the memory pointed to by the pValue pointer and frees it.
+ * The attribute pointer is expected to be contained within in attr_list.
+ * The attribute is NOT REMOVED from the list and type remains unchanged.
+ * Sets ulValueLen to 0.
+ * @param attr
+ *  The attr to free.
+ */
+void attr_pfree_cleanse(CK_ATTRIBUTE_PTR attr);
 
 /**
  * Given a raw attribute list, perhaps from a client caller,
@@ -236,6 +251,10 @@ CK_RV attr_CK_OBJECT_CLASS(CK_ATTRIBUTE_PTR attr, CK_OBJECT_CLASS *x);
 
 CK_RV attr_CK_KEY_TYPE(CK_ATTRIBUTE_PTR attr, CK_KEY_TYPE *x);
 
+CK_BBOOL attr_list_get_CKA_PRIVATE(attr_list *attrs, CK_BBOOL defvalue);
+
+CK_OBJECT_CLASS attr_list_get_CKA_CLASS(attr_list *attrs, CK_OBJECT_CLASS defvalue);
+
 /**
  * Searches an attr_list for an attribute specified by type.
  * @param haystack
@@ -262,6 +281,8 @@ CK_ATTRIBUTE_PTR attr_get_attribute_by_type_raw(CK_ATTRIBUTE_PTR haystack, CK_UL
         CK_ATTRIBUTE_TYPE needle);
 
 CK_RV attr_common_add_RSA_publickey(attr_list **public_attrs);
+
+CK_RV attr_common_add_data(attr_list **storage_attrs);
 
 CK_RV rsa_gen_mechs(attr_list *new_pub_attrs, attr_list *new_priv_attrs);
 

@@ -982,9 +982,113 @@ static void test_create_obj_rsa_public_key(void **state) {
     assert_memory_equal(plaintext, p2, sizeof(plaintext));
 }
 
+/*
+ * Place this test here so we don't have to take the test time hit of another
+ * test setup.
+ */
+static void test_create_data_object_private (void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    user_login(session);
+
+    CK_BBOOL _false = CK_FALSE;
+    CK_BBOOL _true = CK_TRUE;
+
+    char label[] = "data object";
+    char application[] = "my application";
+
+    CK_OBJECT_CLASS object_class = CKO_DATA;
+
+    CK_BYTE id[] = { '1', '2', '3' };
+    CK_BYTE value[] = "my data object";
+
+    CK_ATTRIBUTE data_template[] = {
+      { CKA_CLASS,       &object_class, sizeof(object_class)    },
+      { CKA_TOKEN,       &_true,        sizeof(_true)           },
+      { CKA_PRIVATE,     &_true,        sizeof(_true)           },
+      { CKA_LABEL,       label,         sizeof(label) - 1       },
+      { CKA_MODIFIABLE,  &_false,       sizeof(_false)          },
+      { CKA_APPLICATION, &application,  sizeof(application) - 1 },
+      { CKA_OBJECT_ID,   &id,           sizeof(id)              },
+      { CKA_VALUE,       value,         sizeof(value)           }
+    };
+
+    CK_OBJECT_HANDLE obj = 0;
+
+    CK_RV rv = C_CreateObject(session, data_template, ARRAY_LEN(data_template), &obj);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE buf[64];
+
+    CK_ATTRIBUTE data_template2[] = {
+      { CKA_VALUE, buf, sizeof(buf) },
+    };
+
+    rv = C_GetAttributeValue (session, obj,
+            data_template2, ARRAY_LEN(data_template2));
+    assert_int_equal(rv, CKR_OK);
+
+    assert_int_equal(sizeof(value), data_template2[0].ulValueLen);
+    assert_memory_equal(value, buf, sizeof(value));
+
+    logout(session);
+
+    CK_BYTE buf2[64] = { 0 };
+    CK_ATTRIBUTE data_template3[] = {
+      { CKA_VALUE, buf2, sizeof(buf2) },
+    };
+
+    rv = C_GetAttributeValue (session, obj,
+            data_template3, ARRAY_LEN(data_template3));
+    assert_int_equal(rv, CKR_OK);
+
+    assert_int_equal(data_template3[0].ulValueLen, 0);
+}
+
+static void test_create_data_object_public (void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    user_login(session);
+
+    CK_BBOOL _false = CK_FALSE;
+    CK_BBOOL _true = CK_TRUE;
+
+    char label[] = "public data object";
+    char application[] = "my application";
+
+    CK_OBJECT_CLASS object_class = CKO_DATA;
+
+    CK_BYTE id[] = { '1', '2', '3', '4' };
+    CK_BYTE value[] = "my public data object";
+
+    CK_ATTRIBUTE data_template[] = {
+      { CKA_CLASS,       &object_class, sizeof(object_class)    },
+      { CKA_TOKEN,       &_true,        sizeof(_true)           },
+      { CKA_PRIVATE,     &_false,        sizeof(_false)          },
+      { CKA_LABEL,       label,         sizeof(label) - 1       },
+      { CKA_MODIFIABLE,  &_false,       sizeof(_false)          },
+      { CKA_APPLICATION, &application,  sizeof(application) - 1 },
+      { CKA_OBJECT_ID,   &id,           sizeof(id)              },
+      { CKA_VALUE,       value,         sizeof(value)           }
+    };
+
+    CK_OBJECT_HANDLE obj = 0;
+
+    CK_RV rv = C_CreateObject(session, data_template, ARRAY_LEN(data_template), &obj);
+    assert_int_equal(rv, CKR_ATTRIBUTE_VALUE_INVALID);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_create_data_object_public,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_create_data_object_private,
+            test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_create_obj_rsa_public_key,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_rsa_keygen_missing_attributes,

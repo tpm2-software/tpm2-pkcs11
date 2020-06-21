@@ -19,7 +19,7 @@
 typedef struct tobject_match_list tobject_match_list;
 struct tobject_match_list {
     CK_OBJECT_HANDLE tobj_handle;
-    CK_OBJECT_CLASS class;
+    CK_BBOOL cka_private;
     tobject_match_list *next;
 };
 
@@ -36,10 +36,13 @@ void tobject_free(tobject *tobj) {
     }
 
     twist_free(tobj->objauth);
+    tobj->objauth = NULL;
+
     twist_free(tobj->priv);
     twist_free(tobj->pub);
 
     twist_free(tobj->unsealed_auth);
+    tobj->unsealed_auth = NULL;
 
     attr_list *a = tobject_get_attrs(tobj);
     attr_list_free(a);
@@ -151,7 +154,10 @@ CK_RV tobject_get_max_buf_size(tobject *tobj, size_t *maxsize) {
         /* an R or S with a high bit set needs an extra nul byte so it's not negative (twos comp)*/
         static const unsigned EXTRA = 1U;
 
-        unsigned tmp = ((keysize + INT_HDR + EXTRA) * 2); /* x2 1 for R and 1 for S */
+        unsigned tmp = 0;
+        safe_add(tmp, keysize, INT_HDR);
+        safe_adde(tmp, EXTRA);
+        safe_mule(tmp, 2);
 
         tmp += SEQ_HDR;
 
@@ -262,13 +268,7 @@ static CK_RV do_match_set(tobject_match_list *match_cur, tobject *tobj) {
         return CKR_GENERAL_ERROR;
     }
 
-    CK_OBJECT_CLASS objclass;
-    CK_RV rv = attr_CK_ULONG(a, &objclass);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    match_cur->class = objclass;
+    match_cur->cka_private = attr_list_get_CKA_PRIVATE(tobj->attrs, CK_FALSE);
 
     return CKR_OK;
 }
@@ -360,11 +360,6 @@ out:
     return rv;
 }
 
-static bool is_not_public(tobject_match_list *match) {
-
-    return match->class == CKO_SECRET_KEY || match->class == CKO_PRIVATE_KEY;
-}
-
 CK_RV object_find(session_ctx *ctx, CK_OBJECT_HANDLE *object, CK_ULONG max_object_count, CK_ULONG_PTR object_count) {
 
     check_pointer(object);
@@ -387,8 +382,8 @@ CK_RV object_find(session_ctx *ctx, CK_OBJECT_HANDLE *object, CK_ULONG max_objec
         // Get the current object, and grab it's id for the object handle
         CK_OBJECT_HANDLE handle = opdata->cur->tobj_handle;
 
-        // filter out CKO_PRIVATE and CKO_SECRET if not logged in
-        if (!token_is_user_logged_in(tok) && is_not_public(opdata->cur)) {
+        // filter out CKA_PRIVATE set to CK_TRUE if not logged in
+        if (opdata->cur->cka_private && !token_is_user_logged_in(tok)) {
             opdata->cur = opdata->cur->next;
             continue;
         }
@@ -421,6 +416,129 @@ CK_RV object_find_final(session_ctx *ctx) {
     return CKR_OK;
 }
 
+/**
+ * given an attribute list with CKA_TPM2_ENC_BLOB, will unwrap it with the token wrapping
+ * key and store it in CKA_VALUE.
+ * @param tok
+ *  The token
+ * @param attrs
+ *  The attribute list to modify.
+ * @return
+ *  CKR_OK on success.
+ */
+static CK_RV unwrap_protected_cka_value(token *tok, attr_list *attrs) {
+    /* Caller wants CKA_VALUE in their template and it's not found, we need to fetch it, do we have
+     * the wrapped value in the DB? */
+    assert(tok->wrappingkey);
+
+    CK_ATTRIBUTE_PTR ciphertext_attr = attr_get_attribute_by_type(attrs, CKA_TPM2_ENC_BLOB);
+    if (ciphertext_attr) {
+
+        twist plaintext = NULL;
+        size_t len = 0;
+        if (ciphertext_attr->ulValueLen) {
+            twist ciphertext = twistbin_new(ciphertext_attr->pValue, ciphertext_attr->ulValueLen);
+            if (!ciphertext) {
+                LOGE("oom");
+                return CKR_HOST_MEMORY;
+            }
+
+            CK_RV rv = utils_ctx_unwrap_objauth(tok->wrappingkey, ciphertext, &plaintext);
+            twist_free(ciphertext);
+            if (rv != CKR_OK) {
+                LOGE("Could not unwrap CKA_VALUE");
+                return rv;
+            }
+
+            len = twist_len(plaintext);
+        }
+
+        CK_ATTRIBUTE temp = {
+            .type = CKA_VALUE,
+            .pValue = (void *)plaintext,
+            .ulValueLen = len
+        };
+
+        /*
+         * Add the unwrapped value back to CKA_VALUE
+         *  - Append if not in the list
+         *  - Update if it's in the list
+         */
+        CK_ATTRIBUTE_PTR found = attr_get_attribute_by_type(attrs, CKA_TPM2_ENC_BLOB);
+        CK_RV rv = found ?
+                attr_list_update_entry(attrs, &temp) : attr_list_append_entry(&attrs, &temp);
+        twist_free(plaintext);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+
+    } else {
+        // TODO: Fetch from TPM to support more object types?
+        // TODO: set CKA_VALUE to 0?
+        LOGW("Needed CKA_VALUE but didn't find encrypted blob");
+    }
+
+    return CKR_OK;
+}
+
+/**
+ * given an attribute list with CKA_VALUE, will wrap it with the token wrapping
+ * key and store it in CKA_TPM2_ENC_BLOB. A zero length CKA_VALUE attribute will
+ * clear the CKA_TPM2_ENC_BLOB attribute.
+ * @param tok
+ *  The token
+ * @param attrs
+ *  The attribute list to modify
+ * @return
+ *  CKR_OK on success.
+ */
+static CK_RV wrap_protected_cka_value(token *tok, attr_list *attrs) {
+    assert(tok->wrappingkey);
+
+    /* this may or maynot exist */
+    CK_ATTRIBUTE_PTR enc_blob_attr = attr_get_attribute_by_type(attrs, CKA_TPM2_ENC_BLOB);
+
+    CK_ATTRIBUTE_PTR plaintext_attr = attr_get_attribute_by_type(attrs, CKA_VALUE);
+    if (!plaintext_attr) {
+        LOGE("Expected vendor attribute CKA_VALUE");
+        return CKR_GENERAL_ERROR;
+    }
+
+    twist ciphertext = NULL;
+    size_t len = 0;
+    if (plaintext_attr->ulValueLen) {
+        twist plaintext = twistbin_new(plaintext_attr->pValue, plaintext_attr->ulValueLen);
+        if (!plaintext) {
+            LOGE("oom");
+            return CKR_HOST_MEMORY;
+        }
+
+        CK_RV rv = utils_ctx_wrap_objauth(tok->wrappingkey, plaintext, &ciphertext);
+        twist_free(plaintext);
+        if (rv != CKR_OK) {
+            LOGE("Could not wrap CKA_VALUE");
+            return rv;
+        }
+        len = twist_len(ciphertext);
+    }
+
+    CK_ATTRIBUTE temp = {
+        .type = CKA_TPM2_ENC_BLOB,
+        .pValue = (void *)ciphertext,
+        .ulValueLen = len
+    };
+
+    /* add the wrapped value back to CKA_TPM2_ENC_BLOB */
+    CK_RV rv = enc_blob_attr ? attr_list_update_entry(attrs, &temp) :
+            attr_list_append_entry(&attrs, &temp);
+    twist_free(ciphertext);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    return CKR_OK;
+}
+
 CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
 
     token *tok = session_ctx_get_token(ctx);
@@ -438,6 +556,16 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
     }
 
     /*
+     * If the object is SENSITIVE AND EXTRACTABLE we can reveal CKA_VALUE. We set the
+     * defaults as extractable and not sensitive because only non-tpm objects have
+     * the CKA_VALUE field (certs and public keys). However, we are adding secret
+     * keys, that are created through C_CreateObject(). The user *must* be logged
+     * in to do this or tok->wrappingkey is NULL.
+     */
+    CK_BBOOL cka_private = attr_list_get_CKA_PRIVATE(tobj->attrs, CK_FALSE);
+    bool is_user_logged_in = token_is_user_logged_in (tok);
+
+    /*
      * For each item requested in the template, find if the request has a match
      * and copy the size and possibly data (if allocated).
      */
@@ -448,6 +576,12 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
         CK_ATTRIBUTE_PTR t = &templ[i];
 
         CK_ATTRIBUTE_PTR found = attr_get_attribute_by_type(tobj->attrs, t->type);
+        if (cka_private && t->type == CKA_VALUE && is_user_logged_in &&
+                (!found || !found->ulValueLen)) {
+            rv = unwrap_protected_cka_value(tok, tobj->attrs);
+            /* continue on processing */
+        }
+
         if (found) {
             if (!t->pValue) {
                 /* only populate size if the buffer is null */
@@ -470,7 +604,7 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
            /* If it's not found it defaults to empty. */
            t->pValue = NULL;
            t->ulValueLen = CK_UNAVAILABLE_INFORMATION;
-           LOGV("Invalid Attribute for tid %lu: type(%lu) ulValueLen(%lu), pData(%s)",
+           LOGV("Invalid Attribute for tid %u: type(%lu) ulValueLen(%lu), pData(%s)",
                    tobj->id, t->type, t->ulValueLen, t->pValue ? "non-null" : "null");
            rv = CKR_ATTRIBUTE_TYPE_INVALID;
        }
@@ -564,7 +698,7 @@ attr_list *tobject_get_attrs(tobject *tobj) {
 CK_RV tobject_user_increment(tobject *tobj) {
 
     if (tobj->active == UINT_MAX) {
-       LOGE("tobject active at max count, cannot issue. id: %lu", tobj->id);
+       LOGE("tobject active at max count, cannot issue. id: %u", tobj->id);
        return CKR_GENERAL_ERROR;
     }
 
@@ -576,7 +710,7 @@ CK_RV tobject_user_increment(tobject *tobj) {
 CK_RV tobject_user_decrement(tobject *tobj) {
 
     if (!tobj->active) {
-        LOGE("Returning a non-active tobject id: %lu", tobj->id);
+        LOGE("Returning a non-active tobject id: %u", tobj->id);
         return CKR_GENERAL_ERROR;
     }
 
@@ -607,7 +741,7 @@ CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object) {
         return CKR_FUNCTION_FAILED;
     }
 
-    rv = db_delete_object(tobj);
+    rv = db_delete_object(tok, tobj);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -620,11 +754,9 @@ CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object) {
     return rv;
 }
 
-static CK_RV handle_rsa_public(token *tok, CK_ATTRIBUTE_PTR templ, CK_ULONG count, tobject **tobj) {
+static CK_RV handle_rsa_public(CK_ATTRIBUTE_PTR templ, CK_ULONG count, attr_list **new_attrs) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
-
-    tobject *obj = NULL;
 
     /* RSA Public keys should have a modulus and exponent, verify */
     CK_ATTRIBUTE_PTR a_modulus = attr_get_attribute_by_type_raw(templ, count, CKA_MODULUS);
@@ -716,37 +848,53 @@ static CK_RV handle_rsa_public(token *tok, CK_ATTRIBUTE_PTR templ, CK_ULONG coun
         goto out;
     }
 
+    /* transfer ownership to caller */
+    *new_attrs = tmp_attrs;
+    tmp_attrs = NULL;
+
+out:
+    attr_list_free(tmp_attrs);
+
+    return rv;
+}
+
+static CK_RV handle_data_object(token *tok, CK_ATTRIBUTE_PTR templ, CK_ULONG count, attr_list **new_attrs) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
     /*
-     * Now that everything is verified, create a new tobject
-     * and populate the fields that matter.
+     * Create a new typed attr list
      */
-    obj = tobject_new();
-    if (!obj) {
-        LOGE("oom");
-        rv = CKR_HOST_MEMORY;
+    attr_list *tmp_attrs = NULL;
+    bool res = attr_typify(templ, count, &tmp_attrs);
+    if (!res) {
+        return CKR_GENERAL_ERROR;
+    }
+    assert(tmp_attrs);
+
+    CK_BBOOL cka_private = attr_list_get_CKA_PRIVATE(tmp_attrs, CK_TRUE);
+    if (!cka_private) {
+        LOGE("CKA_PRIVATE cannot be CK_FALSE");
+        rv = CKR_ATTRIBUTE_VALUE_INVALID;
         goto out;
     }
 
-    obj->attrs = tmp_attrs;
-    tmp_attrs = NULL;
-
-    /* add the object to the db */
-    rv = db_add_new_object(tok, obj);
+    rv = wrap_protected_cka_value(tok, tmp_attrs);
     if (rv != CKR_OK) {
         goto out;
     }
 
-    /* assign temp tobject to callee provided pointer */
-    *tobj = obj;
+    /* Set any defaults and do error checking */
+    rv = attr_common_add_data(&tmp_attrs);
+    if (rv != CKR_OK) {
+        goto out;
+    }
 
-    /* callee now takes owenership */
-    obj = NULL;
-
-    rv = CKR_OK;
+    /* transfer ownership to caller */
+    *new_attrs = tmp_attrs;
+    tmp_attrs = NULL;
 
 out:
     attr_list_free(tmp_attrs);
-    tobject_free(obj);
 
     return rv;
 }
@@ -774,6 +922,9 @@ CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OB
 
     /*
      * If CKA_LOCAL is specified, it can never be CK_TRUE
+     * TODO: At somepoint these attr_get_attribute_by_type_raw() calls
+     * could be done by general extractors and default error values ala
+     * attr_list_get_CKA_PRIVATE() type calls for raw attr lists.
      */
     CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type_raw(templ, count, CKA_LOCAL);
     if (a) {
@@ -790,7 +941,10 @@ CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OB
     }
 
     /*
-     * We only support RSA Public objects, so verify it.
+     * We only support:
+     * - CKK_RSA - CKO_PUBLIC_KEY
+     * - CKO_DATA
+     *  so verify it.
      */
     a = attr_get_attribute_by_type_raw(templ, count, CKA_CLASS);
     if (!a) {
@@ -805,43 +959,132 @@ CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OB
         return CKR_TEMPLATE_INCOMPLETE;
     }
 
+    /* Not all objects have a key type, only KEY Objects do */
+    CK_KEY_TYPE key_type = CKA_KEY_TYPE_BAD;
     a = attr_get_attribute_by_type_raw(templ, count, CKA_KEY_TYPE);
-    if (!a) {
-        LOGE("Expected attribute CKA_KEY_TYPE");
-        return CKR_TEMPLATE_INCOMPLETE;
-    }
-
-    CK_KEY_TYPE key_type;
-    rv = attr_CK_KEY_TYPE(a, &key_type);
-    if (rv != CKR_OK) {
-        LOGE("Error converting attribute CKA_KEY_TYPE");
-        return rv;
-    }
-
-    if (key_type != CKK_RSA ||
-            clazz != CKO_PUBLIC_KEY) {
-        LOGE("Can only create RSA Public key objects, "
-                "CKA_CLASS(%lu), CKA_KEY_TYPE(%lu)",
-                clazz, key_type);
-        return CKR_ATTRIBUTE_VALUE_INVALID;
+    if (a) {
+        rv = attr_CK_KEY_TYPE(a, &key_type);
+        if (rv != CKR_OK) {
+            LOGE("Error converting attribute CKA_KEY_TYPE");
+            return rv;
+        }
     }
 
     token *tok = session_ctx_get_token(ctx);
     assert(tok);
+    attr_list *new_attrs = NULL;
 
-    tobject *new_tobj = NULL;
-    rv = handle_rsa_public(tok, templ, count, &new_tobj);
+    if (key_type == CKK_RSA ||
+            clazz == CKO_PUBLIC_KEY) {
+        rv = handle_rsa_public(templ, count, &new_attrs);
+    } else if (clazz == CKO_DATA) {
+        rv = handle_data_object(tok, templ, count, &new_attrs);
+    } else {
+        LOGE("Can only create RSA Public key objects or"
+                "data objects, CKA_CLASS(%lu), CKA_KEY_TYPE(%lu)",
+                clazz, key_type);
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
     if (rv != CKR_OK) {
-        LOGE("Error creating rsa public key: %lu", rv);
+        LOGE("Error creating object, "
+                "CKA_CLASS(%lu), CKA_KEY_TYPE(%lu) rv: %lu",
+                clazz, key_type, rv);
         return rv;
     }
 
+    /* ok create the new tobject */
+    tobject *new_tobj = tobject_new();
+    if (!new_tobj) {
+        LOGE("oom");
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    new_tobj->attrs = new_attrs;
+    new_attrs = NULL;
+
+    bool is_backed_up = false;
+    CK_ATTRIBUTE backup = { 0 };
+
+    /* if it's a private object we can't expose the CKA_VALUE attribute */
+    CK_BBOOL cka_private = attr_list_get_CKA_PRIVATE(new_tobj->attrs, CK_FALSE);
+    a = attr_get_attribute_by_type(new_tobj->attrs, CKA_VALUE);
+    if (cka_private && a && a->ulValueLen) {
+        backup.ulValueLen = a->ulValueLen;
+        backup.pValue = a->pValue;
+        a->ulValueLen = 0;
+        a->pValue = NULL;
+        is_backed_up = true;
+    }
+
+    /* add the object to the db */
+    rv = db_add_new_object(tok, new_tobj);
+    if (rv != CKR_OK) {
+        goto out;
+    }
+
+    if (is_backed_up) {
+        a->ulValueLen = backup.ulValueLen;
+        a->pValue = backup.pValue;
+    }
+
+    /* add the object to the token */
     rv = token_add_tobject(tok, new_tobj);
     if (rv != CKR_OK) {
         return rv;
     }
 
+    /* assign temp tobject to callee provided pointer */
     *object = new_tobj->obj_handle;
+    new_tobj = NULL;
+
+    rv = CKR_OK;
+
+out:
+    attr_list_free(new_attrs);
+    tobject_free(new_tobj);
+
+    return rv;
+}
+
+CK_RV object_init_from_attrs(tobject *tobj) {
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_OBJAUTH_ENC);
+    if (a && a->pValue && a->ulValueLen) {
+        tobj->objauth = twistbin_new(a->pValue, a->ulValueLen);
+        if (!tobj->objauth) {
+            LOGE("oom");
+            goto error;
+        }
+    }
+
+    a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_PUB_BLOB);
+    if (a && a->pValue && a->ulValueLen) {
+
+        tobj->pub = twistbin_new(a->pValue, a->ulValueLen);
+        if (!tobj->pub) {
+            LOGE("oom");
+            goto error;
+        }
+    }
+
+    a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_PRIV_BLOB);
+    if (a && a->pValue && a->ulValueLen) {
+
+        if (!tobj->pub) {
+            LOGE("objects with CKA_TPM2_PUB_BLOB should have CKA_TPM2_PRIV_BLOB");
+            goto error;
+        }
+
+        tobj->priv = twistbin_new(a->pValue, a->ulValueLen);
+        if (!tobj->priv) {
+            LOGE("oom");
+            goto error;
+        }
+    }
 
     return CKR_OK;
+
+error:
+    return CKR_GENERAL_ERROR;
 }

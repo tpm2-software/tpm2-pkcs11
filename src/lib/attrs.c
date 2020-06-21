@@ -3,6 +3,8 @@
 #include <assert.h>
 #include <stdlib.h>
 
+#include <openssl/crypto.h>
+
 #include "attrs.h"
 #include "log.h"
 #include "pkcs11.h"
@@ -121,7 +123,9 @@ static attr_handler2 attr_handlers[] = {
     ADD_ATTR_HANDLER(CKA_TOKEN, TYPE_BYTE_BOOL),
     ADD_ATTR_HANDLER(CKA_PRIVATE, TYPE_BYTE_BOOL),
     ADD_ATTR_HANDLER(CKA_LABEL, TYPE_BYTE_HEX_STR),
+    ADD_ATTR_HANDLER(CKA_APPLICATION, TYPE_BYTE_HEX_STR),
     ADD_ATTR_HANDLER(CKA_VALUE, TYPE_BYTE_HEX_STR),
+    ADD_ATTR_HANDLER(CKA_OBJECT_ID, TYPE_BYTE_HEX_STR),
     ADD_ATTR_HANDLER(CKA_CERTIFICATE_TYPE, TYPE_BYTE_INT),
     ADD_ATTR_HANDLER(CKA_ISSUER, TYPE_BYTE_HEX_STR),
     ADD_ATTR_HANDLER(CKA_SERIAL_NUMBER, TYPE_BYTE_HEX_STR),
@@ -221,6 +225,16 @@ CK_ATTRIBUTE_PTR attr_list_get_ptr(attr_list *l) {
     return l->attrs;
 }
 
+void attr_pfree_cleanse(CK_ATTRIBUTE_PTR attr) {
+    if (attr && attr->pValue) {
+        /* Don't use clear_free because OSSL is not used for alloc */
+        OPENSSL_cleanse(attr->pValue, attr->ulValueLen);
+        free(attr->pValue);
+        attr->pValue = NULL;
+        attr->ulValueLen = 0;
+    }
+}
+
 void attr_list_free(attr_list *attrs) {
 
     if (!attrs) {
@@ -230,7 +244,7 @@ void attr_list_free(attr_list *attrs) {
     CK_ULONG i;
     for (i=0; i < attrs->count; i++) {
         const CK_ATTRIBUTE_PTR a = &attrs->attrs[i];
-        free(a->pValue);
+        attr_pfree_cleanse(a);
     }
 
     free(attrs->attrs);
@@ -380,16 +394,10 @@ static CK_RV attr_common_add_storage(attr_list **storage_attrs) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(*storage_attrs, CKA_CLASS);
-    if (!a) {
+    CK_OBJECT_CLASS cka_class = attr_list_get_CKA_CLASS(*storage_attrs, CK_OBJECT_CLASS_BAD);
+    if (cka_class == CK_OBJECT_CLASS_BAD) {
         LOGE("Expected object to have CKA_CLASS");
         return CKR_GENERAL_ERROR;
-    }
-
-    CK_ULONG v;
-    rv = attr_CK_ULONG(a, &v);
-    if (rv != CKR_OK) {
-        return rv;
     }
 
     attr_list *new_attrs = attr_list_new();
@@ -409,10 +417,12 @@ static CK_RV attr_common_add_storage(attr_list **storage_attrs) {
     goto_error_false(r);
 
     /* defaults */
-    CK_BBOOL defpriv = ((v == CKO_PRIVATE_KEY) || (v == CKO_SECRET_KEY)) ?
-            CK_TRUE : CK_FALSE;
+    CK_BBOOL defpriv = ((cka_class == CKO_PRIVATE_KEY) ||
+            (cka_class == CKO_SECRET_KEY)              ||
+            (cka_class == CKO_DATA)) ?
+                CK_TRUE : CK_FALSE;
 
-    a = attr_get_attribute_by_type(*storage_attrs, CKA_PRIVATE);
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(*storage_attrs, CKA_PRIVATE);
     if (!a) {
         attr_list_add_bool(new_attrs, CKA_PRIVATE, defpriv);
         goto_error_false(r);
@@ -435,6 +445,51 @@ error:
     return rv;
 }
 
+CK_RV attr_common_add_data(attr_list **data_attrs) {
+
+    CK_RV rv = CKR_HOST_MEMORY;
+
+    /* expected */
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(*data_attrs, CKA_VALUE);
+    if (!a) {
+        LOGE("Expected object to have CKA_VALUE");
+        return CKR_TEMPLATE_INCOMPLETE;
+    } else  if (!a->ulValueLen || !a->pValue) {
+        LOGE("CKA_VALUE bad, got len: %lu, pValue: %s", a->ulValueLen,
+                a->pValue ? "(set)" : "(null)");
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    attr_list *new_attrs = attr_list_new();
+    if (!new_attrs) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    a = attr_get_attribute_by_type(*data_attrs, CKA_OBJECT_ID);
+    if (!a) {
+        bool r = attr_list_add_buf(new_attrs, CKA_APPLICATION, NULL, 0);
+        goto_error_false(r);
+    }
+
+    a = attr_get_attribute_by_type(*data_attrs, CKA_APPLICATION);
+    if (!a) {
+        bool r = attr_list_add_buf(new_attrs, CKA_APPLICATION, NULL, 0);
+        goto_error_false(r);
+    }
+
+    *data_attrs = attr_list_append_attrs(*data_attrs,
+            &new_attrs);
+    goto_error_false(*data_attrs);
+
+    return attr_common_add_storage(data_attrs);
+
+error:
+    attr_list_free(new_attrs);
+
+    return rv;
+}
+
 static CK_RV attr_common_add_key(attr_list **key_attrs) {
 
     CK_RV rv = CKR_HOST_MEMORY;
@@ -449,12 +504,6 @@ static CK_RV attr_common_add_key(attr_list **key_attrs) {
     a = attr_get_attribute_by_type(*key_attrs, CKA_LOCAL);
     if (!a) {
         LOGE("Expected object to have CKA_LOCAL");
-        return CKR_GENERAL_ERROR;
-    }
-
-    a = attr_get_attribute_by_type(*key_attrs, CKA_KEY_GEN_MECHANISM);
-    if (!a) {
-        LOGE("Expected object to have CKA_KEY_GEN_MECHANISM");
         return CKR_GENERAL_ERROR;
     }
 
@@ -1120,3 +1169,17 @@ UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_ULONG);
 UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_BBOOL);
 UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_OBJECT_CLASS);
 UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_KEY_TYPE);
+
+#define UTILS_GENERIC_EXTRACTOR(type, T) \
+    T attr_list_get_##type(attr_list *attrs, T defvalue) { \
+	    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(attrs, type); \
+	    if (!a) { \
+	        return defvalue; \
+	    } \
+	    T x = defvalue; \
+		CK_RV rv = attr_##T(a, &x); \
+		return rv != CKR_OK ? defvalue : x; \
+    }
+
+UTILS_GENERIC_EXTRACTOR(CKA_PRIVATE, CK_BBOOL);
+UTILS_GENERIC_EXTRACTOR(CKA_CLASS,   CK_OBJECT_CLASS);

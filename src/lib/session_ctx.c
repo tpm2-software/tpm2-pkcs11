@@ -365,13 +365,25 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
      */
     tpm_ctx *tpm = tok->tctx;
 
-    // Evict the keys
+    /*
+     * For each object:
+     *   - Evict the TPM Handles
+     *   - Cleanse CKA_VALUE fields for private values.
+     */
     if (tok->tobjects.head) {
 
         list *cur = &tok->tobjects.head->l;
         while(cur) {
             tobject *tobj = list_entry(cur, tobject, l);
             cur = cur->next;
+
+            /* if it's CKA_PRIVATE == CK_TRUE and it has a CKA_VALUE field, clear it */
+            CK_BBOOL cka_private = attr_list_get_CKA_PRIVATE(tobj->attrs, CK_FALSE);
+            CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_VALUE);
+            if (cka_private && a && a->pValue && a->ulValueLen) {
+                attr_pfree_cleanse(a);
+            }
+
             if (tobj->tpm_handle) {
                 bool result = tpm_flushcontext(tpm, tobj->tpm_handle);
                 assert(result);
