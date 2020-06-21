@@ -411,7 +411,8 @@ class ObjMod(Command):
 
         with Db(path) as db:
             obj = db.getobject(tid)
-
+            if obj is None:
+                sys.exit('Not found, object with id: {}'.format(tid))
         s = obj['attrs']
         obj_attrs = yaml.safe_load(s)
 
