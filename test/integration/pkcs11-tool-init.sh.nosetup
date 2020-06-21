@@ -89,4 +89,20 @@ pkcs11_tool --list-objects --slot-index=0
 pkcs11_tool --delete-object --slot-index=0 --label="myrsakey" --pin=mynewuserpin --login --type=pubkey
 pkcs11_tool --list-objects --slot-index=0
 
+#
+# Test creating data objects
+#
+echo "hello world" > objdata
+pkcs11_tool --slot-index=0 --login --pin=mynewuserpin --write-object objdata --type data --label dataobj1 --private
+
+# whitebox test to make sure secret is not in store
+if [ "$TPM2_PKCS11_BACKEND" != "fapi" ]; then
+  sqlite3 "$TPM2_PKCS11_STORE/tpm2_pkcs11.sqlite3" 'select attrs from tobjects;' | grep -qiv "$(cat objdata)"
+  # and check for the hex encoded version too
+  sqlite3 "$TPM2_PKCS11_STORE/tpm2_pkcs11.sqlite3" 'select attrs from tobjects;' | grep -qiv "$(xxd -p objdata)"
+fi
+
+pkcs11_tool --slot-index=0 --login --pin=mynewuserpin --read-object --type data --label dataobj1 -o objdata2
+cmp objdata objdata2
+
 exit 0
