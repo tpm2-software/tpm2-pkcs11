@@ -22,6 +22,8 @@
   * Support C_SetAttributeValue.
   * Support for selectable backend using TPM2_PKCS11_BACKEND=esysdb being current version.
   * Support for backend fapi that uses the tss2-fapi keystore instead of an sqlite db.
+  * C_CreateObject: Support for CKO_DATA objects only with CKA_PRIVATE set to CK_TRUE. Token
+    defaults to CK_TRUE.
 
 ### 1.2.0 - 2020-03-30
   * Fix PSS signatures. Non-FIPS mode TPMs produce PSS signatures with a
