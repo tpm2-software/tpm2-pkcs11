@@ -28,10 +28,19 @@ Step one is to satisfy the following dependencies:
   - junit (optional for testing)
   - hamcrest (optional for testing)
 
-After satisfying the dependencies one invoke the regular autotools build process:
+After satisfying the dependencies, one invokes the regular autotools build process:
 ```bash
 ./bootstrap
 ./configure
 make
 make install
 ```
+
+After satisfying the Python dependencies, one can install tpm2_ptool as follows:
+```bash
+python setup.py install
+pip install .
+easy_install
+```
+
+Note that this requires python >= python 3.7.
