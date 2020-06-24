@@ -43,6 +43,14 @@
 #define goto_oom(x, l) if (!x) { LOGE("oom"); goto l; }
 #define goto_error(x, l) if (x) { goto l; }
 
+#ifdef FUZZING
+#define WEAK __attribute__((weak))
+#define FUZZING_VISIBILITY
+#else
+#define WEAK
+#define FUZZING_VISIBILITY static
+#endif
+
 static struct {
     sqlite3 *db;
 } global;
@@ -304,10 +312,7 @@ error:
     return rc;
 }
 
-#ifndef NDEBUG
-__attribute__((weak))
-#endif
-void db_get_label(token *t, sqlite3_stmt *stmt, int iCol) {
+FUZZING_VISIBILITY WEAK void db_get_label(token *t, sqlite3_stmt *stmt, int iCol) {
     snprintf((char *)t->label, sizeof(t->label), "%s",
                         sqlite3_column_text(stmt, iCol));
 }
@@ -1839,9 +1844,7 @@ out:
     return rv;
 }
 
-#ifndef NDEBUG
-__attribute__((weak))
-#endif
+FUZZING_VISIBILITY WEAK
 CK_RV db_new(sqlite3 **db) {
 
     char dbpath[PATH_MAX];

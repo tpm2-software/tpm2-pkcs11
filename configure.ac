@@ -138,6 +138,8 @@ AC_DEFUN([fuzzing_checks],[
     # Disable hardening flags
     AC_MSG_NOTICE(["Disabling hardening --disable-hardening for --enable-fuzzing"])
     enable_hardening=no
+
+    AC_DEFINE([FUZZING], [1], [Defined when building fuzzing tests])
 ])
 
 AC_SUBST([FUZZING_FLAGS])

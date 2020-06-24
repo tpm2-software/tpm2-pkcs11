@@ -10,6 +10,9 @@
 /* Esys3 */
 #undef ESYS_3
 
+/* Defined when building fuzzing tests */
+#undef FUZZING
+
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
 
