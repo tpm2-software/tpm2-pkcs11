@@ -38,6 +38,7 @@ static inline void set_default_tpm(void) {
     will_return_maybe(__wrap_Esys_Load, TSS2_RC_SUCCESS);
     will_return_maybe(__wrap_Esys_TRSess_GetAttributes, TSS2_RC_SUCCESS);
     will_return_maybe(__wrap_Esys_Unseal, TSS2_RC_SUCCESS);
+    will_return_maybe(__wrap_Esys_ObjectChangeAuth, TSS2_RC_SUCCESS);
 }
 
 TSS2_RC __wrap_Esys_Create(
@@ -1242,6 +1243,43 @@ TSS2_RC __wrap_Esys_Unseal(
     memcpy(data->buffer, key, sizeof(key) - 1);
 
     *outData = data;
+
+    return rc;
+}
+
+TSS2_RC
+Esys_ObjectChangeAuth(
+    ESYS_CONTEXT *esysContext,
+    ESYS_TR objectHandle,
+    ESYS_TR parentHandle,
+    ESYS_TR shandle1,
+    ESYS_TR shandle2,
+    ESYS_TR shandle3,
+    const TPM2B_AUTH *newAuth,
+    TPM2B_PRIVATE **outPrivate) {
+
+    UNUSED(esysContext);
+    UNUSED(objectHandle);
+    UNUSED(shandle1);
+    UNUSED(shandle2);
+    UNUSED(shandle3);
+    UNUSED(newAuth);
+
+    TSS2_RC rc = mock();
+    if (rc != TSS2_RC_SUCCESS) {
+        return rc;
+    }
+
+    TPM2B_PRIVATE *priv = calloc(1, sizeof(*priv));
+    if (!priv) {
+        LOGE("oom");
+        return TSS2_ESYS_RC_MEMORY;
+    }
+
+    priv->size = 42;
+    memset(priv->buffer, 0xFF, priv->size);
+
+    *outPrivate = priv;
 
     return rc;
 }
