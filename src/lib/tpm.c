@@ -75,6 +75,8 @@
  */
 #define DEFAULT_SRK_HANDLE 0x81000001
 
+/* Return code when TPM is in DA Lockout mode */
+
 static const TPM2B_PUBLIC rsa_template = {
     .size = 0,
     .publicArea = {
@@ -853,7 +855,7 @@ bool tpm_contextload_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle) {
     return true;
 }
 
-static bool tpm_load(tpm_ctx *ctx,
+static CK_RV tpm_load(tpm_ctx *ctx,
         uint32_t phandle,
         TPM2B_PUBLIC *pub, twist priv_data,
         uint32_t *handle) {
@@ -865,7 +867,7 @@ static bool tpm_load(tpm_ctx *ctx,
     TSS2_RC rval = Tss2_MU_TPM2B_PRIVATE_Unmarshal((uint8_t *)priv_data, len, &offset, &priv);
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Tss2_MU_TPM2B_PRIVATE_Unmarshal: %s:", Tss2_RC_Decode(rval));
-        return false;
+        return CKR_GENERAL_ERROR;
     }
 
     rval = Esys_Load(
@@ -879,10 +881,11 @@ static bool tpm_load(tpm_ctx *ctx,
            handle);
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Esys_Load: %s:", Tss2_RC_Decode(rval));
-        return false;
+        return rval == TPM2_RC_LOCKOUT ?
+                CKR_PIN_LOCKED : CKR_GENERAL_ERROR;
     }
 
-    return true;
+    return CKR_OK;
 }
 
 static bool tpm_loadexternal(tpm_ctx *ctx,
@@ -919,7 +922,7 @@ static bool tpm_loadexternal(tpm_ctx *ctx,
     return true;
 }
 
-bool tpm_loadobj(
+CK_RV tpm_loadobj(
         tpm_ctx *ctx,
         uint32_t phandle, twist auth,
         twist pub_data, twist priv_data,
@@ -932,19 +935,21 @@ bool tpm_loadobj(
     TSS2_RC rval = Tss2_MU_TPM2B_PUBLIC_Unmarshal((uint8_t *)pub_data, len, &offset, &pub);
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Tss2_MU_TPM2B_PRIVATE_Unmarshal: %s:", Tss2_RC_Decode(rval));
-        return false;
+        return CKR_GENERAL_ERROR;
     }
 
     bool tmp_rc = set_esys_auth(ctx->esys_ctx, phandle, auth);
     if (!tmp_rc) {
-        return false;
+        return CKR_GENERAL_ERROR;
     }
 
     if (priv_data) {
         return tpm_load(ctx, phandle, &pub, priv_data, handle);
+
     }
 
-    return tpm_loadexternal(ctx, &pub, handle);
+    return tpm_loadexternal(ctx, &pub, handle) ?
+            CKR_OK : CKR_GENERAL_ERROR;
 }
 
 bool tpm_flushcontext(tpm_ctx *ctx, uint32_t handle) {
