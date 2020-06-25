@@ -86,7 +86,7 @@ bool tpm_getrandom(tpm_ctx *ctx, uint8_t *data, size_t size);
 
 CK_RV tpm_stirrandom(tpm_ctx *ctx, unsigned char *seed, unsigned long seed_len);
 
-bool tpm_loadobj(tpm_ctx *ctx, uint32_t phandle, twist auth,
+CK_RV tpm_loadobj(tpm_ctx *ctx, uint32_t phandle, twist auth,
         twist pub_path, twist priv_path, uint32_t *handle);
 
 bool tpm_flushcontext(tpm_ctx *ctx, uint32_t handle);

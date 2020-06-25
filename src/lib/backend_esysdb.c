@@ -265,8 +265,8 @@ CK_RV backend_esysdb_token_unseal_wrapping_key(token *tok, bool user, twist tpin
     twist pobjauth = tok->pobject.objauth;
     uint32_t sealhandle;
 
-    bool res = tpm_loadobj(tok->tctx, pobj_handle, pobjauth, sealpub, sealpriv, &sealhandle);
-    if (!res) {
+    rv = tpm_loadobj(tok->tctx, pobj_handle, pobjauth, sealpub, sealpriv, &sealhandle);
+    if (rv != CKR_OK) {
         goto error;
     }
 
@@ -359,10 +359,9 @@ CK_RV backend_esysdb_token_changeauth(token *tok, bool user, twist toldpin, twis
 
     uint32_t sealhandle;
 
-    bool res = tpm_loadobj(tok->tctx, tok->pobject.handle, tok->pobject.objauth,
+    rv = tpm_loadobj(tok->tctx, tok->pobject.handle, tok->pobject.objauth,
             sealpub, sealpriv, &sealhandle);
-    if (!res) {
-        rv = CKR_GENERAL_ERROR;
+    if (rv != CKR_OK) {
         goto out;
     }
 

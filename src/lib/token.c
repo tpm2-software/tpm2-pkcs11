@@ -551,13 +551,13 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
         return CKR_OK;
     }
 
-    bool result = tpm_loadobj(
+    rv = tpm_loadobj(
             tpm,
             tok->pobject.handle, tok->pobject.objauth,
             tobj->pub, tobj->priv,
             &tobj->tpm_handle);
-    if (!result) {
-        return CKR_GENERAL_ERROR;
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     rv = utils_ctx_unwrap_objauth(tok->wrappingkey, tobj->objauth,
