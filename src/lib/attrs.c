@@ -1151,6 +1151,106 @@ error:
     return rv;
 }
 
+CK_RV attr_list_update_entry(attr_list *attrs, CK_ATTRIBUTE_PTR untrusted_attr) {
+    assert(attrs);
+    assert(untrusted_attr);
+
+    CK_ATTRIBUTE_TYPE t = untrusted_attr->type;
+
+    attr_handler2 *handler = attr_lookup(t);
+
+    CK_ATTRIBUTE_PTR found = attr_get_attribute_by_type(attrs, t);
+    if (!found) {
+        LOGE("Attribute entry not found");
+        return CKR_GENERAL_ERROR;
+    }
+
+    /* the existing type memory should match the expected type memory */
+    CK_BYTE expected_memory_type = type_from_ptr(found->pValue,
+            found->ulValueLen);
+
+    /* internal state check */
+    if (expected_memory_type != handler->memtype) {
+        LOGE("expected memory(%u-%s) != handler memory(%u-%s)",
+            expected_memory_type, type_to_str(expected_memory_type),
+            handler->memtype, type_to_str(handler->memtype));
+        return CKR_GENERAL_ERROR;
+    }
+
+    /* validate sizes */
+    void *pValue = untrusted_attr->pValue;
+    CK_ULONG ulValueLen = untrusted_attr->ulValueLen;
+
+    switch (handler->memtype) {
+    case TYPE_BYTE_INT:
+        if (ulValueLen != sizeof(CK_ULONG)) {
+            LOGE("ulValueLen(%lu) != sizeof(CK_ULONG)", ulValueLen);
+            return CKR_ATTRIBUTE_VALUE_INVALID;
+        }
+        break;
+    case TYPE_BYTE_BOOL:
+        if (ulValueLen != sizeof(CK_BBOOL)) {
+            LOGE("ulValueLen(%lu) != sizeof(CK_BBOOL)", ulValueLen);
+            return CKR_ATTRIBUTE_VALUE_INVALID;
+        }
+        break;
+    case TYPE_BYTE_INT_SEQ:
+        if (ulValueLen % sizeof(CK_ULONG)) {
+            LOGE("ulValueLen(%lu) %% sizeof(CK_ULONG)",
+                    ulValueLen % sizeof(CK_ULONG));
+            return CKR_ATTRIBUTE_VALUE_INVALID;
+        }
+        break;
+    case TYPE_BYTE_HEX_STR:
+        /* nothing to do */
+        break;
+    default:
+        LOGE("Unknown data type representation, got: %u",
+                handler->memtype);
+        return CKR_GENERAL_ERROR;
+    }
+
+    if (ulValueLen != found->ulValueLen) {
+        void *new_pValue = type_zrealloc(found->pValue, ulValueLen, handler->memtype);
+        if (!new_pValue) {
+            LOGE("oom");
+            return CKR_HOST_MEMORY;
+        }
+        /* update the found node with the new resized memory */
+        found->ulValueLen = ulValueLen;
+        found->pValue = new_pValue;
+    }
+
+    /* update the contents of memory with what was provided */
+    memcpy(found->pValue, pValue, ulValueLen);
+
+    return CKR_OK;
+}
+
+CK_RV attr_list_append_entry(attr_list **attrs, CK_ATTRIBUTE_PTR untrusted_attr) {
+    assert(attrs);
+    assert(*attrs);
+    assert(untrusted_attr);
+
+    attr_list *new_item = NULL;
+    bool res = attr_typify(untrusted_attr, 1, &new_item);
+    if (!res) {
+        LOGE("Could not typify attr: %lu", untrusted_attr->type);
+        return CKR_GENERAL_ERROR;
+    }
+
+    attr_list *x = attr_list_append_attrs(
+            *attrs,
+            &new_item);
+    if (!x) {
+        return CKR_GENERAL_ERROR;
+    }
+
+    *attrs = x;
+
+    return CKR_OK;
+}
+
 #define UTILS_GENERIC_ATTR_TYPE_CONVERT(T) \
     CK_RV attr_##T(CK_ATTRIBUTE_PTR attr, T *x) { \
       assert(attr); \
