@@ -1,5 +1,9 @@
 # Changelog
 
+### 1.3.0 - next
+
+  * Fix Tests against simulator that support RSA 3072 keys
+
 ### 1.2.0 - 2020-03-30
   * Fix PSS signatures. Non-FIPS mode TPMs produce PSS signatures with a
     max salt len that poses interoperability issues with verifying clients,
