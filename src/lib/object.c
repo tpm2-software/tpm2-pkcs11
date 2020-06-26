@@ -154,10 +154,7 @@ CK_RV tobject_get_max_buf_size(tobject *tobj, size_t *maxsize) {
         /* an R or S with a high bit set needs an extra nul byte so it's not negative (twos comp)*/
         static const unsigned EXTRA = 1U;
 
-        unsigned tmp = 0;
-        safe_add(tmp, keysize, INT_HDR);
-        safe_adde(tmp, EXTRA);
-        safe_mule(tmp, 2);
+        unsigned tmp = ((keysize + INT_HDR + EXTRA) * 2); /* x2 1 for R and 1 for S */
 
         tmp += SEQ_HDR;
 
@@ -429,7 +426,7 @@ CK_RV object_find_final(session_ctx *ctx) {
 static CK_RV unwrap_protected_cka_value(token *tok, attr_list *attrs) {
     /* Caller wants CKA_VALUE in their template and it's not found, we need to fetch it, do we have
      * the wrapped value in the DB? */
-    assert(tok->wrappingkey);
+    assert(tok->wappingkey);
 
     CK_ATTRIBUTE_PTR ciphertext_attr = attr_get_attribute_by_type(attrs, CKA_TPM2_ENC_BLOB);
     if (ciphertext_attr) {
@@ -443,7 +440,7 @@ static CK_RV unwrap_protected_cka_value(token *tok, attr_list *attrs) {
                 return CKR_HOST_MEMORY;
             }
 
-            CK_RV rv = utils_ctx_unwrap_objauth(tok->wrappingkey, ciphertext, &plaintext);
+            CK_RV rv = utils_ctx_unwrap_objauth(tok, ciphertext, &plaintext);
             twist_free(ciphertext);
             if (rv != CKR_OK) {
                 LOGE("Could not unwrap CKA_VALUE");
@@ -493,7 +490,7 @@ static CK_RV unwrap_protected_cka_value(token *tok, attr_list *attrs) {
  *  CKR_OK on success.
  */
 static CK_RV wrap_protected_cka_value(token *tok, attr_list *attrs) {
-    assert(tok->wrappingkey);
+    assert(tok->wappingkey);
 
     /* this may or maynot exist */
     CK_ATTRIBUTE_PTR enc_blob_attr = attr_get_attribute_by_type(attrs, CKA_TPM2_ENC_BLOB);
@@ -513,7 +510,7 @@ static CK_RV wrap_protected_cka_value(token *tok, attr_list *attrs) {
             return CKR_HOST_MEMORY;
         }
 
-        CK_RV rv = utils_ctx_wrap_objauth(tok->wrappingkey, plaintext, &ciphertext);
+        CK_RV rv = utils_ctx_wrap_objauth(tok, plaintext, &ciphertext);
         twist_free(plaintext);
         if (rv != CKR_OK) {
             LOGE("Could not wrap CKA_VALUE");
@@ -741,7 +738,7 @@ CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object) {
         return CKR_FUNCTION_FAILED;
     }
 
-    rv = db_delete_object(tok, tobj);
+    rv = db_delete_object(tobj);
     if (rv != CKR_OK) {
         return rv;
     }
