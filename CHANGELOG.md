@@ -1,6 +1,6 @@
 # Changelog
 
-### 1.3.0 - next
+### 1.3.0-RC0 - 2020-06-29
   * C\_CreateObject: Support for CKO\_DATA objects only with CKA\_PRIVATE set to CK\_TRUE.
     Token defaults to CK\_TRUE.
   * Fix Tests against simulator that support RSA 3072 keys
