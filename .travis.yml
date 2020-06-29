@@ -25,6 +25,8 @@ matrix:
     compiler: gcc
   - env: ENABLE_FUZZING=true DOCKER_TAG=fedora-30
     compiler: clang
+  - env: ENABLE_COVERITY=true DOCKER_TAG=ubuntu-18.04
+    compiler: gcc
 
 script:
   - ./.ci/travis.run
