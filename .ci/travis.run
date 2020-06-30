@@ -45,14 +45,14 @@ fi
 
 # ensure coverity_scan tool is available to the container
 if [ ! -f "$(pwd)/coverity-analysis/bin/cov-build" ]; then
-  curl --data-urlencode "project=$PROJECT" \
+  curl --data-urlencode "project=$COV_PROJECT" \
        --data-urlencode "token=$COVERITY_SCAN_TOKEN" \
-       https://scan.coverity.com/download/linux64 -o coverity_tool.tgz
+       "https://scan.coverity.com/download/linux64" -o coverity_tool.tgz
 
-  curl --data-urlencode "project=$PROJECT" \
+  curl --data-urlencode "project=$COV_PROJECT" \
        --data-urlencode "token=$COVERITY_SCAN_TOKEN" \
        --data-urlencode "md5=1" \
-       https://scan.coverity.com/download/linux64 -o coverity_tool.md5
+       "https://scan.coverity.com/download/linux64" -o coverity_tool.md5
   echo "$(cat coverity_tool.md5)" coverity_tool.tgz | md5sum -c
 fi
 
