@@ -290,6 +290,10 @@ AC_DEFUN([integration_test_checks], [
     AS_IF([test "x$tss2_provision" != "xyes"],
       [AC_MSG_ERROR([Integration tests enabled but tss2_provision executable not found.])])
 
+  AC_CHECK_PROG([tpm2tss_genkey], [tpm2tss-genkey], [yes], [no])
+    AS_IF([test "x$tpm2tss_genkey" != "xyes"],
+      [AC_MSG_ERROR([Integration tests enabled but tpm2tss-genkey executable not found.])])
+
   AM_PATH_PYTHON([3.7],
     [AC_SUBST([PYTHON_INTERPRETER], [$PYTHON])],
     [AC_MSG_ERROR([Integration tests enabled but python >= 3.7 executable not found.])]

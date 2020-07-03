@@ -1,0 +1,10 @@
+openssl_conf = openssl_init
+
+[openssl_init]
+engines = engine_section
+
+[engine_section]
+tpm2tss = tpm2tss_section
+
+[tpm2tss_section]
+SET_TCTI = ${ENV::TPM2_PKCS11_TCTI}

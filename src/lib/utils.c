@@ -260,7 +260,18 @@ twist aes256_gcm_decrypt(const twist key, const twist objauth) {
         goto out;
     }
 
-    plaintext = twist_calloc(twist_len(ctextbin));
+    size_t clen = twist_len(ctextbin);
+    if (!clen) {
+        plaintext = twist_new("");
+        if (!plaintext) {
+            LOGE("oom");
+        } else {
+            ok = 1;
+        }
+        goto out;
+    }
+
+    plaintext = twist_calloc(clen);
     if (!plaintext) {
         LOGE("oom");
         goto out;

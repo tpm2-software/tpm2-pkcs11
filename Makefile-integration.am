@@ -10,7 +10,8 @@ integration_scripts = \
     test/integration/tls-tests.sh \
     test/integration/openssl.sh \
     test/integration/pkcs11-javarunner.sh.java \
-    test/integration/nss-tests.sh
+    test/integration/nss-tests.sh \
+    test/integration/ptool-link.sh.nosetup
 # Note that -fapi.sh.fapi is symlinked to .sh.nosetup
 # If we'd use the .fapi extension then .nosetup and .fapi overwrite each others .log
 # thus we use -fapi.sh.fapi as suffix.

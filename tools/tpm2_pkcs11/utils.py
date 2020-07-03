@@ -18,6 +18,7 @@ from pyasn1_modules import pem, rfc2459
 from pyasn1.codec.der import decoder
 from pyasn1.codec.ber import encoder as berenc
 from pyasn1.codec.der import encoder as derenc
+from pyasn1.type import namedtype, tag, univ
 
 from .pkcs11t import *  # noqa
 
@@ -370,3 +371,45 @@ def check_pss_signature(tpm2, pctx, pauth):
             )
 
             return False
+
+class TSSPrivKey(univ.Sequence):
+    '''
+    Parse the ASN1 Sequence and provide the public and private blobs
+    ASN1_SEQUENCE(TSSPRIVKEY) = {
+    ASN1_SIMPLE(TSSPRIVKEY, type, ASN1_OBJECT),
+    ASN1_EXP_OPT(TSSPRIVKEY, emptyAuth, ASN1_BOOLEAN, 0),
+    ASN1_SIMPLE(TSSPRIVKEY, parent, ASN1_INTEGER),
+    ASN1_SIMPLE(TSSPRIVKEY, pubkey, ASN1_OCTET_STRING),
+    ASN1_SIMPLE(TSSPRIVKEY, privkey, ASN1_OCTET_STRING)
+    } ASN1_SEQUENCE_END(TSSPRIVKEY)
+    '''
+ 
+    componentType = namedtype.NamedTypes(
+        namedtype.NamedType('type', univ.ObjectIdentifier()),
+        namedtype.OptionalNamedType('emptyauth', univ.Boolean().subtype(
+               explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 0)
+           )),
+        namedtype.NamedType('parent', univ.Integer()),
+        namedtype.NamedType('pubkey', univ.OctetString()),
+        namedtype.NamedType('privkey', univ.OctetString())
+    )
+
+def asn1parse_tss_key(keypath):
+
+
+    tss2_startmarker='-----BEGIN TSS2 PRIVATE KEY-----'
+    tss2_endmarker='-----END TSS2 PRIVATE KEY-----'
+
+    with open(keypath, 'r') as f:
+        substrate = pem.readPemFromFile(f,
+            startMarker=tss2_startmarker, endMarker=tss2_endmarker)
+        
+        if len(substrate) == 0:
+            sys.exit('Did not find key in tss key file: {}'.format(keypath))
+
+        tss2_privkey, _ = decoder.decode(substrate, asn1Spec=TSSPrivKey())
+
+        print(tss2_privkey)
+        
+        return tss2_privkey
+
