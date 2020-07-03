@@ -3,8 +3,11 @@
 import binascii
 import io
 import os
+import struct
 import sys
 import yaml
+
+from tempfile import mkstemp
 
 # local imports
 from .command import Command
@@ -20,6 +23,7 @@ from .utils import rand_hex_str
 from .utils import pemcert_to_attrs
 from .utils import str2bool
 from .utils import str2bytes
+from .utils import asn1parse_tss_key
 
 from .tpm2 import Tpm2
 
@@ -44,11 +48,10 @@ class NewKeyCommandBase(Command):
         pinopts.add_argument('--userpin', help='The User pin.\n'),
 
     # Implemented by derived class
-    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey, d):
+    def new_key_create(self, pobj, objauth, tpm2, alg, privkey, d):
         raise NotImplementedError('Implement: new_key')
 
-    @staticmethod
-    def new_key_init(label, sopin, userpin, pobj, sealobjects, tpm2, d):
+    def new_key_init(self, label, sopin, userpin, pobj, sealobjects, tpm2, d):
 
         tr_handle = bytes_to_file(pobj['handle'], d)
 
@@ -159,19 +162,17 @@ class NewKeyCommandBase(Command):
                 except KeyError:
                     privkey = None
 
-                path = args['path']
-
                 token = db.gettoken(label)
                 pobjectid = token['pid']
                 pobj = db.getprimary(pobjectid)
 
                 sealobjects = db.getsealobject(token['id'])
 
-                encobjauth, objauth = NewKeyCommandBase.new_key_init(
+                encobjauth, objauth = self.new_key_init(
                     label, sopin, userpin, pobj, sealobjects, tpm2, d)
 
                 tertiarypriv, tertiarypub, tertiarypubdata = self.new_key_create(
-                    pobj, objauth, tpm2, path, alg, privkey, d)
+                    pobj, objauth, tpm2, alg, privkey, d)
 
                 # handle options that can add additional attributes
                 always_auth = args['attr_always_authenticate']
@@ -211,7 +212,7 @@ class ImportCommand(NewKeyCommandBase):
             required=True)
 
     # Imports a new key
-    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey, d):
+    def new_key_create(self, pobj, objauth, tpm2, alg, privkey, d):
         if alg != 'rsa':
             sys.exit('Unknown algorithm or algorithm not supported, got "%s"' %
                      alg)
@@ -258,7 +259,7 @@ class AddKeyCommand(NewKeyCommandBase):
         )
 
     # Creates a new key
-    def new_key_create(self, pobj, objauth, tpm2, path, alg, privkey, d):
+    def new_key_create(self, pobj, objauth, tpm2, alg, privkey, d):
 
         tr_handle = bytes_to_file(pobj['handle'], d)
 
@@ -526,3 +527,120 @@ class ObjDel(Command):
         path = args['path']
 
         ObjDel.delete(path, args['id'])
+
+@commandlet("link")
+class LinkCommand(NewKeyCommandBase):
+    '''
+    Imports an existing TPM key to a token within a tpm2-pkcs11 store.
+    '''
+
+    # adhere to an interface
+    # pylint: disable=no-self-use
+    def generate_options(self, group_parser):
+        super(LinkCommand, self).generate_options(group_parser)
+        group_parser.add_argument('privkey',
+            help='Path of the key to be linked.\n')
+        group_parser.add_argument(
+            '--label',
+            help='The tokens label to import the key too.\n',
+            required=True)
+        group_parser.add_argument(
+            '--key-label',
+            help='The label of the key imported. Defaults to an integer value.\n'
+        )
+        group_parser.add_argument(
+            '--auth',
+            default='',
+            help='The auth value for the key to link.\n'
+        )
+        group_parser.add_argument(
+            '--algorithm',
+            help='The type of the key.\n',
+            choices=['rsa'],
+            default='rsa')
+
+    def new_key_init(self, label, sopin, userpin, pobj, sealobjects, tpm2, d):
+
+        tr_handle = bytes_to_file(pobj['handle'], d)
+
+        # Get the primary object encrypted auth value and sokey information
+        # to decode it. Based on the incoming pin
+        is_so = sopin != None
+        pin = sopin if is_so else userpin
+
+        pubkey = '%spub' % ('so' if is_so else 'user')
+        privkey = '%spriv' % ('so' if is_so else 'user')
+        saltkey = '%sauthsalt' % ('so' if is_so else 'user')
+
+        sealpub = sealobjects[pubkey]
+        sealpriv = sealobjects[privkey]
+        sealsalt = sealobjects[saltkey]
+
+        sealctx = tpm2.load(tr_handle, pobj['objauth'], sealpriv, sealpub)
+
+        sealauth = hash_pass(pin, salt=sealsalt)['hash']
+
+        wrappingkey = tpm2.unseal(sealctx, sealauth)
+
+        wrapper = AESAuthUnwrapper(wrappingkey)
+
+        objauth = self._auth
+
+        encobjauth = wrapper.wrap(str2bytes(objauth))
+
+        return (encobjauth, objauth)
+
+    # Links a new key
+    def new_key_create(self, pobj, objauth, tpm2, alg, keypath, d):
+        if alg != 'rsa':
+            sys.exit('Unknown algorithm or algorithm not supported, got "%s"' %
+                     alg)
+
+        if keypath is None:
+            sys.exit("Invalid private key path")
+
+        tss2_privkey = asn1parse_tss_key(keypath)
+        is_empty_auth = bool(tss2_privkey['emptyauth'])
+        phandle = int(tss2_privkey['parent'])
+        pubbytes = bytes(tss2_privkey['pubkey'])
+        privbytes = bytes(tss2_privkey['privkey'])
+
+        if phandle == tpm2.TPM2_RH_OWNER or \
+            (phandle >> tpm2.TPM2_HR_SHIFT != tpm2.TPM2_HT_PERSISTENT):
+            sys.exit('TSS Engine keys must have a persistent parent, got: 0x{:x}'.format(phandle))
+
+        if is_empty_auth and len(self._auth) if self._auth is not None else 0:
+            sys.exit('Key expected to have auth value, please specify via option --auth');
+
+        # Im diving into the ESYS_TR serialized format,
+        # this isn't the smartest thing to do...
+        handle_bytes = pobj['handle'][0:4]
+        expected_handle = struct.unpack(">I", handle_bytes)[0]
+
+        if phandle != expected_handle:
+            sys.exit("Key must be parent of 0x{:X}, got 0x{:X}".format(
+                expected_handle, phandle))
+
+        # load(self, pctx, pauth, priv, pub):
+        tr_handle = bytes_to_file(pobj['handle'], d)
+        pobjauth = pobj['objauth']
+        ctx = tpm2.load(tr_handle, pobjauth, privbytes, pubbytes)
+        tertiarypubdata, _ = tpm2.readpublic(ctx, False)
+
+        try:
+            privfd, tertiarypriv = mkstemp(prefix='', suffix='.priv', dir=d)
+            pubfd, tertiarypub = mkstemp(prefix='', suffix='.pub', dir=d)
+
+            os.write(privfd, privbytes)
+            os.write(pubfd, pubbytes)
+        finally:
+            os.close(privfd)
+            os.close(pubfd)
+        
+        return (tertiarypriv, tertiarypub, tertiarypubdata)
+
+    def __call__(self, args):
+        self._auth = args['auth'] if 'auth' in args else None
+        objects = super(LinkCommand, self).__call__(args)
+        NewKeyCommandBase.output(objects, 'link')        
+        

@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: BSD-2-Clause
+
+set -x
+
+source "$T/test/integration/scripts/helpers.sh"
+
+tempdir=$(mktemp -d)
+
+function cleanup() {
+	rm -rf "$tempdir"
+}
+trap cleanup EXIT
+
+onerror() {
+  echo "$BASH_COMMAND on line ${BASH_LINENO[0]} failed: $?"
+  exit 1
+}
+trap onerror ERR
+
+setup_asan
+
+if [ -z "$modpath" ]; then
+  modpath="$PWD/src/.libs/libtpm2_pkcs11.so"
+fi
+
+echo "modpath=$modpath"
+
+pkcs11_tool() {
+  pkcs11-tool --module "$modpath" "$@"
+  return $?
+}
+
+export TPM2_PKCS11_STORE="$tempdir"
+
+echo "TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
+
+echo "TPM2_PKCS11_TCTI=$TPM2_PKCS11_TCTI"
+export TPM2_PKCS11_TCTI
+
+# Create a primary key at "$handle"
+tpm2_createprimary -c primary.ctx
+handle=$(tpm2_evictcontrol -c primary.ctx | grep persistent-handle | cut -d' ' -f2-2)
+
+# Create a primary object in the store referencing it
+pid=$(tpm2_ptool init --primary-handle="$handle" --path=$TPM2_PKCS11_STORE | grep id | cut -d' ' -f2-2)
+
+# Create a token using that pid
+tpm2_ptool addtoken --pid="$pid" --label=linktoken --sopin=mysopin --userpin=myuserpin \
+    --path=$TPM2_PKCS11_STORE
+
+# Set up the engine for the tpm2tss-genkey tool both for future and older ways of doing it
+export OPENSSL_CONF="$TEST_FIXTURES/tss2engine.cnf"
+export TPM2TSSENGINE_TCTI="$TPM2_PKCS11_TCTI"
+
+# Generate a TSS2 Engine RSA key
+tpm2tss-genkey -P"$handle" -a rsa -s 2048 "$tempdir/tss2-rsa-2048.pem"
+
+unset OPENSSL_CONF
+
+# Link that key into the token
+tpm2_ptool link --label=linktoken --userpin=myuserpin --key-label=tss2rsa2048 \
+    --path=$TPM2_PKCS11_STORE "$tempdir/tss2-rsa-2048.pem"
+
+echo "testdata">${tempdir}/data
+
+echo "Testing RSA signature"
+pkcs11_tool -v --list-objects --login --pin myuserpin
+
+pkcs11_tool -v --sign --login --token-label="linktoken" --label="tss2rsa2048" --pin myuserpin \
+            --input-file ${tempdir}/data --output-file ${tempdir}/sig \
+            --mechanism SHA256-RSA-PKCS
+
+pkcs11_tool -v --read-object --token-label="linktoken" --label="tss2rsa2048" \
+            --type pubkey --output-file ${tempdir}/pubkey.der \
+    || exit 77
+#This fails on old pkcs11-tool versions, thus exit-skip here
+
+openssl dgst -verify ${tempdir}/pubkey.der -keyform DER -signature ${tempdir}/sig -sha256 \
+             -sigopt rsa_padding_mode:pkcs1 \
+             ${tempdir}/data
+echo "RSA signature tested"
+
+exit 0

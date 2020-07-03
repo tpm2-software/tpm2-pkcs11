@@ -5,11 +5,16 @@ import sys
 from tempfile import mkstemp, NamedTemporaryFile
 import uuid
 
+
 from subprocess import Popen, PIPE
 
 from .utils import str2bytes
 
 class Tpm2(object):
+    TPM2_RH_OWNER = 0x40000001
+    TPM2_HR_SHIFT = 24
+    TPM2_HT_PERSISTENT = 0x81
+
     def __init__(self, tmp):
         self._tmp = tmp
 
@@ -241,7 +246,6 @@ class Tpm2(object):
 
         newpriv = os.path.join(self._tmp, uuid.uuid4().hex + '.priv')
 
-        #tpm2_load -C $file_primary_key_ctx  -u $file_load_key_pub  -r $file_load_key_priv -n $file_load_key_name -o $file_load_key_ctx
         cmd = [
             'tpm2_changeauth',
             '-C',
@@ -258,7 +262,7 @@ class Tpm2(object):
         _, stderr = p.communicate()
         rc = p.wait()
         if rc:
-            raise RuntimeError("Could not execute tpm2_load: %s", stderr)
+            raise RuntimeError("Could not execute tpm2_changeauth: %s", stderr)
 
         return newpriv
 
