@@ -50,6 +50,10 @@ tpm2_ptool addtoken --pid="$pid" --label=linktoken --sopin=mysopin --userpin=myu
     --path=$TPM2_PKCS11_STORE
 
 # Set up the engine for the tpm2tss-genkey tool both for future and older ways of doing it
+engdir="$(pkg-config --variable=enginesdir libcrypto)"
+if [ -z "$engdir" ]; then
+  export OPENSSL_ENGINES=/usr/local/lib/engines
+fi
 export OPENSSL_CONF="$TEST_FIXTURES/tss2engine.cnf"
 export TPM2TSSENGINE_TCTI="$TPM2_PKCS11_TCTI"
 
@@ -57,6 +61,7 @@ export TPM2TSSENGINE_TCTI="$TPM2_PKCS11_TCTI"
 tpm2tss-genkey -P"$handle" -a rsa -s 2048 "$tempdir/tss2-rsa-2048.pem"
 
 unset OPENSSL_CONF
+unset OPENSSL_ENGINES
 
 # Link that key into the token
 tpm2_ptool link --label=linktoken --userpin=myuserpin --key-label=tss2rsa2048 \
