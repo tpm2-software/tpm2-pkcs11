@@ -324,12 +324,10 @@ CK_RV token_init(token *t, CK_BYTE_PTR pin, CK_ULONG pin_len, CK_BYTE_PTR label)
     /*
      * validate that label doesn't have embedded NULL bytes
      */
-    size_t i;
-    for (i=0; i < sizeof(t->label); i++) {
-        if (label[i] == '\0') {
-            LOGE("Label has embedded 0 bytes");
-            return CKR_ARGUMENTS_BAD;
-        }
+    void *found = memchr(label, '\0', sizeof(t->label));
+    if (found) {
+        LOGE("Label has embedded 0 bytes");
+        return CKR_ARGUMENTS_BAD;
     }
 
     if (t->config.is_initialized) {
