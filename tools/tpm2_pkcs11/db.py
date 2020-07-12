@@ -6,7 +6,7 @@ import sqlite3
 import textwrap
 import yaml
 
-VERSION = 3
+VERSION = 4
 
 #
 # With Db() as db:
@@ -151,25 +151,34 @@ class Db(object):
 
         return c.lastrowid
 
-    def addprimary(self, tr_handle, objauth, hierarchy='o'):
+    @staticmethod
+    def addprimary_raw(cursor, tablename, config, objauth, hierarchy='o', pid=None):
 
-        # Subordiante commands will need some of this data
+        # Subordinate commands will need some of this data
         # when deriving subordinate objects, so pass it back
         pobject = {
             # General Metadata
             'hierarchy': hierarchy,
-            'handle': Db._blobify(tr_handle),
+            'config': yaml.safe_dump(config, canonical=True),
             'objauth': objauth,
         }
 
+        if pid is not None:
+            pobject['id'] = pid
+
         columns = ', '.join(pobject.keys())
         placeholders = ', '.join('?' * len(pobject))
-        sql = 'INSERT INTO pobjects ({}) VALUES ({})'.format(columns,
-                                                             placeholders)
-        c = self._conn.cursor()
-        c.execute(sql, list(pobject.values()))
+        sql = 'INSERT INTO {} ({}) VALUES ({})'.format(tablename,
+                                                       columns,
+                                                       placeholders)
+        cursor.execute(sql, list(pobject.values()))
 
-        return c.lastrowid
+        return cursor.lastrowid
+
+    def addprimary(self, config, objauth, hierarchy='o'):
+
+        c = self._conn.cursor()
+        return self.addprimary_raw(c, 'pobjects', config, objauth, hierarchy)
 
     def addtertiary(self, tokid, pkcs11_object):
         tobject = {
@@ -316,16 +325,75 @@ class Db(object):
     def _update_on_3(self, dbbakcon):
         dbbakcon.execute('DROP TRIGGER limit_tobjects;')
 
+    def _update_on_4(self, dbbakcon):
+        '''
+        Between version 3 and 1 of the DB the following changes need to be made:
+        Table pobjects:
+          - column handle of type blob was changes to config of type string
+
+        The YAML config has the handle of the ESYS_TR blob as a hex string.
+        So to perform the upgrade, the code needs to create a new db and copy
+        everything over and generate the new config YAML as:
+        ----
+        persistent: true
+        esys-tr: bytes.hex(handle)
+        '''
+
+        # Create a new table to copy data to
+        s = textwrap.dedent('''
+            CREATE TABLE pobjects2 (
+                id INTEGER PRIMARY KEY,
+                hierarchy TEXT NOT NULL,
+                config TEXT NOT NULL,
+                objauth TEXT NOT NULL
+            );
+            ''')
+        dbbakcon.execute(s)
+
+        c = dbbakcon.cursor()
+
+        c.execute('SELECT * from pobjects')
+        old_pobjects = c.fetchall()
+
+        # copy the data and take the old handle (ESYS_TR Blob)
+        # and convert to a hexstring and store in the config.
+        # add the pobject to the new table keep the rest of the values.
+        # Note: All migrating pobjects are persistent so mark as such.
+        for pobj in old_pobjects:
+            pid = pobj['id']
+            blob = pobj['handle']
+            hexblob = bytes.hex(blob)
+
+            config = {
+                'persistent' : True,
+                'esys-tr': hexblob
+            }
+
+            objauth = pobj['objauth']
+            hierarchy = pobj['hierarchy']
+            self.addprimary_raw(c, 'pobjects2', config, objauth,
+                                hierarchy, pid)
+
+        # Drop the old table
+        s = 'DROP TABLE pobjects;'
+        dbbakcon.execute(s)
+
+        # Rename the new table to the correct table name
+        s = 'ALTER TABLE pobjects2 RENAME TO pobjects;'
+        dbbakcon.execute(s)
+
     def update_db(self, old_version, new_version=VERSION):
-        
+
         # were doing the update, so make a backup to manipulate
         (dbbakcon, dbbakpath) = self.backup()
 
-        try:        
+        dbbakcon.row_factory = sqlite3.Row
+
+        try:
             for x in range(old_version, new_version):
                 x = x + 1
                 getattr(self, '_update_on_{}'.format(x))(dbbakcon)
-    
+
             sql = textwrap.dedent('''
                     REPLACE INTO schema (id, schema_version) VALUES (1, {version});
                 '''.format(version=new_version))
@@ -361,9 +429,9 @@ class Db(object):
             return 0
 
     def db_init_new(self):
-        
+
         c = self._conn.cursor()
-        
+
         sql = [
             textwrap.dedent('''
             CREATE TABLE tokens(
@@ -391,7 +459,7 @@ class Db(object):
             CREATE TABLE pobjects(
                 id INTEGER PRIMARY KEY,
                 hierarchy TEXT NOT NULL,
-                handle BLOB NOT NULL,
+                config TEXT NOT NULL,
                 objauth TEXT NOT NULL
             );
             '''),
@@ -467,14 +535,14 @@ class Db(object):
                 self.VERSION = old_version
                 return False
             elif old_version > VERSION:
-                raise RuntimeError("DB Version exceeds library version:" 
+                raise RuntimeError("DB Version exceeds library version:"
                  " {} > {}".format(old_version, VERSION))
             else:
                 self.version = old_version
                 self.update_db(old_version, VERSION)
                 self.VERSION = self._get_version()
                 return True
-        
+
         except Exception as e:
             sys.stderr.write('DB Upgrade failed: "{}", backup located in "{}"'.format(e, dbbakpath))
             raise e

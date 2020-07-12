@@ -12,8 +12,8 @@ from .command import commandlet
 from .db import Db
 from .utils import bytes_to_file
 from .utils import TemporaryDirectory
-from .utils import rand_hex_str
 from .utils import query_yes_no
+from .utils import create_primary
 
 from .tpm2 import Tpm2
 
@@ -26,20 +26,33 @@ class InitCommand(Command):
     # adhere to an interface
     # pylint: disable=no-self-use
     def generate_options(self, group_parser):
-        group_parser.add_argument(
+        mg = group_parser.add_mutually_exclusive_group()
+        # Keep the old --owner-auth kicking around for backwards compat
+        # but hide it in the help output.
+        mg.add_argument(
+            '--hierarchy-auth',
+            help='The authorization password for adding a primary object to the hierarchy.\n',
+            default="")
+        mg.add_argument(
             '--owner-auth',
-            help='The authorization password for adding a primary object to the owner hierarchy.\n',
+            help=argparse.SUPPRESS,
+            dest='hierarchy_auth',
             default="")
         group_parser.add_argument(
+            '--primary-auth',
+            help='Authorization value for existing primary key object, defaults to an empty auth value.',
+            default="")
+        exclusive_group = group_parser.add_mutually_exclusive_group()
+        exclusive_group.add_argument(
             '--primary-handle',
             nargs='?',
             type=InitCommand.str_to_handle,
             action=InitCommand.make_action(primary=True),
             help='Use an existing primary key object, defaults to 0x81000001.')
-        group_parser.add_argument(
-            '--primary-auth',
-            help='Authorization value for existing primary key object, defaults to an empty auth value.'
-        )
+        exclusive_group.add_argument(
+            '--transient-parent',
+            choices=[ t for t in Tpm2.TEMPLATES.keys() if t is not None ],
+            help='use a transient primary object of a given template.')
 
     @staticmethod
     def str_to_handle(arg):
@@ -69,23 +82,23 @@ class InitCommand(Command):
         if not os.path.isdir(path):
             sys.exit("Specified path is not a directory, got: %s" % (path))
 
-        ownerauth = args['owner_auth']
+        hierarchyauth = args['hierarchy_auth']
         pobjauth = args['primary_auth']
 
         # create the db
         with Db(path) as db:
 
+            transient_parent = args['transient_parent']
             shall_evict = False
             with TemporaryDirectory() as d:
                 try:
                     tpm2 = Tpm2(d)
 
                     if not use_existing_primary:
-                        pobjauth = pobjauth if pobjauth != None else rand_hex_str(
-                        )
-                        ctx = tpm2.createprimary(ownerauth, pobjauth)
-                        tr_handle = tpm2.evictcontrol(ownerauth, ctx)
-                        shall_evict = True
+                        pobj_ctx = create_primary(tpm2, hierarchyauth, pobjauth, transient_parent)
+                        if not transient_parent:
+                            pobj_ctx = tpm2.evictcontrol(hierarchyauth, pobj_ctx)
+                            shall_evict = True
                     else:
                         # get the primary object auth value and convert it to hex
                         if pobjauth is None:
@@ -100,7 +113,7 @@ class InitCommand(Command):
                         # TODO: we need a sapi handle from esys tr to look into getcap to see if
                         # its persistent.
                         if isinstance(handle, int):
-                            (_, tr_handle) = tpm2.readpublic(handle)
+                            (_, pobj_ctx) = tpm2.readpublic(handle)
 
                             # verify handle is persistent
                             output = tpm2.getcap('handles-persistent')
@@ -109,10 +122,18 @@ class InitCommand(Command):
                                 sys.exit('Handle 0x%x is not persistent' %
                                          (handle))
                         else:
-                            tr_handle = handle
+                            pobj_ctx = handle
 
+                    y = {
+                        'transient' : bool(transient_parent)
+                    }
 
-                    pid = db.addprimary(tr_handle, pobjauth)
+                    if transient_parent:
+                        y['template-name'] = args['transient_parent']
+                    else:
+                        with open(pobj_ctx, 'rb') as f:
+                            y['esys-tr'] = bytes.hex(f.read())
+                    pid = db.addprimary(y, pobjauth)
 
                     d = {
                         'id' : pid,
@@ -122,8 +143,8 @@ class InitCommand(Command):
                     print(yaml.safe_dump(d, default_flow_style=False))
 
                 except Exception as e:
-                    if shall_evict and tr_handle != None:
-                        tpm2.evictcontrol(ownerauth, tr_handle)
+                    if shall_evict and pobj_ctx != None:
+                        tpm2.evictcontrol(hierarchyauth, pobj_ctx)
 
                     traceback.print_exc(file=sys.stdout)
                     sys.exit(e)
@@ -141,14 +162,14 @@ class DestroyCommand(Command):
         group_parser.add_argument(
             '--pid', type=int, help="The primary object id to remove.\n")
         group_parser.add_argument(
-            '--owner-auth',
+            '--hierarchy-auth',
             default="",
             help="The primary object id to remove.\n")
 
     def __call__(self, args):
         path = args['path']
         pid = args['pid']
-        ownerauth = args['owner_auth']
+        hierarchyauth = args['hierarchy_auth']
 
         if not os.path.exists(path):
             os.mkdir(path)
@@ -172,7 +193,7 @@ class DestroyCommand(Command):
                 tr_file = bytes_to_file(pobj['handle'], d)
 
                 db.rmprimary(pid)
-                tpm2.evictcontrol(ownerauth, tr_file)
+                tpm2.evictcontrol(hierarchyauth, tr_file)
 
 @commandlet("dbup")
 class DbUp(Command):

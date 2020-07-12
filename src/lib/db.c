@@ -38,10 +38,11 @@
 #define TPM2_PKCS11_STORE_DIR "/etc/tpm2_pkcs11"
 #endif
 
-#define DB_VERSION 3
+#define DB_VERSION 4
 
 #define goto_oom(x, l) if (!x) { LOGE("oom"); goto l; }
 #define goto_error(x, l) if (x) { goto l; }
+#define gotobinderror(rc, msg) do { if (rc) { LOGE("cannot bind "msg); goto error; } } while(0)
 
 #ifdef FUZZING
 #define WEAK __attribute__((weak))
@@ -50,6 +51,22 @@
 #define WEAK
 #define FUZZING_VISIBILITY static
 #endif
+
+typedef struct pobject_v3 pobject_v3;
+struct pobject_v3 {
+    int id;
+    char *hierarchy;
+    twist handle;
+    char *objauth;
+};
+
+typedef struct pobject_v4 pobject_v4;
+struct pobject_v4 {
+    int id;
+    char *hierarchy;
+    char *config;
+    char *objauth;
+};
 
 static struct {
     sqlite3 *db;
@@ -63,17 +80,17 @@ static int _get_blob(sqlite3_stmt *stmt, int i, bool can_be_null, twist *blob) {
     }
 
     if (size == 0) {
-        return can_be_null ? 0 : 1;
+        return can_be_null ? SQLITE_OK : SQLITE_ERROR;
     }
 
     const void *data = sqlite3_column_blob(stmt, i);
     *blob = twistbin_new(data, size);
     if (!*blob) {
         LOGE("oom");
-        return 1;
+        return SQLITE_ERROR;
     }
 
-    return 0;
+    return SQLITE_OK;
 }
 
 static int get_blob_null(sqlite3_stmt *stmt, int i, twist *blob) {
@@ -186,10 +203,222 @@ error:
     return rc;
 }
 
+static void pobject_v3_free(pobject_v3 *old_pobj) {
+
+    twist_free(old_pobj->handle);
+    free(old_pobj->hierarchy);
+    free(old_pobj->objauth);
+}
+
+static void pobject_v4_free(pobject_v4 *new_pobj) {
+
+    free(new_pobj->config);
+    free(new_pobj->hierarchy);
+    free(new_pobj->objauth);
+}
+
+static int init_pobject_v3_from_stmt(sqlite3_stmt *stmt, pobject_v3 *old_pobj) {
+
+    old_pobj->id = sqlite3_column_int(stmt, 0);
+
+    old_pobj->hierarchy = strdup((char *)sqlite3_column_text(stmt, 1));
+    if (!old_pobj->hierarchy) {
+        LOGE("oom");
+        goto error;
+    }
+
+    int rc = _get_blob(stmt, 2, false, &old_pobj->handle);
+    if (rc != SQLITE_OK) {
+        goto error;
+    }
+
+    old_pobj->objauth = strdup((char *)sqlite3_column_text(stmt, 3));
+    if (!old_pobj->objauth) {
+        LOGE("oom");
+        goto error;
+    }
+
+    return SQLITE_OK;
+
+error:
+    pobject_v3_free(old_pobj);
+    return SQLITE_ERROR;
+}
+
+static CK_RV convert_pobject_v3_to_v4(pobject_v3 *old_pobj, pobject_v4 *new_pobj) {
+
+    new_pobj->id = old_pobj->id;
+
+    /* take and steal ownership of these pointers so we don't have oom issues */
+    new_pobj->hierarchy = old_pobj->hierarchy;
+    old_pobj->hierarchy = NULL;
+
+    new_pobj->objauth = old_pobj->objauth;
+    old_pobj->objauth = NULL;
+
+    pobject_config pobj_conf = {
+        .is_transient = false,
+        .blob = old_pobj->handle,
+    };
+
+    char *config = emit_pobject_to_conf_string(&pobj_conf);
+    if (!config) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
+    new_pobj->config = config;
+
+    return CKR_OK;
+}
+
+static int start2(sqlite3 *db) {
+    int rc = sqlite3_exec(db, "BEGIN TRANSACTION", NULL, NULL, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("%s", sqlite3_errmsg(db));
+    }
+    return rc;
+}
+
+static int start(void) {
+    return start2(global.db);
+}
+
+static int commit2(sqlite3 *db) {
+    return sqlite3_exec(db, "COMMIT", NULL, NULL, NULL);
+}
+
+static int commit(void) {
+    return commit2(global.db);
+}
+
+static int rollback2(sqlite3 *db) {
+    return sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+}
+
+static int rollback(void) {
+    return rollback2(global.db);
+}
+
+static CK_RV db_add_pobject_v4(sqlite3 *updb, pobject_v4 *new_pobj) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    sqlite3_stmt *stmt = NULL;
+
+    const char *sql =
+          "INSERT INTO pobjects2 ("
+            "id,"             // index: 1 type: INT
+            "hierarchy, "     // index: 2 type: TEXT
+            "config,"         // index: 3 type: TEXT
+            "objauth"         // index: 4 type: TEXT
+          ") VALUES ("
+            "?,?,?,?"
+          ");";
+
+    int rc = sqlite3_prepare_v2(updb, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("%s", sqlite3_errmsg(updb));
+        goto error;
+    }
+
+    rc = sqlite3_bind_int(stmt, 1, new_pobj->id);
+    gotobinderror(rc, "id");
+
+    rc = sqlite3_bind_text(stmt, 2, new_pobj->hierarchy, -1, SQLITE_STATIC);
+    gotobinderror(rc, "hierarchy");
+
+    rc = sqlite3_bind_text(stmt, 3, new_pobj->config, -1, SQLITE_STATIC);
+    gotobinderror(rc, "config");
+
+    rc = sqlite3_bind_text(stmt, 4, new_pobj->objauth, -1, SQLITE_STATIC);
+    gotobinderror(rc, "objauth");
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        LOGE("step error: %s", sqlite3_errmsg(updb));
+        goto error;
+    }
+
+    rc = sqlite3_finalize(stmt);
+    gotobinderror(rc, "finalize");
+
+    rv = CKR_OK;
+
+out:
+    return rv;
+
+error:
+    rc = sqlite3_finalize(stmt);
+    if (rc != SQLITE_OK) {
+        LOGW("Could not finalize stmt: %d", rc);
+    }
+
+    rollback();
+
+    rv = CKR_GENERAL_ERROR;
+    goto out;
+}
+
+static int init_pobject_from_stmt(sqlite3_stmt *stmt, tpm_ctx *tpm, pobject *pobj) {
+
+    /* Get the YAML config and:
+     *   - parse it to the config structure
+     *   - if persistent deserializes the ESYS_TR into the handle
+     *   - if transient, verify that the template_name is set
+     */
+    size_t yaml_size = sqlite3_column_bytes(stmt, 0);
+    const unsigned char *pobj_yaml_conf = sqlite3_column_text(stmt, 0);
+    bool res = parse_pobject_config_from_string(pobj_yaml_conf, yaml_size,
+            &pobj->config);
+    if (!res) {
+        LOGE("Could not parse pobject config");
+        return SQLITE_ERROR;
+    }
+
+    if (!pobj->config.is_transient) {
+        if (!pobj->config.blob) {
+            LOGE("Expected persistent pobject config to have ESYS_TR blob");
+            return SQLITE_ERROR;
+        }
+        res = tpm_deserialize_handle(tpm, pobj->config.blob, &pobj->handle, NULL);
+        if (!res) {
+            /* just set a general error as rc could be success right now */
+            return SQLITE_ERROR;
+        }
+    } else if (!pobj->config.template_name) {
+        LOGE("Expected transient pobject config to have a template name");
+        return SQLITE_ERROR;
+    }
+
+    pobj->objauth = twist_new((char *)sqlite3_column_text(stmt, 1));
+    if (!pobj->objauth) {
+        LOGE("oom");
+        return SQLITE_ERROR;
+    }
+
+    int rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        LOGE("stepping in pobjects, got: %s\n", sqlite3_errstr(rc));
+        return SQLITE_ERROR;
+    }
+
+    /* if it's a transient primary object create it */
+    if (tpm && pobj->config.is_transient) {
+        CK_RV rv = tpm_create_transient_primary_from_template(tpm,
+                pobj->config.template_name, pobj->objauth, &pobj->handle);
+        if (rv != CKR_OK) {
+            return SQLITE_ERROR;
+        }
+    }
+
+    return SQLITE_OK;
+}
+
 static int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
 
     const char *sql =
-            "SELECT handle,objauth FROM pobjects WHERE id=?";
+            "SELECT config,objauth FROM pobjects WHERE id=?";
 
     sqlite3_stmt *stmt;
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
@@ -210,32 +439,7 @@ static int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
         goto error;
     }
 
-    twist blob = NULL;
-    rc = _get_blob(stmt, 0, false, &blob);
-    if (rc != SQLITE_OK) {
-        LOGE("Cannot get ESYS_TR handle blob %s\n", sqlite3_errmsg(global.db));
-        goto error;
-    }
-
-
-    bool res = tpm_deserialize_handle(tpm, blob, &pobj->handle, NULL);
-    twist_free(blob);
-    if (!res) {
-        /* just set a general error as rc could be success right now */
-        rc = SQLITE_ERROR;
-        goto error;
-    }
-
-    pobj->objauth = twist_new((char *)sqlite3_column_text(stmt, 1));
-    goto_oom(pobj->objauth, error);
-
-    rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
-        LOGE("stepping in pobjects, got: %s\n", sqlite3_errstr(rc));
-        goto error;
-    }
-
-    rc = SQLITE_OK;
+    rc = init_pobject_from_stmt(stmt, tpm, pobj);
 
 error:
     sqlite3_finalize(stmt);
@@ -423,24 +627,6 @@ error:
     return CKR_GENERAL_ERROR;
 
 }
-
-static int start(void) {
-    int rc = sqlite3_exec(global.db, "BEGIN TRANSACTION", NULL, NULL, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("%s", sqlite3_errmsg(global.db));
-    }
-    return rc;
-}
-
-static int commit(void) {
-    return sqlite3_exec(global.db, "COMMIT", NULL, NULL, NULL);
-}
-
-static int rollback(void) {
-    return sqlite3_exec(global.db, "ROLLBACK", NULL, NULL, NULL);
-}
-
-#define gotobinderror(rc, msg) if (rc) { LOGE("cannot bind "msg); goto error; }
 
 CK_RV db_update_for_pinchange(
         token *tok,
@@ -683,18 +869,18 @@ error:
     goto out;
 }
 
-CK_RV db_add_primary(twist blob, unsigned *pid) {
-    assert(blob);
+CK_RV db_add_primary(pobject *pobj, unsigned *pid) {
     assert(pid);
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
+    char *yaml_conf = NULL;
     sqlite3_stmt *stmt = NULL;
 
     const char *sql =
           "INSERT INTO pobjects ("
             "hierarchy, "     // index: 1 type: TEXT
-            "handle,"          // index: 2 type: BLOB
+            "config,"         // index: 2 type: BLOB
             "objauth"         // index: 3 type: TEXT
           ") VALUES ("
             "?,?,?"
@@ -714,8 +900,13 @@ CK_RV db_add_primary(twist blob, unsigned *pid) {
     rc = sqlite3_bind_text(stmt, 1, "o", -1, SQLITE_STATIC);
     gotobinderror(rc, "hierarchy");
 
-    rc = sqlite3_bind_blob(stmt, 2, blob, twist_len(blob), SQLITE_STATIC);
-    gotobinderror(rc, "handle");
+    yaml_conf = emit_pobject_to_conf_string(&pobj->config);
+    if (!yaml_conf) {
+        goto error;
+    }
+
+    rc = sqlite3_bind_text(stmt, 2, yaml_conf, -1, SQLITE_STATIC);
+    gotobinderror(rc, "config");
 
     rc = sqlite3_bind_text(stmt, 3, "", -1, SQLITE_STATIC);
     gotobinderror(rc, "objauth");
@@ -748,6 +939,7 @@ CK_RV db_add_primary(twist blob, unsigned *pid) {
     rv = CKR_OK;
 
 out:
+    free(yaml_conf);
     return rv;
 
 error:
@@ -829,6 +1021,7 @@ CK_RV db_update_tobject_attrs(unsigned id, attr_list *attrs) {
         LOGE("Could not emit tobject attributes");
         return CKR_GENERAL_ERROR;
     }
+    /* BILL TODO AND DROP this */
 LOGE("XXXXX %s\n\n", attr_str);
     const char *sql =
           "UPDATE tobjects SET"
@@ -1468,6 +1661,117 @@ static CK_RV dbup_handler_from_2_to_3(sqlite3 *updb) {
     return CKR_OK;
 }
 
+static CK_RV dbup_handler_from_3_to_4(sqlite3 *updb) {
+
+    /*
+     * Between version 3 and 1 of the DB the following changes need to be made:
+     * Table pobjects:
+     *  - column handle of type blob was changes to config of type string
+     *
+     * The YAML config has the handle of the ESYS_TR blob as a hex string.
+     * So to perform the upgrade, the code needs to create a new db and copy
+     * everything over and generate the new config YAML as:
+     * ----
+     * persistent: true
+     * esys-tr: bytes.hex(handle)
+     */
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+    sqlite3_stmt *stmt = NULL;
+
+    /* Create a new table to copy data to */
+    const char *s = "CREATE TABLE pobjects2 ("
+            "id INTEGER PRIMARY KEY,"
+            "hierarchy TEXT NOT NULL,"
+            "config TEXT NOT NULL,"
+            "objauth TEXT NOT NULL"
+        ");";
+
+    int rc = sqlite3_exec(updb, s, NULL, NULL, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("Cannot create temp table: %s", sqlite3_errmsg(updb));
+        return CKR_GENERAL_ERROR;
+    }
+
+    rc = sqlite3_prepare_v2(updb, "SELECT * from pobjects", -1, &stmt, 0);
+    if (rc != SQLITE_OK) {
+        LOGE("Failed to fetch data: %s", sqlite3_errmsg(updb));
+        goto error;
+    }
+
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_DONE) {
+        goto out;
+    } else if (rc != SQLITE_ROW) {
+        LOGE("Failed to step: %s", sqlite3_errmsg(updb));
+        goto error;
+    }
+
+    while (rc == SQLITE_ROW) {
+
+        pobject_v3 old_pobj = { 0 };
+        rc = init_pobject_v3_from_stmt(stmt, &old_pobj);
+        if (rc != SQLITE_OK) {
+            LOGE("Could not process pobjectes for upgrade");
+            goto error;
+        }
+
+        pobject_v4 new_pobj = { 0 };
+
+        CK_RV tmp_rv = convert_pobject_v3_to_v4(&old_pobj, &new_pobj);
+        if (tmp_rv != CKR_OK) {
+            LOGE("Could not convert V3 Pobject to v4");
+            pobject_v3_free(&old_pobj);
+            pobject_v4_free(&new_pobj);
+            goto error;
+        }
+
+        /* insert into pobjects2 */
+        tmp_rv = db_add_pobject_v4(updb, &new_pobj);
+        pobject_v3_free(&old_pobj);
+        pobject_v4_free(&new_pobj);
+        if (tmp_rv != CKR_OK) {
+            LOGE("Could not store V4 Pobject to pobject2 table");
+            goto error;
+
+        }
+
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_ROW && rc != SQLITE_DONE) {
+            LOGE("Failed to fetch data: %s\n", sqlite3_errmsg(updb));
+            goto error;
+        }
+    }
+
+    /*
+     * done copying V3 pobjects, converting to config and storing as v4 pobject
+     * in pobjects 2.
+     *
+     * Time to drop pobjects table
+     */
+    s = "DROP TABLE pobjects;";
+    rc = sqlite3_exec(updb, s, NULL, NULL, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("Cannot drop pobjects table: %s", sqlite3_errmsg(updb));
+        goto error;
+    }
+
+    /* Rename pobjects2 to pobjects  */
+    s = "ALTER TABLE pobjects2 RENAME TO pobjects;";
+    rc = sqlite3_exec(updb, s, NULL, NULL, NULL);
+    if (rc != SQLITE_OK) {
+        LOGE("Cannot drop pobjects table: %s", sqlite3_errmsg(updb));
+        goto error;
+    }
+
+out:
+    rv = CKR_OK;
+
+error:
+    sqlite3_finalize(stmt);
+    return rv;
+}
+
 static CK_RV db_backup(sqlite3 *db, const char *dbpath, sqlite3 **updb, char **copypath) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -1539,6 +1843,7 @@ static CK_RV db_update(sqlite3 **xdb, const char *dbpath, unsigned old_version, 
             NULL,
             dbup_handler_from_1_to_2,
             dbup_handler_from_2_to_3,
+            dbup_handler_from_3_to_4,
     };
 
     /*
@@ -1723,7 +2028,7 @@ CK_RV db_init_new(sqlite3 *db) {
         "CREATE TABLE pobjects("
             "id INTEGER PRIMARY KEY,"
             "hierarchy TEXT NOT NULL,"
-            "handle BLOB NOT NULL,"
+            "config TEXT NOT NULL,"
             "objauth TEXT NOT NULL"
         ");",
         "CREATE TABLE tobjects("

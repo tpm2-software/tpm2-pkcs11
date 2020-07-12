@@ -11,7 +11,6 @@ import yaml
 from .command import Command
 from .command import commandlet
 from .db import Db
-from .utils import bytes_to_file
 from .utils import check_pss_signature
 from .utils import TemporaryDirectory
 from .utils import hash_pass
@@ -21,6 +20,7 @@ from .utils import load_sealobject
 from .utils import str2bool
 from .utils import pkcs11_cko_to_str
 from .utils import pkcs11_ckk_to_str
+from .utils import get_pobject
 from .tpm2 import Tpm2
 
 from .pkcs11t import *  # noqa
@@ -66,7 +66,10 @@ class VerifyCommand(Command):
         )
         group_parser.add_argument(
             '--label', help='The label to verify.\n', required=True)
-
+        group_parser.add_argument(
+            '--hierarchy-auth',
+            help='The authorization password for the owner hiearchy when using a token with a transient primary object\n',
+            default="")
     @staticmethod
     def verify(db, args):
 
@@ -78,6 +81,7 @@ class VerifyCommand(Command):
 
         sopin = args['sopin']
         userpin = args['userpin']
+        hierarchyauth = args['hierarchy_auth']
 
         verify_output = {}
         verify_output['label'] = label
@@ -95,11 +99,11 @@ class VerifyCommand(Command):
             tpm2 = Tpm2(d)
 
             pobjauth = pobj['objauth']
-            tr_handle = bytes_to_file(pobj['handle'], d)
+            pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
 
             if sopin != None:
 
-                sosealctx = tpm2.load(tr_handle, pobjauth,
+                sosealctx = tpm2.load(pobj_handle, pobjauth,
                                       sealobj['sopriv'], sealobj['sopub'])
 
                 # Unseal the wrapping key auth
@@ -113,7 +117,7 @@ class VerifyCommand(Command):
 
             if userpin != None:
 
-                usersealctx = tpm2.load(tr_handle, pobjauth,
+                usersealctx = tpm2.load(pobj_handle, pobjauth,
                                         sealobj['userpriv'],
                                         sealobj['userpub'])
 
@@ -127,7 +131,10 @@ class VerifyCommand(Command):
 
                 verify_output['pin']['user'] = {'seal-auth' : usersealauth['hash'] }
 
-            print(wrappingkeyauth)
+            verify_output['wrappingkey'] = {
+                'hex' : bytes.hex(wrappingkeyauth),
+                'auth' : usersealauth['hash']
+            }
 
             wrapper = AESAuthUnwrapper(wrappingkeyauth)
 
@@ -154,13 +161,13 @@ class VerifyCommand(Command):
                 tobjauth=None
                 if encauth:
                     encauth=encauth.decode()
-                    tpm2.load(tr_handle, pobjauth, priv, pub)
-                    print(encauth)
+                    tpm2.load(pobj_handle, pobjauth, priv, pub)
                     tobjauth = wrapper.unwrap(encauth).decode()
 
                 verify_output['objects'].append({
                     'id: ' : tobj['id'],
-                    'auth: ' : tobjauth
+                    'auth: ' : tobjauth,
+                    'encauth' : encauth
                 })
 
         yaml_dump = yaml.safe_dump(verify_output, default_flow_style=False)
@@ -200,7 +207,10 @@ class AddTokenCommand(Command):
             '--label',
             help='A unique label to identify the profile in use, must be unique.\n',
             required=True)
-
+        group_parser.add_argument(
+            '--hierarchy-auth',
+            help='The authorization password for the owner hiearchy when using a token with a transient primary object\n',
+            default="")
     @staticmethod
     def do_token_init(db, path, args):
 
@@ -208,6 +218,7 @@ class AddTokenCommand(Command):
         sopin = args['sopin']
         label = args['label']
         pid = args['pid']
+        hierarchyauth = args['hierarchy_auth']
 
         # Verify pid is in db
         pobject = db.getprimary(pid)
@@ -229,21 +240,20 @@ class AddTokenCommand(Command):
             # auth values and sealing the wrappingkey value to it.
             # soobject will be an AES key used for decrypting tertiary object
             # auth values.
-
-            tr_handle = bytes_to_file(pobject['handle'], d)
+            pobj_handle = get_pobject(pobject, tpm2, hierarchyauth, d)
 
             usersealpriv, usersealpub, _ = tpm2.create(
-                tr_handle,
+                pobj_handle,
                 pobject['objauth'],
                 usersealauth['hash'],
                 seal=wrappingkey)
             sosealpriv, sosealpub, _ = tpm2.create(
-                tr_handle,
+                pobj_handle,
                 pobject['objauth'],
                 sosealauth['hash'],
                 seal=wrappingkey)
 
-            pss_sig_good = check_pss_signature(tpm2, tr_handle, pobject['objauth'])
+            pss_sig_good = check_pss_signature(tpm2, pobj_handle, pobject['objauth'])
 
             # If this succeeds, we update the token table
             config = {
@@ -259,18 +269,19 @@ class AddTokenCommand(Command):
     @staticmethod
     def do_token_noninit(db, args):
 
+        pid = args['pid']
+        hierarchyauth = args['hierarchy_auth']
+
         with TemporaryDirectory() as d:
             tpm2 = Tpm2(d)
 
-            pid = args['pid']
-
             pobject = db.getprimary(pid)
-
-            tr_handle = bytes_to_file(pobject['handle'], d)
 
             pobjauth = pobject['objauth']
 
-            pss_sig_good = check_pss_signature(tpm2, tr_handle, pobjauth)
+            pobj_handle = get_pobject(pobject, tpm2, hierarchyauth, d)
+
+            pss_sig_good = check_pss_signature(tpm2, pobj_handle, pobjauth)
 
             # If this succeeds, we update the token table
             config = {
@@ -305,17 +316,9 @@ class AddEmptyTokenCommand(AddTokenCommand):
             help='The primary object id to associate with this token.\n',
             required=True),
         group_parser.add_argument(
-            '--pobj-pin',
-            help='The primary object password. This password is use for authentication to the primary object.\n',
+            '--hierarchy-auth',
+            help='The authorization password for the owner hiearchy when using a token with a transient primary object\n',
             default="")
-        group_parser.add_argument(
-            "--wrap",
-            choices=['auto', 'software', 'tpm'],
-            default='auto',
-            help='Configure usage of SW based crypto for internal object protection.\n'
-            +
-            'This is not recommended for production environments,as the tool will'
-            + 'auto-configure this option based on TPM support.')
 
     def __call__(self, args):
         args['no_init'] = True
@@ -345,6 +348,10 @@ class ChangePinCommand(Command):
             type=str,
             help='The label of the token.\n',
             required=True)
+        group_parser.add_argument(
+            '--hierarchy-auth',
+            help='The authorization password for the owner hiearchy when using a token with a transient primary object\n',
+            default="")
 
     @staticmethod
     def changepin(db, tpm2, args):
@@ -354,6 +361,7 @@ class ChangePinCommand(Command):
         is_so = args['user'] == 'so'
         oldpin = args['old']
         newpin = args['new']
+        hierarchyauth = args['hierarchy_auth']
 
         token = db.gettoken(label)
 
@@ -363,15 +371,15 @@ class ChangePinCommand(Command):
 
         with TemporaryDirectory() as d:
 
-            tr_handle = bytes_to_file(pobject['handle'], d)
+            pobj_handle = get_pobject(pobject, tpm2, hierarchyauth, d)
 
-            sealctx, sealauth = load_sealobject(token, db, tpm2, tr_handle, pobjauth,
+            sealctx, sealauth = load_sealobject(token, db, tpm2, pobj_handle, pobjauth,
                                                       oldpin, is_so)
 
             newsealauth = hash_pass(newpin)
 
             # call tpm2_changeauth and get new private portion
-            newsealpriv = tpm2.changeauth(tr_handle, sealctx, sealauth,
+            newsealpriv = tpm2.changeauth(pobj_handle, sealctx, sealauth,
                                           newsealauth['hash'])
 
         # update the database
@@ -405,6 +413,10 @@ class InitPinCommand(Command):
             type=str,
             help='The label of the token.\n',
             required=True)
+        group_parser.add_argument(
+            '--hierarchy-auth',
+            help='The authorization password for the owner hiearchy when using a token with a transient primary object\n',
+            default="")
 
     @staticmethod
     def initpin(db, tpm2, args):
@@ -420,12 +432,13 @@ class InitPinCommand(Command):
         pobjectid = token['pid']
         pobject = db.getprimary(pobjectid)
         pobjauth = pobject['objauth']
+        hierarchyauth = args['hierarchy_auth']
 
         with TemporaryDirectory() as d:
 
-            tr_handle = bytes_to_file(pobject['handle'], d)
+            pobj_handle = get_pobject(pobject, tpm2, hierarchyauth, d)
 
-            sealctx, sealauth = load_sealobject(token, db, tpm2, tr_handle, pobjauth,
+            sealctx, sealauth = load_sealobject(token, db, tpm2, pobj_handle, pobjauth,
                                                   sopin, True)
             wrappingkeyauth = tpm2.unseal(sealctx, sealauth)
 
@@ -435,7 +448,7 @@ class InitPinCommand(Command):
 
 
             newsealpriv, newsealpub, _ = tpm2.create(
-                tr_handle,
+                pobj_handle,
                 pobjauth,
                 newsealauth['hash'],
                 seal=wrappingkeyauth)
@@ -549,7 +562,9 @@ class ListPrimaryCommand(Command):
         output=[]
         primaries = db.getprimaries()
         for p in primaries:
-            output.append({'id': p['id']})
+            details = {'id': p['id']}
+            details['config'] = yaml.safe_load(p['config'])
+            output.append(details)
 
         if len(output):
             print(yaml.safe_dump(output, default_flow_style=False))

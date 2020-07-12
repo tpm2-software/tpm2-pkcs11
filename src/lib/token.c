@@ -219,6 +219,20 @@ static void sealobject_free(sealobject *sealobj) {
     sealobj->userpriv = NULL;
 }
 
+static void pobject_free(pobject *pobj) {
+
+    twist_free(pobj->objauth);
+    pobj->objauth = NULL;
+
+    pobject_config *c = &pobj->config;
+
+    if (c->is_transient) {
+        free(c->template_name);
+    } else {
+        twist_free(c->blob);
+    }
+}
+
 void token_free(token *t) {
 
     /*
@@ -228,8 +242,7 @@ void token_free(token *t) {
     session_table_free(t->s_table);
     t->s_table = NULL;
 
-    twist_free(t->pobject.objauth);
-    t->pobject.objauth = NULL;
+    pobject_free(&t->pobject);
 
     if (t->type == token_type_esysdb) {
         sealobject_free(&t->esysdb.sealobject);

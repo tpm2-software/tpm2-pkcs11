@@ -15,7 +15,6 @@ from .command import commandlet
 from .db import Db
 from .objects import PKCS11ObjectFactory as PKCS11ObjectFactory
 from .objects import PKCS11X509
-from .utils import bytes_to_file
 from .utils import AESAuthUnwrapper
 from .utils import TemporaryDirectory
 from .utils import hash_pass
@@ -24,6 +23,7 @@ from .utils import pemcert_to_attrs
 from .utils import str2bool
 from .utils import str2bytes
 from .utils import asn1parse_tss_key
+from .utils import get_pobject
 
 from .tpm2 import Tpm2
 
@@ -36,6 +36,13 @@ class NewKeyCommandBase(Command):
 
     def generate_options(self, group_parser):
         group_parser.add_argument(
+            '--label',
+            help='The tokens label to import the key too.\n',
+            required=True)
+        group_parser.add_argument(
+            '--key-label',
+            help='The label of the key imported. Defaults to an integer value.\n')
+        group_parser.add_argument(
             '--id',
             help='The key id. Defaults to a random 8 bytes of hex.\n',
             default=binascii.hexlify(os.urandom(8)).decode())
@@ -43,17 +50,21 @@ class NewKeyCommandBase(Command):
             '--attr-always-authenticate',
             action='store_true',
             help='Sets the CKA_ALWAYS_AUTHENTICATE attribute to CK_TRUE.\n')
+        group_parser.add_argument(
+            '--hierarchy-auth',
+            help='The hierarchyauth, required for transient pobjects.\n',
+            default='')
         pinopts = group_parser.add_mutually_exclusive_group(required=True)
         pinopts.add_argument('--sopin', help='The Administrator pin.\n'),
         pinopts.add_argument('--userpin', help='The User pin.\n'),
 
     # Implemented by derived class
-    def new_key_create(self, pobj, objauth, tpm2, alg, privkey, d):
+    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, d):
         raise NotImplementedError('Implement: new_key')
 
-    def new_key_init(self, label, sopin, userpin, pobj, sealobjects, tpm2, d):
+    def new_key_init(self, label, sopin, userpin, hierarchyauth, pobj, sealobjects, tpm2, d):
 
-        tr_handle = bytes_to_file(pobj['handle'], d)
+        pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
 
         # Get the primary object encrypted auth value and sokey information
         # to decode it. Based on the incoming pin
@@ -68,7 +79,7 @@ class NewKeyCommandBase(Command):
         sealpriv = sealobjects[privkey]
         sealsalt = sealobjects[saltkey]
 
-        sealctx = tpm2.load(tr_handle, pobj['objauth'], sealpriv, sealpub)
+        sealctx = tpm2.load(pobj_handle, pobj['objauth'], sealpriv, sealpub)
 
         sealauth = hash_pass(pin, salt=sealsalt)['hash']
 
@@ -155,6 +166,7 @@ class NewKeyCommandBase(Command):
                 alg = args['algorithm']
                 key_label = args['key_label']
                 tid = args['id']
+                hierarchyauth = args['hierarchy_auth']
 
                 privkey = None
                 try:
@@ -169,10 +181,11 @@ class NewKeyCommandBase(Command):
                 sealobjects = db.getsealobject(token['id'])
 
                 encobjauth, objauth = self.new_key_init(
-                    label, sopin, userpin, pobj, sealobjects, tpm2, d)
+                    label, sopin, userpin, hierarchyauth,
+                    pobj, sealobjects, tpm2, d)
 
                 tertiarypriv, tertiarypub, tertiarypubdata = self.new_key_create(
-                    pobj, objauth, tpm2, alg, privkey, d)
+                    pobj, objauth, hierarchyauth, tpm2, alg, privkey, d)
 
                 # handle options that can add additional attributes
                 always_auth = args['attr_always_authenticate']
@@ -198,21 +211,13 @@ class ImportCommand(NewKeyCommandBase):
             help='Full path of the private key to be imported.\n',
             required=True)
         group_parser.add_argument(
-            '--label',
-            help='The tokens label to import the key too.\n',
-            required=True)
-        group_parser.add_argument(
-            '--key-label',
-            help='The label of the key imported. Defaults to an integer value.\n'
-        )
-        group_parser.add_argument(
             '--algorithm',
             help='The type of the key.\n',
             choices=['rsa'],
             required=True)
 
     # Imports a new key
-    def new_key_create(self, pobj, objauth, tpm2, alg, privkey, d):
+    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, d):
         if alg != 'rsa':
             sys.exit('Unknown algorithm or algorithm not supported, got "%s"' %
                      alg)
@@ -220,10 +225,10 @@ class ImportCommand(NewKeyCommandBase):
         if privkey is None:
             sys.exit("Invalid private key path")
 
-        tr_handle = bytes_to_file(pobj['handle'], d)
+        pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
 
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.importkey(
-            tr_handle, pobj['objauth'], objauth, privkey=privkey, alg=alg)
+            pobj_handle, pobj['objauth'], objauth, privkey=privkey, alg=alg)
 
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 
@@ -242,29 +247,18 @@ class AddKeyCommand(NewKeyCommandBase):
     def generate_options(self, group_parser):
         super(AddKeyCommand, self).generate_options(group_parser)
         group_parser.add_argument(
-            '--label',
-            help='The tokens label to add a key too.\n',
-            required=True)
-        group_parser.add_argument(
             '--algorithm',
             help='The type of the key.\n',
-            choices=[
-                'rsa1024', 'rsa2048', 'aes128', 'aes256', 'ecc224', 'ecc256',
-                'ecc384', 'ecc521'
-            ],
+            choices=Tpm2.ALGS,
             required=True)
-        group_parser.add_argument(
-            '--key-label',
-            help='The key label to identify the key. Defaults to an integer value.\n'
-        )
 
     # Creates a new key
-    def new_key_create(self, pobj, objauth, tpm2, alg, privkey, d):
+    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, d):
 
-        tr_handle = bytes_to_file(pobj['handle'], d)
+        pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
 
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.create(
-            tr_handle, pobj['objauth'], objauth, alg=alg)
+            pobj_handle, pobj['objauth'], objauth, alg=alg)
 
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 
@@ -541,14 +535,6 @@ class LinkCommand(NewKeyCommandBase):
         group_parser.add_argument('privkey',
             help='Path of the key to be linked.\n')
         group_parser.add_argument(
-            '--label',
-            help='The tokens label to import the key too.\n',
-            required=True)
-        group_parser.add_argument(
-            '--key-label',
-            help='The label of the key imported. Defaults to an integer value.\n'
-        )
-        group_parser.add_argument(
             '--auth',
             default='',
             help='The auth value for the key to link.\n'
@@ -559,9 +545,9 @@ class LinkCommand(NewKeyCommandBase):
             choices=['rsa'],
             default='rsa')
 
-    def new_key_init(self, label, sopin, userpin, pobj, sealobjects, tpm2, d):
+    def new_key_init(self, label, sopin, userpin, hierarchyauth, pobj, sealobjects, tpm2, d):
 
-        tr_handle = bytes_to_file(pobj['handle'], d)
+        pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
 
         # Get the primary object encrypted auth value and sokey information
         # to decode it. Based on the incoming pin
@@ -576,7 +562,7 @@ class LinkCommand(NewKeyCommandBase):
         sealpriv = sealobjects[privkey]
         sealsalt = sealobjects[saltkey]
 
-        sealctx = tpm2.load(tr_handle, pobj['objauth'], sealpriv, sealpub)
+        sealctx = tpm2.load(pobj_handle, pobj['objauth'], sealpriv, sealpub)
 
         sealauth = hash_pass(pin, salt=sealsalt)['hash']
 
@@ -591,7 +577,7 @@ class LinkCommand(NewKeyCommandBase):
         return (encobjauth, objauth)
 
     # Links a new key
-    def new_key_create(self, pobj, objauth, tpm2, alg, keypath, d):
+    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, keypath, d):
         if alg != 'rsa':
             sys.exit('Unknown algorithm or algorithm not supported, got "%s"' %
                      alg)
@@ -605,26 +591,36 @@ class LinkCommand(NewKeyCommandBase):
         pubbytes = bytes(tss2_privkey['pubkey'])
         privbytes = bytes(tss2_privkey['privkey'])
 
-        if phandle == tpm2.TPM2_RH_OWNER or \
-            (phandle >> tpm2.TPM2_HR_SHIFT != tpm2.TPM2_HT_PERSISTENT):
-            sys.exit('TSS Engine keys must have a persistent parent, got: 0x{:x}'.format(phandle))
+        pid = pobj['id']
+        pobj_config = yaml.safe_load(pobj['config'])
+        is_transient = pobj_config['transient']
+        if not is_transient and (phandle == tpm2.TPM2_RH_OWNER or \
+            (phandle >> tpm2.TPM2_HR_SHIFT != tpm2.TPM2_HT_PERSISTENT)):
+            sys.exit('The primary object (id: {:d}) is persistent and'
+                ' the TSS Engine key does not have a persistent parent,'
+                ' got: 0x{:x}'.format(pid, phandle))
+        elif is_transient and phandle != 0:
+            sys.exit('The primary object (id: {:d}) is transient and'
+                ' the TSS Engine key has a parent handle,'
+                ' got: 0x{:x}'.format(pid, phandle))
+
 
         if is_empty_auth and len(self._auth) if self._auth is not None else 0:
             sys.exit('Key expected to have auth value, please specify via option --auth');
 
-        # Im diving into the ESYS_TR serialized format,
-        # this isn't the smartest thing to do...
-        handle_bytes = pobj['handle'][0:4]
-        expected_handle = struct.unpack(">I", handle_bytes)[0]
+        if not is_transient:
+            # Im diving into the ESYS_TR serialized format,
+            # this isn't the smartest thing to do...
+            hexhandle = pobj_config['esys-tr']
+            handle_bytes = binascii.unhexlify(hexhandle)[0:4]
+            expected_handle = struct.unpack(">I", handle_bytes)[0]
+            if phandle != expected_handle:
+                sys.exit("Key must be parent of 0x{:X}, got 0x{:X}".format(
+                    expected_handle, phandle))
 
-        if phandle != expected_handle:
-            sys.exit("Key must be parent of 0x{:X}, got 0x{:X}".format(
-                expected_handle, phandle))
-
-        # load(self, pctx, pauth, priv, pub):
-        tr_handle = bytes_to_file(pobj['handle'], d)
+        pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
         pobjauth = pobj['objauth']
-        ctx = tpm2.load(tr_handle, pobjauth, privbytes, pubbytes)
+        ctx = tpm2.load(pobj_handle, pobjauth, privbytes, pubbytes)
         tertiarypubdata, _ = tpm2.readpublic(ctx, False)
 
         try:
@@ -636,11 +632,11 @@ class LinkCommand(NewKeyCommandBase):
         finally:
             os.close(privfd)
             os.close(pubfd)
-        
+
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 
     def __call__(self, args):
         self._auth = args['auth'] if 'auth' in args else None
         objects = super(LinkCommand, self).__call__(args)
-        NewKeyCommandBase.output(objects, 'link')        
-        
+        NewKeyCommandBase.output(objects, 'link')
+

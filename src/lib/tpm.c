@@ -158,10 +158,6 @@ static const char *TPM2_MANUFACTURER_MAP[][2] = {
     {"STM ", "STMicro"}
 };
 
-static TPMS_CAPABILITY_DATA *tpms_fixed_property_cache;
-static TPMS_CAPABILITY_DATA *tpms_alg_cache;
-static TPMS_CAPABILITY_DATA *tpms_cc_cache;
-
 struct tpm_ctx {
     TSS2_TCTI_CONTEXT *tcti_ctx;
     ESYS_CONTEXT *esys_ctx;
@@ -169,6 +165,9 @@ struct tpm_ctx {
     ESYS_TR hmac_session;
     TPMA_SESSION old_flags;
     TPMA_SESSION original_flags;
+    TPMS_CAPABILITY_DATA *tpms_fixed_property_cache;
+    TPMS_CAPABILITY_DATA *tpms_alg_cache;
+    TPMS_CAPABILITY_DATA *tpms_cc_cache;
 };
 
 #define TPM2B_INIT(xsize) { .size = xsize, }
@@ -258,14 +257,22 @@ static void flags_restore(tpm_ctx *ctx) {
     }
 }
 
+#define SAFE_ESYS_FREE(ptr) do { Esys_Free(ptr); ctx->tpms_alg_cache = NULL; } while (0)
+
 void tpm_ctx_free(tpm_ctx *ctx) {
 
     if (!ctx) {
         return;
     }
 
+    /* free the per-tpm caches of properties */
+    SAFE_ESYS_FREE(ctx->tpms_alg_cache);
+    SAFE_ESYS_FREE(ctx->tpms_cc_cache);
+    SAFE_ESYS_FREE(ctx->tpms_fixed_property_cache);
+
     Esys_Finalize(&ctx->esys_ctx);
     Tss2_TctiLdr_Finalize(&ctx->tcti_ctx);
+
     free(ctx);
 }
 
@@ -327,7 +334,7 @@ CK_RV tpm_session_start(tpm_ctx *ctx, twist auth, uint32_t handle) {
             TPM2_SE_HMAC, &symmetric, TPM2_ALG_SHA256,
             &session);
     if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Esys_StartAuthSession: 0x%x", rc);
+        LOGE("Esys_StartAuthSession: %s", Tss2_RC_Decode(rc));
         return CKR_GENERAL_ERROR;
     }
 
@@ -419,12 +426,12 @@ CK_RV tpm_ctx_new(const char *config, tpm_ctx **tctx) {
 
 static CK_RV tpm_get_properties(tpm_ctx *ctx, TPMS_CAPABILITY_DATA **d) {
 
-    if (tpms_fixed_property_cache) {
-        *d = tpms_fixed_property_cache;
+    if (ctx->tpms_fixed_property_cache) {
+        *d = ctx->tpms_fixed_property_cache;
         return CKR_OK;
     }
 
-    assert(!tpms_fixed_property_cache);
+    assert(!ctx->tpms_fixed_property_cache);
 
     TPM2_CAP capability = TPM2_CAP_TPM_PROPERTIES;
     UINT32 property = TPM2_PT_FIXED;
@@ -451,7 +458,7 @@ static CK_RV tpm_get_properties(tpm_ctx *ctx, TPMS_CAPABILITY_DATA **d) {
         return CKR_GENERAL_ERROR;
     }
 
-    *d = tpms_fixed_property_cache = capabilityData;
+    *d = ctx->tpms_fixed_property_cache = capabilityData;
     return CKR_OK;
 }
 
@@ -1952,12 +1959,13 @@ CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handl
     return *newblob ? CKR_OK : CKR_HOST_MEMORY;
 }
 
-static TSS2_RC tpm_get_cc(ESYS_CONTEXT *ectx, TPMS_CAPABILITY_DATA **capabilityData) {
-    assert(ectx);
+static TSS2_RC tpm_get_cc(tpm_ctx *tpm, TPMS_CAPABILITY_DATA **capabilityData) {
+    assert(tpm);
+    assert(tpm->esys_ctx);
     assert(capabilityData);
 
-    if (tpms_cc_cache) {
-        *capabilityData = tpms_cc_cache;
+    if (tpm->tpms_cc_cache) {
+        *capabilityData = tpm->tpms_cc_cache;
         return CKR_OK;
     }
 
@@ -1966,7 +1974,7 @@ static TSS2_RC tpm_get_cc(ESYS_CONTEXT *ectx, TPMS_CAPABILITY_DATA **capabilityD
     UINT32 propertyCount = TPM2_MAX_CAP_CC;
     TPMI_YES_NO moreData;
 
-    TSS2_RC rval = Esys_GetCapability(ectx,
+    TSS2_RC rval = Esys_GetCapability(tpm->esys_ctx,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
@@ -1977,13 +1985,13 @@ static TSS2_RC tpm_get_cc(ESYS_CONTEXT *ectx, TPMS_CAPABILITY_DATA **capabilityD
         return rval;
     }
 
-    tpms_cc_cache = *capabilityData;
+    tpm->tpms_cc_cache = *capabilityData;
 
     return TSS2_RC_SUCCESS;
 }
 
 static TSS2_RC create_loaded(
-        ESYS_CONTEXT *ectx,
+        tpm_ctx *tpm,
         ESYS_TR parent,
         ESYS_TR session,
         TPM2B_SENSITIVE_CREATE *in_sens,
@@ -2001,7 +2009,7 @@ static TSS2_RC create_loaded(
     if (check_cc) {
         /* do not free, value is cached */
         TPMS_CAPABILITY_DATA *capabilityData = NULL;
-        rval = tpm_get_cc(ectx, &capabilityData);
+        rval = tpm_get_cc(tpm, &capabilityData);
         if (rval != TSS2_RC_SUCCESS) {
             return rval;
         }
@@ -2032,7 +2040,7 @@ static TSS2_RC create_loaded(
         template.size = offset;
 
         rval = Esys_CreateLoaded(
-                ectx,
+                tpm->esys_ctx,
                 parent,
                 session, ESYS_TR_NONE, ESYS_TR_NONE,
                 in_sens,
@@ -2052,7 +2060,7 @@ static TSS2_RC create_loaded(
         TPM2B_DIGEST *creation_hash = NULL;
         TPMT_TK_CREATION *creation_ticket = NULL;
 
-        rval = Esys_Create(ectx,
+        rval = Esys_Create(tpm->esys_ctx,
                 parent,
                 session, ESYS_TR_NONE, ESYS_TR_NONE,
                 in_sens,
@@ -2079,7 +2087,7 @@ static TSS2_RC create_loaded(
         if (!out_handle)
             return TSS2_RC_SUCCESS;
 
-        rval = Esys_Load(ectx,
+        rval = Esys_Load(tpm->esys_ctx,
                 parent,
                 session, ESYS_TR_NONE, ESYS_TR_NONE,
                 *out_priv,
@@ -2159,7 +2167,7 @@ CK_RV tpm2_create_seal_obj(tpm_ctx *ctx, twist parentauth, uint32_t parent_handl
     TPM2B_PRIVATE *newpriv = NULL;
     TPM2B_PUBLIC *newpub = NULL;
     TSS2_RC rc = create_loaded(
-            ctx->esys_ctx,
+            ctx,
             parent_handle,
             ctx->hmac_session,
             &sensitive,
@@ -2878,7 +2886,7 @@ CK_RV tpm2_generate_key(
     memcpy(auth->buffer, newauthbin, auth->size);
 
     TSS2_RC rc = create_loaded(
-            tpm->esys_ctx,
+            tpm,
             parent,
             tpm->hmac_session,
             &tpmdat.priv,
@@ -3004,7 +3012,12 @@ void tpm_objdata_free(tpm_object_data *objdata) {
     twist_free(objdata->pubblob);
 }
 
-CK_RV tpm_get_algorithms (tpm_ctx *ctx, TPMS_CAPABILITY_DATA **capabilityData) {
+CK_RV tpm_get_algorithms(tpm_ctx *ctx, TPMS_CAPABILITY_DATA **capabilityData) {
+
+    if (ctx->tpms_alg_cache) {
+        *capabilityData = ctx->tpms_alg_cache;
+        return CKR_OK;
+    }
 
     TPM2_CAP capability = TPM2_CAP_ALGS;
     UINT32 property = TPM2_ALG_FIRST;
@@ -3014,12 +3027,14 @@ CK_RV tpm_get_algorithms (tpm_ctx *ctx, TPMS_CAPABILITY_DATA **capabilityData) {
     check_pointer(ctx);
     check_pointer(capabilityData);
 
+    TPMS_CAPABILITY_DATA *capdata = NULL;
+
     TSS2_RC rval = Esys_GetCapability(ctx->esys_ctx,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             capability,
-            property, propertyCount, &moreData, capabilityData);
+            property, propertyCount, &moreData, &capdata);
 
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Esys_GetCapability: %s:", Tss2_RC_Decode(rval));
@@ -3027,9 +3042,12 @@ CK_RV tpm_get_algorithms (tpm_ctx *ctx, TPMS_CAPABILITY_DATA **capabilityData) {
     }
 
     if (!capabilityData) {
+        Esys_Free(capdata);
         LOGE("TPM did not reply with correct amount of capabilities");
         return CKR_GENERAL_ERROR;
     }
+
+    *capabilityData = ctx->tpms_alg_cache = capdata;
 
     return CKR_OK;
 }
@@ -3090,7 +3108,7 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
     CK_ULONG supported = 0;
 
     TPMS_CAPABILITY_DATA *capabilityData = NULL;
-    CK_RV rv = tpm_get_algorithms (ctx, &capabilityData);
+    CK_RV rv = tpm_get_algorithms(ctx, &capabilityData);
     if (rv != CKR_OK) {
         LOGE("Retrieving supported algorithms from TPM failed");
         return rv;
@@ -3101,7 +3119,6 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
     TPMA_MODES modes = 0;
     rv = tpm2_get_modes(ctx, &modes);
     if (rv != CKR_OK) {
-        Esys_Free(capabilityData);
         return rv;
     }
 
@@ -3156,21 +3173,16 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
 
 out:
     *count = supported;
-    Esys_Free(capabilityData);
 
     return rv;
 }
 
 void tpm_init(void) {
-    tpms_fixed_property_cache = NULL;
-    tpms_alg_cache = NULL;
-    tpms_cc_cache = NULL;
+    /* pass nothing to do */
 }
 
 void tpm_destroy(void) {
-    Esys_Free(tpms_fixed_property_cache);
-    Esys_Free(tpms_alg_cache);
-    Esys_Free(tpms_cc_cache);
+    /* pass nothing to do */
 }
 
 CK_RV tpm_serialize_handle(ESYS_CONTEXT *esys, ESYS_TR handle, twist *buf) {
@@ -3233,7 +3245,230 @@ CK_RV tpm_get_existing_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *pr
     return CKR_OK;
 }
 
-CK_RV tpm_create_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_blob) {
+typedef CK_RV (*pfn_populate)(tpm_ctx *tpm, TPM2B_PUBLIC *pub);
+
+typedef struct key_template key_template;
+struct key_template {
+    const char *template_name;
+    pfn_populate fn;
+};
+
+static CK_RV tss2_engine_pub_populator(tpm_ctx *tpm, TPM2B_PUBLIC *pub) {
+    assert(tpm);
+
+    static const TPM2B_PUBLIC primary_ecc_template = {
+        .size = 0,
+        .publicArea = {
+            .type = TPM2_ALG_ECC,
+            .nameAlg = TPM2_ALG_SHA256,
+            .objectAttributes = (TPMA_OBJECT_USERWITHAUTH
+                    |TPMA_OBJECT_RESTRICTED
+                    |TPMA_OBJECT_DECRYPT
+                    |TPMA_OBJECT_NODA
+                    |TPMA_OBJECT_FIXEDTPM
+                    |TPMA_OBJECT_FIXEDPARENT
+                    |TPMA_OBJECT_SENSITIVEDATAORIGIN),
+            .authPolicy = { 0 },
+            .parameters.eccDetail = {
+                 .symmetric = {
+                     .algorithm = TPM2_ALG_AES,
+                     .keyBits.aes = 128,
+                     .mode.aes = TPM2_ALG_CFB,
+                 },
+                 .scheme = {
+                      .scheme = TPM2_ALG_NULL,
+                  },
+                 .curveID = TPM2_ECC_NIST_P256,
+                 .kdf = {
+                      .scheme = TPM2_ALG_NULL,
+                      .details = {}}
+             },
+            .unique.ecc = {
+                 .x = {.size = 0,.buffer = {}},
+                 .y = {.size = 0,.buffer = {}},
+             },
+        } /* end TPMT */
+    };
+
+    static const TPM2B_PUBLIC primary_rsa_template = {
+        .size = 0,
+        .publicArea = {
+            .type = TPM2_ALG_RSA,
+            .nameAlg = TPM2_ALG_SHA256,
+            .objectAttributes = (TPMA_OBJECT_USERWITHAUTH
+                    |TPMA_OBJECT_RESTRICTED
+                    |TPMA_OBJECT_DECRYPT
+                    |TPMA_OBJECT_NODA
+                    |TPMA_OBJECT_FIXEDTPM
+                    |TPMA_OBJECT_FIXEDPARENT
+                    |TPMA_OBJECT_SENSITIVEDATAORIGIN),
+            .authPolicy = { 0 },
+            .parameters.rsaDetail = {
+                .symmetric = {
+                    .algorithm = TPM2_ALG_AES,
+                    .keyBits.aes = 128,
+                    .mode.aes = TPM2_ALG_CFB,
+                },
+                .scheme = {
+                    .scheme = TPM2_ALG_NULL,
+                    .details = {}
+                },
+                .keyBits = 2048,
+                .exponent = 0,
+            }
+        }, /* end TPMT */
+    };
+
+    TPMS_CAPABILITY_DATA *cap_data = NULL;
+    CK_RV rv = tpm_get_algorithms(tpm, &cap_data);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    bool supports_ecc = false;
+    bool supports_rsa = false;
+
+    TPML_ALG_PROPERTY *algs = &cap_data->data.algorithms;
+    UINT32 i;
+    for (i=0; i < algs->count; i++) {
+        TPMS_ALG_PROPERTY *p = &algs->algProperties[i];
+        if (p->alg == TPM2_ALG_ECC) {
+            supports_ecc = true;
+        } else if (p->alg == TPM2_ALG_RSA) {
+            supports_rsa = true;
+        }
+
+        /* nothing left to examine, exit loop */
+        if (supports_ecc && supports_rsa) {
+            break;
+        }
+    }
+
+    if (!supports_rsa && !supports_ecc) {
+        LOGE("TPM Supports niether ECC nor RSA?");
+        return CKR_GENERAL_ERROR;
+    }
+
+    *pub = supports_ecc ?
+            primary_ecc_template : primary_rsa_template;
+
+    return CKR_OK;
+}
+
+/*
+ * Mapping friendly string names to primary objects templates
+ */
+static const key_template TEMPLATES[] = {
+    {
+        .template_name = "tss2-engine-key",
+        .fn = tss2_engine_pub_populator,
+    },
+};
+
+CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
+        const char *template_name, twist pobj_auth,
+        uint32_t *primary_handle) {
+
+    const key_template *templ = NULL;
+    size_t i;
+    for(i=0; i < ARRAY_LEN(TEMPLATES); i++) {
+        const key_template *t = &TEMPLATES[i];
+
+        if (!strcmp(template_name, t->template_name)) {
+            templ = t;
+            break;
+        }
+    }
+
+    if (!templ) {
+        LOGE("No match for template with name: \"%s\"", template_name);
+        return CKR_GENERAL_ERROR;
+    }
+
+    /* TODO make configurable ? */
+    ESYS_TR hierarchy = ESYS_TR_RH_OWNER;
+    TPM2B_AUTH hieararchy_auth = { 0 };
+
+    /*
+     * Hiearchy is currently fixed to owner auth, but eventually
+     * this could be:
+     * TPM2_PKCS11_<hierarchy>_AUTH where <hierarchy> is one of:
+     * OWNER
+     * PLATFORM
+     * ENDORSEMENT
+     * NULL
+     */
+    const char *auth = getenv("TPM2_PKCS11_OWNER_AUTH");
+    if (auth && auth[0]) {
+        size_t len = strlen(auth);
+        if (len > sizeof(hieararchy_auth.buffer)) {
+            LOGE("TPM2_PKCS11_HIERARCHY_AUTH is too big. Max size is: %zu",
+                    sizeof(hieararchy_auth.buffer));
+            return CKR_GENERAL_ERROR;
+        }
+        hieararchy_auth.size = (typeof(hieararchy_auth.size))len;
+        memcpy(hieararchy_auth.buffer, auth, len);
+    }
+
+    TPM2B_DATA outside_info = { 0 };
+    TPML_PCR_SELECTION pcrs = { 0 };
+    TPM2B_SENSITIVE_CREATE in_sens = { 0 };
+
+    if (pobj_auth) {
+        size_t len = twist_len(pobj_auth);
+        TPM2B_AUTH *a = &in_sens.sensitive.userAuth;
+        if (len > sizeof(a->buffer)) {
+            LOGE("pobject auth too large");
+            return CKR_GENERAL_ERROR;
+        }
+        a->size = (UINT16)len;
+        memcpy(a->buffer, pobj_auth, len);
+    }
+
+    TSS2_RC rval = Esys_TR_SetAuth(tpm->esys_ctx, hierarchy, &hieararchy_auth);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_TR_SetAuth: %s:", Tss2_RC_Decode(rval));
+        return CKR_GENERAL_ERROR;
+    }
+
+    TPM2B_PUBLIC in_pub = { 0 };
+    CK_RV rv = templ->fn(tpm, &in_pub);
+    if (rv != CKR_OK) {
+        LOGE("Template population routine failed: 0x%x", rv);
+        return rv;
+    }
+
+    TPM2B_PUBLIC *out_pub = NULL;
+    TPM2B_CREATION_DATA *data = NULL;
+    TPM2B_DIGEST *hash = NULL;
+    TPMT_TK_CREATION *ticket = NULL;
+
+    ESYS_TR handle = ESYS_TR_NONE;
+    rval = Esys_CreatePrimary(tpm->esys_ctx,
+            hierarchy,
+            ESYS_TR_PASSWORD,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            &in_sens,
+            &in_pub,
+            &outside_info,
+            &pcrs,
+            &handle,
+            &out_pub,
+            &data,
+            &hash,
+            &ticket);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_CreatePrimary: %s:", Tss2_RC_Decode(rval));
+        return CKR_GENERAL_ERROR;
+    }
+
+    *primary_handle = handle;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_create_persistent_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_blob) {
     assert(tpm);
     assert(primary_blob);
     assert(tpm->esys_ctx);

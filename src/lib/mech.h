@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
+#include <stdbool.h>
 
 #include <openssl/evp.h>
 

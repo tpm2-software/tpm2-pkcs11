@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <yaml.h>
 
+#include "parser.h"
 #include "pkcs11.h"
 #include "token.h"
 #include "twist.h"
@@ -358,7 +359,7 @@ struct config_state {
     char key[64];
 };
 
-bool handle_config_event(yaml_event_t *e,
+bool handle_token_config_event(yaml_event_t *e,
         config_state *state, token_config *config) {
 
     switch(e->type) {
@@ -456,7 +457,127 @@ bool parse_token_config_from_string(const unsigned char *yaml, size_t size, toke
         }
 
         /* handle events */
-        rc = handle_config_event(&event, &state, config);
+        rc = handle_token_config_event(&event, &state, config);
+        if (!rc) {
+            LOGE("Parser error %d", parser.error);
+            return false;
+        }
+
+        if(event.type != YAML_STREAM_END_EVENT) {
+            yaml_event_delete(&event);
+        }
+
+    } while(event.type != YAML_STREAM_END_EVENT);
+
+    yaml_event_delete(&event);
+    yaml_parser_delete(&parser);
+
+    return true;
+}
+
+static bool handle_pobject_config_event(yaml_event_t *e,
+        config_state *state, pobject_config *config) {
+
+    switch(e->type) {
+    case YAML_NO_EVENT:
+    case YAML_STREAM_START_EVENT:
+    case YAML_STREAM_END_EVENT:
+    case YAML_DOCUMENT_START_EVENT:
+    case YAML_DOCUMENT_END_EVENT:
+        return true;
+    case YAML_MAPPING_START_EVENT:
+        if (state->map_start) {
+            return false;
+        }
+        state->map_start = true;
+        return true;
+    case YAML_MAPPING_END_EVENT:
+        if (!state->map_start) {
+            return false;
+        }
+        state->map_start = false;
+        return true;
+
+    /* Data */
+    case YAML_SCALAR_EVENT:
+        if (!state->map_start) {
+            return false;
+        }
+
+        /* key */
+        if (!strlen(state->key)) {
+            if (!is_yaml_str(e->data.scalar.tag)) {
+                LOGE("Cannot handle non-str config keys, got: \"%s\"\n",
+                        e->data.scalar.value);
+                return false;
+            }
+
+            if (e->data.scalar.length > sizeof(state->key) - 1) {
+                LOGE("Key is too big for storage class, got key \"%s\","
+                        " expected less than %zu", e->data.scalar.value,
+                        sizeof(state->key) - 1);
+                return false;
+            }
+
+            snprintf(state->key, sizeof(state->key), "%s",
+                    e->data.scalar.value);
+        } else {
+
+            if (!strcmp(state->key, "transient")) {
+                config->is_transient = !strcmp((const char *)e->data.scalar.value, "true") ?
+                        true : false;
+            } else if(!strcmp(state->key, "esys-tr")) {
+                config->blob = twistbin_unhexlify((const char *)e->data.scalar.value);
+                if (!config->blob) {
+                    LOGE("oom");
+                    return false;
+                }
+            } else if(!strcmp(state->key, "template-name")) {
+                config->template_name = strdup((const char *)e->data.scalar.value);
+                if (!config->template_name) {
+                    LOGE("oom");
+                    return false;
+                }
+            } else {
+                LOGE("Unknown key, got: \"%s\"\n",
+                        state->key);
+                return false;
+            }
+
+            state->key[0] = '\0';
+        }
+        return true;
+    default:
+        LOGE("Unhandled YAML event type: %u\n", e->type);
+    }
+
+    return false;
+}
+
+bool parse_pobject_config_from_string(const unsigned char *yaml, size_t size,
+        pobject_config *config) {
+
+    yaml_parser_t parser;
+
+    int rc = yaml_parser_initialize(&parser);
+    if(!rc) {
+        return false;
+    }
+
+    yaml_parser_set_input_string(&parser, yaml, size);
+
+    config_state state = { 0 };
+
+    yaml_event_t event;
+    do {
+        int rc = yaml_parser_parse(&parser, &event);
+        if (!rc) {
+            LOGE("Parser error %d", parser.error);
+            return false;
+        }
+
+        /* handle events */
+        rc = handle_pobject_config_event(&event, &state, config);
         if (!rc) {
             LOGE("Parser error %d", parser.error);
             return false;

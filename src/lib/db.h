@@ -46,7 +46,7 @@ CK_RV db_delete_object(tobject *tobj);
 
 CK_RV db_get_first_pid(unsigned *id);
 
-CK_RV db_add_primary(twist blob, unsigned *pid);
+CK_RV db_add_primary(pobject *pobj, unsigned *pid);
 
 CK_RV db_add_token(token *tok);
 

@@ -170,7 +170,11 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
 
 CK_RV tpm_get_existing_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_blob);
 
-CK_RV tpm_create_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_blob);
+CK_RV tpm_create_persistent_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_blob);
+
+CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
+        const char *template_name, const char *pobj_auth,
+        uint32_t *primary_handle);
 
 CK_RV tpm_get_pss_sig_state(tpm_ctx *tctx, tobject *tobj, bool *pss_sigs_good);
 

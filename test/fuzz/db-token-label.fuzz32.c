@@ -52,9 +52,11 @@ static int setup(void **state) {
     db_debug_set_db(_db);
 
     unsigned int pid = 0;
-    twist blob = twist_new("aabbccdd");
-    rv = db_add_primary(blob, &pid);
-    twist_free(blob);
+    pobject pobj = { 0 };
+    pobj.config.blob = twist_new("aabbccdd");
+    assert_non_null(pobj.config.blob);
+    rv = db_add_primary(&pobj, &pid);
+    twist_free(pobj.config.blob);
     assert_int_equal(rv, CKR_OK);
 
     /* create and add a dummy token */

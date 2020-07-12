@@ -43,29 +43,43 @@ static CK_RV get_or_create_primary(token *t) {
     /* if so use it */
     if (t->pid) {
         /* tokens in the DB store already have an associated primary object */
-        return db_init_pobject(t->pid, &t->pobject, t->tctx);
+        rv = db_init_pobject(t->pid, &t->pobject, t->tctx);
+        if (rv != CKR_OK) {
+            LOGE("Could not initialize pobject");
+            return rv;
+        }
+
+        /* if it's a transient primary we need to create it */
+        return t->pobject.config.is_transient ?
+                tpm_create_transient_primary_from_template(t->tctx,
+                t->pobject.config.template_name, NULL,
+                &t->pobject.handle) : CKR_OK;
     }
 
     /* is their a PC client spec key ? */
+    uint32_t handle = 0;
     twist blob = NULL;
-    rv = tpm_get_existing_primary(t->tctx, &t->pobject.handle, &blob);
+    rv = tpm_get_existing_primary(t->tctx, &handle, &blob);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    /* nothing, create one */
-    if (!t->pobject.handle) {
-        rv = tpm_create_primary(t->tctx, &t->pobject.handle, &blob);
+    /* nothing, create one and persist it */
+    if (!handle) {
+        rv = tpm_create_persistent_primary(t->tctx, &handle, &blob);
         if (rv != CKR_OK) {
             return rv;
         }
     }
 
-    assert(t->pobject.handle);
+    assert(handle);
 
-    rv = db_add_primary(blob, &t->pid);
+    t->pobject.config.is_transient = false;
+    t->pobject.handle = handle;
+    t->pobject.config.blob = blob;
+
+    rv = db_add_primary(&t->pobject, &t->pid);
     assert(t->pid);
-    twist_free(blob);
     return rv;
 }
 

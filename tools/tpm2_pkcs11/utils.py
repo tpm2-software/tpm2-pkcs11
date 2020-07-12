@@ -383,7 +383,7 @@ class TSSPrivKey(univ.Sequence):
     ASN1_SIMPLE(TSSPRIVKEY, privkey, ASN1_OCTET_STRING)
     } ASN1_SEQUENCE_END(TSSPRIVKEY)
     '''
- 
+
     componentType = namedtype.NamedTypes(
         namedtype.NamedType('type', univ.ObjectIdentifier()),
         namedtype.OptionalNamedType('emptyauth', univ.Boolean().subtype(
@@ -403,13 +403,42 @@ def asn1parse_tss_key(keypath):
     with open(keypath, 'r') as f:
         substrate = pem.readPemFromFile(f,
             startMarker=tss2_startmarker, endMarker=tss2_endmarker)
-        
+
         if len(substrate) == 0:
             sys.exit('Did not find key in tss key file: {}'.format(keypath))
 
         tss2_privkey, _ = decoder.decode(substrate, asn1Spec=TSSPrivKey())
 
-        print(tss2_privkey)
-        
         return tss2_privkey
 
+def create_primary(tpm2, hierarchyauth, pobjauth, template=None):
+
+        details = tpm2.TEMPLATES[template]
+        alg = details['alg']
+        attrs = details['attrs']
+        
+        if template == 'tss2-engine-key':
+            supported = tpm2.getcap('algorithms')
+            supported = yaml.safe_load(supported)
+            if 'ecc' in supported:
+                alg = 'ecc256'
+            elif 'rsa' in supported:
+                alg = 'rsa2048'
+            else:
+                sys.exit('TPM Supports neither RSA nor ECC')
+        
+        return tpm2.createprimary(hierarchyauth, pobjauth, alg=alg, attrs=attrs)
+
+def get_pobject(pobject, tpm2, hierarchyauth, d):
+
+    pobjconf = yaml.safe_load(pobject['config'])
+    pobjauth = pobject['objauth']
+
+    if pobjconf['transient'] is True:
+        selection = pobjconf['template-name']
+        pobj_handle = create_primary(tpm2, hierarchyauth, pobjauth, selection)
+    else:
+        tr_handle = binascii.unhexlify(pobjconf['esys-tr'])
+        pobj_handle = bytes_to_file(tr_handle, d)
+
+    return pobj_handle
