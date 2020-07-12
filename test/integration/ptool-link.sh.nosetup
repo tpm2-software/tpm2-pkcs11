@@ -31,6 +31,39 @@ pkcs11_tool() {
   return $?
 }
 
+tpm2tss_genkey() {
+  export OPENSSL_CONF="$TEST_FIXTURES/tss2engine.cnf"
+  export TPM2TSSENGINE_TCTI="$TPM2_PKCS11_TCTI"
+
+  # Generate a TSS2 Engine RSA key
+  tpm2tss-genkey "$@"
+
+  unset OPENSSL_CONF
+  unset OPENSSL_ENGINES
+}
+
+rsa_verify() {
+
+  echo "testdata">${tempdir}/data
+
+  echo "Testing RSA signature"
+  pkcs11_tool -v --list-objects --login --pin myuserpin
+
+  pkcs11_tool -v --sign --login --token-label="$1" --label="$2" --pin myuserpin \
+            --input-file ${tempdir}/data --output-file ${tempdir}/sig \
+            --mechanism SHA256-RSA-PKCS
+
+  pkcs11_tool -v --read-object --token-label="$1" --label="$2" \
+            --type pubkey --output-file "${tempdir}/$2.der" \
+    || exit 77
+  #This fails on old pkcs11-tool versions, thus exit-skip here
+
+  openssl dgst -verify "${tempdir}/$2.der" -keyform DER -signature ${tempdir}/sig -sha256 \
+             -sigopt rsa_padding_mode:pkcs1 \
+             ${tempdir}/data
+  echo "RSA signature tested"
+}
+
 export TPM2_PKCS11_STORE="$tempdir"
 
 echo "TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
@@ -54,36 +87,49 @@ engdir="$(pkg-config --variable=enginesdir libcrypto)"
 if [ -z "$engdir" ]; then
   export OPENSSL_ENGINES=/usr/local/lib/engines
 fi
-export OPENSSL_CONF="$TEST_FIXTURES/tss2engine.cnf"
-export TPM2TSSENGINE_TCTI="$TPM2_PKCS11_TCTI"
 
-# Generate a TSS2 Engine RSA key
-tpm2tss-genkey -P"$handle" -a rsa -s 2048 "$tempdir/tss2-rsa-2048.pem"
-
-unset OPENSSL_CONF
-unset OPENSSL_ENGINES
+tpm2tss_genkey -P"$handle" -a rsa -s 2048 "$tempdir/tss2-rsa-2048.pem"
 
 # Link that key into the token
 tpm2_ptool link --label=linktoken --userpin=myuserpin --key-label=tss2rsa2048 \
     --path=$TPM2_PKCS11_STORE "$tempdir/tss2-rsa-2048.pem"
 
-echo "testdata">${tempdir}/data
+rsa_verify "linktoken" "tss2rsa2048"
 
-echo "Testing RSA signature"
-pkcs11_tool -v --list-objects --login --pin myuserpin
+#
+# Test transient primary keys that the TSS Engine uses
+#
+pid=$(tpm2_ptool init --transient-parent="tss2-engine-key" --path=$TPM2_PKCS11_STORE | grep id | cut -d' ' -f2-2)
 
-pkcs11_tool -v --sign --login --token-label="linktoken" --label="tss2rsa2048" --pin myuserpin \
-            --input-file ${tempdir}/data --output-file ${tempdir}/sig \
-            --mechanism SHA256-RSA-PKCS
+tpm2_ptool addtoken --pid="$pid" --label=linktokentransient --sopin=mysopin --userpin=myuserpin \
+    --path=$TPM2_PKCS11_STORE
 
-pkcs11_tool -v --read-object --token-label="linktoken" --label="tss2rsa2048" \
-            --type pubkey --output-file ${tempdir}/pubkey.der \
-    || exit 77
-#This fails on old pkcs11-tool versions, thus exit-skip here
+tpm2tss_genkey "$tempdir/tss2-rsa-2048-transient.pem"
 
-openssl dgst -verify ${tempdir}/pubkey.der -keyform DER -signature ${tempdir}/sig -sha256 \
-             -sigopt rsa_padding_mode:pkcs1 \
-             ${tempdir}/data
-echo "RSA signature tested"
+# Link that key into the token
+tpm2_ptool link --label=linktokentransient --userpin=myuserpin --key-label=tss2rsa2048transient \
+    --path=$TPM2_PKCS11_STORE "$tempdir/tss2-rsa-2048-transient.pem"
+
+rsa_verify "linktokentransient" "tss2rsa2048transient"
+
+# Now test with owner auth and primary object passwords set to something
+rm -rf "$tempdir"/*
+
+tpm2_changeauth -c o "newpass"
+
+pid=$(tpm2_ptool init --transient-parent="tss2-engine-key" --hierarchy-auth=newpass --primary-auth=1234 \
+    --path=$TPM2_PKCS11_STORE | grep id | cut -d' ' -f2-2)
+
+tpm2_ptool addtoken --hierarchy-auth=newpass --pid="$pid" --label=linktokentransient --sopin=mysopin --userpin=myuserpin \
+    --path=$TPM2_PKCS11_STORE
+
+tpm2tss_genkey -o newpass "$tempdir/tss2-rsa-2048-transient.pem"
+
+# Link that key into the token
+tpm2_ptool link --hierarchy-auth=newpass --label=linktokentransient --userpin=myuserpin --key-label=tss2rsa2048transient \
+    --path=$TPM2_PKCS11_STORE "$tempdir/tss2-rsa-2048-transient.pem"
+
+export TPM2_PKCS11_OWNER_AUTH=newpass
+rsa_verify "linktokentransient" "tss2rsa2048transient"
 
 exit 0

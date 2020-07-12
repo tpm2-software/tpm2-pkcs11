@@ -15,6 +15,27 @@ class Tpm2(object):
     TPM2_HR_SHIFT = 24
     TPM2_HT_PERSISTENT = 0x81
 
+    _TSS2_DEFAULT_ATTRS = "userwithauth|restricted|decrypt|noda|fixedtpm" \
+        "|fixedparent|sensitivedataorigin"
+
+    ALGS = [
+        'rsa1024', 'rsa2048', 'aes128', 'aes256', 'ecc224', 'ecc256',
+        'ecc384', 'ecc521'
+    ]
+
+    TEMPLATES = {
+        # No selection, just use an rsa2048 with tpm2-tool default attrs
+        None               : {
+            'alg' : 'rsa2048',
+            'attrs' : None
+        },
+        # tss2-engine key compatible with EC p256
+        'tss2-engine-key' :  {
+            'alg' : None,
+            'attrs' : _TSS2_DEFAULT_ATTRS
+        }
+    }
+
     def __init__(self, tmp):
         self._tmp = tmp
 
@@ -22,18 +43,26 @@ class Tpm2(object):
     def tmpdir(self):
         return self._tmp
 
-    def createprimary(self, ownerauth=None, objauth=None):
+    def createprimary(self, hierarchyauth=None, objauth=None, alg=None, attrs=None,):
         ctx = os.path.join(self._tmp, "context.out")
         cmd = [
             'tpm2_createprimary', '-c', ctx, '-g',
-            'sha256', '-G', 'rsa'
+            'sha256'
         ]
+
+        if alg is None:
+            alg = 'rsa'
+
+        cmd.extend(['-G', alg])
 
         if objauth and len(objauth) > 0:
             cmd.extend(['-p', objauth])
 
-        if ownerauth and len(ownerauth) > 0:
-            cmd.extend(['-P', ownerauth])
+        if hierarchyauth and len(hierarchyauth) > 0:
+            cmd.extend(['-P', hierarchyauth])
+
+        if attrs is not None:
+            cmd.extend(['-a', attrs])
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         _, stderr = p.communicate()
@@ -42,14 +71,14 @@ class Tpm2(object):
                                stderr)
         return ctx
 
-    def evictcontrol(self, ownerauth, ctx):
+    def evictcontrol(self, hierarchyauth, ctx):
 
         tr_file = os.path.join(self._tmp, "primary.handle")
 
         cmd = ['tpm2_evictcontrol', '-c', str(ctx), '-o', tr_file]
 
-        if ownerauth and len(ownerauth) > 0:
-            cmd.extend(['-P', ownerauth])
+        if hierarchyauth and len(hierarchyauth) > 0:
+            cmd.extend(['-P', hierarchyauth])
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         stdout, stderr = p.communicate()

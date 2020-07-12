@@ -38,10 +38,20 @@ enum token_login_state {
 
 typedef struct tobject tobject;
 
+typedef struct pobject_config pobject_config;
+struct pobject_config {
+    bool is_transient;
+    union {
+        char *template_name;
+        twist blob;
+    };
+};
+
 typedef struct pobject pobject;
 struct pobject {
-    uint32_t handle;
     twist objauth;
+    uint32_t handle;
+    pobject_config config;
 };
 
 typedef struct sealobject sealobject;

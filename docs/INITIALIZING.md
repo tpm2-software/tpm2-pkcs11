@@ -77,6 +77,16 @@ The output of the command to *stdout* is important. It describes the id of the p
 that one can associate subsequent commands to. Again, to create N > 1 slots, just run this command
 N times.
 
+### Transient Primary Keys
+
+By default, and suitable for most users, primary keys are persistent objects in TPM non-volatile memory. However,
+under certain situations, one may wish to use a transient primary key. The upside is that this consumes no
+non-volatile memory in the TPM. So this would be suitable in situations where all NV space is consumed. The downside
+is that initialization of the token will be slower and that it requires authentication to the owner hierarchy. `tpm2_ptool`
+commands that need to leverage a transient primary object have been augmented to take the `--hierarchy-auth` option to
+supply this. However, token initialization will need this in tools consuming the pkcs11 library. This can be supplied
+via the environment variable `TPM2_PKCS11_OWNER_AUTH`.
+
 ### Step 2 - Creating a Token
 
 After creating a slot or slots, now one needs to create a token. This is accomplished with the `addtoken` command for `tpm2-ptool`,

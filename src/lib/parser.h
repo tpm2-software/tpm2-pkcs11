@@ -14,4 +14,7 @@ bool parse_attributes_from_string(const unsigned char *yaml, size_t size,
 bool parse_token_config_from_string(const unsigned char *yaml, size_t size,
         token_config *config);
 
+bool parse_pobject_config_from_string(const unsigned char *yaml, size_t size,
+        pobject_config *config);
+
 #endif /* SRC_LIB_PARSER_H_ */
