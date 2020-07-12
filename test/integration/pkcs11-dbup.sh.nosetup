@@ -89,4 +89,12 @@ v=$(sqlite3 "$TPM2_PKCS11_STORE/tpm2_pkcs11.sqlite3" 'select schema_version from
 echo "Got schema version as $v"
 test $v -ge 1
 
+echo "testdata">${tempdir}/data
+
+echo "Using key to ensure it still wotks"
+pkcs11_tool -v --sign --login --slot-index=0 --label="myrsakey" --pin myuserpin \
+            --input-file ${tempdir}/data --output-file ${tempdir}/sig \
+            --mechanism SHA256-RSA-PKCS
+echo "Successfully used key post schema upgrade"
+
 exit 0
