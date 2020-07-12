@@ -92,8 +92,15 @@ src_libtpm2_test_internal_la_SOURCES = $(LIB_PKCS11_INTERNAL_LIB_SRC)
 
 noinst_LTLIBRARIES = $(libtpm2_test_pkcs11) $(libtpm2_test_internal)
 
+if ENABLE_ASAN
+    ASAN_ENABLED="true"
+else
+    ASAN_ENABLED=""
+endif
+
 # test harness configuration
 AM_TESTS_ENVIRONMENT = \
+    ASAN_ENABLED=$(ASAN_ENABLED) \
     T=$(abs_top_srcdir) \
     PYTHON_INTERPRETER=@PYTHON_INTERPRETER@ \
     TEST_FUNC_LIB=$(srcdir)/test/integration/scripts/int-test-funcs.sh \
