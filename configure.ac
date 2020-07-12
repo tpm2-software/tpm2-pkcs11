@@ -160,6 +160,7 @@ AC_DEFUN([asan_checks],[
 
 AS_IF([test "x$enable_asan" = "xyes"],
     [asan_checks])
+AM_CONDITIONAL([ENABLE_ASAN],[test "x$enable_asan" = "xyes"])
 
 AC_DEFUN([unit_test_checks],[
 
