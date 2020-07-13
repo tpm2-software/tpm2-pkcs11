@@ -301,4 +301,8 @@ CK_RV attr_common_add_data(attr_list **storage_attrs);
 
 CK_RV rsa_gen_mechs(attr_list *new_pub_attrs, attr_list *new_priv_attrs);
 
+CK_RV attr_list_append_entry(attr_list **attrs, CK_ATTRIBUTE_PTR untrusted_attr);
+
+CK_RV attr_list_update_entry(attr_list *attrs, CK_ATTRIBUTE_PTR untrusted_attr);
+
 #endif /* SRC_LIB_ATTRS_H_ */
