@@ -51,6 +51,8 @@ class InitCommand(Command):
             help='Use an existing primary key object, defaults to 0x81000001.')
         exclusive_group.add_argument(
             '--transient-parent',
+            const='tpm2-tools-default',
+            nargs='?',
             choices=[ t for t in Tpm2.TEMPLATES.keys() if t is not None ],
             help='use a transient primary object of a given template.')
 
