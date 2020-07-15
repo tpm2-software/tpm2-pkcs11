@@ -3355,6 +3355,92 @@ static CK_RV tss2_engine_pub_populator(tpm_ctx *tpm, TPM2B_PUBLIC *pub) {
     return CKR_OK;
 }
 
+static CK_RV tpm2_tools_default_pub_populator(tpm_ctx *tpm, TPM2B_PUBLIC *pub) {
+    UNUSED(tpm);
+
+    /* fixedtpm|fixedparent|sensitivedataorigin|userwithauth|restricted|decrypt */
+    static const TPM2B_PUBLIC primary_rsa_template = {
+        .size = 0,
+        .publicArea = {
+            .type = TPM2_ALG_RSA,
+            .nameAlg = TPM2_ALG_SHA256,
+            .objectAttributes =
+                      TPMA_OBJECT_FIXEDTPM
+                    | TPMA_OBJECT_FIXEDPARENT
+                    | TPMA_OBJECT_SENSITIVEDATAORIGIN
+                    | TPMA_OBJECT_USERWITHAUTH
+                    | TPMA_OBJECT_RESTRICTED
+                    | TPMA_OBJECT_DECRYPT
+                    ,
+            .authPolicy = { 0 },
+            .parameters.rsaDetail = {
+                .symmetric = {
+                    .algorithm = TPM2_ALG_AES,
+                    .keyBits.aes = 128,
+                    .mode.aes = TPM2_ALG_CFB,
+                },
+                .scheme = {
+                    .scheme = TPM2_ALG_NULL,
+                    .details = {}
+                },
+                .keyBits = 2048,
+                .exponent = 0,
+            }
+        }, /* end TPMT */
+    };
+
+
+    *pub = primary_rsa_template;
+
+    return CKR_OK;
+}
+
+
+static CK_RV tpm2_tools_default_ecc_pub_populator(tpm_ctx *tpm, TPM2B_PUBLIC *pub) {
+    UNUSED(tpm);
+
+    /* fixedtpm|fixedparent|sensitivedataorigin|userwithauth|restricted|decrypt */
+    static const TPM2B_PUBLIC primary_ecc_template = {
+        .size = 0,
+        .publicArea = {
+            .type = TPM2_ALG_ECC,
+            .nameAlg = TPM2_ALG_SHA256,
+            .objectAttributes =
+                      TPMA_OBJECT_FIXEDTPM
+                    | TPMA_OBJECT_FIXEDPARENT
+                    | TPMA_OBJECT_SENSITIVEDATAORIGIN
+                    | TPMA_OBJECT_USERWITHAUTH
+                    | TPMA_OBJECT_RESTRICTED
+                    | TPMA_OBJECT_DECRYPT
+                    ,
+            .authPolicy = { 0 },
+            .parameters.eccDetail = {
+                 .symmetric = {
+                     .algorithm = TPM2_ALG_AES,
+                     .keyBits.aes = 128,
+                     .mode.aes = TPM2_ALG_CFB,
+                 },
+                 .scheme = {
+                      .scheme = TPM2_ALG_NULL,
+                  },
+                 .curveID = TPM2_ECC_NIST_P256,
+                 .kdf = {
+                      .scheme = TPM2_ALG_NULL,
+                      .details = {}}
+             },
+            .unique.ecc = {
+                 .x = {.size = 0,.buffer = {}},
+                 .y = {.size = 0,.buffer = {}},
+             },
+        }, /* end TPMT */
+    };
+
+
+    *pub = primary_ecc_template;
+
+    return CKR_OK;
+}
+
 /*
  * Mapping friendly string names to primary objects templates
  */
@@ -3363,6 +3449,14 @@ static const key_template TEMPLATES[] = {
         .template_name = "tss2-engine-key",
         .fn = tss2_engine_pub_populator,
     },
+    {
+        .template_name= "tpm2-tools-default",
+        .fn = tpm2_tools_default_pub_populator,
+    },
+    {
+        .template_name= "tpm2-tools-ecc-default",
+        .fn = tpm2_tools_default_ecc_pub_populator,
+    }
 };
 
 CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,

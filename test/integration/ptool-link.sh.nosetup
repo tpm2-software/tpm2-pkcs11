@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
 
-set -x
+set -xe
 
 source "$T/test/integration/scripts/helpers.sh"
 
@@ -131,5 +131,92 @@ tpm2_ptool link --hierarchy-auth=newpass --label=linktokentransient --userpin=my
 
 export TPM2_PKCS11_OWNER_AUTH=newpass
 rsa_verify "linktokentransient" "tss2rsa2048transient"
+
+# Drop the ownerauth password
+tpm2_changeauth -c o -p "newpass"
+unset TPM2_PKCS11_OWNER_AUTH
+
+#
+# Test transient primary keys that the tpm2-tools tpm2_createprimary produces
+#
+
+# Create a key under the default primary key for the tools
+tpm2_createprimary -c "$tempdir/primary.ctx"
+tpm2_create -C "$tempdir/primary.ctx" -u "$tempdir/key.pub" -r "$tempdir/key.priv"
+
+# Create a token suitable to use this key
+pid=$(tpm2_ptool init --transient-parent="tpm2-tools-default" --path=$TPM2_PKCS11_STORE | grep id | cut -d' ' -f2-2)
+
+tpm2_ptool addtoken --pid="$pid" --label=linktokentpmtoolsdefault --sopin=mysopin --userpin=myuserpin \
+    --path=$TPM2_PKCS11_STORE
+
+# Link that key into the token
+tpm2_ptool link --label=linktokentpmtoolsdefault --userpin=myuserpin --key-label=tpm2toolkey \
+    --path=$TPM2_PKCS11_STORE "$tempdir/key.pub" "$tempdir/key.priv"
+
+rsa_verify "linktokentpmtoolsdefault" "tpm2toolkey"
+
+# Create an ECC key just to make sure that works too
+tpm2_create -C "$tempdir/primary.ctx" -Gecc -u "$tempdir/key-ecc.pub" -r "$tempdir/key-ecc.priv"
+
+# Also swap public and private to make sure order doesn't matter
+tpm2_ptool link --label=linktokentpmtoolsdefault --userpin=myuserpin --id=12345678 --key-label=tpm2toolecckey \
+    --path=$TPM2_PKCS11_STORE "$tempdir/key-ecc.priv" "$tempdir/key-ecc.pub"
+
+# Perform a signature using ECDSA w/SHA1
+# Note: you must hex encode the id for it to work
+pkcs11_tool --token-label=linktokentpmtoolsdefault --login --pin myuserpin --sign --id=3132333435363738 \
+            --input-file ${tempdir}/data --mechanism ECDSA-SHA1 \
+            --signature-format=openssl --output-file ${tempdir}/sig
+
+# Verify signature against public key in PEM format, so load it and get a PEM format
+tpm2_load -C "$tempdir/primary.ctx" -u "$tempdir/key-ecc.pub" -r "$tempdir/key-ecc.priv" \
+    -c "$tempdir/ecc-key.ctx"
+
+tpm2_readpublic -c "$tempdir/ecc-key.ctx" -f pem -o "$tempdir/ecc-key.pem"
+
+openssl dgst -sha1 -verify "$tempdir/ecc-key.pem" -signature "$tempdir/sig" "$tempdir/data"
+
+#
+# Test tpm2_createprimary -Gecc transient primary keys
+#
+
+# Create a key under the default primary key for the tools
+tpm2_createprimary -Gecc -c "$tempdir/primary.ctx"
+tpm2_create -C "$tempdir/primary.ctx" -u "$tempdir/key.pub" -r "$tempdir/key.priv"
+
+# Create a token suitable to use this key
+pid=$(tpm2_ptool init --transient-parent="tpm2-tools-ecc-default" --path=$TPM2_PKCS11_STORE | grep id | cut -d' ' -f2-2)
+
+tpm2_ptool addtoken --pid="$pid" --label=eccdefault --sopin=mysopin --userpin=myuserpin \
+    --path=$TPM2_PKCS11_STORE
+
+# Link that key into the token
+tpm2_ptool link --label=eccdefault --userpin=myuserpin --key-label=tpm2toolkey \
+    --path=$TPM2_PKCS11_STORE "$tempdir/key.pub" "$tempdir/key.priv"
+
+rsa_verify "eccdefault" "tpm2toolkey"
+
+# Create an ECC key just to make sure that works too
+tpm2_create -C "$tempdir/primary.ctx" -Gecc -u "$tempdir/key-ecc.pub" -r "$tempdir/key-ecc.priv"
+
+# Also swap public and private to make sure order doesn't matter
+tpm2_ptool link --label=eccdefault --userpin=myuserpin --id=12345678 --key-label=tpm2toolecckey \
+    --path=$TPM2_PKCS11_STORE "$tempdir/key-ecc.priv" "$tempdir/key-ecc.pub"
+
+# Perform a signature using ECDSA w/SHA1
+# Note: you must hex encode the id for it to work
+pkcs11_tool --token-label=eccdefault --login --pin myuserpin --sign --id=3132333435363738 \
+            --input-file ${tempdir}/data --mechanism ECDSA-SHA1 \
+            --signature-format=openssl --output-file ${tempdir}/sig
+
+# Verify signature against public key in PEM format, so load it and get a PEM format
+tpm2_load -C "$tempdir/primary.ctx" -u "$tempdir/key-ecc.pub" -r "$tempdir/key-ecc.priv" \
+    -c "$tempdir/ecc-key.ctx"
+
+tpm2_readpublic -c "$tempdir/ecc-key.ctx" -f pem -o "$tempdir/ecc-key.pem"
+
+openssl dgst -sha1 -verify "$tempdir/ecc-key.pem" -signature "$tempdir/sig" "$tempdir/data"
+
 
 exit 0

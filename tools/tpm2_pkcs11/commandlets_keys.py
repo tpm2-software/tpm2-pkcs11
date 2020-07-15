@@ -163,7 +163,7 @@ class NewKeyCommandBase(Command):
                 label = args['label']
                 sopin = args['sopin']
                 userpin = args['userpin']
-                alg = args['algorithm']
+                alg = args['algorithm'] if 'algorithm' in args else None
                 key_label = args['key_label']
                 tid = args['id']
                 hierarchyauth = args['hierarchy_auth']
@@ -533,6 +533,7 @@ class LinkCommand(NewKeyCommandBase):
     def generate_options(self, group_parser):
         super(LinkCommand, self).generate_options(group_parser)
         group_parser.add_argument('privkey',
+            nargs='*',
             help='Path of the key to be linked.\n')
         group_parser.add_argument(
             '--auth',
@@ -571,11 +572,9 @@ class LinkCommand(NewKeyCommandBase):
 
         return (encobjauth, objauth)
 
-    # Links a new key
-    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, keypath, d):
+    def create_from_tss_key(self, pobj, objauth, hierarchyauth, tpm2, alg, keypath, d):
 
-        if keypath is None:
-            sys.exit("Invalid private key path")
+        keypath = keypath[0]
 
         tss2_privkey = asn1parse_tss_key(keypath)
         is_empty_auth = bool(tss2_privkey['emptyauth'])
@@ -626,6 +625,40 @@ class LinkCommand(NewKeyCommandBase):
             os.close(pubfd)
 
         return (tertiarypriv, tertiarypub, tertiarypubdata)
+
+    def create_from_key_blobs(self, pobj, objauth, hierarchyauth, tpm2, alg, keypaths, d):
+
+        tertiarypub = keypaths[0]
+        tertiarypriv = keypaths[1]
+
+        pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
+        pobjauth = pobj['objauth']
+        try:
+            ctx = tpm2.load(pobj_handle, pobjauth, tertiarypriv, tertiarypub)
+        except RuntimeError as e:
+            # Try swapping pub/priv
+            tmp = tertiarypub
+            tertiarypub = tertiarypriv
+            tertiarypriv = tmp
+            ctx = tpm2.load(pobj_handle, pobjauth, tertiarypriv, tertiarypub)
+
+        tertiarypubdata, _ = tpm2.readpublic(ctx, False)
+
+        return (tertiarypriv, tertiarypub, tertiarypubdata)
+
+    # Links a new key
+    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, keypaths, d):
+
+        if keypaths is None:
+            sys.exit("Keypath must be specified")
+
+        if len(keypaths) == 1:
+            return self.create_from_tss_key(pobj, objauth, hierarchyauth, tpm2, alg, keypaths, d)
+
+        if len(keypaths) == 2:
+            return self.create_from_key_blobs(pobj, objauth, hierarchyauth, tpm2, alg, keypaths, d)
+
+        sys.exit("Expected one or two keyblobs, got: {}".format(len(keypaths)))
 
     def __call__(self, args):
         self._auth = args['auth'] if 'auth' in args else None

@@ -242,6 +242,10 @@ void token_free(token *t) {
     session_table_free(t->s_table);
     t->s_table = NULL;
 
+    if (t->pobject.config.is_transient) {
+        tpm_flushcontext(t->tctx, t->pobject.handle);
+    }
+
     pobject_free(&t->pobject);
 
     if (t->type == token_type_esysdb) {

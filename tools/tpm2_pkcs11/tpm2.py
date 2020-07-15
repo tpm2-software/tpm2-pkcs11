@@ -24,12 +24,22 @@ class Tpm2(object):
     ]
 
     TEMPLATES = {
-        # No selection, just use an rsa2048 with tpm2-tool default attrs
-        None               : {
-            'alg' : 'rsa2048',
+        # tpm2-tools default RSA2048 primary, same as tss2-engine-key
+        None :  {
+            'alg' : None,
             'attrs' : None
         },
-        # tss2-engine key compatible with EC p256
+        # tpm2-tools key compatible with RSA 2048, same as None
+        'tpm2-tools-default' :  {
+            'alg' : None,
+            'attrs' : None
+        },
+        # tpm2-tools key compatible with EC P256
+        'tpm2-tools-ecc-default' :  {
+            'alg' : 'ecc',
+            'attrs' : None
+        },
+        # tss2-engine key
         'tss2-engine-key' :  {
             'alg' : None,
             'attrs' : _TSS2_DEFAULT_ATTRS
