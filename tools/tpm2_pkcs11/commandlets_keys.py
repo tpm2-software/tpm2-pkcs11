@@ -539,11 +539,6 @@ class LinkCommand(NewKeyCommandBase):
             default='',
             help='The auth value for the key to link.\n'
         )
-        group_parser.add_argument(
-            '--algorithm',
-            help='The type of the key.\n',
-            choices=['rsa'],
-            default='rsa')
 
     def new_key_init(self, label, sopin, userpin, hierarchyauth, pobj, sealobjects, tpm2, d):
 
@@ -578,9 +573,6 @@ class LinkCommand(NewKeyCommandBase):
 
     # Links a new key
     def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, keypath, d):
-        if alg != 'rsa':
-            sys.exit('Unknown algorithm or algorithm not supported, got "%s"' %
-                     alg)
 
         if keypath is None:
             sys.exit("Invalid private key path")
