@@ -3,7 +3,7 @@ from setuptools import setup
 from textwrap import dedent as DD
 
 long_description = DD('''
-   This tool is used to configure and maniuplate stores for the tpm2-pkcs11
+   This tool is used to configure and manipulate stores for the tpm2-pkcs11
    cryptographic library.
 ''')
 
