@@ -86,3 +86,21 @@ To enable testing, run `make check`.
 
 **Note:** If make check runs 0 tests, you likely need the configure options `--enable-unit` and `--enable-integration`. See [Configure Options](#configure-options)
 for more details.
+
+## Installing tpm2_ptool.py
+
+To install tpm2_ptool.py, one can use various python installation methodologies as a setup.py file is provided.
+Below are the common ways to install, but are not exhaustive.
+
+First cd to the tools folder:
+```bash
+cd tools
+```
+Then perform one of:
+1. ```bash
+   # pip allows for easy user installs via option --user and thus doesn't require root
+   pip install .
+   ```
+2. ```bash
+   easy_install setup.py
+   ```
