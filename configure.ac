@@ -251,6 +251,8 @@ AC_DEFUN([integration_test_checks], [
   PKG_CHECK_MODULES([OPENSC_PKCS11],[opensc-pkcs11],,
     [AC_CHECK_FILE([/usr/lib/engines/engine_pkcs11.so])])
 
+  PKG_CHECK_MODULES([TSS2_TCTI_TABRMD],[tss2-tcti-tabrmd])
+
   AC_CHECK_PROG([tpm_server], [tpm_server], [yes], [no])
   AS_IF([test "x$tpm_server" != "xyes"],
     [AC_MSG_ERROR([Integration tests enabled but tpm_server not found, try setting PATH])])
@@ -294,6 +296,10 @@ AC_DEFUN([integration_test_checks], [
   AC_CHECK_PROG([tpm2tss_genkey], [tpm2tss-genkey], [yes], [no])
     AS_IF([test "x$tpm2tss_genkey" != "xyes"],
       [AC_MSG_ERROR([Integration tests enabled but tpm2tss-genkey executable not found.])])
+
+  AC_CHECK_PROG([tpm2_abrmd], [tpm2-abrmd], [yes], [no])
+    AS_IF([test "x$tpm2_abrmd" != "xyes"],
+      [AC_MSG_ERROR([Integration tests enabled but tpm2-abrmd executable not found.])])
 
   AM_PATH_PYTHON([3.7],
     [AC_SUBST([PYTHON_INTERPRETER], [$PYTHON])],
