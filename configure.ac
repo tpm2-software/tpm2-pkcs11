@@ -247,7 +247,6 @@ AC_CHECK_PROG([tpm2_changeauth], [tpm2_changeauth], [yes], [no])
 
 AC_DEFUN([integration_test_checks], [
 
-  PKG_CHECK_MODULES([CMOCKA],[cmocka])
   PKG_CHECK_MODULES([OPENSC_PKCS11],[opensc-pkcs11],,
     [AC_CHECK_FILE([/usr/lib/engines/engine_pkcs11.so])])
 
