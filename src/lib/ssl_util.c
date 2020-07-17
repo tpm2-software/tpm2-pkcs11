@@ -552,7 +552,7 @@ CK_RV ssl_util_verify_recover(EVP_PKEY *pkey,
         return rv;
     }
 
-    int rc = EVP_PKEY_verify_recover(pkey_ctx, data, data_len,
+    int rc = EVP_PKEY_verify_recover(pkey_ctx, data, (size_t*) data_len,
             signature, signature_len);
     if (rc < 0) {
         SSL_UTIL_LOGE("EVP_PKEY_verify_recover failed");
