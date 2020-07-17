@@ -3261,6 +3261,14 @@ void tpm_destroy(void) {
     Esys_Free(tpms_fixed_property_cache);
     Esys_Free(tpms_alg_cache);
     Esys_Free(tpms_cc_cache);
+
+    /*
+     * Clear these after free so initialization code knows to re-init if
+     * needed
+     */
+    tpms_fixed_property_cache = NULL;
+    tpms_alg_cache = NULL;
+    tpms_cc_cache = NULL;
 }
 
 CK_RV tpm_serialize_handle(ESYS_CONTEXT *esys, ESYS_TR handle, twist *buf) {
