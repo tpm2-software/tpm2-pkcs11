@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: BSD-2-Clause
 from setuptools import setup
+from textwrap import dedent as DD
 
-# read the contents of your README file
-from os import path
-readme = path.join(path.dirname(__file__), '..', 'docs', 'README.md')
-with open(readme, encoding='utf-8') as f:
-    long_description = f.read()
+long_description = DD('''
+   This tool is used to configure and maniuplate stores for the tpm2-pkcs11
+   cryptographic library.
+''')
 
 setup(
     name='tpm2-pkcs11-tools',
