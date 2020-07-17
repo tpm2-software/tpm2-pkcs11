@@ -24,6 +24,7 @@
   * Support for backend fapi that uses the tss2-fapi keystore instead of an sqlite db.
   * C_CreateObject: Support for CKO_DATA objects only with CKA_PRIVATE set to CK_TRUE. Token
     defaults to CK_TRUE.
+  * Fix: src/lib/ssl_util.c:555:54: error: passing argument 3 of ‘EVP_PKEY_verify_recover’ from incompatible pointer type
 
 ### 1.3.0 - 2020-07-7
   * C\_CreateObject: Support for CKO\_DATA objects only with CKA\_PRIVATE set to CK\_TRUE.
