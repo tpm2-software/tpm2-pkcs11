@@ -25,6 +25,15 @@
   * C_CreateObject: Support for CKO_DATA objects only with CKA_PRIVATE set to CK_TRUE. Token
     defaults to CK_TRUE.
   * Fix: src/lib/ssl_util.c:555:54: error: passing argument 3 of ‘EVP_PKEY_verify_recover’ from incompatible pointer type
+  * Added tpm2_ptool link commandlet for linking existing tpm2 objects into a compatible token. For details see
+    [this](https://github.com/tpm2-software/tpm2-pkcs11/blob/master/docs/INTEROPERABILITY.md) document.
+
+    Supported tpm2 objects are:
+      - serialized TPM2B_PUBLIC and TPM2B_PRIVATE data structures, as produced by
+      [tpm2_create](https://github.com/tpm2-software/tpm2-tools/blob/master/man/tpm2_create.1.md) -u and -r outputs
+      respectively.
+      - PEM encoded keys produced by
+      [tpm2tss-genkey](https://github.com/tpm2-software/tpm2-tss-engine/blob/master/man/tpm2tss-genkey.1.md)
 
 ### 1.3.0 - 2020-07-7
   * C\_CreateObject: Support for CKO\_DATA objects only with CKA\_PRIVATE set to CK\_TRUE.
