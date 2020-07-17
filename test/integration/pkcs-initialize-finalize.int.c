@@ -230,8 +230,43 @@ static void test_c_finalize_bad() {
     LOGV("test_c_finalize_bad Test Passed!");
 }
 
+static void test_double_calls(void) {
+
+    CK_RV rv = C_Initialize(NULL);
+    if(rv != CKR_OK){
+        LOGE("C_Initialize failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    CK_TOKEN_INFO info = { 0 };
+    rv = C_GetTokenInfo(1, &info);
+    if(rv != CKR_OK){
+        LOGE("C_Initialize failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    rv = C_Finalize(NULL);
+    if(rv != CKR_OK){
+        LOGE("C_Initialize failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    rv = C_Initialize(NULL);
+    if(rv != CKR_OK){
+        LOGE("C_Initialize failed! Response Code %x", rv);
+        exit(1);
+    }
+
+    rv = C_Finalize(NULL);
+    if(rv != CKR_OK){
+        LOGE("C_Initialize failed! Response Code %x", rv);
+        exit(1);
+    }
+}
+
 int main() {
 
+    test_double_calls();
     test_c_init_args();
     test_c_double_init();
     test_c_finalize_bad();
