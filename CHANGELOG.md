@@ -1,5 +1,8 @@
 # Changelog
 
+### 1.3.1-RC0 - 2020-07-21
+  * Fix double free.
+
 ### 1.3.0 - 2020-07-7
   * C\_CreateObject: Support for CKO\_DATA objects only with CKA\_PRIVATE set to CK\_TRUE.
     Token defaults to CK\_TRUE.
