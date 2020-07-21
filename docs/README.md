@@ -22,6 +22,10 @@ as the cryptographic token.
 * [P11](P11.md) - How to configure and use it with various P11 components.
 * [PKCS11-TOOL](PKCS11_TOOL.md) - How to configure and use it with OpenSC's pkcs11-tool.
 * [EAP-TLS](EAP-TLS.md) - How to configure and use it for Wi-Fi authentication using EAP-TLS.
+* [INTEROPERABILITY](INTEROPERABILITY.md) - Configuration details for interoperability with
+  [tss2-engine](https://github.com/tpm2-software/tpm2-tss-engine) and
+  [tpm2-tools](https://github.com/tpm2-software/tpm2-tools) projects. Note, the *tpm2-tools* interoperability
+  could cover other projects that use raw *marshalled* TPM 2.0 structures.
 
 # Advanced Knowledge
 * [Architecture](ARCHITECTURE.md) - Internal Overview
