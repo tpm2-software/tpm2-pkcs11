@@ -35,7 +35,6 @@ AC_CONFIG_FILES([Makefile lib/tpm2-pkcs11.pc])
 AC_CONFIG_HEADERS([src/lib/config.h])
 
 # test for TSS dependecies
-PKG_CHECK_MODULES([TSS2_FAPI],   [tss2-fapi >= 3.0])
 PKG_CHECK_MODULES([TSS2_ESYS],   [tss2-esys >= 2.0])
 PKG_CHECK_MODULES([TSS2_MU],     [tss2-mu])
 PKG_CHECK_MODULES([TSS2_TCTILDR], [tss2-tctildr])
@@ -71,6 +70,29 @@ AC_ARG_ENABLE(
   [esapi_sf=$enableval])
 AS_IF([test "x$esapi_sf" = "xyes"],
        [do_esapi_manage_flags])
+
+AC_ARG_ENABLE(
+  [fapi],
+  [AS_HELP_STRING([--with-fapi],
+    [enable or disable the fapi backend. Default is "auto" to autodetect])],
+    [enable_fapi=$enableval],
+    [enable_fapi=auto])
+
+AC_DEFUN([do_fapi_configure], [
+
+  AS_IF([test "x$enable_fapi" = "xauto"],
+      [ PKG_CHECK_MODULES([TSS2_FAPI], [tss2-fapi >= 3.0], [have_fapi=1], [have_fapi=0]) ],
+	  [ PKG_CHECK_MODULES([TSS2_FAPI], [tss2-fapi >= 3.0], [have_fapi=1]) ]
+  )
+])
+
+AS_IF([test "x$enable_fapi" != "xno"],
+    [do_fapi_configure])
+
+AS_IF([test "$have_fapi" = "1"],
+    AC_DEFINE([HAVE_FAPI], [1], [Enabled if FAPI >= 3.0 is found])
+])
+AM_CONDITIONAL([HAVE_FAPI], [test "$have_fapi" = "1"])
 
 # START ENABLE UNIT
 #
@@ -288,14 +310,6 @@ AC_DEFUN([integration_test_checks], [
     AS_IF([test "x$sqlite3" != "xyes"],
       [AC_MSG_ERROR([Integration tests enabled but sqlite3 executable not found.])])
 
-  AC_CHECK_PROG([tss2_provision], [tss2_provision], [yes], [no])
-    AS_IF([test "x$tss2_provision" != "xyes"],
-      [AC_MSG_ERROR([Integration tests enabled but tss2_provision executable not found.])])
-
-  AC_CHECK_PROG([tpm2tss_genkey], [tpm2tss-genkey], [yes], [no])
-    AS_IF([test "x$tpm2tss_genkey" != "xyes"],
-      [AC_MSG_ERROR([Integration tests enabled but tpm2tss-genkey executable not found.])])
-
   AC_CHECK_PROG([tpm2_abrmd], [tpm2-abrmd], [yes], [no])
     AS_IF([test "x$tpm2_abrmd" != "xyes"],
       [AC_MSG_ERROR([Integration tests enabled but tpm2-abrmd executable not found.])])
@@ -304,6 +318,16 @@ AC_DEFUN([integration_test_checks], [
     [AC_SUBST([PYTHON_INTERPRETER], [$PYTHON])],
     [AC_MSG_ERROR([Integration tests enabled but python >= 3.7 executable not found.])]
   )
+
+  AS_IF([test "$have_fapi" = "1"], [
+    AC_CHECK_PROG([tss2_provision], [tss2_provision], [yes], [no])
+      AS_IF([test "x$tss2_provision" != "xyes"],
+        [AC_MSG_ERROR([Integration tests enabled but tss2_provision executable not found.])])
+
+    AC_CHECK_PROG([tpm2tss_genkey], [tpm2tss-genkey], [yes], [no])
+      AS_IF([test "x$tpm2tss_genkey" != "xyes"],
+        [AC_MSG_ERROR([Integration tests enabled but tpm2tss-genkey executable not found.])])
+  ])
 
   AS_IF([test "x$have_javac" = "xno"],
     [AC_MSG_ERROR([Integration tests enabled but no Java compiler was found])])

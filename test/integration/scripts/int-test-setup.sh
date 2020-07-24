@@ -175,8 +175,11 @@ echo ${TPM2TOOLS_TCTI}
 export TPM2_PKCS11_TCTI="tabrmd:${TABRMD_TEST_TCTI_CONF}"
 echo ${TPM2_PKCS11_TCTI}
 
-setup_fapi ${SIM_TMP_DIR}
-tss2_provision
+
+if [ "$FAPI_ENABLED" == "true" ]; then
+    setup_fapi ${SIM_TMP_DIR}
+    tss2_provision
+fi
 
 # if provided, run the test script
 if [ -z "${TSETUP_SCRIPT}" ]; then
@@ -202,7 +205,9 @@ else
     fi
 fi
 
-tss2_list
+if [ "$FAPI_ENABLED" == "true" ]; then
+    tss2_list
+fi
 
 # This sleep is sadly necessary: If we kill the tabrmd w/o sleeping for a
 # second after the test finishes the simulator will die too. Bug in the

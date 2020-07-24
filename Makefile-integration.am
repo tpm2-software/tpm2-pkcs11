@@ -3,18 +3,22 @@ TEST_EXTENSIONS = .sh .int .nosetup .java .fapi
 integration_scripts = \
     test/integration/pkcs11-tool.sh \
     test/integration/pkcs11-tool-init.sh.nosetup \
-    test/integration/pkcs11-tool-init-fapi.sh.fapi \
     test/integration/p11-tool.sh.nosetup \
-    test/integration/p11-tool-fapi.sh.fapi \
     test/integration/pkcs11-dbup.sh.nosetup \
     test/integration/tls-tests.sh \
     test/integration/openssl.sh \
     test/integration/pkcs11-javarunner.sh.java \
     test/integration/nss-tests.sh \
     test/integration/ptool-link.sh.nosetup
+
 # Note that -fapi.sh.fapi is symlinked to .sh.nosetup
 # If we'd use the .fapi extension then .nosetup and .fapi overwrite each others .log
 # thus we use -fapi.sh.fapi as suffix.
+if HAVE_FAPI
+integration_scripts += \
+    test/integration/p11-tool-fapi.sh.fapi \
+    test/integration/pkcs11-tool-init-fapi.sh.fapi
+endif
 
 EXTRA_DIST += \
     $(integration_scripts) \

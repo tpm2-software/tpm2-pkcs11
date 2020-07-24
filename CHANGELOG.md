@@ -22,6 +22,8 @@
   * Support C_SetAttributeValue.
   * Support for selectable backend using TPM2_PKCS11_BACKEND=esysdb being current version.
   * Support for backend fapi that uses the tss2-fapi keystore instead of an sqlite db.
+    - This is auto-detected based on tss2-fapi being installed at configure time, and can be controlled
+      via --enable/disable-fapi.
   * C_CreateObject: Support for CKO_DATA objects only with CKA_PRIVATE set to CK_TRUE. Token
     defaults to CK_TRUE.
   * Fix: src/lib/ssl_util.c:555:54: error: passing argument 3 of ‘EVP_PKEY_verify_recover’ from incompatible pointer type
