@@ -218,12 +218,6 @@ class ImportCommand(NewKeyCommandBase):
 
     # Imports a new key
     def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, d):
-        if alg != 'rsa':
-            sys.exit('Unknown algorithm or algorithm not supported, got "%s"' %
-                     alg)
-
-        if privkey is None:
-            sys.exit("Invalid private key path")
 
         pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
 
