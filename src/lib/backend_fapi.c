@@ -1,12 +1,16 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-
 #include "config.h"
+
+#ifdef HAVE_FAPI
+#include <tss2/tss2_fapi.h>
+#endif
+
 #include "backend_fapi.h"
 #include "emitter.h"
 #include "parser.h"
 #include "utils.h"
-#include <tss2/tss2_fapi.h>
 
+#ifdef HAVE_FAPI
 FAPI_CONTEXT *fctx = NULL;
 unsigned maxobjectid = 0;
 
@@ -923,3 +927,101 @@ out:
 
     return rv;
 }
+#else
+
+CK_RV backend_fapi_init(void) {
+
+	return CKR_OK;
+}
+
+CK_RV backend_fapi_destroy(void) {
+
+	return CKR_OK;
+}
+
+CK_RV backend_fapi_ctx_new(token *t) {
+
+	UNUSED(t);
+	LOGE("FAPI NOT ENABLED");
+	return CKR_GENERAL_ERROR;
+}
+
+void backend_fapi_ctx_free(token *t) {
+
+	UNUSED(t);
+	LOGE("FAPI NOT ENABLED");
+}
+
+CK_RV backend_fapi_create_token_seal(token *t, const twist hexwrappingkey,
+                       const twist newauth, const twist newsalthex) {
+	UNUSED(t);
+	UNUSED(hexwrappingkey);
+	UNUSED(newauth);
+	UNUSED(newsalthex);
+	LOGE("FAPI NOT ENABLED");
+	return CKR_GENERAL_ERROR;
+}
+
+CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
+
+	UNUSED(tok);
+	UNUSED(len);
+	LOGE("FAPI NOT ENABLED");
+	return CKR_GENERAL_ERROR;
+}
+
+CK_RV backend_fapi_init_user(token *t, const twist sealdata,
+                        const twist newauthhex, const twist newsalthex) {
+	UNUSED(t);
+	UNUSED(sealdata);
+	UNUSED(newauthhex);
+	UNUSED(newsalthex);
+	LOGE("FAPI NOT ENABLED");
+	return CKR_GENERAL_ERROR;
+}
+
+CK_RV backend_fapi_add_object(token *t, tobject *tobj) {
+
+	UNUSED(t);
+	UNUSED(tobj);
+	LOGE("FAPI NOT ENABLED");
+	return CKR_GENERAL_ERROR;
+}
+
+CK_RV backend_fapi_update_tobject_attrs(token *tok, tobject *tobj, attr_list *attrlist) {
+
+	UNUSED(tok);
+	UNUSED(tobj);
+	UNUSED(attrlist);
+	LOGE("FAPI NOT ENABLED");
+	return CKR_GENERAL_ERROR;
+}
+
+CK_RV backend_fapi_rm_tobject(token *tok, tobject *tobj) {
+
+	UNUSED(tok);
+	UNUSED(tobj);
+	LOGE("FAPI NOT ENABLED");
+	return CKR_GENERAL_ERROR;
+}
+
+CK_RV backend_fapi_token_unseal_wrapping_key(token *tok, bool user, twist tpin) {
+
+	UNUSED(tok);
+	UNUSED(user);
+	UNUSED(tpin);
+	LOGE("FAPI NOT ENABLED");
+	return CKR_GENERAL_ERROR;
+}
+
+CK_RV backend_fapi_token_changeauth(token *tok, bool user, twist toldpin, twist tnewpin) {
+
+	UNUSED(tok);
+	UNUSED(user);
+	UNUSED(toldpin);
+	UNUSED(tnewpin);
+	LOGE("FAPI NOT ENABLED");
+	return CKR_GENERAL_ERROR;
+}
+
+#endif

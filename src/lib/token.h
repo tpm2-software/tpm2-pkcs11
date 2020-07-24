@@ -10,8 +10,6 @@
 #include "twist.h"
 #include "utils.h"
 
-#include <tss2/tss2_fapi.h>
-
 typedef enum pss_config_state pss_config_state;
 enum pss_config_state {
     pss_config_state_unk = 0,
@@ -91,7 +89,7 @@ struct token {
             sealobject sealobject;
         } esysdb; /* esysdb */
         struct {
-            FAPI_CONTEXT *ctx;
+            void *ctx;
             twist userauthsalt;
             twist soauthsalt;
         } fapi;

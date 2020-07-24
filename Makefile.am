@@ -98,9 +98,16 @@ else
     ASAN_ENABLED=""
 endif
 
+if HAVE_FAPI
+    FAPI_ENABLED="true"
+else
+    FAPI_ENABLED=""
+endif
+
 # test harness configuration
 AM_TESTS_ENVIRONMENT = \
     ASAN_ENABLED=$(ASAN_ENABLED) \
+    FAPI_ENABLED=$(FAPI_ENABLED) \
     T=$(abs_top_srcdir) \
     PYTHON_INTERPRETER=@PYTHON_INTERPRETER@ \
     TEST_FUNC_LIB=$(srcdir)/test/integration/scripts/int-test-funcs.sh \
