@@ -213,7 +213,7 @@ class ImportCommand(NewKeyCommandBase):
         group_parser.add_argument(
             '--algorithm',
             help='The type of the key.\n',
-            choices=['rsa'],
+            choices=['rsa', 'ecc'],
             required=True)
 
     # Imports a new key

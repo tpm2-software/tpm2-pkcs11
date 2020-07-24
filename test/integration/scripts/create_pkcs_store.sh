@@ -159,6 +159,11 @@ echo "importing rsa2048 key under token 'import-keys'"
 openssl genrsa -out "$TPM2_PKCS11_STORE/private.pem" 2048
 tpm2_ptool import --privkey="$TPM2_PKCS11_STORE/private.pem" --algorithm=rsa --key-label="imported_key" --label="import-keys" --userpin=anotheruserpin --path=$TPM2_PKCS11_STORE
 
+# import 1 ECCP256 key under label "import-keys"
+echo "importing ECCp256 key under token 'import-keys'"
+openssl ecparam -name prime256v1 -genkey -noout -out "$TPM2_PKCS11_STORE/private.ecc.pem"
+tpm2_ptool import --privkey="$TPM2_PKCS11_STORE/private.ecc.pem" --algorithm=ecc --key-label="imported_ecc_key" --label="import-keys" --userpin=anotheruserpin --path=$TPM2_PKCS11_STORE
+
 echo "RUN COMMAND BELOW BEFORE make check"
 echo "export TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
 
