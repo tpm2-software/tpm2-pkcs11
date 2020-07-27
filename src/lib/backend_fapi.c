@@ -949,7 +949,7 @@ CK_RV backend_fapi_ctx_new(token *t) {
 void backend_fapi_ctx_free(token *t) {
 
 	UNUSED(t);
-	LOGE("FAPI NOT ENABLED");
+	LOGV("FAPI NOT ENABLED");
 }
 
 CK_RV backend_fapi_create_token_seal(token *t, const twist hexwrappingkey,
