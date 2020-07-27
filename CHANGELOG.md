@@ -38,6 +38,9 @@
       - PEM encoded keys produced by
       [tpm2tss-genkey](https://github.com/tpm2-software/tpm2-tss-engine/blob/master/man/tpm2tss-genkey.1.md)
 
+### 1.3.1 - 2020-07-27
+  * Fix double free.
+
 ### 1.3.0 - 2020-07-7
   * C\_CreateObject: Support for CKO\_DATA objects only with CKA\_PRIVATE set to CK\_TRUE.
     Token defaults to CK\_TRUE.
