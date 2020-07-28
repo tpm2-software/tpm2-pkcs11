@@ -44,14 +44,6 @@
 #define goto_error(x, l) if (x) { goto l; }
 #define gotobinderror(rc, msg) do { if (rc) { LOGE("cannot bind "msg); goto error; } } while(0)
 
-#ifdef FUZZING
-#define WEAK __attribute__((weak))
-#define FUZZING_VISIBILITY
-#else
-#define WEAK
-#define FUZZING_VISIBILITY static
-#endif
-
 typedef struct pobject_v3 pobject_v3;
 struct pobject_v3 {
     int id;
@@ -516,7 +508,7 @@ error:
     return rc;
 }
 
-FUZZING_VISIBILITY WEAK void db_get_label(token *t, sqlite3_stmt *stmt, int iCol) {
+DEBUG_VISIBILITY WEAK void db_get_label(token *t, sqlite3_stmt *stmt, int iCol) {
     snprintf((char *)t->label, sizeof(t->label), "%s",
                         sqlite3_column_text(stmt, iCol));
 }
@@ -2149,7 +2141,7 @@ out:
     return rv;
 }
 
-FUZZING_VISIBILITY WEAK
+DEBUG_VISIBILITY WEAK
 CK_RV db_new(sqlite3 **db) {
 
     char dbpath[PATH_MAX];
