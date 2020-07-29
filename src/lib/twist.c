@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "twist.h"
+#include "utils.h"
 
 #ifdef UNIT_TESTING
     static int _next_alloc_fails = 0;
@@ -38,9 +39,6 @@ struct twist_hdr {
 	char data[];
 };
 
-#define safe_add(r, a, b) __builtin_add_overflow(a, b, &r)
-#define safe_mul(r, a, b) __builtin_mul_overflow(a, b, &r)
-
 static inline twist_hdr *from_twist_to_hdr(twist tstring) {
 	return (twist_hdr *) (tstring - sizeof(char *));
 }
@@ -60,13 +58,13 @@ static void *twist_realloc(void *ptr, size_t size) {
 static twist_hdr *internal_realloc(twist old, size_t size) {
 
 	/* add header to size */
-	bool fail = safe_add(size, size, sizeof(twist));
+	bool fail = _safe_add(size, size, sizeof(twist));
 	if (fail) {
 		return NULL ;
 	}
 
 	/* add null byte space */
-	fail = safe_add(size, size, 1);
+	fail = _safe_add(size, size, 1);
 	if (fail) {
 		return NULL ;
 	}
@@ -87,7 +85,7 @@ static twist internal_append(twist orig, const binarybuffer data[],
 			continue;
 		}
 
-		bool fail = safe_add(size, size, b->size);
+		bool fail = _safe_add(size, size, b->size);
 		if (fail) {
 			return NULL ;
 		}
@@ -97,7 +95,7 @@ static twist internal_append(twist orig, const binarybuffer data[],
 	size_t offset = 0;
 	if (orig) {
 		offset = twist_len(orig);
-		bool fail = safe_add(size, size, offset);
+		bool fail = _safe_add(size, size, offset);
 		if (fail) {
 			return NULL ;
 		}
@@ -261,7 +259,7 @@ bool twist_eq(twist x, twist y) {
 	return !memcmp(x, y, twist_len(x));
 }
 
-twist twistbin_new(const void *data, size_t size) {
+WEAK twist twistbin_new(const void *data, size_t size) {
 
 	if (!data) {
 		return NULL ;
@@ -389,7 +387,7 @@ twist twistbin_create(const binarybuffer data[], size_t len) {
 static twist hexlify(const char *data, size_t datalen) {
 
     size_t bytes = 0;
-    bool fail = safe_mul(bytes, datalen, 2);
+    bool fail = _safe_mul(bytes, datalen, 2);
     if (fail) {
         return NULL;
     }

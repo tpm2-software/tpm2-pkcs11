@@ -66,16 +66,17 @@ static struct {
 
 static int _get_blob(sqlite3_stmt *stmt, int i, bool can_be_null, twist *blob) {
 
+	/* This cannot return < 0 */
     int size = sqlite3_column_bytes(stmt, i);
-    if (size < 0) {
-        return 1;
-    }
+    assert(size >= 0);
 
     if (size == 0) {
         return can_be_null ? SQLITE_OK : SQLITE_ERROR;
     }
 
+    /* 0 length is the only way it will return NULL */
     const void *data = sqlite3_column_blob(stmt, i);
+    assert(data);
     *blob = twistbin_new(data, size);
     if (!*blob) {
         LOGE("oom");
@@ -85,12 +86,12 @@ static int _get_blob(sqlite3_stmt *stmt, int i, bool can_be_null, twist *blob) {
     return SQLITE_OK;
 }
 
-static int get_blob_null(sqlite3_stmt *stmt, int i, twist *blob) {
+DEBUG_VISIBILITY int get_blob_null(sqlite3_stmt *stmt, int i, twist *blob) {
 
     return _get_blob(stmt, i, true, blob);
 }
 
-static int get_blob(sqlite3_stmt *stmt, int i, twist *blob) {
+DEBUG_VISIBILITY int get_blob(sqlite3_stmt *stmt, int i, twist *blob) {
 
     return _get_blob(stmt, i, false, blob);
 }
@@ -102,7 +103,7 @@ struct token_get_cb_ud {
     token *tokens;
 };
 
-static tobject *db_tobject_new(sqlite3_stmt *stmt) {
+DEBUG_VISIBILITY tobject *db_tobject_new(sqlite3_stmt *stmt) {
 
     tobject *tobj = tobject_new();
     if (!tobj) {
