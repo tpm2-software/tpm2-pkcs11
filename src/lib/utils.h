@@ -100,15 +100,23 @@ CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid);
  *  - https://lists.gnu.org/archive/html/bug-gnulib/2019-08/msg00076.html
  */
 #ifdef DISABLE_OVERFLOW_BUILTINS
+#define _safe_add(r, a, b) 0; do { r = a + b; } while(0)
+#define _safe_adde(r, a)   0; do { r += a;    } while(0)
+#define _safe_mul(r, a, b) 0; do { r = a * b; } while(0)
+#define _safe_mule(r, a)   0; do { r *= a;    } while(0)
 #define safe_add(r, a, b) do { r = a + b; } while(0)
 #define safe_adde(r, a)   do { r += a;    } while(0)
 #define safe_mul(r, a, b) do { r = a * b; } while(0)
 #define safe_mule(r, a)   do { r *= a;    } while(0)
 #else
-#define safe_add(r, a, b) do { if (__builtin_add_overflow(a, b, &r)) { LOGE("overflow"); abort(); } } while(0)
-#define safe_adde(r, a)   do { if (__builtin_add_overflow(a, r, &r)) { LOGE("overflow"); abort(); } } while(0)
-#define safe_mul(r, a, b) do { if (__builtin_mul_overflow(a, b, &r)) { LOGE("overflow"); abort(); } } while(0)
-#define safe_mule(r, a)   do { if (__builtin_mul_overflow(a, r, &r)) { LOGE("overflow"); abort(); } } while(0)
+#define _safe_add(r, a, b) __builtin_add_overflow(a, b, &r)
+#define _safe_adde(r, a)   __builtin_add_overflow(a, r, &r)
+#define _safe_mul(r, a, b) __builtin_mul_overflow(a, b, &r)
+#define _safe_mule(r, a)   __builtin_mul_overflow(a, r, &r)
+#define safe_add(r, a, b) do { if (_safe_add(r, a, b)) { LOGE("overflow"); abort(); } } while(0)
+#define safe_adde(r, a)   do { if (_safe_adde(r, a)) { LOGE("overflow"); abort(); } } while(0)
+#define safe_mul(r, a, b) do { if (_safe_mul(r, a, b)) { LOGE("overflow"); abort(); } } while(0)
+#define safe_mule(r, a)   do { if (_safe_mule(r, a)) { LOGE("overflow"); abort(); } } while(0)
 #endif
 
 #endif /* SRC_PKCS11_UTILS_H_ */

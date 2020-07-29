@@ -732,15 +732,19 @@ error:
     goto out;
 }
 
-tobject *tobject_new(void) {
+DEBUG_VISIBILITY tobject *__real_tobject_new(void) {
 
-    tobject *tobj = calloc(1, sizeof(tobject));
+	tobject *tobj = calloc(1, sizeof(tobject));
     if (!tobj) {
         LOGE("oom");
         return NULL;
     }
 
     return tobj;
+}
+
+WEAK tobject *tobject_new(void) {
+	return __real_tobject_new();
 }
 
 CK_RV tobject_set_blob_data(tobject *tobj, twist pub, twist priv) {
