@@ -7,8 +7,9 @@
 #include "attrs.h"
 #include "pkcs11.h"
 #include "token.h"
+#include "utils.h"
 
-bool parse_attributes_from_string(const unsigned char *yaml, size_t size,
+WEAK bool parse_attributes_from_string(const unsigned char *yaml, size_t size,
         attr_list **attrs);
 
 bool parse_token_config_from_string(const unsigned char *yaml, size_t size,

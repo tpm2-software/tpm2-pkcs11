@@ -54,4 +54,14 @@ CK_RV db_update_token_config(token *tok);
 
 CK_RV db_update_tobject_attrs(unsigned id, attr_list *attrs);
 
+/* Debug testing */
+#if !defined(NDEBUG) || defined(UNIT_TESTING)
+#include "twist.h"
+
+int get_blob_null(sqlite3_stmt *stmt, int i, twist *blob);
+int get_blob(sqlite3_stmt *stmt, int i, twist *blob);
+tobject *db_tobject_new(sqlite3_stmt *stmt);
+
+#endif
+
 #endif /* SRC_PKCS11_LIB_DB_H_ */
