@@ -23,7 +23,7 @@
 
 #define UNUSED(x) (void)x
 
-#if defined(FUZZING) || !defined(NDEBUG)
+#if defined(FUZZING) || defined(UNIT_TESTING) || !defined(NDEBUG)
 #define WEAK __attribute__((weak))
 #define DEBUG_VISIBILITY
 #else
