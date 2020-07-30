@@ -7,10 +7,10 @@
 #include <stdint.h>
 
 #include "attrs.h"
+#include "debug.h"
 #include "list.h"
 #include "pkcs11.h"
 #include "twist.h"
-#include "utils.h"
 
 typedef struct session_ctx session_ctx;
 
@@ -130,7 +130,7 @@ CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OB
 
 WEAK CK_RV object_init_from_attrs(tobject *tobj);
 
-#if defined(UNIT_TESTING) || !defined(NDEBUG)
+#ifdef TESTING
 tobject *__real_tobject_new(void);
 #endif
 

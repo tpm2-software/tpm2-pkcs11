@@ -5,9 +5,9 @@
 #include <stdbool.h>
 
 #include "attrs.h"
+#include "debug.h"
 #include "pkcs11.h"
 #include "token.h"
-#include "utils.h"
 
 WEAK bool parse_attributes_from_string(const unsigned char *yaml, size_t size,
         attr_list **attrs);

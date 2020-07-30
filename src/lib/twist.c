@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "debug.h"
 #include "twist.h"
 #include "utils.h"
 

@@ -38,6 +38,28 @@ typedef struct test_info test_info;
 #define ADD_ATTR_ARRAY(t, x) { .type = t,   .ulValueLen = ARRAY_LEN(x),  .pValue = x }
 #define ADD_ATTR_STR(t, x)   { .type = t,   .ulValueLen = sizeof(x) - 1, .pValue = x }
 
+/*
+ * If UNIT_TESTING is defined, cmocka will hijack allocation routines to look for memory leaks.
+ * It checks at the end of the test via fail_if_blocks_allocated, and if true will free
+ * the blocks causing any de-allocation/teardown routines defined after the test to access
+ * and free memory already free'd. To remedy this, define some always safe alloc routines.
+ */
+#if defined(calloc)
+  #undef calloc
+#endif
+
+#if defined(free)
+  #undef free
+#endif
+
+#if defined(malloc)
+  #undef malloc
+#endif
+
+#if defined(realloc)
+  #undef realloc
+#endif
+
 test_info *test_info_from_state(void **state);
 
 int group_setup(void **state);

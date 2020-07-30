@@ -23,14 +23,6 @@
 
 #define UNUSED(x) (void)x
 
-#if defined(FUZZING) || defined(UNIT_TESTING) || !defined(NDEBUG)
-#define WEAK __attribute__((weak))
-#define DEBUG_VISIBILITY
-#else
-#define WEAK
-#define DEBUG_VISIBILITY static
-#endif
-
 #define SAFE_CAST(m, r) \
     do { \
         if (!m->pParameter || m->ulParameterLen != sizeof(typeof(*r))) { \
