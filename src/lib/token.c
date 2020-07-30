@@ -480,6 +480,7 @@ CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
 
     tnewpin = twistbin_new(newpin, newlen);
     if (!tnewpin) {
+        LOGE("oom");
         rv = CKR_HOST_MEMORY;
         goto out;
     }
