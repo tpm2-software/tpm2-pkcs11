@@ -45,22 +45,6 @@
 #define goto_error(x, l) if (x) { goto l; }
 #define gotobinderror(rc, msg) do { if (rc) { LOGE("cannot bind "msg); goto error; } } while(0)
 
-typedef struct pobject_v3 pobject_v3;
-struct pobject_v3 {
-    int id;
-    char *hierarchy;
-    twist handle;
-    char *objauth;
-};
-
-typedef struct pobject_v4 pobject_v4;
-struct pobject_v4 {
-    int id;
-    char *hierarchy;
-    char *config;
-    char *objauth;
-};
-
 static struct {
     sqlite3 *db;
 } global;
@@ -211,11 +195,17 @@ static void pobject_v4_free(pobject_v4 *new_pobj) {
     free(new_pobj->objauth);
 }
 
-static int init_pobject_v3_from_stmt(sqlite3_stmt *stmt, pobject_v3 *old_pobj) {
+DEBUG_VISIBILITY int init_pobject_v3_from_stmt(sqlite3_stmt *stmt, pobject_v3 *old_pobj) {
 
     old_pobj->id = sqlite3_column_int(stmt, 0);
 
-    old_pobj->hierarchy = strdup((char *)sqlite3_column_text(stmt, 1));
+    char *tmp = (char *)sqlite3_column_text(stmt, 1);
+	if (!tmp) {
+		LOGE("Hierarchy is NULL");
+		goto error;
+	}
+
+    old_pobj->hierarchy = strdup(tmp);
     if (!old_pobj->hierarchy) {
         LOGE("oom");
         goto error;
@@ -226,7 +216,13 @@ static int init_pobject_v3_from_stmt(sqlite3_stmt *stmt, pobject_v3 *old_pobj) {
         goto error;
     }
 
-    old_pobj->objauth = strdup((char *)sqlite3_column_text(stmt, 3));
+    tmp = (char *)sqlite3_column_text(stmt, 3);
+	if (!tmp) {
+		LOGE("objauth is NULL");
+		goto error;
+	}
+
+    old_pobj->objauth = strdup(tmp);
     if (!old_pobj->objauth) {
         LOGE("oom");
         goto error;
