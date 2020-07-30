@@ -28,6 +28,8 @@ Step one is to satisfy the following dependencies:
   - junit (optional for testing)
   - hamcrest (optional for testing)
 
+Details on building can be found in [BUILDING.md](BUILDING.md).
+
 After satisfying the dependencies one invoke the regular autotools build process:
 ```bash
 ./bootstrap
