@@ -80,7 +80,24 @@ const unsigned char *__wrap_sqlite3_column_text(sqlite3_stmt *stmt, int i) {
 	return d->data;
 }
 
+int __wrap_sqlite3_column_int(sqlite3_stmt *stmt, int i) {
+	UNUSED(stmt);
+	UNUSED(i);
+
+	will_return_data *d = mock_type(will_return_data *);
+	return d->rc;
+}
+
+char *__real_strdup(const char *s);
+char *__wrap_strdup(const char *s) {
+	UNUSED(s);
+
+	will_return_data *d = mock_type(will_return_data *);
+	return d->data;
+}
+
 /* Override WEAK symbol */
+twist __real_twistbin_new(const void *data, size_t size);
 twist twistbin_new(const void *data, size_t len) {
 	UNUSED(data);
 	UNUSED(len);
@@ -260,6 +277,139 @@ static void db_tobject_new_tobject_object_init_from_attrs_fail(void **state) {
     assert_null(t);
 }
 
+static void init_pobject_v3_from_stmt_sqlite3_column_text_fail(void **state) {
+    (void) state;
+
+    will_return_data d[] = {
+		{ .rc = 42 },               /* sqlite3_column_int */
+		{ .data = NULL },           /* sqlite3_column_text */
+    };
+
+    will_return(__wrap_sqlite3_column_int,    &d[0]);
+    will_return(__wrap_sqlite3_column_text,   &d[1]);
+
+    pobject_v3 pobj = { 0 };
+
+    int rc = init_pobject_v3_from_stmt(BAD_PTR, &pobj);
+    assert_int_equal(rc, SQLITE_ERROR);
+}
+
+static void init_pobject_v3_from_stmt_strdup_fail(void **state) {
+    (void) state;
+
+    will_return_data d[] = {
+		{ .rc = 42 },               /* sqlite3_column_int */
+		{ .data = "o" },            /* sqlite3_column_text */
+		{ .data = NULL },           /* strdup */
+    };
+
+    will_return(__wrap_sqlite3_column_int,    &d[0]);
+    will_return(__wrap_sqlite3_column_text,   &d[1]);
+    will_return(__wrap_strdup,                &d[2]);
+
+    pobject_v3 pobj = { 0 };
+
+    int rc = init_pobject_v3_from_stmt(BAD_PTR, &pobj);
+    assert_int_equal(rc, SQLITE_ERROR);
+}
+
+static void init_pobject_v3_from_stmt__get_blob_fail(void **state) {
+    (void) state;
+
+    char *x = __real_strdup("o");
+    assert_non_null(x);
+
+    will_return_data d[] = {
+		{ .rc = 42 },       /* sqlite3_column_int */
+		{ .data = "o" },    /* sqlite3_column_text */
+		{ .data = x },      /* strdup */
+		{ .rc = 4   },      /* _get_blob --> sqlite3_column_bytes */
+		{ .data = "data" }, /* _get_blob --> sqlite3_column_blob */
+		{ .data = NULL },   /* twistbin_new */
+    };
+
+    will_return(__wrap_sqlite3_column_int,    &d[0]);
+    will_return(__wrap_sqlite3_column_text,   &d[1]);
+    will_return(__wrap_strdup,                &d[2]);
+    will_return(__wrap_sqlite3_column_bytes,  &d[3]);
+    will_return(__wrap_sqlite3_column_blob,   &d[4]);
+    will_return(twistbin_new,                 &d[5]);
+
+    pobject_v3 pobj = { 0 };
+
+    int rc = init_pobject_v3_from_stmt(BAD_PTR, &pobj);
+    assert_int_equal(rc, SQLITE_ERROR);
+}
+
+static void init_pobject_v3_from_stmt_sqlite3_column_text2_fail(void **state) {
+    (void) state;
+
+    char *x = __real_strdup("o");
+    assert_non_null(x);
+
+    twist t = __real_twistbin_new("data", 4);
+    assert_non_null(t);
+
+    will_return_data d[] = {
+		{ .rc = 42 },          /* sqlite3_column_int */
+		{ .data = "o" },       /* sqlite3_column_text */
+		{ .data = x },         /* strdup */
+		{ .rc = 4   },         /* _get_blob --> sqlite3_column_bytes */
+		{ .data = "data" },    /* _get_blob --> sqlite3_column_blob */
+		{ .data = (void *)t }, /* twistbin_new */
+		{ .data = NULL },      /* sqlite3_column_text */
+    };
+
+    will_return(__wrap_sqlite3_column_int,    &d[0]);
+    will_return(__wrap_sqlite3_column_text,   &d[1]);
+    will_return(__wrap_strdup,                &d[2]);
+    will_return(__wrap_sqlite3_column_bytes,  &d[3]);
+    will_return(__wrap_sqlite3_column_blob,   &d[4]);
+    will_return(twistbin_new,                 &d[5]);
+    will_return(__wrap_sqlite3_column_text,   &d[6]);
+
+    pobject_v3 pobj = { 0 };
+
+    int rc = init_pobject_v3_from_stmt(BAD_PTR, &pobj);
+    assert_int_equal(rc, SQLITE_ERROR);
+}
+
+static void init_pobject_v3_from_stmt_strdup2_fail(void **state) {
+    (void) state;
+
+    char *x = __real_strdup("o");
+    assert_non_null(x);
+
+    twist t = __real_twistbin_new("data", 4);
+    assert_non_null(t);
+
+    will_return_data d[] = {
+		{ .rc = 42 },              /* sqlite3_column_int */
+		{ .data = "o" },           /* sqlite3_column_text */
+		{ .data = x },             /* strdup */
+		{ .rc = 4   },             /* _get_blob --> sqlite3_column_bytes */
+		{ .data = "data" },        /* _get_blob --> sqlite3_column_blob */
+		{ .data = (void *)t },     /* twistbin_new */
+		{ .data = "foo:bar:baz" }, /* sqlite3_column_text */
+		{ .data = NULL },          /* strdup */
+    };
+
+    will_return(__wrap_sqlite3_column_int,    &d[0]);
+    will_return(__wrap_sqlite3_column_text,   &d[1]);
+    will_return(__wrap_strdup,                &d[2]);
+    will_return(__wrap_sqlite3_column_bytes,  &d[3]);
+    will_return(__wrap_sqlite3_column_blob,   &d[4]);
+    will_return(twistbin_new,                 &d[5]);
+    will_return(__wrap_sqlite3_column_text,   &d[6]);
+    will_return(__wrap_strdup,                &d[7]);
+
+    pobject_v3 pobj = { 0 };
+
+    int rc = init_pobject_v3_from_stmt(BAD_PTR, &pobj);
+    assert_int_equal(rc, SQLITE_ERROR);
+}
+
+
 int main(int argc, char* argv[]) {
     (void) argc;
     (void) argv;
@@ -281,6 +431,11 @@ int main(int argc, char* argv[]) {
 		cmocka_unit_test_setup(
 			db_tobject_new_tobject_object_init_from_attrs_fail,
 			tobject_setup),
+		cmocka_unit_test(init_pobject_v3_from_stmt_sqlite3_column_text_fail),
+		cmocka_unit_test(init_pobject_v3_from_stmt_strdup_fail),
+		cmocka_unit_test(init_pobject_v3_from_stmt__get_blob_fail),
+		cmocka_unit_test(init_pobject_v3_from_stmt_sqlite3_column_text2_fail),
+		cmocka_unit_test(init_pobject_v3_from_stmt_strdup2_fail),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

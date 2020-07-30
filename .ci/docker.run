@@ -48,8 +48,8 @@ if [[ "$CC" == clang* ]]; then
   # for things like __builtin_mul (undefined references to __muloti4)
   major_ver=$(echo $clang_version | cut -d'.' -f 1-1)
   if [ "$major_ver" -lt 9 ]; then
-    echo "Detecting clang less than version 9, enabling --disable-overflow"
-    config_flags="$config_flags --disable-overflow"
+    echo "Detecting clang less than version 9, enabling --enable-debug --disable-overflow"
+    config_flags="$config_flags --enable-debug --disable-overflow"
     echo "config_flags: $config_flags"
   fi
 else

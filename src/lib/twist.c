@@ -260,8 +260,7 @@ bool twist_eq(twist x, twist y) {
 	return !memcmp(x, y, twist_len(x));
 }
 
-WEAK twist twistbin_new(const void *data, size_t size) {
-
+DEBUG_VISIBILITY twist __real_twistbin_new(const void *data, size_t size) {
 	if (!data) {
 		return NULL ;
 	}
@@ -269,6 +268,11 @@ WEAK twist twistbin_new(const void *data, size_t size) {
 	const struct binarybuffer things[1] = { { .size = size, .data = data } };
 
 	return internal_create(things, LEN(things));
+}
+
+WEAK twist twistbin_new(const void *data, size_t size) {
+
+	return __real_twistbin_new(data, size);
 }
 
 twist twist_append(twist old_str, const char *new_str) {
