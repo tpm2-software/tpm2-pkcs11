@@ -15,6 +15,7 @@
 #include <sqlite3.h>
 
 #include "db.h"
+#include "debug.h"
 #include "object.h"
 #include "twist.h"
 #include "utils.h"
