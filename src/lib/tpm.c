@@ -27,7 +27,6 @@
 #include "checks.h"
 #include "digest.h"
 #include "encrypt.h"
-#include "ssl_util.h"
 #include "pkcs11.h"
 #include "log.h"
 #include "mutex.h"
