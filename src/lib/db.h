@@ -18,6 +18,22 @@
  */
 #define MAX_TOKEN_CNT 255
 
+typedef struct pobject_v3 pobject_v3;
+struct pobject_v3 {
+    int id;
+    char *hierarchy;
+    twist handle;
+    char *objauth;
+};
+
+typedef struct pobject_v4 pobject_v4;
+struct pobject_v4 {
+    int id;
+    char *hierarchy;
+    char *config;
+    char *objauth;
+};
+
 CK_RV db_init(void);
 CK_RV db_destroy(void);
 
@@ -63,6 +79,7 @@ CK_RV db_update_tobject_attrs(unsigned id, attr_list *attrs);
 int get_blob_null(sqlite3_stmt *stmt, int i, twist *blob);
 int get_blob(sqlite3_stmt *stmt, int i, twist *blob);
 tobject *db_tobject_new(sqlite3_stmt *stmt);
+int init_pobject_v3_from_stmt(sqlite3_stmt *stmt, pobject_v3 *old_pobj);
 
 #endif
 

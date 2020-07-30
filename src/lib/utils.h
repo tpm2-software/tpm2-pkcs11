@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "config.h"
 #include "log.h"
 #include "pkcs11.h"
 #include "twist.h"
@@ -92,23 +93,91 @@ CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid);
  *  - https://lists.gnu.org/archive/html/bug-gnulib/2019-08/msg00076.html
  */
 #ifdef DISABLE_OVERFLOW_BUILTINS
-#define _safe_add(r, a, b) 0; do { r = a + b; } while(0)
-#define _safe_adde(r, a)   0; do { r += a;    } while(0)
-#define _safe_mul(r, a, b) 0; do { r = a * b; } while(0)
-#define _safe_mule(r, a)   0; do { r *= a;    } while(0)
-#define safe_add(r, a, b) do { r = a + b; } while(0)
-#define safe_adde(r, a)   do { r += a;    } while(0)
-#define safe_mul(r, a, b) do { r = a * b; } while(0)
-#define safe_mule(r, a)   do { r *= a;    } while(0)
+#include <assert.h>
+#include <openssl/bn.h>
+
+#if defined(NDEBUG)
+#error "Emulated overflow support is not evaluated for non-debug release use." \
+        "Fix toolchain and use overflow builtins. To compile configure with --debug"
+#endif
+
+#ifndef WORDS_BIGENDIAN
+static void be_to_host(unsigned char *from, unsigned char *to, size_t len) {
+#ifndef WORDS_BIGENDIAN
+    size_t i;
+    for (i=0; i < len; i++) {
+        to[len -i -1] = from[i];
+    }
 #else
+    memcpy(from, to, len);
+#endif
+}
+#endif
+
+typedef int (*arithmetic_fn)(BIGNUM *a, BN_ULONG w);
+
+static bool _do_safe_arithmetic(void *r, BN_ULONG a, BN_ULONG b,
+        size_t size_of_r,
+        arithmetic_fn fn) {
+
+    unsigned char bufr[sizeof(size_t)] = { 0 };
+    assert(sizeof(bufr) >= size_of_r);
+
+    BIGNUM *bna = BN_new();
+    assert(bna);
+
+    int rc = BN_add_word(bna, a);
+    assert(rc);
+
+    rc = fn(bna, b);
+    assert(rc);
+
+    int num_of_bytes = BN_num_bytes(bna);
+    if (num_of_bytes > size_of_r) {
+        BN_free(bna);
+        return true;
+    }
+
+    if (!num_of_bytes) {
+        BN_free(bna);
+        memset(r, 0, size_of_r);
+        return false;
+    }
+
+    /* BN_bn2binpad would be nice, but OSSL 1.0.2 is lacking this */
+    assert(num_of_bytes <= size_of_r);
+    off_t offset = size_of_r - num_of_bytes;
+    rc = BN_bn2bin(bna, &bufr[offset]);
+    BN_free(bna);
+    assert(rc);
+
+    be_to_host(bufr, r, size_of_r);
+
+    return false;
+}
+
+#define _safe_add(r, a, b) _do_safe_arithmetic(&r, a, b, \
+        sizeof(r), BN_add_word)
+
+#define _safe_adde(r, a) _do_safe_arithmetic(&r, r, a, \
+        sizeof(r), BN_add_word)
+
+#define _safe_mul(r, a, b) _do_safe_arithmetic(&r, a, b, \
+        sizeof(r), BN_mul_word)
+
+#define _safe_mule(r, a) _do_safe_arithmetic(&r, r, a, \
+        sizeof(r), BN_mul_word)
+#else
+#define set_safe_rc(x) /* NOP */
 #define _safe_add(r, a, b) __builtin_add_overflow(a, b, &r)
 #define _safe_adde(r, a)   __builtin_add_overflow(a, r, &r)
 #define _safe_mul(r, a, b) __builtin_mul_overflow(a, b, &r)
 #define _safe_mule(r, a)   __builtin_mul_overflow(a, r, &r)
+#endif
+
 #define safe_add(r, a, b) do { if (_safe_add(r, a, b)) { LOGE("overflow"); abort(); } } while(0)
 #define safe_adde(r, a)   do { if (_safe_adde(r, a)) { LOGE("overflow"); abort(); } } while(0)
 #define safe_mul(r, a, b) do { if (_safe_mul(r, a, b)) { LOGE("overflow"); abort(); } } while(0)
 #define safe_mule(r, a)   do { if (_safe_mule(r, a)) { LOGE("overflow"); abort(); } } while(0)
-#endif
 
 #endif /* SRC_PKCS11_UTILS_H_ */

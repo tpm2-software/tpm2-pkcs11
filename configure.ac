@@ -434,6 +434,8 @@ AM_CONDITIONAL([HAVE_P11KIT], [test "x$have_p11kit" = "xyes"])
 
 # END P11 CONFIG
 
+AC_C_BIGENDIAN()
+
 # Good information on adding flags, and dealing with compilers can be found here:
 #   https://github.com/zcash/zcash/issues/1832
 #   https://github.com/kmcallister/autoharden/
