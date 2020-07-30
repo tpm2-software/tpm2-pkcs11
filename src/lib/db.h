@@ -6,9 +6,11 @@
 #include <sqlite3.h>
 
 #include "attrs.h"
+#include "debug.h"
 #include "pkcs11.h"
 #include "token.h"
 #include "twist.h"
+#include "utils.h"
 
 /*
  * This HAS to be smaller than 1 byte, as this is embedded
@@ -55,7 +57,7 @@ CK_RV db_update_token_config(token *tok);
 CK_RV db_update_tobject_attrs(unsigned id, attr_list *attrs);
 
 /* Debug testing */
-#if !defined(NDEBUG) || defined(UNIT_TESTING)
+#ifdef TESTING
 #include "twist.h"
 
 int get_blob_null(sqlite3_stmt *stmt, int i, twist *blob);

@@ -21,6 +21,7 @@
 #include <sqlite3.h>
 
 #include "db.h"
+#include "debug.h"
 #include "emitter.h"
 #include "log.h"
 #include "mutex.h"
