@@ -171,6 +171,9 @@ struct tpm_ctx {
 
     bool did_check_for_createloaded;
     bool use_createloaded;
+
+    bool did_check_for_encdec2;
+    bool use_encdec2;
 };
 
 #define TPM2B_INIT(xsize) { .size = xsize, }
@@ -1760,10 +1763,75 @@ out:
     return rv;
 }
 
+static TSS2_RC tpm_get_cc(tpm_ctx *tpm, TPMS_CAPABILITY_DATA **capabilityData) {
+    assert(tpm);
+    assert(tpm->esys_ctx);
+    assert(capabilityData);
+
+    if (tpm->tpms_cc_cache) {
+        *capabilityData = tpm->tpms_cc_cache;
+        return CKR_OK;
+    }
+
+    TPM2_CAP capability = TPM2_CAP_COMMANDS;
+    UINT32 property = TPM2_CC_FIRST;
+    UINT32 propertyCount = TPM2_MAX_CAP_CC;
+    TPMI_YES_NO moreData;
+
+    TSS2_RC rval = Esys_GetCapability(tpm->esys_ctx,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            capability,
+            property, propertyCount, &moreData, capabilityData);
+    if (rval != TPM2_RC_SUCCESS) {
+        LOGE("Esys_GetCapability: %s", Tss2_RC_Decode(rval));
+        return rval;
+    }
+
+    tpm->tpms_cc_cache = *capabilityData;
+
+    return TSS2_RC_SUCCESS;
+}
+
+static TSS2_RC tpm_supports_cc(tpm_ctx *tpm, TPMA_CC check_cc, bool *is_supported) {
+
+	/* do not free, value is cached */
+    TPMS_CAPABILITY_DATA *capabilityData = NULL;
+    CK_RV rval = tpm_get_cc(tpm, &capabilityData);
+    if (rval != TSS2_RC_SUCCESS) {
+        return rval;
+    }
+
+    size_t i;
+    for (i=0; i < capabilityData->data.command.count; i++) {
+        TPMA_CC cca = capabilityData->data.command.commandAttributes[i];
+        TPM2_CC cc = cca & TPMA_CC_COMMANDINDEX_MASK;
+        if (cc == check_cc) {
+            *is_supported = true;
+            return TSS2_RC_SUCCESS;
+        }
+    }
+
+    *is_supported = false;
+    return TSS2_RC_SUCCESS;
+}
+
 static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_ALG_SYM_MODE mode, TPMI_YES_NO is_decrypt,
         TPM2B_IV *iv, CK_BYTE_PTR data_in, CK_ULONG data_in_len, CK_BYTE_PTR data_out, CK_ULONG_PTR data_out_len) {
 
+	TSS2_RC rval = TSS2_RC_SUCCESS;
     CK_RV rv = CKR_GENERAL_ERROR;
+
+    /* figure out what command to use */
+    if (!ctx->did_check_for_encdec2) {
+        /* do not free, value is cached */
+        rval = tpm_supports_cc(ctx, TPM2_CC_EncryptDecrypt2,
+        		&ctx->use_encdec2);
+        if (rval != TSS2_RC_SUCCESS) {
+        	return rval;
+        }
+    }
 
     bool result = set_esys_auth(ctx->esys_ctx, handle, objauth);
     if (!result) {
@@ -1793,24 +1861,21 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
     TPM2B_IV *tpm_iv_out = NULL;
 
     unsigned version = 2;
-
-    TSS2_RC rval =
-        Esys_EncryptDecrypt2(
-            ctx->esys_ctx,
-            handle,
-            ctx->hmac_session,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            &tpm_data_in,
-            is_decrypt,
-            mode,
-            iv,
-            &tpm_data_out,
-            &tpm_iv_out);
-
-    if (tpm2_error_get(rval) == TPM2_RC_COMMAND_CODE) {
-        version = 1;
-
+    if (ctx->use_encdec2) {
+		rval = Esys_EncryptDecrypt2(
+			ctx->esys_ctx,
+			handle,
+			ctx->hmac_session,
+			ESYS_TR_NONE,
+			ESYS_TR_NONE,
+			&tpm_data_in,
+			is_decrypt,
+			mode,
+			iv,
+			&tpm_data_out,
+			&tpm_iv_out);
+    } else {
+    	version = 1;
         flags_turndown(ctx, TPMA_SESSION_DECRYPT);
         rval = Esys_EncryptDecrypt(
             ctx->esys_ctx,
@@ -1827,7 +1892,7 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
         flags_restore(ctx);
     }
 
-    if(rval != TSS2_RC_SUCCESS) {
+    if (rval != TSS2_RC_SUCCESS) {
         LOGE("Esys_EncryptDecrypt%u: %s", version,
                 Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
@@ -1960,60 +2025,6 @@ CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handl
     free(newprivate);
 
     return *newblob ? CKR_OK : CKR_HOST_MEMORY;
-}
-
-static TSS2_RC tpm_get_cc(tpm_ctx *tpm, TPMS_CAPABILITY_DATA **capabilityData) {
-    assert(tpm);
-    assert(tpm->esys_ctx);
-    assert(capabilityData);
-
-    if (tpm->tpms_cc_cache) {
-        *capabilityData = tpm->tpms_cc_cache;
-        return CKR_OK;
-    }
-
-    TPM2_CAP capability = TPM2_CAP_COMMANDS;
-    UINT32 property = TPM2_CC_FIRST;
-    UINT32 propertyCount = TPM2_MAX_CAP_CC;
-    TPMI_YES_NO moreData;
-
-    TSS2_RC rval = Esys_GetCapability(tpm->esys_ctx,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            capability,
-            property, propertyCount, &moreData, capabilityData);
-    if (rval != TPM2_RC_SUCCESS) {
-        LOGE("Esys_GetCapability: %s", Tss2_RC_Decode(rval));
-        return rval;
-    }
-
-    tpm->tpms_cc_cache = *capabilityData;
-
-    return TSS2_RC_SUCCESS;
-}
-
-static TSS2_RC tpm_supports_cc(tpm_ctx *tpm, TPMA_CC check_cc, bool *is_supported) {
-
-	/* do not free, value is cached */
-    TPMS_CAPABILITY_DATA *capabilityData = NULL;
-    CK_RV rval = tpm_get_cc(tpm, &capabilityData);
-    if (rval != TSS2_RC_SUCCESS) {
-        return rval;
-    }
-
-    size_t i;
-    for (i=0; i < capabilityData->data.command.count; i++) {
-        TPMA_CC cca = capabilityData->data.command.commandAttributes[i];
-        TPM2_CC cc = cca & TPMA_CC_COMMANDINDEX_MASK;
-        if (cc == check_cc) {
-            *is_supported = true;
-            return TSS2_RC_SUCCESS;
-        }
-    }
-
-    *is_supported = false;
-    return TSS2_RC_SUCCESS;
 }
 
 static TSS2_RC create_loaded(
