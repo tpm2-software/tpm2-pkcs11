@@ -693,7 +693,13 @@ static void test_init_token(void **state) {
 
     /* Initialize a token */
     unsigned char sopin[] = GOOD_SOPIN;
+
     CK_BYTE label[32 + 1] = "mynewtoken42                    ";
+    CK_BYTE bad_label[32 + 1] = "myne\0wtoken42                   ";
+
+    rv = C_InitToken(slot, sopin, sizeof(sopin) - 1, bad_label);
+    assert_int_equal(rv, CKR_ARGUMENTS_BAD);
+
     rv = C_InitToken(slot, sopin, sizeof(sopin) - 1, label);
     assert_int_equal(rv, CKR_OK);
 
