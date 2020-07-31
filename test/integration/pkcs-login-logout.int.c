@@ -650,6 +650,17 @@ static void test_so_state_pin_init_good(void **state) {
     logout(handle);
 }
 
+static void test_double_init_token(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SLOT_ID slot = ti->slots[0].slot_id;
+
+    unsigned char sopin[] = GOOD_SOPIN;
+    CK_BYTE label[32 + 1] = "doubleinittoken                 ";
+	CK_RV rv = C_InitToken(slot, sopin, sizeof(sopin) - 1, label);
+	assert_int_equal(rv, CKR_DEVICE_ERROR);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
@@ -705,6 +716,10 @@ int main() {
          */
         cmocka_unit_test_setup_teardown(test_so_state_pin_init_good,
                 test_setup_rw, test_teardown),
+
+        /* These work on new tokens via slots and thus don't matter the order */
+        cmocka_unit_test_setup_teardown(test_double_init_token,
+                test_setup_ro, test_teardown),
     };
 
     return cmocka_run_group_tests(tests, _group_setup_locking, _group_teardown);
