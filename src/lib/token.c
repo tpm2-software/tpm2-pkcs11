@@ -342,6 +342,14 @@ CK_RV token_init(token *t, CK_BYTE_PTR pin, CK_ULONG pin_len, CK_BYTE_PTR label)
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
+    /* Bug:
+     * https://github.com/tpm2-software/tpm2-pkcs11/issues/576
+     */
+    if (t->config.is_initialized) {
+        LOGE("Tokens cannot be re-initialized");
+        return CKR_DEVICE_ERROR;
+    }
+
     twist newauth = NULL;
     twist newsalthex = NULL;
 
