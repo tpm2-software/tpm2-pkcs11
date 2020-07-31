@@ -723,6 +723,13 @@ static void test_init_token(void **state) {
 
     user_login(session);
     logout(session);
+
+    /*
+     * Try to initialize a token of the same name to verify DB UNIQUE constraint error path
+     * We know that slot + 1 brings us to the next unitialized slot...
+     */
+    rv = C_InitToken(slot + 1, sopin, sizeof(sopin) - 1, label);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
 int main() {

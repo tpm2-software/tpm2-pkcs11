@@ -20,7 +20,23 @@
 #include "token.h"
 #include "utils.h"
 
+static void sealobject_free(sealobject *sealobj) {
+    twist_free(sealobj->soauthsalt);
+    twist_free(sealobj->sopriv);
+    twist_free(sealobj->sopub);
+    twist_free(sealobj->userauthsalt);
+    twist_free(sealobj->userpub);
+    twist_free(sealobj->userpriv);
+    sealobj->soauthsalt = NULL;
+    sealobj->sopriv = NULL;
+    sealobj->sopub = NULL;
+    sealobj->userauthsalt = NULL;
+    sealobj->userpub = NULL;
+    sealobj->userpriv = NULL;
+}
+
 CK_RV token_min_init(token *t) {
+
     /*
      * Initialize the per-token session table
      */
@@ -39,12 +55,34 @@ CK_RV token_min_init(token *t) {
         return rv;
     }
 
+    assert(!t->mutex);
     rv = mutex_create(&t->mutex);
     if (rv != CKR_OK) {
         LOGE("Could not initialize mutex: 0x%lx", rv);
     }
 
     return rv;
+}
+
+void token_reset(token *t) {
+
+    /* forget the primary object so it can be reinitialized as needed */
+    t->pid = 0;
+    twist_free(t->pobject.objauth);
+    memset(&t->pobject, 0, sizeof(t->pobject));
+
+    /*
+     * forget the config, as it could change between initialization calls
+     * again.
+     */
+    free(t->config.tcti);
+    memset(&t->config, 0, sizeof(t->config));
+
+    sealobject_free(&t->sealobject);
+    /*
+     * the rest of the state can live so we don't need to free/realloc it
+     * Beware of who holds the mutex!
+     */
 }
 
 void token_free_list(token *t, size_t len) {
@@ -189,22 +227,7 @@ void token_rm_tobject(token *tok, tobject *t) {
     t->l.next = t->l.prev = NULL;
 }
 
-static void sealobject_free(sealobject *sealobj) {
-    twist_free(sealobj->soauthsalt);
-    twist_free(sealobj->sopriv);
-    twist_free(sealobj->sopub);
-    twist_free(sealobj->userauthsalt);
-    twist_free(sealobj->userpub);
-    twist_free(sealobj->userpriv);
-    sealobj->soauthsalt = NULL;
-    sealobj->sopriv = NULL;
-    sealobj->sopub = NULL;
-    sealobj->userauthsalt = NULL;
-    sealobj->userpub = NULL;
-    sealobj->userpriv = NULL;
-}
-
-void token_free(token *t) {
+void token_free_ex(token *t, bool keep_lock) {
 
     /*
      * for each session remove them
@@ -214,7 +237,7 @@ void token_free(token *t) {
     t->s_table = NULL;
 
     twist_free(t->pobject.objauth);
-    t->pobject.objauth = NULL;
+    memset(&t->pobject, 0, sizeof(t->pobject));
 
     sealobject_free(&t->sealobject);
 
@@ -231,11 +254,19 @@ void token_free(token *t) {
     tpm_ctx_free(t->tctx);
     t->tctx = NULL;
 
-    mutex_destroy(t->mutex);
-    t->mutex = NULL;
+    if (!keep_lock) {
+        mutex_destroy(t->mutex);
+        t->mutex = NULL;
+    }
 
     free(t->config.tcti);
-    t->config.tcti = NULL;
+
+    memset(&t->config, 0, sizeof(t->config));
+}
+
+void token_free(token *t) {
+
+    token_free_ex(t, false);
 }
 
 CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
@@ -393,6 +424,13 @@ CK_RV token_init(token *t, CK_BYTE_PTR pin, CK_ULONG pin_len, CK_BYTE_PTR label)
     t->sealobject.soauthsalt = newsalthex;
     newsalthex = NULL;
 
+    void *p = memchr(label, '\0', sizeof(t->label));
+    if (p) {
+        LOGE("Cannot have embedded nul byte in token label");
+        rv = CKR_ARGUMENTS_BAD;
+        goto error;
+    }
+
     memcpy(t->label, label, sizeof(t->label));
 
     /* TODO get TCTI config from ENV var and use throughout this process */
@@ -421,9 +459,7 @@ out:
     return rv;
 
 error:
-    token_free(t);
-    token_min_init(t);
-    t->config.is_initialized = false;
+    token_reset(t);
     goto out;
 }
 
