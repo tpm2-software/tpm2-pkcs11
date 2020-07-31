@@ -661,6 +661,70 @@ static void test_double_init_token(void **state) {
 	assert_int_equal(rv, CKR_DEVICE_ERROR);
 }
 
+static void test_init_token(void **state) {
+    UNUSED(state);
+
+    CK_SLOT_ID slots[10];
+    CK_ULONG slot_cnt = ARRAY_LEN(slots);
+
+    CK_RV rv = C_GetSlotList (CK_TRUE, slots, &slot_cnt);
+    assert_int_equal(rv, CKR_OK);
+
+    bool found = false;
+    CK_SLOT_ID slot = 0;
+    CK_ULONG i;
+    for (i=0; i < slot_cnt; i++) {
+        CK_SLOT_ID s = slots[i];
+
+        CK_TOKEN_INFO info = { 0 };
+        rv = C_GetTokenInfo (s, &info);
+        assert_int_equal(rv, CKR_OK);
+
+        if (!(info.flags & CKF_TOKEN_INITIALIZED)) {
+            found = true;
+            slot = s;
+            break;
+        }
+        /* keep looking */
+    }
+
+    /* We better find an empty slot, or something is broken */
+    assert_int_equal(found, true);
+
+    /* Initialize a token */
+    unsigned char sopin[] = GOOD_SOPIN;
+    CK_BYTE label[32 + 1] = "mynewtoken42                    ";
+    rv = C_InitToken(slot, sopin, sizeof(sopin) - 1, label);
+    assert_int_equal(rv, CKR_OK);
+
+    /*
+     * Verify that we cannot do a USER login until pin is initialized
+     * Bug: https://github.com/tpm2-software/tpm2-pkcs11/issues/563
+     */
+    CK_SESSION_HANDLE session = 0;
+    rv = C_OpenSession(slot, CKF_SERIAL_SESSION|CKF_RW_SESSION, NULL, NULL, &session);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Login(session, CKU_USER, C("anypin"), 6);
+    assert_int_equal(rv, CKR_USER_PIN_NOT_INITIALIZED);
+
+    /* establish R/W SO Functions login state */
+    rv = C_Login(session, CKU_SO, sopin, sizeof(sopin) - 1);
+    assert_int_equal(rv, CKR_OK);
+
+    /* Initialize the Pin */
+    const char userpin[] = GOOD_USERPIN;
+    rv = C_InitPIN(session, C(userpin), sizeof(userpin) - 1);
+    assert_int_equal(rv, CKR_OK);
+
+    /* logout of the SO session */
+    rv = C_Logout(session);
+    assert_int_equal(rv, CKR_OK);
+
+    user_login(session);
+    logout(session);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
@@ -720,6 +784,7 @@ int main() {
         /* These work on new tokens via slots and thus don't matter the order */
         cmocka_unit_test_setup_teardown(test_double_init_token,
                 test_setup_ro, test_teardown),
+        cmocka_unit_test(test_init_token),
     };
 
     return cmocka_run_group_tests(tests, _group_setup_locking, _group_teardown);

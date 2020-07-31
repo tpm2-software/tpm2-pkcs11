@@ -266,6 +266,15 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
         return CKR_OK;
     }
 
+    sealobject *sealobj = &tok->sealobject;
+    twist sealpub = is_user(user) ? sealobj->userpub : sealobj->sopub;
+    twist sealpriv = is_user(user) ? sealobj->userpriv : sealobj->sopriv;
+
+    /* Detect if PIN has not been set and thus missing the respective user seal object */
+    if (!sealpub) {
+        LOGE("User pin is not initialized, call C_InitPIN");
+        return CKR_USER_PIN_NOT_INITIALIZED;
+    }
 
     CK_RV tmp = tpm_session_start(tok->tctx, tok->pobject.objauth, tok->pobject.handle);
     if (tmp != CKR_OK) {
@@ -275,10 +284,6 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
     on_error_flush_session = true;
 
     /* load seal object */
-    sealobject *sealobj = &tok->sealobject;
-    twist sealpub = is_user(user) ? sealobj->userpub : sealobj->sopub;
-    twist sealpriv = is_user(user) ? sealobj->userpriv : sealobj->sopriv;
-
     uint32_t pobj_handle = tok->pobject.handle;
     twist pobjauth = tok->pobject.objauth;
 
