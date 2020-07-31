@@ -105,4 +105,16 @@ fi
 pkcs11_tool --slot-index=0 --login --pin=mynewuserpin --read-object --type data --label dataobj1 -o objdata2
 cmp objdata objdata2
 
+#
+# Negative test, ensure that this fails
+#
+trap - ERR
+
+# Reproduce https://github.com/tpm2-software/tpm2-pkcs11/issues/563
+pkcs11_tool --slot-index=1 --init-token --label tpmhsm --so-pin foo --pin bar
+if [ $? -eq 0 ]; then
+  echo "Expected login to fail without user pin set"
+  exit 1
+fi
+
 exit 0
