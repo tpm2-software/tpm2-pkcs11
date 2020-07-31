@@ -935,7 +935,7 @@ out:
 error:
     rc = sqlite3_finalize(stmt);
     if (rc != SQLITE_OK) {
-        LOGW("Could not finalize stmt: %d", rc);
+        LOGW("Could not finalize stmt: %s", sqlite3_errmsg(global.db));
     }
 
     rollback();
