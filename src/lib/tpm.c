@@ -168,6 +168,9 @@ struct tpm_ctx {
     TPMS_CAPABILITY_DATA *tpms_fixed_property_cache;
     TPMS_CAPABILITY_DATA *tpms_alg_cache;
     TPMS_CAPABILITY_DATA *tpms_cc_cache;
+
+    bool did_check_for_createloaded;
+    bool use_createloaded;
 };
 
 #define TPM2B_INIT(xsize) { .size = xsize, }
@@ -2003,10 +2006,7 @@ static TSS2_RC create_loaded(
 
     TSS2_RC rval;
 
-    static bool check_cc = true;
-    static bool use_create_loaded=false;
-
-    if (check_cc) {
+    if (!tpm->did_check_for_createloaded) {
         /* do not free, value is cached */
         TPMS_CAPABILITY_DATA *capabilityData = NULL;
         rval = tpm_get_cc(tpm, &capabilityData);
@@ -2019,14 +2019,14 @@ static TSS2_RC create_loaded(
             TPMA_CC cca = capabilityData->data.command.commandAttributes[i];
             TPM2_CC cc = cca & TPMA_CC_COMMANDINDEX_MASK;
             if (cc == TPM2_CC_CreateLoaded) {
-                use_create_loaded = true;
+                tpm->use_createloaded = true;
                 break;
             }
         }
-        check_cc = false;
+        tpm->did_check_for_createloaded = true;
     }
 
-    if (out_handle && use_create_loaded) {
+    if (out_handle && tpm->use_createloaded) {
 
         size_t offset = 0;
         TPM2B_TEMPLATE template = { .size = 0 };
