@@ -1993,6 +1993,29 @@ static TSS2_RC tpm_get_cc(tpm_ctx *tpm, TPMS_CAPABILITY_DATA **capabilityData) {
     return TSS2_RC_SUCCESS;
 }
 
+static TSS2_RC tpm_supports_cc(tpm_ctx *tpm, TPMA_CC check_cc, bool *is_supported) {
+
+	/* do not free, value is cached */
+    TPMS_CAPABILITY_DATA *capabilityData = NULL;
+    CK_RV rval = tpm_get_cc(tpm, &capabilityData);
+    if (rval != TSS2_RC_SUCCESS) {
+        return rval;
+    }
+
+    size_t i;
+    for (i=0; i < capabilityData->data.command.count; i++) {
+        TPMA_CC cca = capabilityData->data.command.commandAttributes[i];
+        TPM2_CC cc = cca & TPMA_CC_COMMANDINDEX_MASK;
+        if (cc == check_cc) {
+            *is_supported = true;
+            return TSS2_RC_SUCCESS;
+        }
+    }
+
+    *is_supported = false;
+    return TSS2_RC_SUCCESS;
+}
+
 static TSS2_RC create_loaded(
         tpm_ctx *tpm,
         ESYS_TR parent,
@@ -2008,22 +2031,11 @@ static TSS2_RC create_loaded(
 
     if (!tpm->did_check_for_createloaded) {
         /* do not free, value is cached */
-        TPMS_CAPABILITY_DATA *capabilityData = NULL;
-        rval = tpm_get_cc(tpm, &capabilityData);
+        rval = tpm_supports_cc(tpm, TPM2_CC_CreateLoaded,
+        		&tpm->did_check_for_createloaded);
         if (rval != TSS2_RC_SUCCESS) {
-            return rval;
+        	return rval;
         }
-
-        size_t i;
-        for (i=0; i < capabilityData->data.command.count; i++) {
-            TPMA_CC cca = capabilityData->data.command.commandAttributes[i];
-            TPM2_CC cc = cca & TPMA_CC_COMMANDINDEX_MASK;
-            if (cc == TPM2_CC_CreateLoaded) {
-                tpm->use_createloaded = true;
-                break;
-            }
-        }
-        tpm->did_check_for_createloaded = true;
     }
 
     if (out_handle && tpm->use_createloaded) {
