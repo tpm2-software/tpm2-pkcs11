@@ -27,12 +27,7 @@ static void sealobject_free(sealobject *sealobj) {
     twist_free(sealobj->userauthsalt);
     twist_free(sealobj->userpub);
     twist_free(sealobj->userpriv);
-    sealobj->soauthsalt = NULL;
-    sealobj->sopriv = NULL;
-    sealobj->sopub = NULL;
-    sealobj->userauthsalt = NULL;
-    sealobj->userpub = NULL;
-    sealobj->userpriv = NULL;
+    memset(sealobj, 0, sizeof(*sealobj));
 }
 
 CK_RV token_min_init(token *t) {
