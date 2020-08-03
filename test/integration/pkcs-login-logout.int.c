@@ -650,6 +650,94 @@ static void test_so_state_pin_init_good(void **state) {
     logout(handle);
 }
 
+static void test_double_init_token(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SLOT_ID slot = ti->slots[0].slot_id;
+
+    unsigned char sopin[] = GOOD_SOPIN;
+    CK_BYTE label[32 + 1] = "doubleinittoken                 ";
+	CK_RV rv = C_InitToken(slot, sopin, sizeof(sopin) - 1, label);
+	assert_int_equal(rv, CKR_ARGUMENTS_BAD);
+}
+
+static void test_init_token(void **state) {
+    UNUSED(state);
+
+    CK_SLOT_ID slots[10];
+    CK_ULONG slot_cnt = ARRAY_LEN(slots);
+
+    CK_RV rv = C_GetSlotList (CK_TRUE, slots, &slot_cnt);
+    assert_int_equal(rv, CKR_OK);
+
+    bool found = false;
+    CK_SLOT_ID slot = 0;
+    CK_ULONG i;
+    for (i=0; i < slot_cnt; i++) {
+        CK_SLOT_ID s = slots[i];
+
+        CK_TOKEN_INFO info = { 0 };
+        rv = C_GetTokenInfo (s, &info);
+        assert_int_equal(rv, CKR_OK);
+
+        if (!(info.flags & CKF_TOKEN_INITIALIZED)) {
+            found = true;
+            slot = s;
+            break;
+        }
+        /* keep looking */
+    }
+
+    /* We better find an empty slot, or something is broken */
+    assert_int_equal(found, true);
+
+    /* Initialize a token */
+    unsigned char sopin[] = GOOD_SOPIN;
+
+    CK_BYTE label[32 + 1] = "mynewtoken42                    ";
+    CK_BYTE bad_label[32 + 1] = "myne\0wtoken42                   ";
+
+    rv = C_InitToken(slot, sopin, sizeof(sopin) - 1, bad_label);
+    assert_int_equal(rv, CKR_ARGUMENTS_BAD);
+
+    rv = C_InitToken(slot, sopin, sizeof(sopin) - 1, label);
+    assert_int_equal(rv, CKR_OK);
+
+    /*
+     * Verify that we cannot do a USER login until pin is initialized
+     * Bug: https://github.com/tpm2-software/tpm2-pkcs11/issues/563
+     */
+    CK_SESSION_HANDLE session = 0;
+    rv = C_OpenSession(slot, CKF_SERIAL_SESSION|CKF_RW_SESSION, NULL, NULL, &session);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Login(session, CKU_USER, C("anypin"), 6);
+    assert_int_equal(rv, CKR_USER_PIN_NOT_INITIALIZED);
+
+    /* establish R/W SO Functions login state */
+    rv = C_Login(session, CKU_SO, sopin, sizeof(sopin) - 1);
+    assert_int_equal(rv, CKR_OK);
+
+    /* Initialize the Pin */
+    const char userpin[] = GOOD_USERPIN;
+    rv = C_InitPIN(session, C(userpin), sizeof(userpin) - 1);
+    assert_int_equal(rv, CKR_OK);
+
+    /* logout of the SO session */
+    rv = C_Logout(session);
+    assert_int_equal(rv, CKR_OK);
+
+    user_login(session);
+    logout(session);
+
+    /*
+     * Try to initialize a token of the same name to verify DB UNIQUE constraint error path
+     * We know that slot + 1 brings us to the next unitialized slot...
+     */
+    rv = C_InitToken(slot + 1, sopin, sizeof(sopin) - 1, label);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
@@ -705,6 +793,11 @@ int main() {
          */
         cmocka_unit_test_setup_teardown(test_so_state_pin_init_good,
                 test_setup_rw, test_teardown),
+
+        /* These work on new tokens via slots and thus don't matter the order */
+        cmocka_unit_test_setup_teardown(test_double_init_token,
+                test_setup_ro, test_teardown),
+        cmocka_unit_test(test_init_token),
     };
 
     return cmocka_run_group_tests(tests, _group_setup_locking, _group_teardown);

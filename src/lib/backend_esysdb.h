@@ -11,6 +11,7 @@ CK_RV backend_esysdb_destroy(void);
 
 CK_RV backend_esysdb_ctx_new(token *t);
 void backend_esysdb_ctx_free(token *t);
+void backend_esysdb_ctx_reset(token *t);
 
 CK_RV backend_esysdb_create_token_seal(token *t, const twist hexwrappingkey,
                        const twist newauth, const twist newsalthex);

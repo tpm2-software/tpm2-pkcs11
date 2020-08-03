@@ -106,8 +106,17 @@ CK_RV backend_ctx_new(token *t) {
 }
 
 void backend_ctx_free(token *t) {
-    backend_fapi_ctx_free(t);
-    backend_esysdb_ctx_free(t);
+    if (t->type == token_type_esysdb) {
+        backend_esysdb_ctx_free(t);
+    } else {
+        backend_fapi_ctx_free(t);
+    }
+    tpm_ctx_free(t->tctx);
+}
+
+void backend_ctx_reset(token *t) {
+    backend_esysdb_ctx_reset(t);
+    /* fapi doesn't appear to need anything */
 }
 
 /** Create a new token

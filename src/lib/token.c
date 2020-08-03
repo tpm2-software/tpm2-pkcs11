@@ -20,7 +20,23 @@
 #include "token.h"
 #include "utils.h"
 
+static void pobject_free(pobject *pobj) {
+
+    twist_free(pobj->objauth);
+
+    pobject_config *c = &pobj->config;
+
+    if (c->is_transient) {
+        free(c->template_name);
+    } else {
+        twist_free(c->blob);
+    }
+
+    memset(pobj, 0, sizeof(*pobj));
+}
+
 CK_RV token_min_init(token *t) {
+
     /*
      * Initialize the per-token session table
      */
@@ -54,6 +70,18 @@ CK_RV token_min_init(token *t) {
     }
 
     return rv;
+}
+
+void token_reset(token *t) {
+
+    /* forget the primary object so it can be reinitialized as needed */
+    pobject_free(&t->pobject);
+
+    backend_ctx_reset(t);
+    /*
+     * the rest of the state can live so we don't need to free/realloc it
+     * Beware of who holds the mutex!
+     */
 }
 
 void token_free_list(token *t, size_t len) {
@@ -204,35 +232,6 @@ void token_rm_tobject(token *tok, tobject *t) {
     t->l.next = t->l.prev = NULL;
 }
 
-static void sealobject_free(sealobject *sealobj) {
-    twist_free(sealobj->soauthsalt);
-    twist_free(sealobj->sopriv);
-    twist_free(sealobj->sopub);
-    twist_free(sealobj->userauthsalt);
-    twist_free(sealobj->userpub);
-    twist_free(sealobj->userpriv);
-    sealobj->soauthsalt = NULL;
-    sealobj->sopriv = NULL;
-    sealobj->sopub = NULL;
-    sealobj->userauthsalt = NULL;
-    sealobj->userpub = NULL;
-    sealobj->userpriv = NULL;
-}
-
-static void pobject_free(pobject *pobj) {
-
-    twist_free(pobj->objauth);
-    pobj->objauth = NULL;
-
-    pobject_config *c = &pobj->config;
-
-    if (c->is_transient) {
-        free(c->template_name);
-    } else {
-        twist_free(c->blob);
-    }
-}
-
 void token_free(token *t) {
 
     /*
@@ -247,10 +246,6 @@ void token_free(token *t) {
     }
 
     pobject_free(&t->pobject);
-
-    if (t->type == token_type_esysdb) {
-        sealobject_free(&t->esysdb.sealobject);
-    }
 
     if (t->tobjects.head) {
         list *cur = &t->tobjects.head->l;
@@ -269,7 +264,7 @@ void token_free(token *t) {
     t->mutex = NULL;
 
     free(t->config.tcti);
-    t->config.tcti = NULL;
+    memset(&t->config, 0, sizeof(t->config));
 
     mdetail_free(&t->mdtl);
 }
@@ -395,13 +390,7 @@ out:
     return rv;
 
 error:
-    token_free(t);
-    CK_RV rv2 = token_min_init(t);
-    if (rv2 != CKR_OK) {
-        LOGE("Could not re-create empty token");
-        rv = rv2;
-    }
-    t->config.is_initialized = false;
+    token_reset(t);
     goto out;
 }
 

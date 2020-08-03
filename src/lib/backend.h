@@ -13,7 +13,7 @@ CK_RV backend_destroy(void);
 
 CK_RV backend_ctx_new(token *t);
 void backend_ctx_free(token *t);
-
+void backend_ctx_reset(token *t);
 CK_RV backend_create_token_seal(token *t, const twist hexwrappingkey,
                         const twist newauth, const twist newsalthex);
 

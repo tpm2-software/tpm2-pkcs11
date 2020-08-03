@@ -23,8 +23,27 @@ CK_RV backend_esysdb_ctx_new(token *t) {
     return tpm_ctx_new(t->config.tcti, &t->tctx);
 }
 
+static void sealobject_free(sealobject *sealobj) {
+    twist_free(sealobj->soauthsalt);
+    twist_free(sealobj->sopriv);
+    twist_free(sealobj->sopub);
+    twist_free(sealobj->userauthsalt);
+    twist_free(sealobj->userpub);
+    twist_free(sealobj->userpriv);
+    memset(sealobj, 0, sizeof(*sealobj));
+}
+
+void backend_esysdb_ctx_reset(token *t) {
+
+    sealobject_free(&t->esysdb.sealobject);
+    /*
+     * the rest of the state can live so we don't need to free/realloc it
+     * Beware of who holds the mutex!
+     */
+}
+
 void backend_esysdb_ctx_free(token *t) {
-    tpm_ctx_free(t->tctx);
+    sealobject_free(&t->esysdb.sealobject);
 }
 
 static CK_RV get_or_create_primary(token *t) {
@@ -118,6 +137,10 @@ CK_RV backend_esysdb_create_token_seal(token *t, const twist hexwrappingkey,
 
     rv = db_add_token(t);
     if (rv != CKR_OK) {
+        /* do not take ownership on failure */
+        t->esysdb.sealobject.soauthsalt = NULL;
+        /* reset the token to an initial state */
+        backend_esysdb_ctx_reset(t);
         LOGE("Could not add token to db");
         goto error;
     }
