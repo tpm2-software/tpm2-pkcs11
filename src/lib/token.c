@@ -222,7 +222,7 @@ void token_rm_tobject(token *tok, tobject *t) {
     t->l.next = t->l.prev = NULL;
 }
 
-void token_free_ex(token *t, bool keep_lock) {
+void token_free(token *t) {
 
     /*
      * for each session remove them
@@ -249,19 +249,12 @@ void token_free_ex(token *t, bool keep_lock) {
     tpm_ctx_free(t->tctx);
     t->tctx = NULL;
 
-    if (!keep_lock) {
-        mutex_destroy(t->mutex);
-        t->mutex = NULL;
-    }
+    mutex_destroy(t->mutex);
+    t->mutex = NULL;
 
     free(t->config.tcti);
 
     memset(&t->config, 0, sizeof(t->config));
-}
-
-void token_free(token *t) {
-
-    token_free_ex(t, false);
 }
 
 CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {

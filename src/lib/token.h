@@ -87,15 +87,6 @@ struct token {
 void token_free(token *t);
 
 /**
- * Free the token internals, but keep the lock
- * @param t
- *  The token to free
- * @param keep_lock
- *  Whether or not to free the mutex.
- */
-void token_free_ex(token *t, bool keep_lock);
-
-/**
  * Free's a list of tokens
  * @param t
  *  The token list to free
