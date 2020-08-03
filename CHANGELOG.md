@@ -1,6 +1,7 @@
 # Changelog
 
 ### next - next
+  * Fix superflous error message when falling back from TPM2_EncryptDecrypt2 interface.
   * Support importing EC keys via tpm2_ptool import.
   * C_InitToken: Fix improper SRK handle of 0x81000000, it should be 0x81000001.
   * Fix a leak in in tpm.c of an EVP_PKEY object.
