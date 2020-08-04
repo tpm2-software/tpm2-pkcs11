@@ -39,7 +39,7 @@
       - PEM encoded keys produced by
       [tpm2tss-genkey](https://github.com/tpm2-software/tpm2-tss-engine/blob/master/man/tpm2tss-genkey.1.md)
 
-### 1.3.2 - next
+### 1.3.2-RC0 - 2020-08-04
   * Fix C_InitToken, ensure no embedded nul byte.
   * Fix free of mutex being held in C_InitToken failures: #573
   * Fix C_Login CKU_USER login attempt before pin is setup: #563
