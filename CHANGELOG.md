@@ -1,10 +1,10 @@
 # Changelog
 
-### 1.3.2-RC0 - 2020-08-04
-  * Fix C_InitToken, ensure no embedded nul byte.
-  * Fix free of mutex being held in C_InitToken failures: #573
-  * Fix C_Login CKU_USER login attempt before pin is setup: #563
-  * Fix C_InitToken double init issues #577
+### 1.3.2 - 2020-08-10
+  * Fix C\_InitToken, ensure no embedded nul byte.
+  * Fix free of mutex being held in C\_InitToken failures: #573
+  * Fix C\_Login CKU\_USER login attempt before pin is setup: #563
+  * Fix C\_InitToken double init issues #577
 
 ### 1.3.1 - 2020-07-27
   * Fix double free.
