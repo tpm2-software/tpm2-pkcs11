@@ -9,6 +9,10 @@ if [ -z "$TEST_FIXTURES" ]; then
     export TEST_FIXTURES="$T/test/integration/fixtures"
 fi
 
+if [ -z "$TPM2_PKCS11_MODULE" ]; then
+    export TPM2_PKCS11_MODULE="$T/src/.libs/libtpm2_pkcs11.so"
+fi
+
 echo source "$T/test/integration/scripts/helpers.sh"
 source "$T/test/integration/scripts/helpers.sh"
 
