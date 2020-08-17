@@ -1,11 +1,11 @@
 # Changelog
 
-### next - next
-  * Fix superflous error message when falling back from TPM2_EncryptDecrypt2 interface.
-  * Support importing EC keys via tpm2_ptool import.
-  * C_InitToken: Fix improper SRK handle of 0x81000000, it should be 0x81000001.
-  * Fix a leak in in tpm.c of an EVP_PKEY object.
-  * C_GenerateKeyPair: was not adding PSS signatures as supported by RSA objects, add it.
+### 1.4.0-RC0 - 2020-08-17
+  * Fix superflous error message when falling back from TPM2\_EncryptDecrypt2 interface.
+  * Support importing EC keys via tpm2\_ptool import.
+  * C\_InitToken: Fix improper SRK handle of 0x81000000, it should be 0x81000001.
+  * Fix a leak in in tpm.c of an EVP\_PKEY object.
+  * C\_GenerateKeyPair: was not adding PSS signatures as supported by RSA objects, add it.
   * Fix PSS signatures. Non-FIPS mode TPMs produce PSS signatures with a
     max salt len that poses interoperability issues with verifying clients,
     notably TLS in OpenSSL.
@@ -19,17 +19,17 @@
   * ci: increase CI coverage to: Fedora 30, Ubuntu 16.04, Ubuntu 18.04.
   * configure: check for Python version >= 3.7 and pass to Automake. No
     need to set PYTHON\_INTERPRETER anymore.
-  * Fix segfault/memory corruption bugs in C_Destroy().
+  * Fix segfault/memory corruption bugs in C\_Destroy().
   * Fix segfault when no user pin is provisioned.
-  * Support C_SetAttributeValue.
-  * Support for selectable backend using TPM2_PKCS11_BACKEND=esysdb being current version.
+  * Support C\_SetAttributeValue.
+  * Support for selectable backend using TPM2\_PKCS11\_BACKEND=esysdb being current version.
   * Support for backend fapi that uses the tss2-fapi keystore instead of an sqlite db.
     - This is auto-detected based on tss2-fapi being installed at configure time, and can be controlled
       via --enable/disable-fapi.
-  * C_CreateObject: Support for CKO_DATA objects only with CKA_PRIVATE set to CK_TRUE. Token
+  * C\_CreateObject: Support for CKO\_DATA objects only with CKA\_PRIVATE set to CK\_TRUE. Token
     defaults to CK_TRUE.
-  * Fix: src/lib/ssl_util.c:555:54: error: passing argument 3 of ‘EVP_PKEY_verify_recover’ from incompatible pointer type
-  * Added tpm2_ptool link commandlet for linking existing tpm2 objects into a compatible token. For details see
+  * Fix: src/lib/ssl\_util.c:555:54: error: passing argument 3 of ‘EVP\_PKEY\_verify\_recover’ from incompatible pointer type
+  * Added tpm2\_ptool link commandlet for linking existing tpm2 objects into a compatible token. For details see
     [this](https://github.com/tpm2-software/tpm2-pkcs11/blob/master/docs/INTEROPERABILITY.md) document.
 
     Supported tpm2 objects are:
