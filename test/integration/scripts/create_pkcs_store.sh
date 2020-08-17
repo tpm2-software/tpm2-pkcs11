@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: BSD-2-Clause
 #!/usr/bin/env bash
 
+if [ -z "$T" ]; then
+    export T="$(pwd)"
+fi
+
 echo source "$T/test/integration/scripts/helpers.sh"
 source "$T/test/integration/scripts/helpers.sh"
 
