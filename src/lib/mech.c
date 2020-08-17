@@ -502,31 +502,52 @@ CK_RV rsa_pss_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
     /*
      * The TPM fixes the MGF to the hash algorithm and the salt to the hashlen.
      */
-    if (params->hashAlg == CKM_SHA_1
-            && ((params->mgf != CKG_MGF1_SHA1) ||(params->sLen != 20)) ) {
+    CK_MECHANISM test_type = { 0 };
+    if (params->hashAlg == CKM_SHA_1) {
+        if ((params->mgf != CKG_MGF1_SHA1) ||(params->sLen != 20)) {
+            return CKR_MECHANISM_PARAM_INVALID;
+        }
+
+        test_type.mechanism = CKM_SHA1_RSA_PKCS_PSS;
+
+    } else if (params->hashAlg == CKM_SHA256) {
+
+        if ((params->mgf != CKG_MGF1_SHA256) ||(params->sLen != 32)) {
+            return CKR_MECHANISM_PARAM_INVALID;
+        }
+
+        test_type.mechanism = CKM_SHA256_RSA_PKCS_PSS;
+
+    } else if (params->hashAlg == CKM_SHA384) {
+        if ((params->mgf != CKG_MGF1_SHA384) ||(params->sLen != 48)) {
+            return CKR_MECHANISM_PARAM_INVALID;
+        }
+        test_type.mechanism = CKM_SHA384_RSA_PKCS_PSS;
+
+    } else if (params->hashAlg == CKM_SHA512) {
+        if ((params->mgf != CKG_MGF1_SHA512) ||(params->sLen != 64)) {
+            return CKR_MECHANISM_PARAM_INVALID;
+        }
+
+        test_type.mechanism = CKM_SHA512_RSA_PKCS_PSS;
+
+    } else {
+        LOGE("Unknown hash algorithm: 0x%x", params->hashAlg);
         return CKR_MECHANISM_PARAM_INVALID;
     }
 
-    if (params->hashAlg == CKM_SHA256
-            && ((params->mgf != CKG_MGF1_SHA256) ||(params->sLen != 32)) ) {
-        return CKR_MECHANISM_PARAM_INVALID;
-    }
-
-    if (params->hashAlg == CKM_SHA384
-            && ((params->mgf != CKG_MGF1_SHA384) ||(params->sLen != 48)) ) {
-        return CKR_MECHANISM_PARAM_INVALID;
-    }
-
-    if (params->hashAlg == CKM_SHA512
-            && ((params->mgf != CKG_MGF1_SHA512) ||(params->sLen != 64)) ) {
-        return CKR_MECHANISM_PARAM_INVALID;
+    /* Is it synthetic or native TPM supported ?*/
+    bool is_synthetic = true;
+    rv = mech_is_synthetic(m, &test_type, &is_synthetic);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     /*
-     * now that the PSS portion IS supported AND the mechanism params check out,
-     * we need raw RSA, do we have it?
+     * For synthetic operations we need raw RSA do we have it? Else we're
+     * fine
      */
-    return has_raw_rsa(attrs);
+    return is_synthetic ? has_raw_rsa(attrs) : CKR_OK;
 }
 
 CK_RV rsa_oaep_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
