@@ -5,6 +5,10 @@ if [ -z "$T" ]; then
     export T="$(pwd)"
 fi
 
+if [ -z "$TEST_FIXTURES" ]; then
+    export TEST_FIXTURES="$T/test/integration/fixtures"
+fi
+
 echo source "$T/test/integration/scripts/helpers.sh"
 source "$T/test/integration/scripts/helpers.sh"
 
