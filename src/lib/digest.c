@@ -37,11 +37,8 @@ void digest_op_data_free(digest_op_data **opdata) {
 
 static CK_RV digest_sw_init(mdetail *mdtl, digest_op_data *opdata) {
 
-    CK_MECHANISM mech = { 0 };
-    mech.mechanism = opdata->mechanism;
-
     const EVP_MD *md = NULL;
-    CK_RV rv = mech_get_digester(mdtl, &mech, &md);
+    CK_RV rv = mech_get_digester(mdtl, &opdata->mechanism, &md);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -102,7 +99,7 @@ out:
     return rv;
 }
 
-CK_RV digest_init_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_MECHANISM_TYPE mechanism) {
+CK_RV digest_init_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_MECHANISM_PTR mechanism) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -123,7 +120,7 @@ CK_RV digest_init_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_MECHA
         opdata = supplied_opdata;
     }
 
-    opdata->mechanism = mechanism;
+    opdata->mechanism = *mechanism;
 
     token *tok = session_ctx_get_token(ctx);
 

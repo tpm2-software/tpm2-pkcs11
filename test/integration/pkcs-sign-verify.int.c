@@ -495,6 +495,180 @@ static void test_sign_verify_CKM_ECDSA_SHA1(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
+static void test_pss(CK_SESSION_HANDLE session,
+        CK_OBJECT_HANDLE key[2], CK_MECHANISM_TYPE halg) {
+
+    CK_RSA_PKCS_PSS_PARAMS params = {
+        .hashAlg = halg,
+    };
+
+    switch (halg) {
+    case CKM_SHA_1:
+        params.mgf = CKG_MGF1_SHA1;
+        params.sLen = 20;
+        break;
+    case CKM_SHA256:
+        params.mgf = CKG_MGF1_SHA256;
+        params.sLen = 32;
+        break;
+    case CKM_SHA384:
+        params.mgf = CKG_MGF1_SHA384;
+        params.sLen = 48;
+        break;
+    case CKM_SHA512:
+        params.mgf = CKG_MGF1_SHA512;
+        params.sLen = 64;
+        break;
+    default:
+        assert_true(0);
+    }
+
+    CK_MECHANISM mech = {
+        .mechanism = CKM_RSA_PKCS_PSS,
+        .pParameter = &params,
+        .ulParameterLen = sizeof(params)
+    };
+
+    CK_BYTE msg_digest[64];
+    memset(msg_digest, 0xAA, params.sLen);
+
+    CK_RV rv = C_SignInit(session, &mech, key[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE sig[4096];
+    CK_ULONG siglen = 0;
+
+    /* Call C_Sign for Size */
+    rv = C_Sign(session, msg_digest, params.sLen,
+            NULL, &siglen);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_not_equal(siglen, 0);
+
+    CK_ULONG tmp_len = siglen;
+    rv = C_Sign(session, msg_digest, params.sLen,
+            sig, &siglen);
+    assert_int_equal(rv, CKR_OK);
+    /* actual size must not be larger than previously indicated */
+    assert_in_range(siglen, 1, tmp_len);
+
+    rv = C_VerifyInit(session, &mech, key[1]);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Verify(session, msg_digest, params.sLen,
+            sig, siglen);
+    assert_int_equal(rv, CKR_OK);
+}
+
+static void test_pss2(CK_SESSION_HANDLE session,
+        CK_OBJECT_HANDLE key[2], CK_MECHANISM_TYPE halg) {
+
+    CK_MECHANISM mech = {
+        .pParameter = NULL,
+        .ulParameterLen = 0
+    };
+
+    switch (halg) {
+    case CKM_SHA_1:
+        mech.mechanism = CKM_SHA1_RSA_PKCS_PSS;
+        break;
+    case CKM_SHA256:
+        mech.mechanism = CKM_SHA256_RSA_PKCS_PSS;
+        break;
+    case CKM_SHA384:
+        mech.mechanism = CKM_SHA384_RSA_PKCS_PSS;
+        break;
+    case CKM_SHA512:
+        mech.mechanism = CKM_SHA512_RSA_PKCS_PSS;
+        break;
+    default:
+        assert_true(0);
+    }
+
+    CK_BYTE msg[] = "my message";
+
+    CK_RV rv = C_SignInit(session, &mech, key[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE sig[4096];
+    CK_ULONG siglen = 0;
+
+    /* Call C_Sign for Size */
+    rv = C_Sign(session, msg, sizeof(msg) - 1,
+            NULL, &siglen);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_not_equal(siglen, 0);
+
+    CK_ULONG tmp_len = siglen;
+    rv = C_Sign(session, msg, sizeof(msg) - 1,
+            sig, &siglen);
+    assert_int_equal(rv, CKR_OK);
+    /* actual size must not be larger than previously indicated */
+    assert_in_range(siglen, 1, tmp_len);
+
+    rv = C_VerifyInit(session, &mech, key[1]);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Verify(session, msg, sizeof(msg) - 1,
+            sig, siglen);
+    assert_int_equal(rv, CKR_OK);
+}
+
+
+static void test_sign_verify_CKM_RSA_PKCS_PSS(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_BYTE _label[] = "rsa1";
+
+    CK_OBJECT_CLASS key_class = CKO_PRIVATE_KEY;
+    CK_KEY_TYPE key_type = CKK_RSA;
+    CK_ATTRIBUTE tmpl[] = {
+        { CKA_CLASS,    &key_class, sizeof(key_class)  },
+        { CKA_KEY_TYPE, &key_type,  sizeof(key_type)   },
+        { CKA_LABEL,    _label,     sizeof(_label) - 1 },
+    };
+
+    user_login(session);
+
+    /* Find an RSA Private key */
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG count;
+    CK_OBJECT_HANDLE objhandles[2];
+    rv = C_FindObjects(session, &objhandles[0], 1, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    /* Find matching RSA Public key */
+    key_class = CKO_PUBLIC_KEY;
+    rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_FindObjects(session, &objhandles[1], 1, &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    test_pss(session, objhandles, CKM_SHA_1);
+    test_pss2(session, objhandles, CKM_SHA_1);
+
+    test_pss(session, objhandles, CKM_SHA256);
+    test_pss2(session, objhandles, CKM_SHA256);
+
+    test_pss(session, objhandles, CKM_SHA384);
+    test_pss2(session, objhandles, CKM_SHA384);
+
+    test_pss(session, objhandles, CKM_SHA512);
+    test_pss2(session, objhandles, CKM_SHA512);
+}
+
 static void test_double_sign_call_for_size_SHA256(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -956,6 +1130,8 @@ static void test_cert_no_good(void **state) {
 int main() {
 
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_sign_verify_CKM_RSA_PKCS_PSS,
+                test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_context_specific_good,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_public,

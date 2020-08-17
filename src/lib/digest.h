@@ -15,16 +15,16 @@
 typedef struct digest_op_data digest_op_data;
 struct digest_op_data {
     tobject *tobj;
-    CK_MECHANISM_TYPE mechanism;
+    CK_MECHANISM mechanism;
     EVP_MD_CTX *mdctx;
 };
 
 digest_op_data *digest_op_data_new(void);
 void digest_op_data_free(digest_op_data **opdata);
 
-CK_RV digest_init_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_MECHANISM_TYPE mechanism);
-static inline CK_RV digest_init(session_ctx *ctx, CK_MECHANISM *mechanism) {
-    return digest_init_op(ctx, NULL, mechanism->mechanism);
+CK_RV digest_init_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_MECHANISM_PTR mechanism);
+static inline CK_RV digest_init(session_ctx *ctx, CK_MECHANISM_PTR mechanism) {
+    return digest_init_op(ctx, NULL, mechanism);
 }
 
 CK_RV digest_update_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_BYTE_PTR part, CK_ULONG part_len);
