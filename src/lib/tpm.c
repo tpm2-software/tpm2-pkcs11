@@ -1371,6 +1371,47 @@ CK_RV tpm_rsa_pkcs_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, 
     return CKR_OK;
 }
 
+CK_RV tpm_rsa_pss_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(m);
+
+    check_pointer(mech);
+    check_pointer(outdata);
+
+    CK_RSA_PKCS_PSS_PARAMS_PTR params;
+    SAFE_CAST(mech, params);
+
+    tpm_op_data *opdata = tpm_opdata_new();
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->rsa.sig.scheme = TPM2_ALG_RSAPSS;
+
+    switch (params->hashAlg) {
+    case CKM_SHA_1:
+        opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA1;
+        break;
+    case CKM_SHA256:
+        opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA256;
+        break;
+    case CKM_SHA384:
+        opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA384;
+        break;
+    case CKM_SHA512:
+        opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA512;
+        break;
+    default:
+        tpm_opdata_free(&opdata);
+        return CKR_MECHANISM_INVALID;
+    }
+
+    set_common_opdata(opdata, tctx, tobj, CKK_RSA);
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
 CK_RV tpm_rsa_pss_sha1_get_opdata(mdetail *mdtl,
         tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
     UNUSED(mdtl);

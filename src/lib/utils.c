@@ -353,18 +353,26 @@ size_t utils_get_halg_size(CK_MECHANISM_TYPE mttype) {
         case CKM_SHA1_RSA_PKCS:
             /* falls-thru */
         case CKM_SHA1_RSA_PKCS_PSS:
+            /* falls-thru */
+        case CKM_SHA_1:
             return 20;
         case CKM_SHA256_RSA_PKCS:
             /* falls-thru */
         case CKM_SHA256_RSA_PKCS_PSS:
+            /* falls-thru */
+        case CKM_SHA256:
             return 32;
         case CKM_SHA384_RSA_PKCS:
             /* falls-thru */
         case CKM_SHA384_RSA_PKCS_PSS:
+            /* falls-thru */
+        case CKM_SHA384:
             return 48;
         case CKM_SHA512_RSA_PKCS:
             /* falls-thru */
         case CKM_SHA512_RSA_PKCS_PSS:
+            /* falls-thru */
+        case CKM_SHA512:
             return 64;
     }
 

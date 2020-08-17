@@ -37,6 +37,10 @@ CK_RV mech_is_hashing_needed(
         CK_MECHANISM_PTR mech,
         bool *is_hashing_needed);
 
+CK_RV mech_is_hashing_knowledge_needed(mdetail *m,
+    CK_MECHANISM_PTR mech,
+    bool *is_hashing_knowledge_needed);
+
 CK_RV mech_get_digest_alg(mdetail *mdtl,
         CK_MECHANISM_PTR mech,
         CK_MECHANISM_TYPE *mech_type);

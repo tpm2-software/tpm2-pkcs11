@@ -34,7 +34,7 @@ enum mechanism_flags {
     mf_rsa           = 1 << 9,
     mf_ecc           = 1 << 10,
     mf_aes           = 1 << 11,
-    mf_force_synthetic     = 1 << 12,
+    mf_force_synthetic = 1 << 12,
 };
 
 typedef struct mdetail_entry mdetail_entry;
@@ -128,8 +128,6 @@ static CK_RV sha256_get_digester(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD
 static CK_RV sha384_get_digester(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD **md);
 static CK_RV sha512_get_digester(mdetail *m, CK_MECHANISM_PTR mech, const EVP_MD **md);
 
-static CK_RV tpm_rsa_pss_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata);
-
 static const mdetail_entry _g_mechs_templ[] = {
 
     /* RSA */
@@ -139,7 +137,7 @@ static const mdetail_entry _g_mechs_templ[] = {
 
     { .type = CKM_RSA_PKCS,      .flags = mf_force_synthetic|mf_sign|mf_verify|mf_encrypt|mf_decrypt|mf_rsa, .validator = rsa_pkcs_validator, .synthesizer = rsa_pkcs_synthesizer, .get_tpm_opdata = tpm_rsa_pkcs_get_opdata, .padding = RSA_PKCS1_PADDING },
 
-    { .type = CKM_RSA_PKCS_PSS,  .flags = mf_sign|mf_verify, .validator = rsa_pss_validator, .get_halg = rsa_pss_get_halg,  .get_digester = rsa_pss_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
+    { .type = CKM_RSA_PKCS_PSS,  .flags = mf_sign|mf_verify, .validator = rsa_pss_validator, .synthesizer = rsa_pss_synthesizer, .get_digester = rsa_pss_get_digester, .get_tpm_opdata = tpm_rsa_pss_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
 
     { .type = CKM_RSA_PKCS_OAEP, . flags = mf_encrypt|mf_decrypt|mf_rsa,  .validator = rsa_oaep_validator, .get_halg = rsa_oaep_get_halg, .get_digester = rsa_oaep_get_digester, .get_tpm_opdata = tpm_rsa_oaep_get_opdata, .padding = RSA_PKCS1_OAEP_PADDING },
 
@@ -489,16 +487,6 @@ CK_RV rsa_pss_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
         return CKR_MECHANISM_PARAM_INVALID;
     }
 
-    CK_MECHANISM_TYPE halg = 0;
-    CK_RV rv = d->get_halg(mech, &halg);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    if (halg != params->hashAlg) {
-        return CKR_MECHANISM_PARAM_INVALID;
-    }
-
     /*
      * The TPM fixes the MGF to the hash algorithm and the salt to the hashlen.
      */
@@ -538,7 +526,7 @@ CK_RV rsa_pss_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
 
     /* Is it synthetic or native TPM supported ?*/
     bool is_synthetic = true;
-    rv = mech_is_synthetic(m, &test_type, &is_synthetic);
+    CK_RV rv = mech_is_synthetic(m, &test_type, &is_synthetic);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -999,48 +987,6 @@ CK_RV rsa_pkcs_hash_synthesizer(mdetail *mdtl,
     return rsa_pkcs_synthesizer(mdtl, mech, attrs, hdr_buf, total_size, outbuf, outlen);
 }
 
-CK_RV tpm_rsa_pss_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
-
-    check_pointer(mech);
-    check_pointer(outdata);
-
-    CK_MECHANISM_TYPE halg = 0;
-    CK_RV rv = rsa_pss_get_halg(mech, &halg);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    mdetail_entry *d = mlookup(m, halg);
-    if (!d) {
-        return CKR_MECHANISM_INVALID;
-    }
-
-    CK_MECHANISM flat = { 0 };
-    switch (halg) {
-    case CKM_SHA_1:
-        flat.mechanism = CKM_SHA1_RSA_PKCS_PSS;
-        break;
-    case CKM_SHA256:
-        flat.mechanism = CKM_SHA256_RSA_PKCS_PSS;
-        break;
-    case CKM_SHA384:
-        flat.mechanism = CKM_SHA384_RSA_PKCS_PSS;
-        break;
-    case CKM_SHA512:
-        flat.mechanism = CKM_SHA512_RSA_PKCS_PSS;
-        break;
-    default:
-        return CKR_MECHANISM_INVALID;
-    }
-
-    d = mlookup(m, flat.mechanism);
-    if (!d) {
-        return CKR_MECHANISM_INVALID;
-    }
-
-    return d->get_tpm_opdata(m, tctx, mech, tobj, outdata);
-}
-
 static CK_RV get_rsa_mechinfo(tpm_ctx *tctx, CK_MECHANISM_INFO_PTR info) {
 
     CK_ULONG min = 0;
@@ -1270,6 +1216,25 @@ CK_RV mech_is_hashing_needed(mdetail *m,
     }
 
     *is_hashing_needed = halg != 0;
+
+    return CKR_OK;
+}
+
+CK_RV mech_is_hashing_knowledge_needed(mdetail *m,
+    CK_MECHANISM_PTR mech,
+    bool *is_hashing_knowledge_needed) {
+
+    check_pointer(m);
+    check_pointer(mech);
+    check_pointer(is_hashing_knowledge_needed);
+
+    mdetail_entry *d = mlookup(m, mech->mechanism);
+    if (!d) {
+        LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
+        return CKR_MECHANISM_INVALID;
+    }
+
+    *is_hashing_knowledge_needed = d->get_digester;
 
     return CKR_OK;
 }

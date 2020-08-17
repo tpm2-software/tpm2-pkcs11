@@ -54,7 +54,19 @@ static sign_opdata *sign_opdata_new(mdetail *mdtl, CK_MECHANISM_PTR mechanism, t
         return NULL;
     }
 
-    if (is_hashing_needed) {
+    /*
+     * Some algorithms we don't perform the hash, but we need knowledge of
+     * the hashing algorithm for verify operations with OSSL
+     */
+    bool is_hash_knowledge_needed = false;
+    rv = mech_is_hashing_knowledge_needed(mdtl, mechanism,
+            &is_hash_knowledge_needed);
+    if (rv != CKR_OK) {
+        return NULL;
+    }
+
+
+    if (is_hashing_needed || is_hash_knowledge_needed) {
         rv = mech_get_digester(mdtl, mechanism, &md);
         if (rv != CKR_OK) {
             return NULL;
@@ -142,7 +154,7 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
             return CKR_HOST_MEMORY;
         }
 
-        rv = digest_init_op(ctx, digest_opdata, mechanism->mechanism);
+        rv = digest_init_op(ctx, digest_opdata, mechanism);
         if (rv != CKR_OK) {
             digest_op_data_free(&digest_opdata);
             return rv;
@@ -311,7 +323,15 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
 
     if (opdata->do_hash) {
 
-        CK_ULONG hash_len = utils_get_halg_size(opdata->mech.mechanism);
+        CK_MECHANISM_TYPE mech_halg;
+        rv = mech_get_digest_alg(tok->mdtl,
+                &opdata->mech,
+                &mech_halg);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+
+        CK_ULONG hash_len = utils_get_halg_size(mech_halg);
         if (!hash_len) {
             LOGE("Hash algorithm cannot have 0 size");
             return CKR_GENERAL_ERROR;
@@ -422,7 +442,8 @@ out:
 
             assert(opdata->digest_opdata);
 
-            CK_RV tmp = digest_init_op(ctx, new_digest_state, opdata->digest_opdata->mechanism);
+            CK_RV tmp = digest_init_op(ctx, new_digest_state,
+                    &opdata->digest_opdata->mechanism);
             if (tmp != CKR_OK) {
                 digest_op_data_free(&new_digest_state);
                 reset_ctx = false;
