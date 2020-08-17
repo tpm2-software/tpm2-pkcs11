@@ -91,7 +91,7 @@ AS_IF([test "x$enable_fapi" != "xno"],
 
 AS_IF([test "$have_fapi" = "1"],
     AC_DEFINE([HAVE_FAPI], [1], [Enabled if FAPI >= 3.0 is found])
-])
+)
 AM_CONDITIONAL([HAVE_FAPI], [test "$have_fapi" = "1"])
 
 # START ENABLE UNIT
