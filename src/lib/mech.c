@@ -34,7 +34,7 @@ enum mechanism_flags {
     mf_rsa           = 1 << 9,
     mf_ecc           = 1 << 10,
     mf_aes           = 1 << 11,
-    mf_force_synthetic     = 1 << 11,
+    mf_force_synthetic     = 1 << 12,
 };
 
 typedef struct mdetail_entry mdetail_entry;
