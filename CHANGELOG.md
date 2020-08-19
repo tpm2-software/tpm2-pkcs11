@@ -2,6 +2,7 @@
 
 ### next
   * Fix warning ../configure: line 14383: ]: command not found
+  * Fix CKM_RSA_PKCS_PSS mechanism.
 
 ### 1.4.0-RC0 - 2020-08-17
   * Fix superflous error message when falling back from TPM2\_EncryptDecrypt2 interface.
