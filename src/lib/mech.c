@@ -137,7 +137,7 @@ static const mdetail_entry _g_mechs_templ[] = {
 
     { .type = CKM_RSA_PKCS,      .flags = mf_force_synthetic|mf_sign|mf_verify|mf_encrypt|mf_decrypt|mf_rsa, .validator = rsa_pkcs_validator, .synthesizer = rsa_pkcs_synthesizer, .get_tpm_opdata = tpm_rsa_pkcs_get_opdata, .padding = RSA_PKCS1_PADDING },
 
-    { .type = CKM_RSA_PKCS_PSS,  .flags = mf_sign|mf_verify, .validator = rsa_pss_validator, .synthesizer = rsa_pss_synthesizer, .get_digester = rsa_pss_get_digester, .get_tpm_opdata = tpm_rsa_pss_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
+    { .type = CKM_RSA_PKCS_PSS,  .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_validator, .synthesizer = rsa_pss_synthesizer, .get_digester = rsa_pss_get_digester, .get_tpm_opdata = tpm_rsa_pss_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
 
     { .type = CKM_RSA_PKCS_OAEP, . flags = mf_encrypt|mf_decrypt|mf_rsa,  .validator = rsa_oaep_validator, .get_halg = rsa_oaep_get_halg, .get_digester = rsa_oaep_get_digester, .get_tpm_opdata = tpm_rsa_oaep_get_opdata, .padding = RSA_PKCS1_OAEP_PADDING },
 
@@ -146,10 +146,10 @@ static const mdetail_entry _g_mechs_templ[] = {
     { .type = CKM_SHA384_RSA_PKCS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pkcs_hash_validator, .synthesizer = rsa_pkcs_hash_synthesizer, .get_halg = sha384_get_halg, .get_digester = sha384_get_digester, .get_tpm_opdata = tpm_rsa_pkcs_sha384_get_opdata, .padding = RSA_PKCS1_PADDING },
     { .type = CKM_SHA512_RSA_PKCS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pkcs_hash_validator, .synthesizer = rsa_pkcs_hash_synthesizer, .get_halg = sha512_get_halg, .get_digester = sha512_get_digester, .get_tpm_opdata = tpm_rsa_pkcs_sha512_get_opdata, .padding = RSA_PKCS1_PADDING },
 
-    { .type = CKM_SHA1_RSA_PKCS_PSS,   .flags = mf_sign|mf_verify, .validator = rsa_pss_hash_validator, .get_halg = sha1_get_halg, .get_digester = sha1_get_digester,     .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha1_get_opdata,   .padding = RSA_PKCS1_PSS_PADDING },
-    { .type = CKM_SHA256_RSA_PKCS_PSS, .flags = mf_sign|mf_verify, .validator = rsa_pss_hash_validator, .get_halg = sha256_get_halg, .get_digester = sha256_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha256_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
-    { .type = CKM_SHA384_RSA_PKCS_PSS, .flags = mf_sign|mf_verify, .validator = rsa_pss_hash_validator, .get_halg = sha384_get_halg, .get_digester = sha384_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha384_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
-    { .type = CKM_SHA512_RSA_PKCS_PSS, .flags = mf_sign|mf_verify, .validator = rsa_pss_hash_validator, .get_halg = sha512_get_halg, .get_digester = sha512_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha512_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
+    { .type = CKM_SHA1_RSA_PKCS_PSS,   .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha1_get_halg, .get_digester = sha1_get_digester,     .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha1_get_opdata,   .padding = RSA_PKCS1_PSS_PADDING },
+    { .type = CKM_SHA256_RSA_PKCS_PSS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha256_get_halg, .get_digester = sha256_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha256_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
+    { .type = CKM_SHA384_RSA_PKCS_PSS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha384_get_halg, .get_digester = sha384_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha384_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
+    { .type = CKM_SHA512_RSA_PKCS_PSS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_hash_validator, .get_halg = sha512_get_halg, .get_digester = sha512_get_digester, .synthesizer = rsa_pss_synthesizer, .get_tpm_opdata = tpm_rsa_pss_sha512_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
 
     /* EC */
     { .type = CKM_EC_KEY_PAIR_GEN, .flags = mf_is_keygen|mf_ecc,      .validator = ecc_keygen_validator },
