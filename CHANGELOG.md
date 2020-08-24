@@ -1,6 +1,6 @@
 # Changelog
 
-### 1.4.0-RC0 - 2020-08-17
+### 1.4.0 - 2020-08-24
   * Fix superflous error message when falling back from TPM2\_EncryptDecrypt2 interface.
   * Support importing EC keys via tpm2\_ptool import.
   * C\_InitToken: Fix improper SRK handle of 0x81000000, it should be 0x81000001.
