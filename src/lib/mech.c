@@ -1071,11 +1071,11 @@ CK_RV mech_get_supported(mdetail *m, CK_MECHANISM_TYPE_PTR mechlist, CK_ULONG_PT
             rv = CKR_BUFFER_TOO_SMALL;
             goto out;
         }
-	if (supported) {
+        if (supported) {
             size_t bytes = 0;
             safe_mul(bytes, supported, sizeof(mechlist[0]));
             memcpy(mechlist, tmp, bytes);
-	}
+        }
     }
 
     rv = CKR_OK;
