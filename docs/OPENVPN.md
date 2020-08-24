@@ -58,7 +58,7 @@ Applying: Stop _pkcs11h_util_hexToBinary() checking for trailing NUL
 Applying: Accept RFC7512-compliant PKCS#11 URIs as serialized token/certificate IDs
 Applying: Serialize to RFC7512-compliant PKCS#11 URIs
 
-# Get PKCS support.
+# Get PSS support.
 git cherry-pick c192bb4
 ```
 **Note**: The above does not apply cleanly, but the conflict is on:
