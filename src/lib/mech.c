@@ -1061,11 +1061,9 @@ CK_RV mech_get_supported(mdetail *m, CK_MECHANISM_TYPE_PTR mechlist, CK_ULONG_PT
             continue;
         }
 
-        supported++;
-
         assert(supported <= ARRAY_LEN(tmp));
-
         tmp[supported] = d->type;
+        supported++;
     }
 
     if (mechlist) {
