@@ -3,6 +3,8 @@
 ### next
   * Fix warning ../configure: line 14383: ]: command not found
   * Fix CKM_RSA_PKCS_PSS mechanism.
+  * C_GetMechanismList: Fix index 0 being invalid.
+  * C_GetMechanismInfo: Fix errors like ERROR: Unknown mechanism, got: 0xd.
 
 ### 1.4.0 - 2020-08-24
   * Fix superflous error message when falling back from TPM2\_EncryptDecrypt2 interface.
