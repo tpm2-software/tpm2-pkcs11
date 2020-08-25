@@ -1098,7 +1098,7 @@ CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OB
         rv = handle_data_object(tok, templ, count, &new_attrs);
     } else {
         LOGE("Can only create RSA Public key objects or"
-                "data objects, CKA_CLASS(%lu), CKA_KEY_TYPE(%lu)",
+                " data objects, CKA_CLASS(%lu), CKA_KEY_TYPE(%lu)",
                 clazz, key_type);
         return CKR_ATTRIBUTE_VALUE_INVALID;
     }
