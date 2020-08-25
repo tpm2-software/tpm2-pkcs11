@@ -65,4 +65,13 @@ echo "Deleting pubkey"
 pkcs11_tool --slot=1 --pin=myuserpin --login --delete-object --type=pubkey --label=myecckey
 echo "Pubkey deleted"
 
+# Verify we can add a certifcate, since this is a setup a test, the store should contain a cert to use.
+echo "Writing certificate"
+# Not all versions of pkcs11-tool handle PEM to DER conversions, 0.15 doesn't, 0.19 does. So always
+# convert to DER
+openssl x509 -inform PEM -outform DER -in "$TPM2_PKCS11_STORE/cert.pem.rsa1" -out "$TPM2_PKCS11_STORE/cert.der.rsa1"
+pkcs11_tool --slot=1 -l --pin=myuserpin --write-object="$TPM2_PKCS11_STORE/cert.der.rsa1" \
+    --type=cert --id=01 --label=device-cert
+echo "Certificate wrote"
+
 exit 0

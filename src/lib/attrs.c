@@ -444,7 +444,7 @@ attr_list *attr_list_append_attrs(
     return old_attrs;
 }
 
-static CK_RV attr_common_add_storage(attr_list **storage_attrs) {
+CK_RV attr_common_add_storage(attr_list **storage_attrs) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -1344,3 +1344,4 @@ UTILS_GENERIC_ATTR_TYPE_CONVERT(CK_KEY_TYPE);
 
 UTILS_GENERIC_EXTRACTOR(CKA_PRIVATE, CK_BBOOL);
 UTILS_GENERIC_EXTRACTOR(CKA_CLASS,   CK_OBJECT_CLASS);
+UTILS_GENERIC_EXTRACTOR(CKA_TOKEN, CK_BBOOL);
