@@ -264,6 +264,8 @@ CK_RV attr_CK_KEY_TYPE(CK_ATTRIBUTE_PTR attr, CK_KEY_TYPE *x);
 
 CK_BBOOL attr_list_get_CKA_PRIVATE(attr_list *attrs, CK_BBOOL defvalue);
 
+CK_BBOOL attr_list_get_CKA_TOKEN(attr_list *attrs, CK_BBOOL defvalue);
+
 CK_OBJECT_CLASS attr_list_get_CKA_CLASS(attr_list *attrs, CK_OBJECT_CLASS defvalue);
 
 /**
@@ -296,6 +298,8 @@ CK_RV attr_list_append_entry(attr_list **attrs, CK_ATTRIBUTE_PTR untrusted_attr)
 CK_RV attr_list_update_entry(attr_list *attrs, CK_ATTRIBUTE_PTR untrusted_attr);
 
 CK_RV attr_common_add_RSA_publickey(attr_list **public_attrs);
+
+CK_RV attr_common_add_storage(attr_list **public_attrs);
 
 CK_RV attr_common_add_data(attr_list **storage_attrs);
 
