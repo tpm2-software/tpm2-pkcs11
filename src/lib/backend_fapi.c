@@ -966,7 +966,7 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
 
 	UNUSED(tok);
 	UNUSED(len);
-	LOGE("FAPI NOT ENABLED");
+	LOGV("FAPI NOT ENABLED");
 	return CKR_GENERAL_ERROR;
 }
 
