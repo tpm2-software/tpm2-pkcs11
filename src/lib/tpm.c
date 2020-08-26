@@ -2490,7 +2490,7 @@ static CK_RV handle_extractable_common(CK_ATTRIBUTE_PTR attr, bool is_extractabl
         return rv;
     }
 
-    if (value == is_extractable ? CK_TRUE : CK_FALSE) {
+    if (value == is_extractable ? true : false) {
         keydat->pub.publicArea.objectAttributes &= ~(TPMA_OBJECT_FIXEDTPM | TPMA_OBJECT_FIXEDPARENT);
     } else {
         keydat->pub.publicArea.objectAttributes |= (TPMA_OBJECT_FIXEDTPM | TPMA_OBJECT_FIXEDPARENT);
