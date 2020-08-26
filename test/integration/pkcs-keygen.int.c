@@ -870,6 +870,51 @@ static void test_non_common_template_attrs(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
+static void test_extract_and_private(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_BBOOL ck_true = CK_TRUE;
+    // CK_BBOOL ck_false = CK_FALSE;
+    CK_UTF8CHAR label[] = "minimum-rsa";
+
+    CK_ATTRIBUTE pub[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_ENCRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_VERIFY, ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+    };
+
+    CK_ATTRIBUTE priv[] = {
+        ADD_ATTR_BASE(CKA_DECRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_SIGN, ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_EXTRACTABLE, ck_true),
+    };
+
+    CK_MECHANISM mech = {
+        .mechanism = CKM_RSA_PKCS_KEY_PAIR_GEN,
+        .pParameter = NULL,
+        .ulParameterLen = 0
+    };
+
+    CK_OBJECT_HANDLE pubkey;
+    CK_OBJECT_HANDLE privkey;
+
+    user_login(session);
+
+    CK_RV rv = C_GenerateKeyPair (session,
+            &mech,
+            pub, ARRAY_LEN(pub),
+            priv, ARRAY_LEN(priv),
+            &pubkey, &privkey);
+    assert_int_equal(rv, CKR_ATTRIBUTE_VALUE_INVALID);
+}
+
 static void test_create_obj_rsa_public_key(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -1074,6 +1119,8 @@ static void test_create_data_object_public (void **state) {
 int main() {
 
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_extract_and_private,
+                test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_create_data_object_public,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_create_data_object_private,
