@@ -3281,22 +3281,55 @@ CK_RV tpm_get_existing_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *pr
     assert(primary_blob);
 
     ESYS_TR handle = ESYS_TR_NONE;
+    TPMI_YES_NO more_data = TPM2_NO;
+    TPMS_CAPABILITY_DATA *capdata = NULL;
 
-    TSS2_RC rval =
-    Esys_TR_FromTPMPublic(
+    /* Check for the handle here to avoid causing TPM2_ReadPublic to fail loudly */
+    TSS2_RC rval = Esys_GetCapability(
+            tpm->esys_ctx,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            TPM2_CAP_HANDLES,
+            TPM2_PERSISTENT_FIRST,
+            TPM2_MAX_CAP_HANDLES,
+            &more_data,
+            &capdata);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_GetCapability: %s:", Tss2_RC_Decode(rval));
+        return CKR_GENERAL_ERROR;
+    }
+
+    TPM2_HANDLE find_handle = DEFAULT_SRK_HANDLE;
+
+    bool found = false;
+    UINT32 i;
+    TPM2_HANDLE *found_handles = capdata->data.handles.handle;
+    for (i=0; i < capdata->data.handles.count; i++) {
+        if (find_handle == found_handles[i]) {
+            found = true;
+            break;
+        }
+    }
+
+    Esys_Free(capdata);
+
+    if (!found) {
+        *primary_handle = 0;
+        LOGV("No Provisioning Guide Spec Key Handle");
+        return CKR_OK;
+    }
+
+    rval = Esys_TR_FromTPMPublic(
         tpm->esys_ctx,
-        DEFAULT_SRK_HANDLE,
+        find_handle,
         ESYS_TR_NONE,
         ESYS_TR_NONE,
         ESYS_TR_NONE,
         &handle);
     if (rval != TSS2_RC_SUCCESS) {
-        if (rval != PARAM_1_HANDLE_IS_INVALID) {
-            LOGE("Esys_TR_FromTPMPublic: %s:", Tss2_RC_Decode(rval));
-            return CKR_GENERAL_ERROR;
-        }
-        LOGV("No Provisioning Guide Spec Key Handle");
-        return CKR_OK;
+        LOGE("Esys_TR_FromTPMPublic: %s:", Tss2_RC_Decode(rval));
+        return CKR_GENERAL_ERROR;
     }
 
     CK_RV rv = tpm_serialize_handle(tpm->esys_ctx, handle, primary_blob);
