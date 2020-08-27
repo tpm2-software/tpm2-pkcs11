@@ -21,6 +21,7 @@
 
 /* OpenSSL Backwards Compat APIs */
 #if defined(LIB_TPM2_OPENSSL_OPENSSL_PRE11)
+#include <string.h>
 size_t EC_POINT_point2buf(const EC_GROUP *group, const EC_POINT *point,
                           point_conversion_form_t form,
                           unsigned char **pbuf, BN_CTX *ctx);
