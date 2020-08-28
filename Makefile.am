@@ -80,7 +80,7 @@ AM_DISTCHECK_CONFIGURE_FLAGS = --with-p11kitconfigdir='$$(datarootdir)/p11kitcon
 # UNIT, INTEGRATION and/or FUZZ can use this library.
 #
 
-# src/lib stuff as a seperate archive
+# src/lib stuff as a separate archive
 libtpm2_test_pkcs11 = src/libtpm2_test_pkcs11.la
 src_libtpm2_test_pkcs11_la_LIBADD =  $(AM_LDFLAGS) $(libtpm2_test_internal)
 src_libtpm2_test_pkcs11_la_SOURCES = $(LIB_PKCS11_SRC)
