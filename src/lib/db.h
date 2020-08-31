@@ -80,6 +80,7 @@ int get_blob_null(sqlite3_stmt *stmt, int i, twist *blob);
 int get_blob(sqlite3_stmt *stmt, int i, twist *blob);
 tobject *db_tobject_new(sqlite3_stmt *stmt);
 int init_pobject_v3_from_stmt(sqlite3_stmt *stmt, pobject_v3 *old_pobj);
+int init_tobjects(token *tok);
 
 #endif
 

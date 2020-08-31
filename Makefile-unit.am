@@ -28,6 +28,9 @@ test_unit_test_db_LDFLAGS      = -Wl,--wrap=sqlite3_column_bytes \
                                  -Wl,--wrap=sqlite3_column_bytes \
                                  -Wl,--wrap=sqlite3_column_text \
                                  -Wl,--wrap=sqlite3_column_int \
+                                 -Wl,--wrap=sqlite3_prepare_v2 \
+                                 -Wl,--wrap=sqlite3_finalize \
+                                 -Wl,--wrap=sqlite3_bind_int \
                                  -Wl,--wrap=strdup
 endif
 # END UNIT
