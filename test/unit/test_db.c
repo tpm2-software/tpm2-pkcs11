@@ -124,6 +124,29 @@ int __wrap_sqlite3_bind_int(sqlite3_stmt *pStmt, int iCol, int value) {
 	return d->rc;
 }
 
+int __wrap_sqlite3_bind_text(sqlite3_stmt *pStmt, int iCol, const char *text, int len, void(*fnp)(void *data)) {
+	UNUSED(pStmt);
+	UNUSED(iCol);
+	UNUSED(text);
+	UNUSED(len);
+	UNUSED(fnp);
+
+	will_return_data *d = mock_type(will_return_data *);
+	return d->rc;
+}
+
+int __wrap_sqlite3_step(sqlite3_stmt *pStmt) {
+	UNUSED(pStmt);
+
+	will_return_data *d = mock_type(will_return_data *);
+	return d->rc;
+}
+
+const char *__wrap_sqlite3_errmsg(sqlite3 *db) {
+	UNUSED(db);
+	return "FAKE ERROR MESSAGE";
+}
+
 char *__real_strdup(const char *s);
 char *__wrap_strdup(const char *s) {
 	UNUSED(s);
@@ -505,7 +528,62 @@ static void test_convert_pobject_v3_to_v4_emit_pobject_to_conf_string_fail(void 
 
     will_return(emit_pobject_to_conf_string, &d[0]);
 
-	convert_pobject_v3_to_v4(&old_pobj, &new_pobj);
+	CK_RV rv = convert_pobject_v3_to_v4(&old_pobj, &new_pobj);
+	assert_int_equal(rv, CKR_HOST_MEMORY);
+}
+
+static void test_db_add_pobject_v4_sqlite3_prepare_v2_fail(void **state) {
+	UNUSED(state);
+
+    will_return_data d[] = {
+		{ .rc = SQLITE_ERROR }, /* sqlite3_prepare_v2 */
+		{ .rc = SQLITE_ERROR }  /* sqlite3_finalize (error for warning) */
+    };
+
+    will_return(__wrap_sqlite3_prepare_v2, &d[0]);
+    will_return(__wrap_sqlite3_finalize, &d[1]);
+
+    pobject_v4 new_pobj = {
+		.id = 1234,
+		.config = "YAML CONFIG YEAH",
+		.hierarchy = "o",
+		.objauth = "foobarauth"
+    };
+
+	CK_RV rv = db_add_pobject_v4((sqlite3 *)0xDEADBEEF, &new_pobj);
+	assert_int_not_equal(rv, CKR_OK);
+}
+
+static void test_db_add_pobject_v4_sqlite3_step_fail(void **state) {
+	UNUSED(state);
+
+    will_return_data d[] = {
+		{ .rc = SQLITE_OK },       /* sqlite3_prepare_v2 */
+		{ .rc = SQLITE_OK },       /* sqlite3_bind_int */
+		{ .rc = SQLITE_OK },       /* sqlite3_bind_text */
+		{ .rc = SQLITE_OK },       /* sqlite3_bind_text */
+		{ .rc = SQLITE_OK },       /* sqlite3_bind_text */
+		{ .rc = SQLITE_ERROR },    /* sqlite3_step */
+		{ .rc = SQLITE_OK },       /* sqlite3_finalize */
+    };
+
+    will_return(__wrap_sqlite3_prepare_v2, &d[0]);
+    will_return(__wrap_sqlite3_bind_int,   &d[1]);
+    will_return(__wrap_sqlite3_bind_text,  &d[2]);
+    will_return(__wrap_sqlite3_bind_text,  &d[3]);
+    will_return(__wrap_sqlite3_bind_text,  &d[4]);
+    will_return(__wrap_sqlite3_step,       &d[5]);
+    will_return(__wrap_sqlite3_finalize,   &d[6]);
+
+    pobject_v4 new_pobj = {
+		.id = 1234,
+		.config = "YAML CONFIG YEAH",
+		.hierarchy = "o",
+		.objauth = "foobarauth"
+    };
+
+	CK_RV rv = db_add_pobject_v4((sqlite3 *)0xDEADBEEF, &new_pobj);
+	assert_int_not_equal(rv, CKR_OK);
 }
 
 int main(int argc, char* argv[]) {
@@ -536,7 +614,9 @@ int main(int argc, char* argv[]) {
 		cmocka_unit_test(init_pobject_v3_from_stmt_strdup2_fail),
 		cmocka_unit_test(init_tobjects_sqlite3_prepare_v2_fail),
 		cmocka_unit_test(init_tobjects_sqlite3_bind_int),
-		cmocka_unit_test(test_convert_pobject_v3_to_v4_emit_pobject_to_conf_string_fail)
+		cmocka_unit_test(test_convert_pobject_v3_to_v4_emit_pobject_to_conf_string_fail),
+		cmocka_unit_test(test_db_add_pobject_v4_sqlite3_prepare_v2_fail),
+		cmocka_unit_test(test_db_add_pobject_v4_sqlite3_step_fail)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

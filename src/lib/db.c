@@ -290,7 +290,7 @@ static int rollback(void) {
     return rollback2(global.db);
 }
 
-static CK_RV db_add_pobject_v4(sqlite3 *updb, pobject_v4 *new_pobj) {
+DEBUG_VISIBILITY CK_RV db_add_pobject_v4(sqlite3 *updb, pobject_v4 *new_pobj) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
