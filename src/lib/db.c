@@ -235,7 +235,7 @@ error:
     return SQLITE_ERROR;
 }
 
-static CK_RV convert_pobject_v3_to_v4(pobject_v3 *old_pobj, pobject_v4 *new_pobj) {
+DEBUG_VISIBILITY CK_RV convert_pobject_v3_to_v4(pobject_v3 *old_pobj, pobject_v4 *new_pobj) {
 
     new_pobj->id = old_pobj->id;
 
