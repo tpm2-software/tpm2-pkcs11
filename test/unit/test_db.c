@@ -168,6 +168,14 @@ WEAK CK_RV object_init_from_attrs(tobject *tobj) {
 	return d->rv;
 }
 
+/* weak override */
+char *emit_pobject_to_conf_string(pobject_config *config) {
+	UNUSED(config);
+
+	will_return_data *d = mock_type(will_return_data *);
+	return d->data;
+}
+
 static void test_db_get_blob_col_bytes_0(void **state) {
     (void) state;
 
@@ -480,6 +488,26 @@ static void init_tobjects_sqlite3_bind_int(void **state) {
 	assert_int_not_equal(rc, SQLITE_OK);
 }
 
+static void test_convert_pobject_v3_to_v4_emit_pobject_to_conf_string_fail(void **state) {
+	UNUSED(state);
+
+	pobject_v4 new_pobj = { 0 };
+
+	pobject_v3 old_pobj = {
+		.id = 42,
+		.hierarchy = "o",
+		.objauth = "foobarauth"
+	};
+
+    will_return_data d[] = {
+		{ .data = NULL },    /* emit_pobject_to_conf_string */
+    };
+
+    will_return(emit_pobject_to_conf_string, &d[0]);
+
+	convert_pobject_v3_to_v4(&old_pobj, &new_pobj);
+}
+
 int main(int argc, char* argv[]) {
     (void) argc;
     (void) argv;
@@ -507,7 +535,8 @@ int main(int argc, char* argv[]) {
 		cmocka_unit_test(init_pobject_v3_from_stmt_sqlite3_column_text2_fail),
 		cmocka_unit_test(init_pobject_v3_from_stmt_strdup2_fail),
 		cmocka_unit_test(init_tobjects_sqlite3_prepare_v2_fail),
-		cmocka_unit_test(init_tobjects_sqlite3_bind_int)
+		cmocka_unit_test(init_tobjects_sqlite3_bind_int),
+		cmocka_unit_test(test_convert_pobject_v3_to_v4_emit_pobject_to_conf_string_fail)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
