@@ -88,6 +88,42 @@ int __wrap_sqlite3_column_int(sqlite3_stmt *stmt, int i) {
 	return d->rc;
 }
 
+int __wrap_sqlite3_finalize(sqlite3_stmt *pStmt) {
+
+	free(pStmt);
+	will_return_data *d = mock_type(will_return_data *);
+	return d->rc;
+}
+
+int __wrap_sqlite3_prepare_v2(sqlite3 *db,
+  const char *zSql,
+  int nByte,
+  sqlite3_stmt **ppStmt,
+  const char **pzTail
+) {
+	UNUSED(db);
+	UNUSED(zSql);
+	UNUSED(nByte);
+	UNUSED(ppStmt);
+	UNUSED(pzTail);
+
+	will_return_data *d = mock_type(will_return_data *);
+	if (d->rc == SQLITE_OK) {
+		*ppStmt = malloc(4);
+		assert_non_null(*ppStmt);
+	}
+	return d->rc;
+}
+
+int __wrap_sqlite3_bind_int(sqlite3_stmt *pStmt, int iCol, int value) {
+	UNUSED(pStmt);
+	UNUSED(iCol);
+	UNUSED(value);
+
+	will_return_data *d = mock_type(will_return_data *);
+	return d->rc;
+}
+
 char *__real_strdup(const char *s);
 char *__wrap_strdup(const char *s) {
 	UNUSED(s);
@@ -409,6 +445,40 @@ static void init_pobject_v3_from_stmt_strdup2_fail(void **state) {
     assert_int_equal(rc, SQLITE_ERROR);
 }
 
+static void init_tobjects_sqlite3_prepare_v2_fail(void **state) {
+	UNUSED(state);
+
+    will_return_data d[] = {
+		{ .rc = SQLITE_ERROR },    /* sqlite3_prepare_v2 */
+    };
+
+    will_return(__wrap_sqlite3_prepare_v2, &d[0]);
+
+	int rc = init_tobjects((token *)0xDEADBEEF);
+	assert_int_not_equal(rc, SQLITE_OK);
+
+}
+
+static void init_tobjects_sqlite3_bind_int(void **state) {
+	UNUSED(state);
+
+	token t = {
+		.id = 42
+	};
+
+    will_return_data d[] = {
+		{ .rc = SQLITE_OK    },    /* sqlite3_prepare_v2 */
+		{ .rc = SQLITE_ERROR },    /* sqlite3_bind_int */
+		{ .rc = SQLITE_OK },       /* sqlite3_finalize */
+    };
+
+    will_return(__wrap_sqlite3_prepare_v2, &d[0]);
+    will_return(__wrap_sqlite3_bind_int  , &d[1]);
+    will_return(__wrap_sqlite3_finalize,   &d[2]);
+
+	int rc = init_tobjects(&t);
+	assert_int_not_equal(rc, SQLITE_OK);
+}
 
 int main(int argc, char* argv[]) {
     (void) argc;
@@ -436,6 +506,8 @@ int main(int argc, char* argv[]) {
 		cmocka_unit_test(init_pobject_v3_from_stmt__get_blob_fail),
 		cmocka_unit_test(init_pobject_v3_from_stmt_sqlite3_column_text2_fail),
 		cmocka_unit_test(init_pobject_v3_from_stmt_strdup2_fail),
+		cmocka_unit_test(init_tobjects_sqlite3_prepare_v2_fail),
+		cmocka_unit_test(init_tobjects_sqlite3_bind_int)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
