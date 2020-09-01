@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "attrs.h"
+#include "debug.h"
 #include "object.h"
 #include "twist.h"
 #include "utils.h"
@@ -93,7 +94,7 @@ bool tpm_flushcontext(tpm_ctx *ctx, uint32_t handle);
 
 twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth);
 
-bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle, uint32_t *tpmHandle);
+WEAK bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle, uint32_t *tpmHandle);
 
 bool tpm_contextload_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle);
 

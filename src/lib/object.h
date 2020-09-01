@@ -13,6 +13,7 @@
 #include "twist.h"
 
 typedef struct session_ctx session_ctx;
+typedef struct pobject pobject;
 
 typedef struct tobject tobject;
 struct tobject {
@@ -132,6 +133,7 @@ WEAK CK_RV object_init_from_attrs(tobject *tobj);
 
 #ifdef TESTING
 tobject *__real_tobject_new(void);
+void pobject_free(pobject *pobj);
 #endif
 
 #endif /* SRC_PKCS11_OBJECT_H_ */

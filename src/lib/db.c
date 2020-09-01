@@ -350,7 +350,7 @@ error:
     goto out;
 }
 
-static int init_pobject_from_stmt(sqlite3_stmt *stmt, tpm_ctx *tpm, pobject *pobj) {
+DEBUG_VISIBILITY int init_pobject_from_stmt(sqlite3_stmt *stmt, tpm_ctx *tpm, pobject *pobj) {
 
     /* Get the YAML config and:
      *   - parse it to the config structure

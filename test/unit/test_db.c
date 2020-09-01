@@ -199,6 +199,21 @@ char *emit_pobject_to_conf_string(pobject_config *config) {
 	return d->data;
 }
 
+/* weak override */
+bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob,
+        uint32_t *handle, uint32_t *tpm_handle) {
+    UNUSED(ctx);
+    UNUSED(handle_blob);
+    UNUSED(handle);
+
+    if (tpm_handle) {
+        *tpm_handle = 42;
+    }
+
+    will_return_data *d = mock_type(will_return_data *);
+    return d->rcb;
+}
+
 static void test_db_get_blob_col_bytes_0(void **state) {
     (void) state;
 
@@ -586,6 +601,189 @@ static void test_db_add_pobject_v4_sqlite3_step_fail(void **state) {
 	assert_int_not_equal(rv, CKR_OK);
 }
 
+static void test_init_pobject_from_stmt_parse_pobject_config_from_string_fail(void **state) {
+    UNUSED(state);
+
+    pobject pobj = {0};
+
+    const char *yaml_config = "really bad yaml";
+
+    will_return_data d[] = {
+        { .rc = strlen(yaml_config)   }, /* sqlite3_column_bytes */
+        { .data = (void *)yaml_config }, /* sqlite3_column_text */
+    };
+
+    will_return(__wrap_sqlite3_column_bytes, &d[0]);
+    will_return(__wrap_sqlite3_column_text,  &d[1]);
+
+    int rc = init_pobject_from_stmt((sqlite3_stmt *)0xBADDCAFE, (tpm_ctx *)0xBADCC0DE, &pobj);
+    pobject_free(&pobj);
+    assert_int_not_equal(rc, SQLITE_OK);
+}
+
+static void test_init_pobject_from_stmt_not_transient_no_blob_fail(void **state) {
+    UNUSED(state);
+
+    pobject pobj = {0};
+
+    /*
+     * convert text to C string easily:
+     *   - https://tomeko.net/online_tools/cpp_text_escape.php?lang=en
+     */
+    const char *yaml_config =
+        "---\n"
+        "!!map {\n"
+        "  ? !!str \"transient\"\n"
+        "  : !!bool \"false\",\n"
+        "}\n";
+
+    will_return_data d[] = {
+        { .rc = strlen(yaml_config)   }, /* sqlite3_column_bytes */
+        { .data = (void *)yaml_config }, /* sqlite3_column_text */
+    };
+
+    will_return(__wrap_sqlite3_column_bytes, &d[0]);
+    will_return(__wrap_sqlite3_column_text,  &d[1]);
+
+    int rc = init_pobject_from_stmt((sqlite3_stmt *)0xBADDCAFE, (tpm_ctx *)0xBADCC0DE, &pobj);
+    pobject_free(&pobj);
+    assert_int_not_equal(rc, SQLITE_OK);
+}
+
+static void test_init_pobject_from_stmt_tpm_deserialize_handle_fail(void **state) {
+    UNUSED(state);
+
+    pobject pobj = {0};
+
+    /*
+     * convert text to C string easily:
+     *   - https://tomeko.net/online_tools/cpp_text_escape.php?lang=en
+     */
+    const char *yaml_config =
+        "---\n"
+        "!!map {\n"
+        "  ? !!str \"esys-tr\"\n"
+        "  : !!str \"810000000022000b7ddf69cda75fe70a5114890cb571af4b67667887b51640de9833d0ad7ae1fe9400000001011a0001000b00030072000000060080004300100800000000000100bbfeca8f754e03dce6bee3b5ba7536c0c7241cb84ae1401b9573ca88ea2c2caeaa7a462b9e8578719a7b8e5cd72f8790e2745833d87f89586fe3fc3ff09edc154519361a1a6676247b423ee6d39419ede7946ee3778b75c558464cbd1305382ec7fb2674986ad924ee5198dfcd32d29b0b9161ed9c7dc9bf935d10562870b7a192d40b2c1b4b255df08fb9ce6489ce9ca11ba85fedf09107316aa18442b2eeb6249cb495ed6b9de9421ebbb1313f2616b60045351253be475ddb712dc1f593e98950b52c90ddad7590556564f3725eccebeb0b0f409c83e81d6e8163054312d01f5551f53ebecbef6b5a58bce6df206837b5af27ae6c3983fecd5a003f115159\",\n"
+        "  ? !!str \"transient\"\n"
+        "  : !!bool \"false\",\n"
+        "}";
+
+    will_return_data d[] = {
+        { .rc = strlen(yaml_config)   }, /* sqlite3_column_bytes */
+        { .data = (void *)yaml_config }, /* sqlite3_column_text */
+        { .rcb = false                }, /* tpm_deserialize_handle */
+    };
+
+    will_return(__wrap_sqlite3_column_bytes, &d[0]);
+    will_return(__wrap_sqlite3_column_text,  &d[1]);
+    will_return(tpm_deserialize_handle,      &d[2]);
+
+    int rc = init_pobject_from_stmt((sqlite3_stmt *)0xBADDCAFE, (tpm_ctx *)0xBADCC0DE, &pobj);
+    pobject_free(&pobj);
+    assert_int_not_equal(rc, SQLITE_OK);
+}
+
+static void test_init_pobject_from_stmt_missing_template_name_fail(void **state) {
+    UNUSED(state);
+
+    pobject pobj = {0};
+
+    /*
+     * convert text to C string easily:
+     *   - https://tomeko.net/online_tools/cpp_text_escape.php?lang=en
+     */
+    const char *yaml_config =
+        "---\n"
+        "!!map {\n"
+       "  ? !!str \"transient\"\n"
+        "  : !!bool \"true\",\n"
+        "}";
+
+    will_return_data d[] = {
+        { .rc = strlen(yaml_config)   }, /* sqlite3_column_bytes */
+        { .data = (void *)yaml_config }, /* sqlite3_column_text */
+    };
+
+    will_return(__wrap_sqlite3_column_bytes, &d[0]);
+    will_return(__wrap_sqlite3_column_text,  &d[1]);
+
+    int rc = init_pobject_from_stmt((sqlite3_stmt *)0xBADDCAFE, (tpm_ctx *)0xBADCC0DE, &pobj);
+    pobject_free(&pobj);
+    assert_int_not_equal(rc, SQLITE_OK);
+}
+
+static void test_init_pobject_from_stmt_twist_new_fail(void **state) {
+    UNUSED(state);
+
+    pobject pobj = {0};
+
+    /*
+     * convert text to C string easily:
+     *   - https://tomeko.net/online_tools/cpp_text_escape.php?lang=en
+     */
+    const char *yaml_config =
+        "---\n"
+        "!!map {\n"
+        "  ? !!str \"esys-tr\"\n"
+        "  : !!str \"810000000022000b7ddf69cda75fe70a5114890cb571af4b67667887b51640de9833d0ad7ae1fe9400000001011a0001000b00030072000000060080004300100800000000000100bbfeca8f754e03dce6bee3b5ba7536c0c7241cb84ae1401b9573ca88ea2c2caeaa7a462b9e8578719a7b8e5cd72f8790e2745833d87f89586fe3fc3ff09edc154519361a1a6676247b423ee6d39419ede7946ee3778b75c558464cbd1305382ec7fb2674986ad924ee5198dfcd32d29b0b9161ed9c7dc9bf935d10562870b7a192d40b2c1b4b255df08fb9ce6489ce9ca11ba85fedf09107316aa18442b2eeb6249cb495ed6b9de9421ebbb1313f2616b60045351253be475ddb712dc1f593e98950b52c90ddad7590556564f3725eccebeb0b0f409c83e81d6e8163054312d01f5551f53ebecbef6b5a58bce6df206837b5af27ae6c3983fecd5a003f115159\",\n"
+        "  ? !!str \"transient\"\n"
+        "  : !!bool \"false\",\n"
+        "}";
+
+    will_return_data d[] = {
+        { .rc = strlen(yaml_config)   }, /* sqlite3_column_bytes */
+        { .data = (void *)yaml_config }, /* sqlite3_column_text */
+        { .rcb = true                 }, /* tpm_deserialize_handle */
+        { .data = NULL                }, /* sqlite3_column_text */
+    };
+
+    will_return(__wrap_sqlite3_column_bytes, &d[0]);
+    will_return(__wrap_sqlite3_column_text,  &d[1]);
+    will_return(tpm_deserialize_handle,      &d[2]);
+    will_return(__wrap_sqlite3_column_text,  &d[3]);
+
+    int rc = init_pobject_from_stmt((sqlite3_stmt *)0xBADDCAFE, (tpm_ctx *)0xBADCC0DE, &pobj);
+    pobject_free(&pobj);
+    assert_int_not_equal(rc, SQLITE_OK);
+}
+
+static void test_init_pobject_from_stmt_sqlite_step_fail(void **state) {
+    UNUSED(state);
+
+    pobject pobj = {0};
+
+    /*
+     * convert text to C string easily:
+     *   - https://tomeko.net/online_tools/cpp_text_escape.php?lang=en
+     */
+    const char *yaml_config =
+        "---\n"
+        "!!map {\n"
+        "  ? !!str \"esys-tr\"\n"
+        "  : !!str \"810000000022000b7ddf69cda75fe70a5114890cb571af4b67667887b51640de9833d0ad7ae1fe9400000001011a0001000b00030072000000060080004300100800000000000100bbfeca8f754e03dce6bee3b5ba7536c0c7241cb84ae1401b9573ca88ea2c2caeaa7a462b9e8578719a7b8e5cd72f8790e2745833d87f89586fe3fc3ff09edc154519361a1a6676247b423ee6d39419ede7946ee3778b75c558464cbd1305382ec7fb2674986ad924ee5198dfcd32d29b0b9161ed9c7dc9bf935d10562870b7a192d40b2c1b4b255df08fb9ce6489ce9ca11ba85fedf09107316aa18442b2eeb6249cb495ed6b9de9421ebbb1313f2616b60045351253be475ddb712dc1f593e98950b52c90ddad7590556564f3725eccebeb0b0f409c83e81d6e8163054312d01f5551f53ebecbef6b5a58bce6df206837b5af27ae6c3983fecd5a003f115159\",\n"
+        "  ? !!str \"transient\"\n"
+        "  : !!bool \"false\",\n"
+        "}";
+
+    will_return_data d[] = {
+        { .rc = strlen(yaml_config)   }, /* sqlite3_column_bytes */
+        { .data = (void *)yaml_config }, /* sqlite3_column_text */
+        { .rcb = true                 }, /* tpm_deserialize_handle */
+        { .data = "fake auth data"    }, /* sqlite3_column_text */
+        { .rc = SQLITE_ERROR          }  /* sqlite3_step */
+    };
+
+    will_return(__wrap_sqlite3_column_bytes, &d[0]);
+    will_return(__wrap_sqlite3_column_text,  &d[1]);
+    will_return(tpm_deserialize_handle,      &d[2]);
+    will_return(__wrap_sqlite3_column_text,  &d[3]);
+    will_return(__wrap_sqlite3_step,         &d[4]);
+
+    int rc = init_pobject_from_stmt((sqlite3_stmt *)0xBADDCAFE, (tpm_ctx *)0xBADCC0DE, &pobj);
+    pobject_free(&pobj);
+    assert_int_not_equal(rc, SQLITE_OK);
+}
+
 int main(int argc, char* argv[]) {
     (void) argc;
     (void) argv;
@@ -616,7 +814,13 @@ int main(int argc, char* argv[]) {
 		cmocka_unit_test(init_tobjects_sqlite3_bind_int),
 		cmocka_unit_test(test_convert_pobject_v3_to_v4_emit_pobject_to_conf_string_fail),
 		cmocka_unit_test(test_db_add_pobject_v4_sqlite3_prepare_v2_fail),
-		cmocka_unit_test(test_db_add_pobject_v4_sqlite3_step_fail)
+		cmocka_unit_test(test_db_add_pobject_v4_sqlite3_step_fail),
+		cmocka_unit_test(test_init_pobject_from_stmt_parse_pobject_config_from_string_fail),
+		cmocka_unit_test(test_init_pobject_from_stmt_not_transient_no_blob_fail),
+		cmocka_unit_test(test_init_pobject_from_stmt_tpm_deserialize_handle_fail),
+		cmocka_unit_test(test_init_pobject_from_stmt_missing_template_name_fail),
+        cmocka_unit_test(test_init_pobject_from_stmt_twist_new_fail),
+        cmocka_unit_test(test_init_pobject_from_stmt_sqlite_step_fail)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
