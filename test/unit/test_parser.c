@@ -233,6 +233,43 @@ static void test_config_parser_empty_seq(void **state) {
     attr_list_free(attrs);
 }
 
+static void test_token_config_parser_no_tags(void **state) {
+    (void) state;
+
+    token_config conf = {0};
+
+    const char *yaml_config =
+        "{\n"
+        "    pss-sigs-good: true\n"
+        "    token-init: true\n"
+        "}";
+
+    bool res = parse_token_config_from_string((const unsigned char *)yaml_config,
+            strlen(yaml_config),
+            &conf);
+    assert_false(res);
+}
+
+static void test_token_config_parser_missing_tags(void **state) {
+    (void) state;
+
+    token_config conf = {0};
+
+    const char *yaml_config =
+        "---\n"
+        "!!map {\n"
+            "? !!str \"pss-sigs-good\"\n"
+            ": !!bool \"true\",\n"
+            "\"token-init\"\n"
+            ": !!bool \"true\",\n"
+        "}\n";
+
+    bool res = parse_token_config_from_string((const unsigned char *)yaml_config,
+            strlen(yaml_config),
+            &conf);
+    assert_false(res);
+}
+
 int main(int argc, char* argv[]) {
     (void) argc;
     (void) argv;
@@ -241,6 +278,8 @@ int main(int argc, char* argv[]) {
         cmocka_unit_test(test_config_parser_empty_seq),
         cmocka_unit_test(test_attr_parser_good),
         cmocka_unit_test(test_config_parser_good),
+        cmocka_unit_test(test_token_config_parser_no_tags),
+        cmocka_unit_test(test_token_config_parser_missing_tags),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
