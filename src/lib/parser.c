@@ -93,14 +93,26 @@ bool pop_handler(handler_stack *state) {
 }
 
 static bool is_yaml_int(unsigned char *tag) {
+    if (!tag) {
+        LOGE("Tag cannot be NULL");
+        return false;
+    }
     return !strcmp((const char *)tag, YAML_INT_TAG);
 }
 
 static bool is_yaml_bool(unsigned char *tag) {
+    if (!tag) {
+        LOGE("Tag cannot be NULL");
+        return false;
+    }
     return !strcmp((const char *)tag, YAML_BOOL_TAG);
 }
 
 static bool is_yaml_str(unsigned char *tag) {
+    if (!tag) {
+        LOGE("Tag cannot be NULL");
+        return false;
+    }
     return !strcmp((const char *)tag, YAML_STR_TAG);
 }
 
@@ -350,6 +362,11 @@ bool parse_attributes_from_string(const unsigned char *yaml, size_t size,
 
     bool ret = parse_attributes(&parser, attrs);
     yaml_parser_delete(&parser);
+    if (!ret) {
+        attr_list_free(*attrs);
+        *attrs = NULL;
+    }
+
     return ret;
 }
 
@@ -437,6 +454,8 @@ bool handle_token_config_event(yaml_event_t *e,
 
 bool parse_token_config_from_string(const unsigned char *yaml, size_t size, token_config *config) {
 
+    bool ret = false;
+
     yaml_parser_t parser;
 
     int rc = yaml_parser_initialize(&parser);
@@ -453,14 +472,14 @@ bool parse_token_config_from_string(const unsigned char *yaml, size_t size, toke
         int rc = yaml_parser_parse(&parser, &event);
         if (!rc) {
             LOGE("Parser error %d", parser.error);
-            return false;
+            goto error;
         }
 
         /* handle events */
         rc = handle_token_config_event(&event, &state, config);
         if (!rc) {
             LOGE("Parser error %d", parser.error);
-            return false;
+            goto error;
         }
 
         if(event.type != YAML_STREAM_END_EVENT) {
@@ -469,10 +488,16 @@ bool parse_token_config_from_string(const unsigned char *yaml, size_t size, toke
 
     } while(event.type != YAML_STREAM_END_EVENT);
 
+    ret = true;
+error:
     yaml_event_delete(&event);
     yaml_parser_delete(&parser);
 
-    return true;
+    if (!ret) {
+        token_config_free(config);
+    }
+
+    return ret;
 }
 
 static bool handle_pobject_config_event(yaml_event_t *e,
@@ -557,6 +582,8 @@ static bool handle_pobject_config_event(yaml_event_t *e,
 bool parse_pobject_config_from_string(const unsigned char *yaml, size_t size,
         pobject_config *config) {
 
+    bool ret = false;
+
     yaml_parser_t parser;
 
     int rc = yaml_parser_initialize(&parser);
@@ -573,14 +600,14 @@ bool parse_pobject_config_from_string(const unsigned char *yaml, size_t size,
         int rc = yaml_parser_parse(&parser, &event);
         if (!rc) {
             LOGE("Parser error %d", parser.error);
-            return false;
+            goto error;
         }
 
         /* handle events */
         rc = handle_pobject_config_event(&event, &state, config);
         if (!rc) {
             LOGE("Parser error %d", parser.error);
-            return false;
+            goto error;
         }
 
         if(event.type != YAML_STREAM_END_EVENT) {
@@ -589,8 +616,14 @@ bool parse_pobject_config_from_string(const unsigned char *yaml, size_t size,
 
     } while(event.type != YAML_STREAM_END_EVENT);
 
+    ret = true;
+
+error:
+    if (!ret) {
+        pobject_config_free(config);
+    }
     yaml_event_delete(&event);
     yaml_parser_delete(&parser);
 
-    return true;
+    return ret;
 }

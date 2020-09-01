@@ -20,17 +20,22 @@
 #include "token.h"
 #include "utils.h"
 
-static void pobject_free(pobject *pobj) {
-
-    twist_free(pobj->objauth);
-
-    pobject_config *c = &pobj->config;
+void pobject_config_free(pobject_config *c) {
 
     if (c->is_transient) {
         free(c->template_name);
     } else {
         twist_free(c->blob);
     }
+
+    memset(c, 0, sizeof(*c));
+}
+
+DEBUG_VISIBILITY void pobject_free(pobject *pobj) {
+
+    twist_free(pobj->objauth);
+
+    pobject_config_free(&pobj->config);
 
     memset(pobj, 0, sizeof(*pobj));
 }
@@ -232,6 +237,16 @@ void token_rm_tobject(token *tok, tobject *t) {
     t->l.next = t->l.prev = NULL;
 }
 
+void token_config_free(token_config *c) {
+
+    if (!c) {
+        return;
+    }
+
+    free(c->tcti);
+    memset(c, 0, sizeof(*c));
+}
+
 void token_free(token *t) {
 
     /*
@@ -263,8 +278,7 @@ void token_free(token *t) {
     mutex_destroy(t->mutex);
     t->mutex = NULL;
 
-    free(t->config.tcti);
-    memset(&t->config, 0, sizeof(t->config));
+    token_config_free(&t->config);
 
     mdetail_free(&t->mdtl);
 }

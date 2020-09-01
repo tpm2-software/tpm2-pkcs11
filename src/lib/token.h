@@ -122,6 +122,14 @@ struct token {
 void token_free(token *t);
 
 /**
+ * Free's a token_config
+ * @param c
+ *  The token config to free.
+ */
+void token_config_free(token_config *c);
+
+
+/**
  * Free's a list of tokens
  * @param t
  *  The token list to free
@@ -212,5 +220,7 @@ CK_RV token_min_init(token *t);
 void token_reset(token *t);
 
 CK_RV token_init(token *t, CK_BYTE_PTR pin, CK_ULONG pin_len, CK_BYTE_PTR label);
+
+void pobject_config_free(pobject_config *c);
 
 #endif /* SRC_TOKEN_H_ */
