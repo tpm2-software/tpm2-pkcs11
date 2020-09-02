@@ -593,6 +593,8 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
 
         if (!t->config.is_initialized) {
             LOGV("skipping further initialization of token tid: %u", t->id);
+            /* token initialized, bump cnt */
+            cnt++;
             continue;
         }
 
