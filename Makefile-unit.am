@@ -34,7 +34,8 @@ test_unit_test_db_LDFLAGS      = -Wl,--wrap=sqlite3_column_bytes \
                                  -Wl,--wrap=sqlite3_bind_text \
                                  -Wl,--wrap=sqlite3_errmsg \
                                  -Wl,--wrap=sqlite3_step \
-                                 -Wl,--wrap=strdup
+                                 -Wl,--wrap=strdup \
+                                 -Wl,--wrap=calloc
                                  
 endif
 # END UNIT

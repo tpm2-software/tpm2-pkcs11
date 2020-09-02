@@ -146,7 +146,7 @@ WEAK DEBUG_VISIBILITY tobject *db_tobject_new(sqlite3_stmt *stmt) {
     return __real_db_tobject_new(stmt);
 }
 
-DEBUG_VISIBILITY int init_tobjects(token *tok) {
+DEBUG_VISIBILITY int __real_init_tobjects(token *tok) {
 
     const char *sql =
             "SELECT * FROM tobjects WHERE tokid=?";
@@ -184,6 +184,10 @@ DEBUG_VISIBILITY int init_tobjects(token *tok) {
 error:
     sqlite3_finalize(stmt);
     return rc;
+}
+
+WEAK DEBUG_VISIBILITY int init_tobjects(token *tok) {
+    return __real_init_tobjects(tok);
 }
 
 static void pobject_v3_free(pobject_v3 *old_pobj) {
@@ -410,7 +414,7 @@ DEBUG_VISIBILITY int init_pobject_from_stmt(sqlite3_stmt *stmt, tpm_ctx *tpm, po
     return SQLITE_OK;
 }
 
-DEBUG_VISIBILITY int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
+DEBUG_VISIBILITY int __real_init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
 
     const char *sql =
             "SELECT config,objauth FROM pobjects WHERE id=?";
@@ -442,12 +446,16 @@ error:
     return rc;
 }
 
+WEAK DEBUG_VISIBILITY int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
+    return __real_init_pobject(pid, pobj, tpm);
+}
+
 CK_RV db_init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
     int rc = init_pobject(pid, pobj, tpm);
     return rc == SQLITE_OK ? CKR_OK : CKR_GENERAL_ERROR;
 }
 
-DEBUG_VISIBILITY int init_sealobjects(unsigned tokid, sealobject *sealobj) {
+DEBUG_VISIBILITY int __real_init_sealobjects(unsigned tokid, sealobject *sealobj) {
 
     const char *sql =
             "SELECT * FROM sealobjects WHERE tokid=?";
@@ -509,6 +517,10 @@ error:
     sqlite3_finalize(stmt);
 
     return rc;
+}
+
+WEAK DEBUG_VISIBILITY int init_sealobjects(unsigned tokid, sealobject *sealobj) {
+    return __real_init_sealobjects(tokid, sealobj);
 }
 
 DEBUG_VISIBILITY WEAK void db_get_label(token *t, sqlite3_stmt *stmt, int iCol) {
