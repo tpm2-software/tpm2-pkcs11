@@ -447,7 +447,7 @@ CK_RV db_init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
     return rc == SQLITE_OK ? CKR_OK : CKR_GENERAL_ERROR;
 }
 
-static int init_sealobjects(unsigned tokid, sealobject *sealobj) {
+DEBUG_VISIBILITY int init_sealobjects(unsigned tokid, sealobject *sealobj) {
 
     const char *sql =
             "SELECT * FROM sealobjects WHERE tokid=?";
