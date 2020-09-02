@@ -534,7 +534,7 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
     if (rc != SQLITE_OK) {
         free(tmp);
         LOGE("Cannot prepare tobject query: %s\n", sqlite3_errmsg(global.db));
-        return rc;
+        return CKR_GENERAL_ERROR;
     }
 
     size_t row = 0;
