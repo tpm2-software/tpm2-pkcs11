@@ -85,6 +85,7 @@ int init_tobjects(token *tok);
 CK_RV convert_pobject_v3_to_v4(pobject_v3 *old_pobj, pobject_v4 *new_pobj);
 CK_RV db_add_pobject_v4(sqlite3 *updb, pobject_v4 *new_pobj);
 int init_pobject_from_stmt(sqlite3_stmt *stmt, tpm_ctx *tpm, pobject *pobj);
+DEBUG_VISIBILITY int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm);
 
 #endif
 
