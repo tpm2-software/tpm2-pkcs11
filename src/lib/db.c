@@ -622,7 +622,6 @@ error:
     token_free_list(tmp, cnt);
     sqlite3_finalize(stmt);
     return CKR_GENERAL_ERROR;
-
 }
 
 CK_RV db_update_for_pinchange(
