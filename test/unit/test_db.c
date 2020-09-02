@@ -95,7 +95,6 @@ int __wrap_sqlite3_column_int(sqlite3_stmt *stmt, int i) {
 
 int __wrap_sqlite3_finalize(sqlite3_stmt *pStmt) {
 
-	free(pStmt);
 	will_return_data *d = mock_type(will_return_data *);
 	return d->rc;
 }
@@ -114,8 +113,7 @@ int __wrap_sqlite3_prepare_v2(sqlite3 *db,
 
 	will_return_data *d = mock_type(will_return_data *);
 	if (d->rc == SQLITE_OK) {
-		*ppStmt = malloc(4);
-		assert_non_null(*ppStmt);
+		*ppStmt = (sqlite3_stmt *)0xBADCC0DE;
 	}
 	return d->rc;
 }
@@ -138,6 +136,17 @@ int __wrap_sqlite3_bind_text(sqlite3_stmt *pStmt, int iCol, const char *text, in
 
 	will_return_data *d = mock_type(will_return_data *);
 	return d->rc;
+}
+
+int __wrap_sqlite3_bind_blob(sqlite3_stmt *pStmt, int iCol, const void *data, int len, void(*fnp)(void *data)) {
+    UNUSED(pStmt);
+    UNUSED(iCol);
+    UNUSED(data);
+    UNUSED(len);
+    UNUSED(fnp);
+
+    will_return_data *d = mock_type(will_return_data *);
+    return d->rc;
 }
 
 int __wrap_sqlite3_step(sqlite3_stmt *pStmt) {
@@ -173,6 +182,28 @@ void *__wrap_calloc(size_t nmemb, size_t size) {
     }
 
     return d->data;
+}
+
+int __real_sqlite3_exec(
+    sqlite3 *db,                               /* An open database */
+    const char *sql,                           /* SQL to be evaluated */
+    int (*callback)(void*,int,char**,char**),  /* Callback function */
+    void *,                                    /* 1st argument to callback */
+    char **errmsg                              /* Error msg written here */
+);
+int __wrap_sqlite3_exec(
+    sqlite3 *db,
+    const char *sql,
+    int (*callback)(void*,int,char**,char**),
+    void *arg,
+    char **errmsg
+) {
+    will_return_data *d = mock_type(will_return_data *);
+    if (d->call_real) {
+        return __real_sqlite3_exec(db, sql, callback, arg, errmsg);
+    }
+
+    return d->rc;
 }
 
 /* Override WEAK symbol */
@@ -1238,6 +1269,310 @@ void test_db_get_tokens_init_tobjects_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
+void test_db_update_for_pinchange_sqlite3_start_fail(void **state) {
+    UNUSED(state);
+
+    will_return_data d[] = {
+        { .rc = SQLITE_ERROR }, /* sqlite3_exec */
+    };
+
+    will_return(__wrap_sqlite3_exec,        &d[0]);
+
+    CK_RV rv = db_update_for_pinchange(
+            NULL,
+            false,
+            NULL,
+            NULL,
+            NULL);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+void test_db_update_for_pinchange_start_fail(void **state) {
+    UNUSED(state);
+
+    will_return_data d[] = {
+        { .rc = SQLITE_ERROR }, /* sqlite3_exec (BEGIN TRANSACTION)*/
+    };
+
+    will_return(__wrap_sqlite3_exec,        &d[0]);
+
+    CK_RV rv = db_update_for_pinchange(
+            NULL,
+            true,
+            NULL,
+            (twist)0xDEADBEEF,
+            (twist)0xDEADBEEF);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+void test_db_update_for_pinchange_sqlite3_prepare_v2_fail(void **state) {
+    UNUSED(state);
+
+    will_return_data d[] = {
+        { .rc = SQLITE_OK                }, /* sqlite3_exec (BEGIN TRANSACTION)*/
+        { .rc = SQLITE_ERROR             }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_ERROR             }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                }, /* sqlite3_exec (ROLLBACK)*/
+    };
+
+    will_return(__wrap_sqlite3_exec,        &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_finalize,    &d[2]);
+    will_return(__wrap_sqlite3_exec,        &d[3]);
+
+    CK_RV rv = db_update_for_pinchange(
+            NULL,
+            true,
+            NULL,
+            (twist)0xDEADBEEF,
+            (twist)0xDEADBEEF);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+void test_db_update_for_pinchange_sqlite3_bind_text_fail(void **state) {
+    UNUSED(state);
+
+    will_return_data d[] = {
+        { .rc = SQLITE_OK                }, /* sqlite3_exec (BEGIN TRANSACTION)*/
+        { .rc = SQLITE_OK                }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_ERROR             }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                }, /* sqlite3_exec (ROLLBACK)*/
+    };
+
+    will_return(__wrap_sqlite3_exec,        &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_bind_text,   &d[2]);
+    will_return(__wrap_sqlite3_finalize,    &d[3]);
+    will_return(__wrap_sqlite3_exec,        &d[4]);
+
+    CK_RV rv = db_update_for_pinchange(
+            NULL,
+            true,
+            NULL,
+            (twist)0xDEADBEEF,
+            (twist)0xDEADBEEF);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+void test_db_update_for_pinchange_sqlite3_bind_private_blob_fail(void **state) {
+
+    will_return_data d[] = {
+        { .rc = SQLITE_OK                }, /* sqlite3_exec (BEGIN TRANSACTION)*/
+        { .rc = SQLITE_OK                }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_text */
+        { .rc = SQLITE_ERROR             }, /* sqlite3_bind_blob */
+        { .rc = SQLITE_OK                }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                }, /* sqlite3_exec (ROLLBACK)*/
+    };
+
+    will_return(__wrap_sqlite3_exec,        &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_bind_text,   &d[2]);
+    will_return(__wrap_sqlite3_bind_blob,   &d[3]);
+    will_return(__wrap_sqlite3_finalize,    &d[4]);
+    will_return(__wrap_sqlite3_exec,        &d[5]);
+
+    twist twist_data  = twist_new("pubdata");
+    assert_non_null(twist_data);
+
+    CK_RV rv = db_update_for_pinchange(
+            NULL,
+            true,
+            NULL,
+            twist_data,
+            twist_data);
+    twist_free(twist_data);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+void test_db_update_for_pinchange_sqlite3_bind_public_blob_fail(void **state) {
+    UNUSED(state);
+
+    will_return_data d[] = {
+        { .rc = SQLITE_OK                }, /* sqlite3_exec (BEGIN TRANSACTION)*/
+        { .rc = SQLITE_OK                }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_blob 1 */
+        { .rc = SQLITE_ERROR             }, /* sqlite3_bind_blob 2 */
+        { .rc = SQLITE_OK                }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                }, /* sqlite3_exec (ROLLBACK)*/
+    };
+
+    will_return(__wrap_sqlite3_exec,        &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_bind_text,   &d[2]);
+    will_return(__wrap_sqlite3_bind_blob,   &d[3]);
+    will_return(__wrap_sqlite3_bind_blob,   &d[4]);
+    will_return(__wrap_sqlite3_finalize,    &d[5]);
+    will_return(__wrap_sqlite3_exec,        &d[6]);
+
+    twist twist_data  = twist_new("pubdata");
+    assert_non_null(twist_data);
+
+    CK_RV rv = db_update_for_pinchange(
+            NULL,
+            true,
+            NULL,
+            twist_data,
+            twist_data);
+    twist_free(twist_data);
+}
+
+void test_db_update_for_pinchange_sqlite3_bind_int_fail(void **state) {
+    UNUSED(state);
+
+    token t = { .id = 76 };
+
+    will_return_data d[] = {
+        { .rc = SQLITE_OK                }, /* sqlite3_exec (BEGIN TRANSACTION)*/
+        { .rc = SQLITE_OK                }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_blob 1 */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_blob 2 */
+        { .rc = SQLITE_ERROR             }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                }, /* sqlite3_exec (ROLLBACK)*/
+    };
+
+    will_return(__wrap_sqlite3_exec,        &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_bind_text,   &d[2]);
+    will_return(__wrap_sqlite3_bind_blob,   &d[3]);
+    will_return(__wrap_sqlite3_bind_blob,   &d[4]);
+    will_return(__wrap_sqlite3_bind_int,    &d[5]);
+    will_return(__wrap_sqlite3_finalize,    &d[6]);
+    will_return(__wrap_sqlite3_exec,        &d[7]);
+
+    twist twist_data  = twist_new("pubdata");
+    assert_non_null(twist_data);
+
+    CK_RV rv = db_update_for_pinchange(
+            &t,
+            true,
+            NULL,
+            twist_data,
+            twist_data);
+    twist_free(twist_data);
+}
+
+void test_db_update_for_pinchange_sqlite3_step_fail(void **state) {
+    UNUSED(state);
+
+    token t = { .id = 76 };
+
+    will_return_data d[] = {
+        { .rc = SQLITE_OK                }, /* sqlite3_exec (BEGIN TRANSACTION)*/
+        { .rc = SQLITE_OK                }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_blob 1 */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_blob 2 */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_int */
+        { .rc = SQLITE_ERROR             }, /* sqlite3_step */
+        { .rc = SQLITE_OK                }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                }, /* sqlite3_exec (ROLLBACK)*/
+    };
+
+    will_return(__wrap_sqlite3_exec,        &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_bind_text,   &d[2]);
+    will_return(__wrap_sqlite3_bind_blob,   &d[3]);
+    will_return(__wrap_sqlite3_bind_blob,   &d[4]);
+    will_return(__wrap_sqlite3_bind_int,    &d[5]);
+    will_return(__wrap_sqlite3_step,        &d[6]);
+    will_return(__wrap_sqlite3_finalize,    &d[7]);
+    will_return(__wrap_sqlite3_exec,        &d[8]);
+
+    twist twist_data  = twist_new("pubdata");
+    assert_non_null(twist_data);
+
+    CK_RV rv = db_update_for_pinchange(
+            &t,
+            true,
+            NULL,
+            twist_data,
+            twist_data);
+    twist_free(twist_data);
+}
+
+void test_db_update_for_pinchange_sqlite3_finalize_fail(void **state) {
+    UNUSED(state);
+
+    token t = { .id = 76 };
+
+    will_return_data d[] = {
+        { .rc = SQLITE_OK                }, /* sqlite3_exec (BEGIN TRANSACTION)*/
+        { .rc = SQLITE_OK                }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_blob 1 */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_blob 2 */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_int */
+        { .rc = SQLITE_DONE              }, /* sqlite3_step */
+        { .rc = SQLITE_ERROR             }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                }, /* sqlite3_exec (ROLLBACK)*/
+    };
+
+    will_return(__wrap_sqlite3_exec,              &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[1]);
+    will_return(__wrap_sqlite3_bind_text,         &d[2]);
+    will_return(__wrap_sqlite3_bind_blob,         &d[3]);
+    will_return(__wrap_sqlite3_bind_blob,         &d[4]);
+    will_return(__wrap_sqlite3_bind_int,          &d[5]);
+    will_return(__wrap_sqlite3_step,              &d[6]);
+    will_return_count(__wrap_sqlite3_finalize,    &d[7], 2);
+    will_return(__wrap_sqlite3_exec,              &d[8]);
+
+    twist twist_data  = twist_new("pubdata");
+    assert_non_null(twist_data);
+
+    CK_RV rv = db_update_for_pinchange(
+            &t,
+            true,
+            NULL,
+            twist_data,
+            twist_data);
+    twist_free(twist_data);
+}
+
+void test_db_update_for_pinchange_commit_fail(void **state) {
+    UNUSED(state);
+
+    token t = { .id = 76 };
+
+    will_return_data d[] = {
+        { .rc = SQLITE_OK                }, /* sqlite3_exec (BEGIN TRANSACTION)*/
+        { .rc = SQLITE_OK                }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_blob 1 */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_blob 2 */
+        { .rc = SQLITE_OK                }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                }, /* sqlite3_step */
+        { .rc = SQLITE_OK                }, /* sqlite3_finalize */
+        { .rc = SQLITE_ERROR             }, /* sqlite3_exec (ROLLBACK)*/
+    };
+
+    will_return(__wrap_sqlite3_exec,        &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_bind_text,   &d[2]);
+    will_return(__wrap_sqlite3_bind_blob,   &d[3]);
+    will_return(__wrap_sqlite3_bind_blob,   &d[4]);
+    will_return(__wrap_sqlite3_bind_int,    &d[5]);
+    will_return(__wrap_sqlite3_step,        &d[6]);
+    will_return(__wrap_sqlite3_finalize,    &d[7]);
+    will_return(__wrap_sqlite3_exec,        &d[8]);
+
+    twist twist_data  = twist_new("pubdata");
+    assert_non_null(twist_data);
+
+    CK_RV rv = db_update_for_pinchange(
+            &t,
+            true,
+            NULL,
+            twist_data,
+            twist_data);
+    twist_free(twist_data);
+}
+
 int main(int argc, char* argv[]) {
     (void) argc;
     (void) argv;
@@ -1291,6 +1626,16 @@ int main(int argc, char* argv[]) {
         cmocka_unit_test(test_db_get_tokens_token_overcount_fail),
         cmocka_unit_test(test_db_get_tokens_init_seal_objects_fail),
         cmocka_unit_test(test_db_get_tokens_init_tobjects_fail),
+        cmocka_unit_test(test_db_update_for_pinchange_start_fail),
+        cmocka_unit_test(test_db_update_for_pinchange_sqlite3_start_fail),
+        cmocka_unit_test(test_db_update_for_pinchange_sqlite3_prepare_v2_fail),
+        cmocka_unit_test(test_db_update_for_pinchange_sqlite3_bind_text_fail),
+        cmocka_unit_test(test_db_update_for_pinchange_sqlite3_bind_private_blob_fail),
+        cmocka_unit_test(test_db_update_for_pinchange_sqlite3_bind_public_blob_fail),
+        cmocka_unit_test(test_db_update_for_pinchange_sqlite3_bind_int_fail),
+        cmocka_unit_test(test_db_update_for_pinchange_sqlite3_step_fail),
+        cmocka_unit_test(test_db_update_for_pinchange_sqlite3_finalize_fail),
+        cmocka_unit_test(test_db_update_for_pinchange_commit_fail)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
