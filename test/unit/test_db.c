@@ -153,6 +153,10 @@ char *__wrap_strdup(const char *s) {
 	UNUSED(s);
 
 	will_return_data *d = mock_type(will_return_data *);
+	if (d->call_real) {
+	    return __real_strdup(s);
+	}
+
 	return d->data;
 }
 
@@ -234,6 +238,18 @@ CK_RV token_add_tobject_last(token *tok, tobject *t) {
     return d->rv;
 }
 
+/* weak override */
+CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
+        const char *template_name, twist pobj_auth,
+        uint32_t *primary_handle) {
+    UNUSED(tpm);
+    UNUSED(template_name);
+    UNUSED(pobj_auth);
+    UNUSED(primary_handle);
+
+    will_return_data *d = mock_type(will_return_data *);
+    return d->rv;
+}
 
 static void test_db_get_blob_col_bytes_0(void **state) {
     (void) state;
@@ -765,6 +781,45 @@ static void test_init_pobject_from_stmt_tpm_deserialize_handle_fail(void **state
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
+static void test_init_pobject_from_stmt_tpm_create_transient_primary_from_template_fail(void **state) {
+    UNUSED(state);
+
+    pobject pobj = {0};
+
+    /*
+     * convert text to C string easily:
+     *   - https://tomeko.net/online_tools/cpp_text_escape.php?lang=en
+     */
+    const char *yaml_config =
+        "---\n"
+        "!!map {\n"
+        "  ? !!str \"template-name\"\n"
+        "  : !!str \"tpm2-tools-default\",\n"
+        "  ? !!str \"transient\"\n"
+        "  : !!bool \"true\",\n"
+        "}\n";
+
+    will_return_data d[] = {
+        { .call_real = true           }, /* strdup */
+        { .rc = strlen(yaml_config)   }, /* sqlite3_column_bytes */
+        { .data = (void *)yaml_config }, /* sqlite3_column_text */
+        { .data = "fakeauth"          }, /* sqlite3_column_text */
+        { .rc = SQLITE_DONE           }, /* sqlite3_step */
+        { .rv = CKR_GENERAL_ERROR     }, /* tpm_create_transient_primary_from_template */
+    };
+
+    will_return_always(__wrap_strdup,                       &d[0]);
+    will_return(__wrap_sqlite3_column_bytes,                &d[1]);
+    will_return(__wrap_sqlite3_column_text,                 &d[2]);
+    will_return(__wrap_sqlite3_column_text,                 &d[3]);
+    will_return(__wrap_sqlite3_step,                        &d[4]);
+    will_return(tpm_create_transient_primary_from_template, &d[5]);
+
+    int rc = init_pobject_from_stmt((sqlite3_stmt *)0xBADDCAFE, (tpm_ctx *)0xBADCC0DE, &pobj);
+    pobject_free(&pobj);
+    assert_int_not_equal(rc, SQLITE_OK);
+}
+
 static void test_init_pobject_from_stmt_missing_template_name_fail(void **state) {
     UNUSED(state);
 
@@ -903,6 +958,7 @@ int main(int argc, char* argv[]) {
 		cmocka_unit_test(test_init_pobject_from_stmt_parse_pobject_config_from_string_fail),
 		cmocka_unit_test(test_init_pobject_from_stmt_not_transient_no_blob_fail),
 		cmocka_unit_test(test_init_pobject_from_stmt_tpm_deserialize_handle_fail),
+		cmocka_unit_test(test_init_pobject_from_stmt_tpm_create_transient_primary_from_template_fail),
 		cmocka_unit_test(test_init_pobject_from_stmt_missing_template_name_fail),
         cmocka_unit_test(test_init_pobject_from_stmt_twist_new_fail),
         cmocka_unit_test(test_init_pobject_from_stmt_sqlite_step_fail)
