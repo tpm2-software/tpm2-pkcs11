@@ -88,7 +88,7 @@ struct token_get_cb_ud {
     token *tokens;
 };
 
-DEBUG_VISIBILITY tobject *db_tobject_new(sqlite3_stmt *stmt) {
+DEBUG_VISIBILITY tobject *__real_db_tobject_new(sqlite3_stmt *stmt) {
 
     tobject *tobj = tobject_new();
     if (!tobj) {
@@ -142,6 +142,10 @@ error:
     return NULL;
 }
 
+WEAK DEBUG_VISIBILITY tobject *db_tobject_new(sqlite3_stmt *stmt) {
+    return __real_db_tobject_new(stmt);
+}
+
 DEBUG_VISIBILITY int init_tobjects(token *tok) {
 
     const char *sql =
@@ -170,6 +174,7 @@ DEBUG_VISIBILITY int init_tobjects(token *tok) {
 
         CK_RV rv = token_add_tobject_last(tok, insert);
         if (rv != CKR_OK) {
+            tobject_free(insert);
             goto error;
         }
     }

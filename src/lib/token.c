@@ -98,7 +98,7 @@ void token_free_list(token *t, size_t len) {
     free(t);
 }
 
-CK_RV token_add_tobject_last(token *tok, tobject *t) {
+WEAK CK_RV token_add_tobject_last(token *tok, tobject *t) {
 
     if (!tok->tobjects.tail) {
         t->l.prev = t->l.next = NULL;
