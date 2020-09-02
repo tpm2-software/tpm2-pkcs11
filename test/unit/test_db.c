@@ -970,6 +970,86 @@ void test_init_pobject_sqlite_step_fail(void **state) {
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
+void test_init_sealobjects_sqlite3_prepare_v2_fail(void **state) {
+    UNUSED(state);
+
+    sealobject sobj = { 0 };
+
+    will_return_data d[] = {
+        { .rc = SQLITE_ERROR          }, /* sqlite3_prepare_v2 */
+    };
+
+    will_return(__wrap_sqlite3_prepare_v2, &d[0]);
+
+    int rc = init_sealobjects(42, &sobj);
+    assert_int_not_equal(rc, SQLITE_OK);
+}
+
+void test_init_sealobjects_sqlite3_bind_int_fail(void **state) {
+    UNUSED(state);
+
+    sealobject sobj = { 0 };
+
+    will_return_data d[] = {
+        { .rc = SQLITE_OK       }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_ERROR    }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK          }, /* sqlite3_finalize */
+    };
+
+    will_return(__wrap_sqlite3_prepare_v2, &d[0]);
+    will_return(__wrap_sqlite3_bind_int,   &d[1]);
+    will_return(__wrap_sqlite3_finalize,   &d[2]);
+
+    int rc = init_sealobjects(42, &sobj);
+    assert_int_not_equal(rc, SQLITE_OK);
+}
+
+void test_init_sealobjects_sqlite3_step_fail(void **state) {
+    UNUSED(state);
+
+    sealobject sobj = { 0 };
+
+    will_return_data d[] = {
+        { .rc = SQLITE_OK          }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK          }, /* sqlite3_bind_int */
+        { .rc = SQLITE_ERROR       }, /* sqlite3_step */
+        { .rc = SQLITE_OK          }, /* sqlite3_finalize */
+    };
+
+    will_return(__wrap_sqlite3_prepare_v2, &d[0]);
+    will_return(__wrap_sqlite3_bind_int,   &d[1]);
+    will_return(__wrap_sqlite3_step,       &d[2]);
+    will_return(__wrap_sqlite3_finalize,   &d[3]);
+
+    int rc = init_sealobjects(42, &sobj);
+    assert_int_not_equal(rc, SQLITE_OK);
+}
+
+void test_init_sealobjects_bad_col_name_fail(void **state) {
+    UNUSED(state);
+
+    sealobject sobj = { 0 };
+
+    will_return_data d[] = {
+        { .rc = SQLITE_OK          }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK          }, /* sqlite3_bind_int */
+        { .rc = SQLITE_ROW         }, /* sqlite3_step */
+        { .rc = 1                  }, /* sqlite3_data_count */
+        { .data = "bad col name"   }, /* sqlite3_column_name */
+        { .rc = SQLITE_OK          }, /* sqlite3_finalize */
+    };
+
+    will_return(__wrap_sqlite3_prepare_v2,  &d[0]);
+    will_return(__wrap_sqlite3_bind_int,    &d[1]);
+    will_return(__wrap_sqlite3_step,        &d[2]);
+    will_return(__wrap_sqlite3_data_count,  &d[3]);
+    will_return(__wrap_sqlite3_column_name, &d[4]);
+    will_return(__wrap_sqlite3_finalize,    &d[5]);
+
+    int rc = init_sealobjects(42, &sobj);
+    assert_int_not_equal(rc, SQLITE_OK);
+}
+
 int main(int argc, char* argv[]) {
     (void) argc;
     (void) argv;
@@ -1013,7 +1093,11 @@ int main(int argc, char* argv[]) {
         cmocka_unit_test(test_init_pobject_from_stmt_sqlite_step_fail),
         cmocka_unit_test(test_init_pobject_sqlite_prepare_v2_fail),
         cmocka_unit_test(test_init_pobject_sqlite_bind_int_fail),
-        cmocka_unit_test(test_init_pobject_sqlite_step_fail)
+        cmocka_unit_test(test_init_pobject_sqlite_step_fail),
+        cmocka_unit_test(test_init_sealobjects_sqlite3_prepare_v2_fail),
+        cmocka_unit_test(test_init_sealobjects_sqlite3_bind_int_fail),
+        cmocka_unit_test(test_init_sealobjects_sqlite3_step_fail),
+        cmocka_unit_test(test_init_sealobjects_bad_col_name_fail),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
