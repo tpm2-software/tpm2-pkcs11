@@ -3555,7 +3555,7 @@ static const key_template TEMPLATES[] = {
     }
 };
 
-CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
+WEAK CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
         const char *template_name, twist pobj_auth,
         uint32_t *primary_handle) {
 
