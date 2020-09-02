@@ -688,7 +688,7 @@ CK_RV db_update_for_pinchange(
     /*
      * Prepare statements
      */
-    rc = sqlite3_prepare(global.db, sql, -1, &stmt, NULL);
+    rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
     if (rc) {
         LOGE("Could not prepare statement: \"%s\" error: \"%s\"",
         sql, sqlite3_errmsg(global.db));
