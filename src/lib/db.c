@@ -410,7 +410,7 @@ DEBUG_VISIBILITY int init_pobject_from_stmt(sqlite3_stmt *stmt, tpm_ctx *tpm, po
     return SQLITE_OK;
 }
 
-static int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
+DEBUG_VISIBILITY int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
 
     const char *sql =
             "SELECT config,objauth FROM pobjects WHERE id=?";
