@@ -82,12 +82,14 @@ tobject *db_tobject_new(sqlite3_stmt *stmt);
 tobject *__real_db_tobject_new(sqlite3_stmt *stmt);
 int init_pobject_v3_from_stmt(sqlite3_stmt *stmt, pobject_v3 *old_pobj);
 int init_tobjects(token *tok);
+int __real_init_tobjects(token *tok);
 CK_RV convert_pobject_v3_to_v4(pobject_v3 *old_pobj, pobject_v4 *new_pobj);
 CK_RV db_add_pobject_v4(sqlite3 *updb, pobject_v4 *new_pobj);
 int init_pobject_from_stmt(sqlite3_stmt *stmt, tpm_ctx *tpm, pobject *pobj);
-DEBUG_VISIBILITY int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm);
-DEBUG_VISIBILITY int init_sealobjects(unsigned tokid, sealobject *sealobj);
-
+int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm);
+int __real_init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm);
+int init_sealobjects(unsigned tokid, sealobject *sealobj);
+int __real_init_sealobjects(unsigned tokid, sealobject *sealobj);
 #endif
 
 #endif /* SRC_PKCS11_LIB_DB_H_ */

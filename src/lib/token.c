@@ -40,7 +40,7 @@ DEBUG_VISIBILITY void pobject_free(pobject *pobj) {
     memset(pobj, 0, sizeof(*pobj));
 }
 
-CK_RV token_min_init(token *t) {
+WEAK CK_RV token_min_init(token *t) {
 
     /*
      * Initialize the per-token session table

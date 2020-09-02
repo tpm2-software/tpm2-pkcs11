@@ -25,6 +25,7 @@
 typedef struct will_return_data will_return_data;
 struct will_return_data {
     bool call_real;
+    token t;
 	union {
 		int rc;
 		void *data;
@@ -35,7 +36,10 @@ struct will_return_data {
 
 static int tobject_setup(void **state) {
 
-	tobject *t = __real_tobject_new();
+    will_return_data d = { .call_real = true };
+    will_return(__wrap_calloc, &d);
+
+    tobject *t = __real_tobject_new();
 	assert_non_null(t);
 	t->id = 42;
 	*state = t;
@@ -160,6 +164,17 @@ char *__wrap_strdup(const char *s) {
 	return d->data;
 }
 
+void *__real_calloc(size_t nmemb, size_t size);
+void *__wrap_calloc(size_t nmemb, size_t size) {
+
+    will_return_data *d = mock_type(will_return_data *);
+    if (d->call_real) {
+        return __real_calloc(nmemb, size);
+    }
+
+    return d->data;
+}
+
 /* Override WEAK symbol */
 twist __real_twistbin_new(const void *data, size_t size);
 twist twistbin_new(const void *data, size_t len) {
@@ -250,6 +265,45 @@ CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
     will_return_data *d = mock_type(will_return_data *);
     return d->rv;
 }
+
+/* weak override */
+CK_RV token_min_init(token *t) {
+
+    will_return_data *d = mock_type(will_return_data *);
+    *t = d->t;
+    return d->rv;
+}
+
+/* weak override */
+int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm) {
+
+    will_return_data *d = mock_type(will_return_data *);
+    if (d->call_real) {
+        return __real_init_pobject(pid, pobj, tpm);
+    }
+    return d->rc;
+}
+
+/* weak override */
+int init_sealobjects(unsigned tokid, sealobject *sealobj) {
+
+    will_return_data *d = mock_type(will_return_data *);
+    if (d->call_real) {
+        return __real_init_sealobjects(tokid, sealobj);
+    }
+    return d->rc;
+}
+
+/* weak override */
+int init_tobjects(token *tok) {
+
+    will_return_data *d = mock_type(will_return_data *);
+    if (d->call_real) {
+        return __real_init_tobjects(tok);
+    }
+    return d->rc;
+}
+
 
 static void test_db_get_blob_col_bytes_0(void **state) {
     (void) state;
@@ -547,7 +601,7 @@ static void init_tobjects_sqlite3_prepare_v2_fail(void **state) {
 
     will_return(__wrap_sqlite3_prepare_v2, &d[0]);
 
-	int rc = init_tobjects((token *)0xDEADBEEF);
+	int rc = __real_init_tobjects((token *)0xDEADBEEF);
 	assert_int_not_equal(rc, SQLITE_OK);
 
 }
@@ -569,7 +623,7 @@ static void init_tobjects_sqlite3_bind_int(void **state) {
     will_return(__wrap_sqlite3_bind_int  , &d[1]);
     will_return(__wrap_sqlite3_finalize,   &d[2]);
 
-	int rc = init_tobjects(&t);
+	int rc = __real_init_tobjects(&t);
 	assert_int_not_equal(rc, SQLITE_OK);
 }
 
@@ -594,7 +648,7 @@ static void init_tobjects_db_tobject_new_fail(void **state) {
     will_return(db_tobject_new,            &d[3]);
     will_return(__wrap_sqlite3_finalize,   &d[4]);
 
-    int rc = init_tobjects(&t);
+    int rc = __real_init_tobjects(&t);
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
@@ -620,7 +674,7 @@ static void init_tobjects_token_add_tobject_last_fail(void **state) {
     will_return(token_add_tobject_last,    &d[4]);
     will_return(__wrap_sqlite3_finalize,   &d[5]);
 
-    int rc = init_tobjects(&t);
+    int rc = __real_init_tobjects(&t);
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
@@ -930,7 +984,7 @@ void test_init_pobject_sqlite_prepare_v2_fail(void **state) {
 
     will_return(__wrap_sqlite3_prepare_v2, &d[0]);
 
-    int rc = init_pobject(1, NULL, NULL);
+    int rc = __real_init_pobject(1, NULL, NULL);
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
@@ -947,7 +1001,7 @@ void test_init_pobject_sqlite_bind_int_fail(void **state) {
     will_return(__wrap_sqlite3_bind_int,   &d[1]);
     will_return(__wrap_sqlite3_finalize,   &d[2]);
 
-    int rc = init_pobject(1, NULL, NULL);
+    int rc = __real_init_pobject(1, NULL, NULL);
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
@@ -966,7 +1020,7 @@ void test_init_pobject_sqlite_step_fail(void **state) {
     will_return(__wrap_sqlite3_step,       &d[2]);
     will_return(__wrap_sqlite3_finalize,   &d[3]);
 
-    int rc = init_pobject(1, NULL, NULL);
+    int rc = __real_init_pobject(1, NULL, NULL);
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
@@ -981,7 +1035,7 @@ void test_init_sealobjects_sqlite3_prepare_v2_fail(void **state) {
 
     will_return(__wrap_sqlite3_prepare_v2, &d[0]);
 
-    int rc = init_sealobjects(42, &sobj);
+    int rc = __real_init_sealobjects(42, &sobj);
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
@@ -1000,7 +1054,7 @@ void test_init_sealobjects_sqlite3_bind_int_fail(void **state) {
     will_return(__wrap_sqlite3_bind_int,   &d[1]);
     will_return(__wrap_sqlite3_finalize,   &d[2]);
 
-    int rc = init_sealobjects(42, &sobj);
+    int rc = __real_init_sealobjects(42, &sobj);
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
@@ -1021,7 +1075,7 @@ void test_init_sealobjects_sqlite3_step_fail(void **state) {
     will_return(__wrap_sqlite3_step,       &d[2]);
     will_return(__wrap_sqlite3_finalize,   &d[3]);
 
-    int rc = init_sealobjects(42, &sobj);
+    int rc = __real_init_sealobjects(42, &sobj);
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
@@ -1046,8 +1100,142 @@ void test_init_sealobjects_bad_col_name_fail(void **state) {
     will_return(__wrap_sqlite3_column_name, &d[4]);
     will_return(__wrap_sqlite3_finalize,    &d[5]);
 
-    int rc = init_sealobjects(42, &sobj);
+    int rc = __real_init_sealobjects(42, &sobj);
     assert_int_not_equal(rc, SQLITE_OK);
+}
+
+void test_db_get_tokens_calloc_fail(void **state) {
+    UNUSED(state);
+
+    sealobject sobj = { 0 };
+
+    will_return_data d[] = {
+        { .data = NULL        }, /* calloc */
+    };
+
+    will_return(__wrap_calloc,  &d[0]);
+
+    size_t len = 0;
+    token *t = NULL;
+
+    CK_RV rv = db_get_tokens(&t, &len);
+    assert_int_equal(rv, CKR_HOST_MEMORY);
+}
+
+void test_db_get_tokens_sqlite3_prepare_v2_fail(void **state) {
+    UNUSED(state);
+
+    sealobject sobj = { 0 };
+
+    will_return_data d[] = {
+        { .call_real = true           }, /* calloc */
+        { .rc = SQLITE_ERROR          }, /* sqlite3_prepare_v2 */
+    };
+
+    will_return(__wrap_calloc,              &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+
+    CK_RV rv = db_get_tokens(NULL, NULL);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+void test_db_get_tokens_token_overcount_fail(void **state) {
+    UNUSED(state);
+
+    sealobject sobj = { 0 };
+
+    will_return_data d[] = {
+        { .call_real = true           }, /* calloc */
+        { .rc = SQLITE_OK             }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_ROW            }, /* sqlite3_step */
+        { .rc = 0                     }, /* sqlite3_data_count (no per token data)*/
+        { .rv = CKR_OK                }, /* token_min_init */
+        { .rc = SQLITE_OK             }, /* init_pobject */
+        { .rc = SQLITE_OK             }, /* sqlite3_finalize */
+    };
+
+    will_return_always(__wrap_calloc,              &d[0]);
+    will_return_always(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return_always(__wrap_sqlite3_step,        &d[2]);
+    will_return_always(__wrap_sqlite3_data_count,  &d[3]);
+    will_return_always(token_min_init,             &d[4]);
+    will_return_always(init_pobject,               &d[5]);
+    will_return(__wrap_sqlite3_finalize,           &d[6]);
+
+    CK_RV rv = db_get_tokens(NULL, NULL);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+void test_db_get_tokens_init_seal_objects_fail(void **state) {
+    UNUSED(state);
+
+    sealobject sobj = { 0 };
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        }
+    };
+
+    will_return_data d[] = {
+        { .call_real = true           }, /* calloc */
+        { .rc = SQLITE_OK             }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_ROW            }, /* sqlite3_step */
+        { .rc = 0                     }, /* sqlite3_data_count (no per token data)*/
+        { .rv = CKR_OK, .t = t        }, /* token_min_init */
+        { .rc = SQLITE_OK             }, /* init_pobject */
+        { .rc = SQLITE_ERROR          }, /* init_sealobjects */
+        { .rc = SQLITE_OK             }, /* sqlite3_finalize */
+    };
+
+    will_return(__wrap_calloc,              &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_step,        &d[2]);
+    will_return(__wrap_sqlite3_data_count,  &d[3]);
+    will_return(token_min_init,             &d[4]);
+    will_return(init_pobject,               &d[5]);
+    will_return(init_sealobjects,           &d[6]);
+    will_return(__wrap_sqlite3_finalize,    &d[7]);
+
+    CK_RV rv = db_get_tokens(NULL, NULL);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+void test_db_get_tokens_init_tobjects_fail(void **state) {
+    UNUSED(state);
+
+    sealobject sobj = { 0 };
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        }
+    };
+
+    will_return_data d[] = {
+        { .call_real = true           }, /* calloc */
+        { .rc = SQLITE_OK             }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_ROW            }, /* sqlite3_step */
+        { .rc = 0                     }, /* sqlite3_data_count (no per token data)*/
+        { .rv = CKR_OK, .t = t        }, /* token_min_init */
+        { .rc = SQLITE_OK             }, /* init_pobject */
+        { .rc = SQLITE_OK             }, /* init_sealobjects */
+        { .rc = SQLITE_ERROR          }, /* init_tobjects */
+        { .rc = SQLITE_OK             }, /* sqlite3_finalize */
+    };
+
+    will_return(__wrap_calloc,              &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_step,        &d[2]);
+    will_return(__wrap_sqlite3_data_count,  &d[3]);
+    will_return(token_min_init,             &d[4]);
+    will_return(init_pobject,               &d[5]);
+    will_return(init_sealobjects,           &d[6]);
+    will_return(init_tobjects,              &d[7]);
+    will_return(__wrap_sqlite3_finalize,    &d[8]);
+
+    CK_RV rv = db_get_tokens(NULL, NULL);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
 int main(int argc, char* argv[]) {
@@ -1098,6 +1286,11 @@ int main(int argc, char* argv[]) {
         cmocka_unit_test(test_init_sealobjects_sqlite3_bind_int_fail),
         cmocka_unit_test(test_init_sealobjects_sqlite3_step_fail),
         cmocka_unit_test(test_init_sealobjects_bad_col_name_fail),
+        cmocka_unit_test(test_db_get_tokens_calloc_fail),
+        cmocka_unit_test(test_db_get_tokens_sqlite3_prepare_v2_fail),
+        cmocka_unit_test(test_db_get_tokens_token_overcount_fail),
+        cmocka_unit_test(test_db_get_tokens_init_seal_objects_fail),
+        cmocka_unit_test(test_db_get_tokens_init_tobjects_fail),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
