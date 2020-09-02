@@ -339,24 +339,14 @@ DEBUG_VISIBILITY CK_RV db_add_pobject_v4(sqlite3 *updb, pobject_v4 *new_pobj) {
         goto error;
     }
 
-    rc = sqlite3_finalize(stmt);
-    gotobinderror(rc, "finalize");
-
     rv = CKR_OK;
-
-out:
-    return rv;
-
 error:
     rc = sqlite3_finalize(stmt);
     if (rc != SQLITE_OK) {
         LOGW("Could not finalize stmt: %d", rc);
     }
 
-    rollback();
-
-    rv = CKR_GENERAL_ERROR;
-    goto out;
+    return rv;
 }
 
 DEBUG_VISIBILITY int init_pobject_from_stmt(sqlite3_stmt *stmt, tpm_ctx *tpm, pobject *pobj) {
