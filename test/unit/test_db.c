@@ -24,6 +24,7 @@
 
 typedef struct will_return_data will_return_data;
 struct will_return_data {
+    bool call_real;
 	union {
 		int rc;
 		void *data;
@@ -173,6 +174,16 @@ tobject *tobject_new(void) {
 }
 
 /* weak override */
+tobject *db_tobject_new(sqlite3_stmt *stmt) {
+
+    will_return_data *d = mock_type(will_return_data *);
+    if (d->call_real) {
+        return __real_db_tobject_new(stmt);
+    }
+    return d->data;
+}
+
+/* weak override */
 bool parse_attributes_from_string(const unsigned char *yaml, size_t size,
         attr_list **attrs) {
 	UNUSED(yaml);
@@ -213,6 +224,16 @@ bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob,
     will_return_data *d = mock_type(will_return_data *);
     return d->rcb;
 }
+
+/* weak overide */
+CK_RV token_add_tobject_last(token *tok, tobject *t) {
+    UNUSED(tok);
+    UNUSED(t);
+
+    will_return_data *d = mock_type(will_return_data *);
+    return d->rv;
+}
+
 
 static void test_db_get_blob_col_bytes_0(void **state) {
     (void) state;
@@ -263,11 +284,13 @@ static void test_db_get_blob_alloc_fail(void **state) {
 static void db_tobject_new_tobject_alloc_fail(void **state) {
     (void) state;
 
-    will_return_data d = {
-		.data = NULL,
+    will_return_data d[] = {
+        { .call_real = true },  /* db_tobject_new call real */
+		{ .data = NULL      }  /* tobject_new fail */
     };
 
-    will_return(tobject_new, &d);
+    will_return(db_tobject_new, &d[0]);
+    will_return(tobject_new, &d[1]);
 
     tobject *t = db_tobject_new(BAD_PTR);
     assert_null(t);
@@ -277,14 +300,16 @@ static void db_tobject_new_tobject_sqlite3_column_unknown_fail(void **state) {
     (void) state;
 
     will_return_data d[] = {
+        { .call_real = true }, /* db_tobject_new call real */
 		{ .data = *state },    /* tobject_new */
 		{ .rc = 1 },           /* sqlite3_data_count */
 		{ .data = "unknown" }, /* sqlite3_column_name */
     };
 
-    will_return(tobject_new,                 &d[0]);
-    will_return(__wrap_sqlite3_data_count,   &d[1]);
-    will_return(__wrap_sqlite3_column_name,  &d[2]);
+    will_return(db_tobject_new,              &d[0]);
+    will_return(tobject_new,                 &d[1]);
+    will_return(__wrap_sqlite3_data_count,   &d[2]);
+    will_return(__wrap_sqlite3_column_name,  &d[3]);
 
     tobject *t = db_tobject_new(BAD_PTR);
     assert_null(t);
@@ -294,18 +319,20 @@ static void db_tobject_new_tobject_sqlite3_column_text_fail(void **state) {
     (void) state;
 
     will_return_data d[] = {
-		{ .data = *state },  /* tobject_new */
-		{ .rc = 1 },         /* sqlite3_data_count */
-		{ .data = "attrs" }, /* sqlite3_column_name */
-		{ .rc = 0 },         /* sqlite3_column_bytes */
-		{ .data = NULL },    /* sqlite3_column_text */
+        { .call_real = true }, /* db_tobject_new call real */
+		{ .data = *state },    /* tobject_new */
+		{ .rc = 1 },           /* sqlite3_data_count */
+		{ .data = "attrs" },   /* sqlite3_column_name */
+		{ .rc = 0 },           /* sqlite3_column_bytes */
+		{ .data = NULL },      /* sqlite3_column_text */
     };
 
-    will_return(tobject_new,                 &d[0]);
-    will_return(__wrap_sqlite3_data_count,   &d[1]);
-    will_return(__wrap_sqlite3_column_name,  &d[2]);
-    will_return(__wrap_sqlite3_column_bytes, &d[3]);
-    will_return(__wrap_sqlite3_column_text,  &d[4]);
+    will_return(db_tobject_new,              &d[0]);
+    will_return(tobject_new,                 &d[1]);
+    will_return(__wrap_sqlite3_data_count,   &d[2]);
+    will_return(__wrap_sqlite3_column_name,  &d[3]);
+    will_return(__wrap_sqlite3_column_bytes, &d[4]);
+    will_return(__wrap_sqlite3_column_text,  &d[5]);
 
     tobject *t = db_tobject_new(BAD_PTR);
     assert_null(t);
@@ -315,20 +342,22 @@ static void db_tobject_new_tobject_sqlite3_attrs_text_fail(void **state) {
     (void) state;
 
     will_return_data d[] = {
-		{ .data = *state },  /* tobject_new */
-		{ .rc = 1 },         /* sqlite3_data_count */
-		{ .data = "attrs" }, /* sqlite3_column_name */
-		{ .rc = 4 },         /* sqlite3_column_bytes */
-		{ .data = "bad" },   /* sqlite3_column_text */
-		{ .rcb = false },    /* parse_attributes_from_string */
+        { .call_real = true }, /* db_tobject_new call real */
+		{ .data = *state },    /* tobject_new */
+		{ .rc = 1 },           /* sqlite3_data_count */
+		{ .data = "attrs" },   /* sqlite3_column_name */
+		{ .rc = 4 },           /* sqlite3_column_bytes */
+		{ .data = "bad" },     /* sqlite3_column_text */
+		{ .rcb = false },      /* parse_attributes_from_string */
     };
 
-    will_return(tobject_new,                  &d[0]);
-    will_return(__wrap_sqlite3_data_count,    &d[1]);
-    will_return(__wrap_sqlite3_column_name,   &d[2]);
-    will_return(__wrap_sqlite3_column_bytes,  &d[3]);
-    will_return(__wrap_sqlite3_column_text,   &d[4]);
-    will_return(parse_attributes_from_string, &d[5]);
+    will_return(db_tobject_new,               &d[0]);
+    will_return(tobject_new,                  &d[1]);
+    will_return(__wrap_sqlite3_data_count,    &d[2]);
+    will_return(__wrap_sqlite3_column_name,   &d[3]);
+    will_return(__wrap_sqlite3_column_bytes,  &d[4]);
+    will_return(__wrap_sqlite3_column_text,   &d[5]);
+    will_return(parse_attributes_from_string, &d[6]);
 
     tobject *t = db_tobject_new(BAD_PTR);
     assert_null(t);
@@ -338,6 +367,7 @@ static void db_tobject_new_tobject_object_init_from_attrs_fail(void **state) {
     (void) state;
 
     will_return_data d[] = {
+        { .call_real = true },      /* db_tobject_new call real */
 		{ .data = *state },         /* tobject_new */
 		{ .rc = 1 },                /* sqlite3_data_count */
 		{ .data = "attrs" },        /* sqlite3_column_name */
@@ -347,13 +377,14 @@ static void db_tobject_new_tobject_object_init_from_attrs_fail(void **state) {
 		{ .rv = CKR_GENERAL_ERROR } /* object_init_from_attrs */
     };
 
-    will_return(tobject_new,                  &d[0]);
-    will_return(__wrap_sqlite3_data_count,    &d[1]);
-    will_return(__wrap_sqlite3_column_name,   &d[2]);
-    will_return(__wrap_sqlite3_column_bytes,  &d[3]);
-    will_return(__wrap_sqlite3_column_text,   &d[4]);
-    will_return(parse_attributes_from_string, &d[5]);
-    will_return(object_init_from_attrs,       &d[6]);
+    will_return(db_tobject_new,               &d[0]);
+    will_return(tobject_new,                  &d[1]);
+    will_return(__wrap_sqlite3_data_count,    &d[2]);
+    will_return(__wrap_sqlite3_column_name,   &d[3]);
+    will_return(__wrap_sqlite3_column_bytes,  &d[4]);
+    will_return(__wrap_sqlite3_column_text,   &d[5]);
+    will_return(parse_attributes_from_string, &d[6]);
+    will_return(object_init_from_attrs,       &d[7]);
 
     tobject *t = db_tobject_new(BAD_PTR);
     assert_null(t);
@@ -524,6 +555,57 @@ static void init_tobjects_sqlite3_bind_int(void **state) {
 
 	int rc = init_tobjects(&t);
 	assert_int_not_equal(rc, SQLITE_OK);
+}
+
+static void init_tobjects_db_tobject_new_fail(void **state) {
+    UNUSED(state);
+
+    token t = {
+        .id = 42
+    };
+
+    will_return_data d[] = {
+        { .rc = SQLITE_OK  }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK  }, /* sqlite3_bind_int */
+        { .rc = SQLITE_ROW }, /* sqlite3_step */
+        { .data = NULL     }, /* db_tobject_new */
+        { .rc = SQLITE_OK  }, /* sqlite3_finalize */
+    };
+
+    will_return(__wrap_sqlite3_prepare_v2, &d[0]);
+    will_return(__wrap_sqlite3_bind_int,   &d[1]);
+    will_return(__wrap_sqlite3_step,       &d[2]);
+    will_return(db_tobject_new,            &d[3]);
+    will_return(__wrap_sqlite3_finalize,   &d[4]);
+
+    int rc = init_tobjects(&t);
+    assert_int_not_equal(rc, SQLITE_OK);
+}
+
+static void init_tobjects_token_add_tobject_last_fail(void **state) {
+
+    token t = {
+        .id = 42
+    };
+
+    will_return_data d[] = {
+        { .rc = SQLITE_OK       }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK       }, /* sqlite3_bind_int */
+        { .rc = SQLITE_ROW      }, /* sqlite3_step */
+        { .data = *state        }, /* db_tobject_new call real */
+        { .rv = CKR_HOST_MEMORY }, /* token_add_tobject_last */
+        { .rc = SQLITE_OK       }, /* sqlite3_finalize */
+    };
+
+    will_return(__wrap_sqlite3_prepare_v2, &d[0]);
+    will_return(__wrap_sqlite3_bind_int,   &d[1]);
+    will_return(__wrap_sqlite3_step,       &d[2]);
+    will_return(db_tobject_new,            &d[3]);
+    will_return(token_add_tobject_last,    &d[4]);
+    will_return(__wrap_sqlite3_finalize,   &d[5]);
+
+    int rc = init_tobjects(&t);
+    assert_int_not_equal(rc, SQLITE_OK);
 }
 
 static void test_convert_pobject_v3_to_v4_emit_pobject_to_conf_string_fail(void **state) {
@@ -805,6 +887,7 @@ int main(int argc, char* argv[]) {
 		cmocka_unit_test_setup(
 			db_tobject_new_tobject_object_init_from_attrs_fail,
 			tobject_setup),
+		cmocka_unit_test(init_tobjects_db_tobject_new_fail),
 		cmocka_unit_test(init_pobject_v3_from_stmt_sqlite3_column_text_fail),
 		cmocka_unit_test(init_pobject_v3_from_stmt_strdup_fail),
 		cmocka_unit_test(init_pobject_v3_from_stmt__get_blob_fail),
@@ -812,6 +895,8 @@ int main(int argc, char* argv[]) {
 		cmocka_unit_test(init_pobject_v3_from_stmt_strdup2_fail),
 		cmocka_unit_test(init_tobjects_sqlite3_prepare_v2_fail),
 		cmocka_unit_test(init_tobjects_sqlite3_bind_int),
+		cmocka_unit_test_setup(init_tobjects_token_add_tobject_last_fail,
+            tobject_setup),
 		cmocka_unit_test(test_convert_pobject_v3_to_v4_emit_pobject_to_conf_string_fail),
 		cmocka_unit_test(test_db_add_pobject_v4_sqlite3_prepare_v2_fail),
 		cmocka_unit_test(test_db_add_pobject_v4_sqlite3_step_fail),
