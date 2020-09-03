@@ -308,10 +308,8 @@ void mdetail_set_pss_status(mdetail *m, bool pss_sigs_good) {
 
         if (pss_sigs_good) {
             d->flags |= mf_tpm_supported;
-            d->flags &= ~mf_rsa;
         } else {
             d->flags &= ~mf_tpm_supported;
-            d->flags |= mf_rsa;
         }
     }
 }
