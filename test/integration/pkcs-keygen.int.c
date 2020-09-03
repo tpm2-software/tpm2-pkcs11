@@ -915,6 +915,146 @@ static void test_extract_and_private(void **state) {
     assert_int_equal(rv, CKR_ATTRIBUTE_VALUE_INVALID);
 }
 
+static void test_rsa_keypairgen_wrap(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_BBOOL ck_true = CK_TRUE;
+    // CK_BBOOL ck_false = CK_FALSE;
+    CK_UTF8CHAR label[] = "wrap-rsa";
+
+    CK_ATTRIBUTE pub[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_ENCRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_VERIFY, ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_WRAP, ck_true),
+    };
+
+    CK_ATTRIBUTE priv[] = {
+        ADD_ATTR_BASE(CKA_DECRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_SIGN, ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_EXTRACTABLE, ck_true),
+    };
+
+    CK_MECHANISM mech = {
+        .mechanism = CKM_RSA_PKCS_KEY_PAIR_GEN,
+        .pParameter = NULL,
+        .ulParameterLen = 0
+    };
+
+    CK_OBJECT_HANDLE pubkey;
+    CK_OBJECT_HANDLE privkey;
+
+    user_login(session);
+
+    CK_RV rv = C_GenerateKeyPair (session,
+            &mech,
+            pub, ARRAY_LEN(pub),
+            priv, ARRAY_LEN(priv),
+            &pubkey, &privkey);
+    assert_int_equal(rv, CKR_ATTRIBUTE_VALUE_INVALID);
+}
+
+static void test_rsa_keypairgen_unwrap(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_BBOOL ck_true = CK_TRUE;
+    // CK_BBOOL ck_false = CK_FALSE;
+    CK_UTF8CHAR label[] = "unwrap-rsa";
+
+    CK_ATTRIBUTE pub[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_ENCRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_VERIFY, ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+    };
+
+    CK_ATTRIBUTE priv[] = {
+        ADD_ATTR_BASE(CKA_DECRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_SIGN, ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_EXTRACTABLE, ck_true),
+        ADD_ATTR_BASE(CKA_UNWRAP, ck_true),
+    };
+
+    CK_MECHANISM mech = {
+        .mechanism = CKM_RSA_PKCS_KEY_PAIR_GEN,
+        .pParameter = NULL,
+        .ulParameterLen = 0
+    };
+
+    CK_OBJECT_HANDLE pubkey;
+    CK_OBJECT_HANDLE privkey;
+
+    user_login(session);
+
+    CK_RV rv = C_GenerateKeyPair (session,
+            &mech,
+            pub, ARRAY_LEN(pub),
+            priv, ARRAY_LEN(priv),
+            &pubkey, &privkey);
+    assert_int_equal(rv, CKR_ATTRIBUTE_VALUE_INVALID);
+}
+
+static void test_rsa_keypairgen_wrap_unwrap(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_BBOOL ck_true = CK_TRUE;
+    // CK_BBOOL ck_false = CK_FALSE;
+    CK_UTF8CHAR label[] = "wrap-unwrap-rsa";
+
+    CK_ATTRIBUTE pub[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_ENCRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_VERIFY, ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_WRAP, ck_true),
+    };
+
+    CK_ATTRIBUTE priv[] = {
+        ADD_ATTR_BASE(CKA_DECRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_SIGN, ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_EXTRACTABLE, ck_true),
+        ADD_ATTR_BASE(CKA_UNWRAP, ck_true),
+    };
+
+    CK_MECHANISM mech = {
+        .mechanism = CKM_RSA_PKCS_KEY_PAIR_GEN,
+        .pParameter = NULL,
+        .ulParameterLen = 0
+    };
+
+    CK_OBJECT_HANDLE pubkey;
+    CK_OBJECT_HANDLE privkey;
+
+    user_login(session);
+
+    CK_RV rv = C_GenerateKeyPair (session,
+            &mech,
+            pub, ARRAY_LEN(pub),
+            priv, ARRAY_LEN(priv),
+            &pubkey, &privkey);
+    assert_int_equal(rv, CKR_ATTRIBUTE_VALUE_INVALID);
+}
+
+
 static void test_create_obj_rsa_public_key(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -1141,6 +1281,12 @@ int main() {
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_non_common_template_attrs,
             test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_rsa_keypairgen_wrap,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_rsa_keypairgen_unwrap,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_rsa_keypairgen_wrap_unwrap,
+                test_setup, test_teardown),
     };
 
     return cmocka_run_group_tests(tests, group_setup, group_teardown);
