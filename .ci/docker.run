@@ -64,8 +64,8 @@ fi
 # avoid error checking or cause make distcheck to fail. So run a
 # pure check with gcc before adding those flags.
 if [[ "$CC" != clang* ]]; then
-    ./configure --enable-esapi-session-manage-flags --disable-fapi
-    make distcheck
+    ./configure --enable-esapi-session-manage-flags --disable-fapi --enable-unit --enable-integration
+    make distcheck TESTS=
     make distclean
 fi
 
