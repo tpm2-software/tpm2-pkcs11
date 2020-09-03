@@ -757,8 +757,9 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
 
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
+        free(attrs);
         LOGE("%s", sqlite3_errmsg(global.db));
-        goto error;
+        return CKR_GENERAL_ERROR;
     }
 
     rc = start();
