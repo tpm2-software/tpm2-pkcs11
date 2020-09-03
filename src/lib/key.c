@@ -87,9 +87,6 @@ CK_RV check_common_attrs(
         { CKA_DERIVE,            handle_expect_false  },
         { CKA_SIGN_RECOVER,      handle_expect_false  },
         { CKA_VERIFY_RECOVER,    handle_expect_false  },
-        { CKA_UNWRAP,            handle_expect_false  },
-        { CKA_WRAP,              handle_expect_false  },
-        { CKA_WRAP_WITH_TRUSTED, handle_expect_false  },
         { CKA_TRUSTED,           handle_expect_false  },
         { CKA_ALWAYS_AUTHENTICATE, handle_always_auth },
     };
