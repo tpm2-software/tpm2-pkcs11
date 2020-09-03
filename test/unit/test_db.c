@@ -1749,6 +1749,197 @@ static void test_db_delete_object_sqlite3_step_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
+static void test_db_db_add_primary_emit_pobject_to_conf_string_fail(void **state) {
+    UNUSED(state);
+
+    unsigned pid = 0;
+    pobject pobj = { 0 };
+
+    will_return_data d[] = {
+        { .data = NULL       }, /* emit_pobject_to_conf_string */
+    };
+
+    will_return(emit_pobject_to_conf_string, &d[0]);
+
+    CK_RV rv = db_add_primary(&pobj, &pid);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_db_add_primary_sqlite3_prepare_v2_fail(void **state) {
+    UNUSED(state);
+
+    unsigned pid = 0;
+    pobject pobj = { 0 };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_pobject_to_conf_string */
+        { .rc = SQLITE_ERROR }, /* sqlite3_prepare_v2 */
+    };
+
+    will_return(emit_pobject_to_conf_string, &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,   &d[1]);
+
+    CK_RV rv = db_add_primary(&pobj, &pid);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_db_add_primary_sqlite3_bind_text_fail(void **state) {
+    UNUSED(state);
+
+    unsigned pid = 0;
+    pobject pobj = { 0 };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_pobject_to_conf_string */
+        { .rc = SQLITE_OK    }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK    }, /* sqlite_exec (BEGIN TRANSACTION) */
+        { .rc = SQLITE_ERROR }, /* sqlite3_bind_text */
+        { .rc = SQLITE_ERROR }, /* sqlite3_finalize (force warning) */
+        { .rc = SQLITE_OK    }, /* sqlite_exec (ROLLBACK) */
+    };
+
+    will_return(emit_pobject_to_conf_string, &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,   &d[1]);
+    will_return(__wrap_sqlite3_exec,         &d[2]);
+    will_return(__wrap_sqlite3_bind_text,    &d[3]);
+    will_return(__wrap_sqlite3_finalize,     &d[4]);
+    will_return(__wrap_sqlite3_exec,         &d[5]);
+
+    CK_RV rv = db_add_primary(&pobj, &pid);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_db_add_primary_sqlite3_bind_text_2_fail(void **state) {
+    UNUSED(state);
+
+    unsigned pid = 0;
+    pobject pobj = { 0 };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_pobject_to_conf_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* sqlite_exec (BEGIN TRANSACTION) */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                 }, /* sqlite_exec (ROLLBACK) */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_pobject_to_conf_string, &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,   &d[1]);
+    will_return(__wrap_sqlite3_exec,         &d[2]);
+    will_return(__wrap_sqlite3_bind_text,    &d[3]);
+    will_return(__wrap_sqlite3_bind_text,    &d[4]);
+    will_return(__wrap_sqlite3_finalize,     &d[5]);
+    will_return(__wrap_sqlite3_exec,         &d[6]);
+
+    CK_RV rv = db_add_primary(&pobj, &pid);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_db_add_primary_sqlite3_bind_text_3_fail(void **state) {
+    UNUSED(state);
+
+    unsigned pid = 0;
+    pobject pobj = { 0 };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_pobject_to_conf_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* sqlite_exec (BEGIN TRANSACTION) */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                 }, /* sqlite_exec (ROLLBACK) */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_pobject_to_conf_string, &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,   &d[1]);
+    will_return(__wrap_sqlite3_exec,         &d[2]);
+    will_return(__wrap_sqlite3_bind_text,    &d[3]);
+    will_return(__wrap_sqlite3_bind_text,    &d[4]);
+    will_return(__wrap_sqlite3_bind_text,    &d[5]);
+    will_return(__wrap_sqlite3_finalize,     &d[6]);
+    will_return(__wrap_sqlite3_exec,         &d[7]);
+
+    CK_RV rv = db_add_primary(&pobj, &pid);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_db_add_primary_sqlite3_step_fail(void **state) {
+    UNUSED(state);
+
+    unsigned pid = 0;
+    pobject pobj = { 0 };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_pobject_to_conf_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* sqlite_exec (BEGIN TRANSACTION) */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_step */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                 }, /* sqlite_exec (BEGIN TRANSACTION) */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_pobject_to_conf_string, &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,   &d[1]);
+    will_return(__wrap_sqlite3_exec,         &d[2]);
+    will_return(__wrap_sqlite3_bind_text,    &d[3]);
+    will_return(__wrap_sqlite3_bind_text,    &d[4]);
+    will_return(__wrap_sqlite3_bind_text,    &d[5]);
+    will_return(__wrap_sqlite3_step,         &d[6]);
+    will_return(__wrap_sqlite3_finalize,     &d[7]);
+    will_return(__wrap_sqlite3_exec,         &d[8]);
+    CK_RV rv = db_add_primary(&pobj, &pid);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_db_add_primary_sqlite3_last_insert_rowid_fail(void **state) {
+    UNUSED(state);
+
+    unsigned pid = 0;
+    pobject pobj = { 0 };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_pobject_to_conf_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* sqlite_exec (BEGIN TRANSACTION) */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_DONE               }, /* sqlite3_step */
+        { .u64 = 0                        }, /* sqlite3_last_insert_rowid */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                 }, /* sqlite_exec (ROLLBACK) */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_pobject_to_conf_string,      &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[1]);
+    will_return(__wrap_sqlite3_exec,              &d[2]);
+    will_return(__wrap_sqlite3_bind_text,         &d[3]);
+    will_return(__wrap_sqlite3_bind_text,         &d[4]);
+    will_return(__wrap_sqlite3_bind_text,         &d[5]);
+    will_return(__wrap_sqlite3_step,              &d[6]);
+    will_return(__wrap_sqlite3_last_insert_rowid, &d[7]);
+    will_return(__wrap_sqlite3_finalize,          &d[8]);
+    will_return(__wrap_sqlite3_exec,              &d[9]);
+
+    CK_RV rv = db_add_primary(&pobj, &pid);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
 int main(int argc, char* argv[]) {
     (void) argc;
     (void) argv;
@@ -1818,7 +2009,14 @@ int main(int argc, char* argv[]) {
         cmocka_unit_test(test_db_add_new_object_sqlite3_last_insert_rowid_fail),
         cmocka_unit_test(test_db_delete_object_sqlite3_prepare_v2_fail),
         cmocka_unit_test(test_db_delete_object_sqlite3_bind_int_fail),
-        cmocka_unit_test(test_db_delete_object_sqlite3_step_fail)
+        cmocka_unit_test(test_db_delete_object_sqlite3_step_fail),
+        cmocka_unit_test(test_db_db_add_primary_emit_pobject_to_conf_string_fail),
+        cmocka_unit_test(test_db_db_add_primary_sqlite3_prepare_v2_fail),
+        cmocka_unit_test(test_db_db_add_primary_sqlite3_bind_text_fail),
+        cmocka_unit_test(test_db_db_add_primary_sqlite3_bind_text_2_fail),
+        cmocka_unit_test(test_db_db_add_primary_sqlite3_bind_text_3_fail),
+        cmocka_unit_test(test_db_db_add_primary_sqlite3_step_fail),
+        cmocka_unit_test(test_db_db_add_primary_sqlite3_last_insert_rowid_fail)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
