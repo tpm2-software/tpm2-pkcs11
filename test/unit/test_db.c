@@ -94,6 +94,7 @@ int __wrap_sqlite3_column_int(sqlite3_stmt *stmt, int i) {
 }
 
 int __wrap_sqlite3_finalize(sqlite3_stmt *pStmt) {
+    UNUSED(pStmt);
 
 	will_return_data *d = mock_type(will_return_data *);
 	return d->rc;
@@ -1138,8 +1139,6 @@ void test_init_sealobjects_bad_col_name_fail(void **state) {
 void test_db_get_tokens_calloc_fail(void **state) {
     UNUSED(state);
 
-    sealobject sobj = { 0 };
-
     will_return_data d[] = {
         { .data = NULL        }, /* calloc */
     };
@@ -1156,8 +1155,6 @@ void test_db_get_tokens_calloc_fail(void **state) {
 void test_db_get_tokens_sqlite3_prepare_v2_fail(void **state) {
     UNUSED(state);
 
-    sealobject sobj = { 0 };
-
     will_return_data d[] = {
         { .call_real = true           }, /* calloc */
         { .rc = SQLITE_ERROR          }, /* sqlite3_prepare_v2 */
@@ -1172,8 +1169,6 @@ void test_db_get_tokens_sqlite3_prepare_v2_fail(void **state) {
 
 void test_db_get_tokens_token_overcount_fail(void **state) {
     UNUSED(state);
-
-    sealobject sobj = { 0 };
 
     will_return_data d[] = {
         { .call_real = true           }, /* calloc */
@@ -1199,8 +1194,6 @@ void test_db_get_tokens_token_overcount_fail(void **state) {
 
 void test_db_get_tokens_init_seal_objects_fail(void **state) {
     UNUSED(state);
-
-    sealobject sobj = { 0 };
 
     token t = {
         .config = {
@@ -1234,8 +1227,6 @@ void test_db_get_tokens_init_seal_objects_fail(void **state) {
 
 void test_db_get_tokens_init_tobjects_fail(void **state) {
     UNUSED(state);
-
-    sealobject sobj = { 0 };
 
     token t = {
         .config = {
@@ -1356,6 +1347,7 @@ void test_db_update_for_pinchange_sqlite3_bind_text_fail(void **state) {
 }
 
 void test_db_update_for_pinchange_sqlite3_bind_private_blob_fail(void **state) {
+    UNUSED(state);
 
     will_return_data d[] = {
         { .rc = SQLITE_OK                }, /* sqlite3_exec (BEGIN TRANSACTION)*/
