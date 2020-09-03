@@ -31,6 +31,7 @@ struct will_return_data {
 		void *data;
 		bool rcb;
 		CK_RV rv;
+		sqlite3_int64 u64;
 	};
 };
 
@@ -205,6 +206,13 @@ int __wrap_sqlite3_exec(
     }
 
     return d->rc;
+}
+
+sqlite3_int64 __wrap_sqlite3_last_insert_rowid(sqlite3 *db) {
+    UNUSED(db);
+
+    will_return_data *d = mock_type(will_return_data *);
+    return d->u64;
 }
 
 /* Override WEAK symbol */
@@ -1409,6 +1417,7 @@ void test_db_update_for_pinchange_sqlite3_bind_public_blob_fail(void **state) {
             twist_data,
             twist_data);
     twist_free(twist_data);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
 void test_db_update_for_pinchange_sqlite3_bind_int_fail(void **state) {
@@ -1446,6 +1455,7 @@ void test_db_update_for_pinchange_sqlite3_bind_int_fail(void **state) {
             twist_data,
             twist_data);
     twist_free(twist_data);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
 void test_db_update_for_pinchange_sqlite3_step_fail(void **state) {
@@ -1485,6 +1495,7 @@ void test_db_update_for_pinchange_sqlite3_step_fail(void **state) {
             twist_data,
             twist_data);
     twist_free(twist_data);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
 void test_db_update_for_pinchange_sqlite3_finalize_fail(void **state) {
@@ -1524,6 +1535,7 @@ void test_db_update_for_pinchange_sqlite3_finalize_fail(void **state) {
             twist_data,
             twist_data);
     twist_free(twist_data);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
 void test_db_update_for_pinchange_commit_fail(void **state) {
@@ -1563,6 +1575,7 @@ void test_db_update_for_pinchange_commit_fail(void **state) {
             twist_data,
             twist_data);
     twist_free(twist_data);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
 int main(int argc, char* argv[]) {
