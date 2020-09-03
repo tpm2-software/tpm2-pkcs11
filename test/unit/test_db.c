@@ -1686,6 +1686,69 @@ static void test_db_add_new_object_sqlite3_last_insert_rowid_fail(void **state) 
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
+static void test_db_delete_object_sqlite3_prepare_v2_fail(void **state) {
+    UNUSED(state);
+
+    tobject tobj = { 0 };
+
+    will_return_data d[] = {
+        { .rc = SQLITE_ERROR }, /* sqlite3_prepare_v2 */
+    };
+
+    will_return(__wrap_sqlite3_prepare_v2,  &d[0]);
+
+    CK_RV rv = db_delete_object(&tobj);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_delete_object_sqlite3_bind_int_fail(void **state) {
+    UNUSED(state);
+
+    tobject tobj = { 0 };
+
+    will_return_data d[] = {
+        { .rc = SQLITE_OK                        }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                        }, /* sqlite_exec (BEGIN TRANSACTION) */
+        { .rc = SQLITE_ERROR                     }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                        }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                        }, /* sqlite_exec (ROLLBACK) */
+    };
+
+    will_return(__wrap_sqlite3_prepare_v2,  &d[0]);
+    will_return(__wrap_sqlite3_exec,        &d[1]);
+    will_return(__wrap_sqlite3_bind_int,    &d[2]);
+    will_return(__wrap_sqlite3_finalize,    &d[3]);
+    will_return(__wrap_sqlite3_exec,        &d[4]);
+
+    CK_RV rv = db_delete_object(&tobj);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_delete_object_sqlite3_step_fail(void **state) {
+    UNUSED(state);
+
+    tobject tobj = { 0 };
+
+    will_return_data d[] = {
+        { .rc = SQLITE_OK                        }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                        }, /* sqlite_exec (BEGIN TRANSACTION) */
+        { .rc = SQLITE_OK                        }, /* sqlite3_bind_int */
+        { .rc = SQLITE_ERROR                     }, /* sqlite3_step */
+        { .rc = SQLITE_ERROR                     }, /* sqlite3_finalize (force warning) */
+        { .rc = SQLITE_OK                        }, /* sqlite_exec (ROLLBACK) */
+    };
+
+    will_return(__wrap_sqlite3_prepare_v2,  &d[0]);
+    will_return(__wrap_sqlite3_exec,        &d[1]);
+    will_return(__wrap_sqlite3_bind_int,    &d[2]);
+    will_return(__wrap_sqlite3_step,        &d[3]);
+    will_return(__wrap_sqlite3_finalize,    &d[4]);
+    will_return(__wrap_sqlite3_exec,        &d[5]);
+
+    CK_RV rv = db_delete_object(&tobj);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
 int main(int argc, char* argv[]) {
     (void) argc;
     (void) argv;
@@ -1753,6 +1816,9 @@ int main(int argc, char* argv[]) {
         cmocka_unit_test(test_db_add_new_object_sqlite3_prepare_v2_fail),
         cmocka_unit_test(test_db_add_new_object_sqlite_step_fail),
         cmocka_unit_test(test_db_add_new_object_sqlite3_last_insert_rowid_fail),
+        cmocka_unit_test(test_db_delete_object_sqlite3_prepare_v2_fail),
+        cmocka_unit_test(test_db_delete_object_sqlite3_bind_int_fail),
+        cmocka_unit_test(test_db_delete_object_sqlite3_step_fail)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
