@@ -45,9 +45,45 @@
 #define goto_error(x, l) if (x) { goto l; }
 #define gotobinderror(rc, msg) do { if (rc) { LOGE("cannot bind "msg); goto error; } } while(0)
 
+#define TRANSACTION_START \
+    do { \
+        bool _transaction_active = false; \
+        if (start() != SQLITE_OK) { \
+            goto error; \
+        } \
+	    \
+        _transaction_active = true;
+
+#define TRANSACTION_END(rx) \
+    error: \
+        if (_transaction_active) { \
+            if (rv == CKR_OK) { \
+                if(commit() != SQLITE_OK) { \
+                    rollback(); \
+                    rx = CKR_GENERAL_ERROR; \
+			    } \
+            } else { \
+                rollback(); \
+            } \
+        } \
+    } while (0);
+
 static struct {
     sqlite3 *db;
 } global;
+
+static inline void _sqlite3_finalize_warn(sqlite3 *db, sqlite3_stmt *stmt) {
+
+    int rc = sqlite3_finalize(stmt);
+    if (rc != SQLITE_OK) {
+        LOGW("sqlite3_finalize: %s", sqlite3_errmsg(db));
+    }
+}
+
+static inline void sqlite3_finalize_warn(sqlite3_stmt *stmt) {
+
+    _sqlite3_finalize_warn(global.db, stmt);
+}
 
 static int _get_blob(sqlite3_stmt *stmt, int i, bool can_be_null, twist *blob) {
 
@@ -762,10 +798,7 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
         return CKR_GENERAL_ERROR;
     }
 
-    rc = start();
-    if (rc != SQLITE_OK) {
-        goto error;
-    }
+    TRANSACTION_START;
 
     rc = sqlite3_bind_int(stmt, 1, tok->id);
     gotobinderror(rc, "tokid");
@@ -792,28 +825,15 @@ CK_RV db_add_new_object(token *tok, tobject *tobj) {
 
     tobject_set_id(tobj, (unsigned)id);
 
-    rc = sqlite3_finalize(stmt);
-    gotobinderror(rc, "finalize");
-
-    rc = commit();
-    gotobinderror(rc, "commit");
-
     rv = CKR_OK;
 
-out:
+    TRANSACTION_END(rv);
+
+    sqlite3_finalize_warn(stmt);
+
     free(attrs);
+
     return rv;
-
-error:
-    rc = sqlite3_finalize(stmt);
-    if (rc != SQLITE_OK) {
-        LOGW("Could not finalize stmt: %d", rc);
-    }
-
-    rollback();
-
-    rv = CKR_GENERAL_ERROR;
-    goto out;
 }
 
 CK_RV db_delete_object(tobject *tobj) {
