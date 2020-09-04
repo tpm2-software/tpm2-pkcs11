@@ -1096,13 +1096,11 @@ CK_RV db_add_token(token *tok) {
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
         LOGE("%s", sqlite3_errmsg(global.db));
-        goto error;
+        free(config);
+        return CKR_GENERAL_ERROR;
     }
 
-    rc = start();
-    if (rc != SQLITE_OK) {
-        goto error;
-    }
+    TRANSACTION_START;
 
     rc = sqlite3_bind_int(stmt, 1, tok->pid);
     gotobinderror(rc, "pid");
@@ -1166,30 +1164,16 @@ CK_RV db_add_token(token *tok) {
         goto error;
     }
 
-    rc = sqlite3_finalize(stmt);
-    gotobinderror(rc, "finalize");
-
-    rc = commit();
-    gotobinderror(rc, "commit");
-
     rv = CKR_OK;
 
-out:
+    TRANSACTION_END(rv);
+
+    sqlite3_finalize_warn(stmt);
+
     free(config);
+
     return rv;
-
-error:
-    rc = sqlite3_finalize(stmt);
-    if (rc != SQLITE_OK) {
-        LOGW("Could not finalize stmt: %s", sqlite3_errmsg(global.db));
-    }
-
-    rollback();
-
-    rv = CKR_GENERAL_ERROR;
-    goto out;
 }
-
 
 CK_RV db_get_first_pid(unsigned *id) {
     assert(id);
