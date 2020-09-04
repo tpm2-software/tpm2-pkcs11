@@ -887,24 +887,22 @@ CK_RV db_add_primary(pobject *pobj, unsigned *pid) {
             "?,?,?"
           ");";
 
-    int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        LOGE("%s", sqlite3_errmsg(global.db));
-        goto error;
+    yaml_conf = emit_pobject_to_conf_string(&pobj->config);
+    if (!yaml_conf) {
+        return CKR_GENERAL_ERROR;
     }
 
-    rc = start();
+    int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
-        goto error;
+        free(yaml_conf);
+        LOGE("%s", sqlite3_errmsg(global.db));
+        return CKR_GENERAL_ERROR;
     }
+
+    TRANSACTION_START;
 
     rc = sqlite3_bind_text(stmt, 1, "o", -1, SQLITE_STATIC);
     gotobinderror(rc, "hierarchy");
-
-    yaml_conf = emit_pobject_to_conf_string(&pobj->config);
-    if (!yaml_conf) {
-        goto error;
-    }
 
     rc = sqlite3_bind_text(stmt, 2, yaml_conf, -1, SQLITE_STATIC);
     gotobinderror(rc, "config");
@@ -931,28 +929,14 @@ CK_RV db_add_primary(pobject *pobj, unsigned *pid) {
 
     *pid = (unsigned)id;
 
-    rc = sqlite3_finalize(stmt);
-    gotobinderror(rc, "finalize");
-
-    rc = commit();
-    gotobinderror(rc, "commit");
-
     rv = CKR_OK;
 
-out:
+    TRANSACTION_END(rv);
+    sqlite3_finalize_warn(stmt);
+
     free(yaml_conf);
+
     return rv;
-
-error:
-    rc = sqlite3_finalize(stmt);
-    if (rc != SQLITE_OK) {
-        LOGW("Could not finalize stmt: %d", rc);
-    }
-
-    rollback();
-
-    rv = CKR_GENERAL_ERROR;
-    goto out;
 }
 
 CK_RV db_update_token_config(token *tok) {
