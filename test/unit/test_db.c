@@ -344,6 +344,12 @@ int init_tobjects(token *tok) {
     return d->rc;
 }
 
+/* weak override */
+char *emit_attributes_to_string(attr_list *attrs) {
+    UNUSED(attrs);
+    will_return_data *d = mock_type(will_return_data *);
+    return d->data;
+}
 
 static void test_db_get_blob_col_bytes_0(void **state) {
     (void) state;
@@ -1578,6 +1584,108 @@ void test_db_update_for_pinchange_commit_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
+static void test_db_add_new_object_emit_attributes_to_string_fail(void **state) {
+    UNUSED(state);
+
+    token t = { .id = 76 };
+    tobject tobj = { 0 };
+
+    will_return_data d[] = {
+        { .data = NULL                }, /* emit_attributes_to_string */
+    };
+
+    will_return(emit_attributes_to_string,        &d[0]);
+
+    CK_RV rv = db_add_new_object(&t, &tobj);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_new_object_sqlite3_prepare_v2_fail(void **state) {
+    UNUSED(state);
+
+    token t = { .id = 76 };
+    tobject tobj = { 0 };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("attrs in yaml") }, /* emit_attributes_to_string */
+        { .rc = SQLITE_ERROR                     }, /* sqlite3_prepare_v2 */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_attributes_to_string,  &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+
+    CK_RV rv = db_add_new_object(&t, &tobj);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_new_object_sqlite_step_fail(void **state) {
+    UNUSED(state);
+
+    token t = { .id = 76 };
+    tobject tobj = { 0 };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("attrs in yaml") }, /* emit_attributes_to_string */
+        { .rc = SQLITE_OK                        }, /* sqlite_exec (BEGIN TRANSACTION) */
+        { .rc = SQLITE_OK                        }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                        }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                        }, /* sqlite3_bind_text */
+        { .rc = SQLITE_ERROR                     }, /* sqlite3_step */
+        { .rc = SQLITE_OK                        }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                        }, /* sqlite_exec (ROLLBACK) */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_attributes_to_string,  &d[0]);
+    will_return(__wrap_sqlite3_exec,        &d[1]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[2]);
+    will_return(__wrap_sqlite3_bind_int,    &d[3]);
+    will_return(__wrap_sqlite3_bind_text,   &d[4]);
+    will_return(__wrap_sqlite3_step,        &d[5]);
+    will_return(__wrap_sqlite3_finalize,    &d[6]);
+    will_return(__wrap_sqlite3_exec,        &d[7]);
+
+    CK_RV rv = db_add_new_object(&t, &tobj);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_new_object_sqlite3_last_insert_rowid_fail(void **state) {
+    UNUSED(state);
+
+    token t = { .id = 76 };
+    tobject tobj = { 0 };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("attrs in yaml") }, /* emit_attributes_to_string */
+        { .rc = SQLITE_OK                        }, /* sqlite_exec (BEGIN TRANSACTION) */
+        { .rc = SQLITE_OK                        }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                        }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                        }, /* sqlite3_bind_text */
+        { .rc = SQLITE_DONE                      }, /* sqlite3_step */
+        { .u64 = 0                               }, /* sqlite3_last_insert_rowid */
+        { .rc = SQLITE_ERROR                     }, /* sqlite3_finalize (force warning) */
+        { .rc = SQLITE_OK                        }, /* sqlite_exec (ROLLBACK) */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_attributes_to_string,        &d[0]);
+    will_return(__wrap_sqlite3_exec,              &d[1]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[2]);
+    will_return(__wrap_sqlite3_bind_int,          &d[3]);
+    will_return(__wrap_sqlite3_bind_text,         &d[4]);
+    will_return(__wrap_sqlite3_step,              &d[5]);
+    will_return(__wrap_sqlite3_last_insert_rowid, &d[6]);
+    will_return(__wrap_sqlite3_finalize,          &d[7]);
+    will_return(__wrap_sqlite3_exec,              &d[8]);
+
+    CK_RV rv = db_add_new_object(&t, &tobj);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
 int main(int argc, char* argv[]) {
     (void) argc;
     (void) argv;
@@ -1640,7 +1748,11 @@ int main(int argc, char* argv[]) {
         cmocka_unit_test(test_db_update_for_pinchange_sqlite3_bind_int_fail),
         cmocka_unit_test(test_db_update_for_pinchange_sqlite3_step_fail),
         cmocka_unit_test(test_db_update_for_pinchange_sqlite3_finalize_fail),
-        cmocka_unit_test(test_db_update_for_pinchange_commit_fail)
+        cmocka_unit_test(test_db_update_for_pinchange_commit_fail),
+        cmocka_unit_test(test_db_add_new_object_emit_attributes_to_string_fail),
+        cmocka_unit_test(test_db_add_new_object_sqlite3_prepare_v2_fail),
+        cmocka_unit_test(test_db_add_new_object_sqlite_step_fail),
+        cmocka_unit_test(test_db_add_new_object_sqlite3_last_insert_rowid_fail),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
