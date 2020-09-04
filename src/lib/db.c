@@ -673,12 +673,9 @@ CK_RV db_update_for_pinchange(
         twist newprivblob,
         twist newpubblob) {
 
-    sqlite3_stmt *stmt = NULL;
+    CK_RV rv = CKR_GENERAL_ERROR;
 
-    int rc = start();
-    if (rc != SQLITE_OK) {
-        return CKR_GENERAL_ERROR;
-    }
+    sqlite3_stmt *stmt = NULL;
 
     char *sql = NULL;
     /* so update statements */
@@ -714,12 +711,14 @@ CK_RV db_update_for_pinchange(
     /*
      * Prepare statements
      */
-    rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
+    int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
     if (rc) {
         LOGE("Could not prepare statement: \"%s\" error: \"%s\"",
         sql, sqlite3_errmsg(global.db));
-        goto error;
+        return CKR_GENERAL_ERROR;
     }
+
+    TRANSACTION_START;
 
     /* bind values */
     /* sealobjects */
@@ -748,28 +747,13 @@ CK_RV db_update_for_pinchange(
         goto error;
     }
 
-    rc = sqlite3_finalize(stmt);
-    if (rc != SQLITE_OK) {
-        LOGE("Could not finalize stmt");
-        goto error;
-    }
+    rv = CKR_OK;
 
-    rc = commit();
-    if (rc != SQLITE_OK) {
-        goto error;
-    }
+    TRANSACTION_END(rv);
 
-    return CKR_OK;
+    sqlite3_finalize_warn(stmt);
 
-error:
-
-    rc = sqlite3_finalize(stmt);
-    if (rc != SQLITE_OK) {
-        LOGW("Could not finalize stmt");
-    }
-
-    rollback();
-    return CKR_GENERAL_ERROR;
+    return rv;
 }
 
 CK_RV db_add_new_object(token *tok, tobject *tobj) {
