@@ -22,6 +22,9 @@
 /* Enabled if FAPI >= 3.0 is found */
 #undef HAVE_FAPI
 
+/* Define to 1 if the system has the `weak' function attribute */
+#undef HAVE_FUNC_ATTRIBUTE_WEAK
+
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 
