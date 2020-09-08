@@ -90,3 +90,7 @@ fuzz-*.log
 # Fuzz Executables
 test/fuzz/*.fuzz
 test/fuzz/*.fuzz32
+
+# Ignore config.h files
+config.h
+config.h.in
