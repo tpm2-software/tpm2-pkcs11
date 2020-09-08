@@ -1028,7 +1028,7 @@ static void test_init_pobject_from_stmt_sqlite_step_fail(void **state) {
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
-void test_init_pobject_sqlite_prepare_v2_fail(void **state) {
+static void test_init_pobject_sqlite_prepare_v2_fail(void **state) {
     UNUSED(state);
 
     will_return_data d[] = {
@@ -1041,7 +1041,7 @@ void test_init_pobject_sqlite_prepare_v2_fail(void **state) {
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
-void test_init_pobject_sqlite_bind_int_fail(void **state) {
+static void test_init_pobject_sqlite_bind_int_fail(void **state) {
     UNUSED(state);
 
     will_return_data d[] = {
@@ -1058,7 +1058,7 @@ void test_init_pobject_sqlite_bind_int_fail(void **state) {
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
-void test_init_pobject_sqlite_step_fail(void **state) {
+static void test_init_pobject_sqlite_step_fail(void **state) {
     UNUSED(state);
 
     will_return_data d[] = {
@@ -1077,7 +1077,7 @@ void test_init_pobject_sqlite_step_fail(void **state) {
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
-void test_init_sealobjects_sqlite3_prepare_v2_fail(void **state) {
+static void test_init_sealobjects_sqlite3_prepare_v2_fail(void **state) {
     UNUSED(state);
 
     sealobject sobj = { 0 };
@@ -1092,7 +1092,7 @@ void test_init_sealobjects_sqlite3_prepare_v2_fail(void **state) {
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
-void test_init_sealobjects_sqlite3_bind_int_fail(void **state) {
+static void test_init_sealobjects_sqlite3_bind_int_fail(void **state) {
     UNUSED(state);
 
     sealobject sobj = { 0 };
@@ -1111,7 +1111,7 @@ void test_init_sealobjects_sqlite3_bind_int_fail(void **state) {
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
-void test_init_sealobjects_sqlite3_step_fail(void **state) {
+static void test_init_sealobjects_sqlite3_step_fail(void **state) {
     UNUSED(state);
 
     sealobject sobj = { 0 };
@@ -1132,7 +1132,7 @@ void test_init_sealobjects_sqlite3_step_fail(void **state) {
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
-void test_init_sealobjects_bad_col_name_fail(void **state) {
+static void test_init_sealobjects_bad_col_name_fail(void **state) {
     UNUSED(state);
 
     sealobject sobj = { 0 };
@@ -1157,7 +1157,7 @@ void test_init_sealobjects_bad_col_name_fail(void **state) {
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
-void test_db_get_tokens_calloc_fail(void **state) {
+static void test_db_get_tokens_calloc_fail(void **state) {
     UNUSED(state);
 
     will_return_data d[] = {
@@ -1173,7 +1173,7 @@ void test_db_get_tokens_calloc_fail(void **state) {
     assert_int_equal(rv, CKR_HOST_MEMORY);
 }
 
-void test_db_get_tokens_sqlite3_prepare_v2_fail(void **state) {
+static void test_db_get_tokens_sqlite3_prepare_v2_fail(void **state) {
     UNUSED(state);
 
     will_return_data d[] = {
@@ -1188,7 +1188,7 @@ void test_db_get_tokens_sqlite3_prepare_v2_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
-void test_db_get_tokens_token_overcount_fail(void **state) {
+static void test_db_get_tokens_token_overcount_fail(void **state) {
     UNUSED(state);
 
     will_return_data d[] = {
@@ -1213,7 +1213,7 @@ void test_db_get_tokens_token_overcount_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
-void test_db_get_tokens_init_seal_objects_fail(void **state) {
+static void test_db_get_tokens_init_seal_objects_fail(void **state) {
     UNUSED(state);
 
     token t = {
@@ -1335,7 +1335,7 @@ static void test_db_get_tokens_init_tobjects_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
-void test_db_get_tokens_config_fail(void **state) {
+static void test_db_get_tokens_config_fail(void **state) {
     UNUSED(state);
 
     will_return_data d[] = {
@@ -1362,7 +1362,7 @@ void test_db_get_tokens_config_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
-void test_db_get_tokens_parse_token_config_from_string_fail(void **state) {
+static void test_db_get_tokens_parse_token_config_from_string_fail(void **state) {
     UNUSED(state);
 
     const char *yaml_data = "bad yaml";
@@ -1391,7 +1391,7 @@ void test_db_get_tokens_parse_token_config_from_string_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
-void test_db_get_tokens_parse_token_unknown_key_fail(void **state) {
+static void test_db_get_tokens_parse_token_unknown_key_fail(void **state) {
     UNUSED(state);
 
     will_return_data d[] = {
@@ -1414,7 +1414,7 @@ void test_db_get_tokens_parse_token_unknown_key_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
-void test_db_update_for_pinchange_sqlite3_prepare_v2_fail(void **state) {
+static void test_db_update_for_pinchange_sqlite3_prepare_v2_fail(void **state) {
     UNUSED(state);
 
     will_return_data d[] = {
@@ -1432,7 +1432,7 @@ void test_db_update_for_pinchange_sqlite3_prepare_v2_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
-void test_db_update_for_pinchange_start_fail(void **state) {
+static void test_db_update_for_pinchange_start_fail(void **state) {
     UNUSED(state);
 
     will_return_data d[] = {
@@ -1454,7 +1454,7 @@ void test_db_update_for_pinchange_start_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
-void test_db_update_for_pinchange_sqlite3_bind_text_fail(void **state) {
+static void test_db_update_for_pinchange_sqlite3_bind_text_fail(void **state) {
     UNUSED(state);
 
     will_return_data d[] = {
@@ -1480,7 +1480,7 @@ void test_db_update_for_pinchange_sqlite3_bind_text_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
-void test_db_update_for_pinchange_sqlite3_bind_private_blob_fail(void **state) {
+static void test_db_update_for_pinchange_sqlite3_bind_private_blob_fail(void **state) {
     UNUSED(state);
 
     will_return_data d[] = {
@@ -1512,7 +1512,7 @@ void test_db_update_for_pinchange_sqlite3_bind_private_blob_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
-void test_db_update_for_pinchange_sqlite3_bind_public_blob_fail(void **state) {
+static void test_db_update_for_pinchange_sqlite3_bind_public_blob_fail(void **state) {
     UNUSED(state);
 
     will_return_data d[] = {
@@ -1546,7 +1546,7 @@ void test_db_update_for_pinchange_sqlite3_bind_public_blob_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
-void test_db_update_for_pinchange_sqlite3_bind_int_fail(void **state) {
+static void test_db_update_for_pinchange_sqlite3_bind_int_fail(void **state) {
     UNUSED(state);
 
     token t = { .id = 76 };
@@ -1584,7 +1584,7 @@ void test_db_update_for_pinchange_sqlite3_bind_int_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
-void test_db_update_for_pinchange_sqlite3_step_fail(void **state) {
+static void test_db_update_for_pinchange_sqlite3_step_fail(void **state) {
     UNUSED(state);
 
     token t = { .id = 76 };
@@ -1624,7 +1624,7 @@ void test_db_update_for_pinchange_sqlite3_step_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
-void test_db_update_for_pinchange_sqlite3_finalize_fail(void **state) {
+static void test_db_update_for_pinchange_sqlite3_finalize_fail(void **state) {
     UNUSED(state);
 
     token t = { .id = 76 };
@@ -1665,7 +1665,7 @@ void test_db_update_for_pinchange_sqlite3_finalize_fail(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
-void test_db_update_for_pinchange_commit_fail(void **state) {
+static void test_db_update_for_pinchange_commit_fail(void **state) {
     UNUSED(state);
 
     token t = { .id = 76 };
