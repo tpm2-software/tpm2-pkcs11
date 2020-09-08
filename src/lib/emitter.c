@@ -240,7 +240,7 @@ doc_delete:
 
 }
 
-char *emit_config_to_string(token *t) {
+WEAK char *emit_config_to_string(token *t) {
 
     yaml_document_t doc = { 0 };
 

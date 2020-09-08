@@ -351,6 +351,13 @@ char *emit_attributes_to_string(attr_list *attrs) {
     return d->data;
 }
 
+/* weak override */
+char *emit_config_to_string(token *tok) {
+    UNUSED(tok);
+    will_return_data *d = mock_type(will_return_data *);
+    return d->data;
+}
+
 static void test_db_get_blob_col_bytes_0(void **state) {
     (void) state;
 
@@ -2054,6 +2061,90 @@ static void test_db_db_add_primary_sqlite3_last_insert_rowid_fail(void **state) 
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
+static void test_db_update_token_config_emit_config_to_string_fail(void **state) {
+    UNUSED(state);
+
+    token tok = { 0 };
+
+    will_return_data d[] = {
+        { .data = NULL }, /* emit_config_to_string */
+    };
+
+    will_return(emit_config_to_string,      &d[0]);
+
+    CK_RV rv = db_update_token_config(&tok);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_update_token_sqlite3_prepare_v2_fail(void **state) {
+    UNUSED(state);
+
+    token tok = { 0 };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,      &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_finalize,    &d[2]);
+
+    CK_RV rv = db_update_token_config(&tok);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_update_token_sqlite3_bind_text_fail(void **state) {
+    UNUSED(state);
+
+    token tok = { 0 };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,      &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_bind_text,   &d[2]);
+    will_return(__wrap_sqlite3_finalize,    &d[3]);
+
+    CK_RV rv = db_update_token_config(&tok);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_update_token_sqlite3_bind_int_fail(void **state) {
+    UNUSED(state);
+
+    token tok = { 0 };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,      &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_bind_text,   &d[2]);
+    will_return(__wrap_sqlite3_bind_int,    &d[3]);
+    will_return(__wrap_sqlite3_finalize,    &d[4]);
+
+    CK_RV rv = db_update_token_config(&tok);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
 int main(int argc, char* argv[]) {
     (void) argc;
     (void) argv;
@@ -2134,7 +2225,11 @@ int main(int argc, char* argv[]) {
         cmocka_unit_test(test_db_db_add_primary_sqlite3_bind_text_2_fail),
         cmocka_unit_test(test_db_db_add_primary_sqlite3_bind_text_3_fail),
         cmocka_unit_test(test_db_db_add_primary_sqlite3_step_fail),
-        cmocka_unit_test(test_db_db_add_primary_sqlite3_last_insert_rowid_fail)
+        cmocka_unit_test(test_db_db_add_primary_sqlite3_last_insert_rowid_fail),
+        cmocka_unit_test(test_db_update_token_config_emit_config_to_string_fail),
+        cmocka_unit_test(test_db_update_token_sqlite3_prepare_v2_fail),
+        cmocka_unit_test(test_db_update_token_sqlite3_bind_text_fail),
+        cmocka_unit_test(test_db_update_token_sqlite3_bind_int_fail),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
