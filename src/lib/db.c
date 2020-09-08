@@ -972,8 +972,7 @@ CK_RV db_update_tobject_attrs(unsigned id, attr_list *attrs) {
         LOGE("Could not emit tobject attributes");
         return CKR_GENERAL_ERROR;
     }
-    /* BILL TODO AND DROP this */
-LOGE("XXXXX %s\n\n", attr_str);
+
     const char *sql =
           "UPDATE tobjects SET"
             " attrs=?"      // index: 1 type: TEXT (JSON)
