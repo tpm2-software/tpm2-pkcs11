@@ -602,7 +602,7 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
             } else if (!strcmp(name, "config")) {
                 int bytes = sqlite3_column_bytes(stmt, i);
                 const unsigned char *config = sqlite3_column_text(stmt, i);
-                if (!config || !i) {
+                if (!config || !bytes) {
                     LOGE("Expected token config to contain config data");
                     goto error;
                 }
