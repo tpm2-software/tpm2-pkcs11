@@ -117,6 +117,7 @@ AM_TESTS_ENVIRONMENT = \
     TPM2_PKCS11_MODULE=$(abs_builddir)/src/.libs/libtpm2_pkcs11.so \
     TEST_JAVA_ROOT=$(JAVAROOT) \
     PACKAGE_URL=$(PACKAGE_URL) \
+    CC=$(CC) \
     dbus-run-session
 
 TESTS_LDADD = $(noinst_LTLIBRARIES) $(lib_LTLIBRARIES) $(p11lib_LTLIBRARIES) $(AM_LDFLAGS) $(CMOCKA_LIBS) $(CRYPTO_LIBS)
