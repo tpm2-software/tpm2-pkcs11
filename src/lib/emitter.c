@@ -47,7 +47,7 @@ static int output_handler(void *data, unsigned char *buffer, size_t size) {
     return 1;
 }
 
-char *emit_attributes_to_string(attr_list *attrs) {
+WEAK char *emit_attributes_to_string(attr_list *attrs) {
 
     yaml_document_t doc = { 0 };
 
@@ -366,7 +366,7 @@ doc_delete:
 
 }
 
-char *emit_pobject_to_conf_string(pobject_config *config) {
+WEAK char *emit_pobject_to_conf_string(pobject_config *config) {
 
     yaml_document_t doc = { 0 };
 
