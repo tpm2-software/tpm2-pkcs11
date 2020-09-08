@@ -188,6 +188,9 @@ AC_DEFUN([unit_test_checks],[
 
   AC_DEFINE([UNIT_TESTING], [1],
     [Define when unit testing. libtwist uses this to define a debug interface for alloc failures])
+
+  AX_GCC_FUNC_ATTRIBUTE([weak])
+
 ]) # end function unit_test_checks
 
 AS_IF([test "x$enable_unit" = "xyes"],
