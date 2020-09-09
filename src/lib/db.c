@@ -81,8 +81,9 @@ static inline void _sqlite3_finalize_warn(sqlite3 *db, sqlite3_stmt *stmt) {
 }
 
 static inline void sqlite3_finalize_warn(sqlite3_stmt *stmt) {
-
-    _sqlite3_finalize_warn(global.db, stmt);
+    if (stmt) {
+        _sqlite3_finalize_warn(global.db, stmt);
+    }
 }
 
 static int _get_blob(sqlite3_stmt *stmt, int i, bool can_be_null, twist *blob) {
