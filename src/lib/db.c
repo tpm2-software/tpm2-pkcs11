@@ -995,29 +995,12 @@ CK_RV db_update_tobject_attrs(unsigned id, attr_list *attrs) {
         goto error;
     }
 
-    rc = sqlite3_finalize(stmt);
-    if (rc) {
-        LOGE("finalize");
-        /* finalizing again probably won't fix this */
-        goto out;
-    }
-
     rv = CKR_OK;
 
-out:
+error:
+    sqlite3_finalize_warn(stmt);
     free(attr_str);
     return rv;
-
-error:
-    rc = sqlite3_finalize(stmt);
-    if (rc != SQLITE_OK) {
-        LOGW("Could not finalize stmt: %d", rc);
-    }
-
-    rollback();
-
-    rv = CKR_GENERAL_ERROR;
-    goto out;
 }
 
 CK_RV db_add_token(token *tok) {
