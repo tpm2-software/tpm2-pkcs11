@@ -2242,6 +2242,608 @@ static void test_db_update_tobject_attrs_sqlite3_step_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
+static void test_db_add_token_emit_config_to_string_fail(void **state) {
+    UNUSED(state);
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        }
+    };
+
+    will_return_data d[] = {
+        { .data = NULL },                    /* emit_config_to_string */
+    };
+
+    will_return(emit_config_to_string,  &d[0]);
+
+    CK_RV rv = db_add_token(&t);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_token_sqlite3_prepare_v2_fail(void **state) {
+    UNUSED(state);
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        }
+    };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_prepare_v2 */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,      &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+
+    CK_RV rv = db_add_token(&t);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_token_sqlite3_exec_fail(void **state) {
+    UNUSED(state);
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        }
+    };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_ERROR              }, /* TRANSACTION_START */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,      &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_exec,        &d[2]);
+    will_return(__wrap_sqlite3_finalize,    &d[3]);
+
+    CK_RV rv = db_add_token(&t);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_token_sqlite3_bind_int_fail(void **state) {
+    UNUSED(state);
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        }
+    };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_START */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_END */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,      &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_exec,        &d[2]);
+    will_return(__wrap_sqlite3_bind_int,    &d[3]);
+    will_return(__wrap_sqlite3_exec,        &d[4]);
+    will_return(__wrap_sqlite3_finalize,    &d[5]);
+
+    CK_RV rv = db_add_token(&t);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_token_sqlite3_bind_text_1_fail(void **state) {
+    UNUSED(state);
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        }
+    };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_START */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_END */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,      &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_exec,        &d[2]);
+    will_return(__wrap_sqlite3_bind_int,    &d[3]);
+    will_return(__wrap_sqlite3_bind_text,   &d[4]);
+    will_return(__wrap_sqlite3_exec,        &d[5]);
+    will_return(__wrap_sqlite3_finalize,    &d[6]);
+
+    CK_RV rv = db_add_token(&t);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_token_sqlite3_bind_text_2_fail(void **state) {
+    UNUSED(state);
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        }
+    };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_START */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_END */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,      &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_exec,        &d[2]);
+    will_return(__wrap_sqlite3_bind_int,    &d[3]);
+    will_return(__wrap_sqlite3_bind_text,   &d[4]);
+    will_return(__wrap_sqlite3_bind_text,   &d[5]);
+    will_return(__wrap_sqlite3_exec,        &d[6]);
+    will_return(__wrap_sqlite3_finalize,    &d[7]);
+
+    CK_RV rv = db_add_token(&t);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_token_sqlite3_step_fail(void **state) {
+    UNUSED(state);
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        }
+    };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_START */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_step */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_END */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,      &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_exec,        &d[2]);
+    will_return(__wrap_sqlite3_bind_int,    &d[3]);
+    will_return(__wrap_sqlite3_bind_text,   &d[4]);
+    will_return(__wrap_sqlite3_bind_text,   &d[5]);
+    will_return(__wrap_sqlite3_step,        &d[6]);
+    will_return(__wrap_sqlite3_exec,        &d[7]);
+    will_return(__wrap_sqlite3_finalize,    &d[8]);
+
+    CK_RV rv = db_add_token(&t);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_token_sqlite3_last_insert_rowid_fail(void **state) {
+    UNUSED(state);
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        }
+    };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_START */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_DONE               }, /* sqlite3_step */
+        { .rc = 0                         }, /* sqlite3_last_insert_rowid (zero is bad) */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_END */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,            &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[1]);
+    will_return(__wrap_sqlite3_exec,              &d[2]);
+    will_return(__wrap_sqlite3_bind_int,          &d[3]);
+    will_return(__wrap_sqlite3_bind_text,         &d[4]);
+    will_return(__wrap_sqlite3_bind_text,         &d[5]);
+    will_return(__wrap_sqlite3_step,              &d[6]);
+    will_return(__wrap_sqlite3_last_insert_rowid, &d[7]);
+    will_return(__wrap_sqlite3_exec,              &d[8]);
+    will_return(__wrap_sqlite3_finalize,          &d[9]);
+
+    CK_RV rv = db_add_token(&t);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_token_sqlite3_finalize_fail(void **state) {
+    UNUSED(state);
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        }
+    };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_START */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_DONE               }, /* sqlite3_step */
+        { .rc = 42                        }, /* sqlite3_last_insert_rowid*/
+        { .rc = SQLITE_ERROR              }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_END */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,            &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[1]);
+    will_return(__wrap_sqlite3_exec,              &d[2]);
+    will_return(__wrap_sqlite3_bind_int,          &d[3]);
+    will_return(__wrap_sqlite3_bind_text,         &d[4]);
+    will_return(__wrap_sqlite3_bind_text,         &d[5]);
+    will_return(__wrap_sqlite3_step,              &d[6]);
+    will_return(__wrap_sqlite3_last_insert_rowid, &d[7]);
+    will_return(__wrap_sqlite3_finalize,          &d[8]);
+    will_return(__wrap_sqlite3_exec,              &d[9]);
+    will_return(__wrap_sqlite3_finalize,          &d[10]);
+
+    CK_RV rv = db_add_token(&t);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_token_sqlite3_prepare_v2_2_fail(void **state) {
+    UNUSED(state);
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        }
+    };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_START */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_DONE               }, /* sqlite3_step */
+        { .rc = 42                        }, /* sqlite3_last_insert_rowid*/
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_END */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,            &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[1]);
+    will_return(__wrap_sqlite3_exec,              &d[2]);
+    will_return(__wrap_sqlite3_bind_int,          &d[3]);
+    will_return(__wrap_sqlite3_bind_text,         &d[4]);
+    will_return(__wrap_sqlite3_bind_text,         &d[5]);
+    will_return(__wrap_sqlite3_step,              &d[6]);
+    will_return(__wrap_sqlite3_last_insert_rowid, &d[7]);
+    will_return(__wrap_sqlite3_finalize,          &d[8]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[9]);
+    will_return(__wrap_sqlite3_exec,              &d[10]);
+
+    CK_RV rv = db_add_token(&t);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_token_sqlite3_bind_int_2_fail(void **state) {
+    UNUSED(state);
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        }
+    };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_START */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_DONE               }, /* sqlite3_step */
+        { .rc = 42                        }, /* sqlite3_last_insert_rowid*/
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_END */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,            &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[1]);
+    will_return(__wrap_sqlite3_exec,              &d[2]);
+    will_return(__wrap_sqlite3_bind_int,          &d[3]);
+    will_return(__wrap_sqlite3_bind_text,         &d[4]);
+    will_return(__wrap_sqlite3_bind_text,         &d[5]);
+    will_return(__wrap_sqlite3_step,              &d[6]);
+    will_return(__wrap_sqlite3_last_insert_rowid, &d[7]);
+    will_return(__wrap_sqlite3_finalize,          &d[8]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[9]);
+    will_return(__wrap_sqlite3_bind_int,          &d[10]);
+    will_return(__wrap_sqlite3_exec,              &d[11]);
+    will_return(__wrap_sqlite3_finalize,          &d[12]);
+
+    CK_RV rv = db_add_token(&t);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_token_sqlite3_bind_text_3_fail(void **state) {
+    UNUSED(state);
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        }
+    };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_START */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_DONE               }, /* sqlite3_step */
+        { .rc = 42                        }, /* sqlite3_last_insert_rowid*/
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_END */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,            &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[1]);
+    will_return(__wrap_sqlite3_exec,              &d[2]);
+    will_return(__wrap_sqlite3_bind_int,          &d[3]);
+    will_return(__wrap_sqlite3_bind_text,         &d[4]);
+    will_return(__wrap_sqlite3_bind_text,         &d[5]);
+    will_return(__wrap_sqlite3_step,              &d[6]);
+    will_return(__wrap_sqlite3_last_insert_rowid, &d[7]);
+    will_return(__wrap_sqlite3_finalize,          &d[8]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[9]);
+    will_return(__wrap_sqlite3_bind_int,          &d[10]);
+    will_return(__wrap_sqlite3_bind_text,         &d[11]);
+    will_return(__wrap_sqlite3_exec,              &d[12]);
+    will_return(__wrap_sqlite3_finalize,          &d[13]);
+
+    CK_RV rv = db_add_token(&t);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_token_sqlite3_bind_blob_1_fail(void **state) {
+    UNUSED(state);
+
+    twist data = twist_new("twist data");
+    assert_non_null(data);
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        },
+        .esysdb = {
+            .sealobject = {
+                .sopriv = data,
+                .sopub = data
+            },
+        },
+    };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_START */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_DONE               }, /* sqlite3_step */
+        { .rc = 42                        }, /* sqlite3_last_insert_rowid*/
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_bind_blob */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_END */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,            &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[1]);
+    will_return(__wrap_sqlite3_exec,              &d[2]);
+    will_return(__wrap_sqlite3_bind_int,          &d[3]);
+    will_return(__wrap_sqlite3_bind_text,         &d[4]);
+    will_return(__wrap_sqlite3_bind_text,         &d[5]);
+    will_return(__wrap_sqlite3_step,              &d[6]);
+    will_return(__wrap_sqlite3_last_insert_rowid, &d[7]);
+    will_return(__wrap_sqlite3_finalize,          &d[8]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[9]);
+    will_return(__wrap_sqlite3_bind_int,          &d[10]);
+    will_return(__wrap_sqlite3_bind_text,         &d[11]);
+    will_return(__wrap_sqlite3_bind_blob,         &d[12]);
+    will_return(__wrap_sqlite3_exec,              &d[13]);
+    will_return(__wrap_sqlite3_finalize,          &d[14]);
+
+    CK_RV rv = db_add_token(&t);
+    twist_free(data);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_token_sqlite3_bind_blob_2_fail(void **state) {
+    UNUSED(state);
+
+    twist data = twist_new("twist data");
+    assert_non_null(data);
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        },
+        .esysdb = {
+            .sealobject = {
+                .sopriv = data,
+                .sopub = data
+            },
+        },
+    };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_START */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_DONE               }, /* sqlite3_step */
+        { .rc = 42                        }, /* sqlite3_last_insert_rowid*/
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_blob */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_bind_blob */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_END */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,            &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[1]);
+    will_return(__wrap_sqlite3_exec,              &d[2]);
+    will_return(__wrap_sqlite3_bind_int,          &d[3]);
+    will_return(__wrap_sqlite3_bind_text,         &d[4]);
+    will_return(__wrap_sqlite3_bind_text,         &d[5]);
+    will_return(__wrap_sqlite3_step,              &d[6]);
+    will_return(__wrap_sqlite3_last_insert_rowid, &d[7]);
+    will_return(__wrap_sqlite3_finalize,          &d[8]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[9]);
+    will_return(__wrap_sqlite3_bind_int,          &d[10]);
+    will_return(__wrap_sqlite3_bind_text,         &d[11]);
+    will_return(__wrap_sqlite3_bind_blob,         &d[12]);
+    will_return(__wrap_sqlite3_bind_blob,         &d[13]);
+    will_return(__wrap_sqlite3_exec,              &d[14]);
+    will_return(__wrap_sqlite3_finalize,          &d[15]);
+
+    CK_RV rv = db_add_token(&t);
+    twist_free(data);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_add_token_sqlite3_step_2_fail(void **state) {
+    UNUSED(state);
+
+    twist data = twist_new("twist data");
+    assert_non_null(data);
+
+    token t = {
+        .config = {
+            .is_initialized = true
+        },
+        .esysdb = {
+            .sealobject = {
+                .sopriv = data,
+                .sopub = data
+            },
+        },
+    };
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_config_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_START */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_DONE               }, /* sqlite3_step */
+        { .rc = 42                        }, /* sqlite3_last_insert_rowid*/
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_blob */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_blob */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_step */
+        { .rc = SQLITE_OK                 }, /* TRANSACTION_END */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_config_to_string,            &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[1]);
+    will_return(__wrap_sqlite3_exec,              &d[2]);
+    will_return(__wrap_sqlite3_bind_int,          &d[3]);
+    will_return(__wrap_sqlite3_bind_text,         &d[4]);
+    will_return(__wrap_sqlite3_bind_text,         &d[5]);
+    will_return(__wrap_sqlite3_step,              &d[6]);
+    will_return(__wrap_sqlite3_last_insert_rowid, &d[7]);
+    will_return(__wrap_sqlite3_finalize,          &d[8]);
+    will_return(__wrap_sqlite3_prepare_v2,        &d[9]);
+    will_return(__wrap_sqlite3_bind_int,          &d[10]);
+    will_return(__wrap_sqlite3_bind_text,         &d[11]);
+    will_return(__wrap_sqlite3_bind_blob,         &d[12]);
+    will_return(__wrap_sqlite3_bind_blob,         &d[13]);
+    will_return(__wrap_sqlite3_step,              &d[14]);
+    will_return(__wrap_sqlite3_exec,              &d[15]);
+    will_return(__wrap_sqlite3_finalize,          &d[16]);
+
+    CK_RV rv = db_add_token(&t);
+    twist_free(data);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
 int main(int argc, char* argv[]) {
     (void) argc;
     (void) argv;
@@ -2331,7 +2933,22 @@ int main(int argc, char* argv[]) {
         cmocka_unit_test(test_db_update_tobject_attrs_sqlite3_prepare_v2_fail),
         cmocka_unit_test(test_db_update_tobject_attrs_sqlite3_bind_text_fail),
         cmocka_unit_test(test_db_update_tobject_attrs_sqlite3_bind_int_fail),
-        cmocka_unit_test(test_db_update_tobject_attrs_sqlite3_step_fail)
+        cmocka_unit_test(test_db_update_tobject_attrs_sqlite3_step_fail),
+        cmocka_unit_test(test_db_add_token_emit_config_to_string_fail),
+        cmocka_unit_test(test_db_add_token_sqlite3_prepare_v2_fail),
+        cmocka_unit_test(test_db_add_token_sqlite3_exec_fail),
+        cmocka_unit_test(test_db_add_token_sqlite3_bind_int_fail),
+        cmocka_unit_test(test_db_add_token_sqlite3_bind_text_1_fail),
+        cmocka_unit_test(test_db_add_token_sqlite3_bind_text_2_fail),
+        cmocka_unit_test(test_db_add_token_sqlite3_step_fail),
+        cmocka_unit_test(test_db_add_token_sqlite3_last_insert_rowid_fail),
+        cmocka_unit_test(test_db_add_token_sqlite3_finalize_fail),
+        cmocka_unit_test(test_db_add_token_sqlite3_prepare_v2_2_fail),
+        cmocka_unit_test(test_db_add_token_sqlite3_bind_int_2_fail),
+        cmocka_unit_test(test_db_add_token_sqlite3_bind_text_3_fail),
+        cmocka_unit_test(test_db_add_token_sqlite3_bind_blob_1_fail),
+        cmocka_unit_test(test_db_add_token_sqlite3_bind_blob_2_fail),
+        cmocka_unit_test(test_db_add_token_sqlite3_step_2_fail)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
