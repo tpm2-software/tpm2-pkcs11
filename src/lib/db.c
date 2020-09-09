@@ -1081,6 +1081,7 @@ CK_RV db_add_token(token *tok) {
 
     rc = sqlite3_finalize(stmt);
     gotobinderror(rc, "finalize");
+    stmt = NULL;
 
     /* add the sealobjects WITHIN the transaction */
     sql = "INSERT INTO sealobjects"
