@@ -2084,14 +2084,12 @@ static void test_db_update_token_sqlite3_prepare_v2_fail(void **state) {
     will_return_data d[] = {
         { .data = __real_strdup("foobar") }, /* emit_config_to_string */
         { .rc = SQLITE_ERROR              }, /* sqlite3_prepare_v2 */
-        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
     };
 
     assert_non_null(d[0].data);
 
     will_return(emit_config_to_string,      &d[0]);
     will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
-    will_return(__wrap_sqlite3_finalize,    &d[2]);
 
     CK_RV rv = db_update_token_config(&tok);
     assert_int_equal(rv, CKR_GENERAL_ERROR);
