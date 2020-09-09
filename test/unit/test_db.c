@@ -2143,6 +2143,105 @@ static void test_db_update_token_sqlite3_bind_int_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
+static void test_db_update_tobject_attrs_emit_attributes_to_string_fail(void **state) {
+    UNUSED(state);
+
+    will_return_data d[] = {
+        { .data = NULL }, /* emit_attributes_to_string */
+    };
+
+    will_return(emit_attributes_to_string,  &d[0]);
+
+    CK_RV rv = db_update_tobject_attrs(42, (attr_list *)0xDEADBEEF);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_update_tobject_attrs_sqlite3_prepare_v2_fail(void **state) {
+    UNUSED(state);
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_attributes_to_string */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_prepare_v2 */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_attributes_to_string,  &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+
+    CK_RV rv = db_update_tobject_attrs(42, (attr_list *)0xDEADBEEF);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_update_tobject_attrs_sqlite3_bind_text_fail(void **state) {
+    UNUSED(state);
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_attributes_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_attributes_to_string,  &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_bind_text,   &d[2]);
+    will_return(__wrap_sqlite3_finalize,    &d[3]);
+
+    CK_RV rv = db_update_tobject_attrs(42, (attr_list *)0xDEADBEEF);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_update_tobject_attrs_sqlite3_bind_int_fail(void **state) {
+    UNUSED(state);
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_attributes_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_bind_int */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_attributes_to_string,  &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_bind_text,   &d[2]);
+    will_return(__wrap_sqlite3_bind_int,    &d[3]);
+    will_return(__wrap_sqlite3_finalize,    &d[4]);
+
+    CK_RV rv = db_update_tobject_attrs(42, (attr_list *)0xDEADBEEF);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
+static void test_db_update_tobject_attrs_sqlite3_step_fail(void **state) {
+    UNUSED(state);
+
+    will_return_data d[] = {
+        { .data = __real_strdup("foobar") }, /* emit_attributes_to_string */
+        { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
+        { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
+        { .rc = SQLITE_ERROR              }, /* sqlite3_step */
+        { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
+    };
+
+    assert_non_null(d[0].data);
+
+    will_return(emit_attributes_to_string,  &d[0]);
+    will_return(__wrap_sqlite3_prepare_v2,  &d[1]);
+    will_return(__wrap_sqlite3_bind_text,   &d[2]);
+    will_return(__wrap_sqlite3_bind_int,    &d[3]);
+    will_return(__wrap_sqlite3_step,        &d[4]);
+    will_return(__wrap_sqlite3_finalize,    &d[5]);
+
+    CK_RV rv = db_update_tobject_attrs(42, (attr_list *)0xDEADBEEF);
+    assert_int_equal(rv, CKR_GENERAL_ERROR);
+}
+
 int main(int argc, char* argv[]) {
     (void) argc;
     (void) argv;
@@ -2228,6 +2327,11 @@ int main(int argc, char* argv[]) {
         cmocka_unit_test(test_db_update_token_sqlite3_prepare_v2_fail),
         cmocka_unit_test(test_db_update_token_sqlite3_bind_text_fail),
         cmocka_unit_test(test_db_update_token_sqlite3_bind_int_fail),
+        cmocka_unit_test(test_db_update_tobject_attrs_emit_attributes_to_string_fail),
+        cmocka_unit_test(test_db_update_tobject_attrs_sqlite3_prepare_v2_fail),
+        cmocka_unit_test(test_db_update_tobject_attrs_sqlite3_bind_text_fail),
+        cmocka_unit_test(test_db_update_tobject_attrs_sqlite3_bind_int_fail),
+        cmocka_unit_test(test_db_update_tobject_attrs_sqlite3_step_fail)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
