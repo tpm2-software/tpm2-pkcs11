@@ -99,7 +99,14 @@ class InitCommand(Command):
                     if not use_existing_primary:
                         pobj_ctx = create_primary(tpm2, hierarchyauth, pobjauth, transient_parent)
                         if not transient_parent:
-                            pobj_ctx = tpm2.evictcontrol(hierarchyauth, pobj_ctx)
+                            # Check if the default handle 0x81000001 is available
+                            handle = 0x81000001
+                            handles_persistent = yaml.safe_load(tpm2.getcap('handles-persistent'))
+                            if handles_persistent and handle in handles_persistent:
+                                # Automatically find the first free handle
+                                handle = None
+
+                            pobj_ctx = tpm2.evictcontrol(hierarchyauth, pobj_ctx, handle)
                             shall_evict = True
                     else:
                         # get the primary object auth value and convert it to hex
