@@ -81,7 +81,7 @@ class Tpm2(object):
                                stderr)
         return ctx
 
-    def evictcontrol(self, hierarchyauth, ctx):
+    def evictcontrol(self, hierarchyauth, ctx, handle=None):
 
         tr_file = os.path.join(self._tmp, "primary.handle")
 
@@ -89,6 +89,9 @@ class Tpm2(object):
 
         if hierarchyauth and len(hierarchyauth) > 0:
             cmd.extend(['-P', hierarchyauth])
+
+        if handle:
+            cmd.append(str(handle))
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         stdout, stderr = p.communicate()
