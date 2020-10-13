@@ -6,6 +6,8 @@
   * C_GetMechanismList: Fix index 0 being invalid.
   * C_GetMechanismInfo: Fix errors like ERROR: Unknown mechanism, got: 0xd.
   * Docs: use full paths from project root to help fix 404 errors.
+  * tpm2_ptool init to attempt to persistent created primary object at 0x81000001 and fallback to
+    first available address on failure.
 
 ### 1.4.0 - 2020-08-24
   * Fix superflous error message when falling back from TPM2\_EncryptDecrypt2 interface.
