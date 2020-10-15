@@ -1135,25 +1135,6 @@ static void test_create_obj_rsa_public_key(void **state) {
     CK_BYTE *p2 = &plaintext2[sizeof(plaintext2) - sizeof(plaintext)];
 
     assert_memory_equal(plaintext, p2, sizeof(plaintext));
-
-    rv = C_EncryptInit(session, &mech, privkey);
-    assert_int_equal(rv, CKR_OK);
-
-    unsigned char padded_plaintext[256] = { 0 };
-    memcpy(padded_plaintext, plaintext, sizeof(plaintext));
-
-    rv = C_Encrypt(session, padded_plaintext, sizeof(padded_plaintext), ciphertext, &ciphertext_len);
-    assert_int_equal(rv, CKR_OK);
-
-    rv = C_DecryptInit(session, &mech, pubkey);
-    assert_int_equal(rv, CKR_OK);
-
-    rv = C_Decrypt(session, ciphertext, ciphertext_len, plaintext2, &plaintext2_len);
-    assert_int_equal(rv, CKR_OK);
-
-    p2 = &plaintext2[sizeof(plaintext2) - sizeof(plaintext)];
-
-    assert_memory_equal(plaintext, p2, sizeof(plaintext));
 }
 
 /*
