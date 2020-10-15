@@ -117,7 +117,8 @@ EC_KEY *EVP_PKEY_get0_EC_KEY(EVP_PKEY *pkey) {
 
     return pkey->pkey.ec;
 }
-
+#else
+#include <openssl/evperr.h>
 #endif
 
 static CK_RV convert_pubkey_RSA(RSA **outkey, attr_list *attrs) {
@@ -293,18 +294,6 @@ CK_RV ssl_util_encrypt(EVP_PKEY *pkey,
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    /* make sure destination is big enough */
-    int to_len = EVP_PKEY_size(pkey);
-    if (to_len < 0) {
-        LOGE("Expected buffer size to be > 0, got: %d", to_len);
-        return CKR_GENERAL_ERROR;
-    }
-
-    if ((CK_ULONG)to_len > *ctextlen) {
-        *ctextlen = to_len;
-        return CKR_BUFFER_TOO_SMALL;
-    }
-
     EVP_PKEY_CTX *pkey_ctx = EVP_PKEY_CTX_new(pkey, NULL);
     if (!pkey_ctx) {
         LOGE("OOM");
@@ -355,8 +344,15 @@ CK_RV ssl_util_encrypt(EVP_PKEY *pkey,
 
     size_t outlen = *ctextlen;
     rc = EVP_PKEY_encrypt(pkey_ctx, ctext, &outlen, ptext, ptextlen);
-    if (!rc) {
-        SSL_UTIL_LOGE("Could not perform RSA public encrypt");
+    if (rc <= 0) {
+        unsigned long r = ERR_get_error();
+        int reason = ERR_GET_REASON(r);
+        if (reason == EVP_R_BUFFER_TOO_SMALL) {
+            *ctextlen = EVP_PKEY_size(pkey);
+            rv = CKR_BUFFER_TOO_SMALL;
+        } else {
+            LOGE("Could not perform RSA public encrypt: %s", ERR_error_string(r, NULL));
+        }
         goto error;
     }
 
