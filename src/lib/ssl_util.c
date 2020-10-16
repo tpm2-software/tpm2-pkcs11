@@ -294,6 +294,11 @@ CK_RV ssl_util_encrypt(EVP_PKEY *pkey,
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
+    if (!ctext) {
+        *ctextlen = EVP_PKEY_size(pkey);
+        return CKR_OK;
+    }
+
     EVP_PKEY_CTX *pkey_ctx = EVP_PKEY_CTX_new(pkey, NULL);
     if (!pkey_ctx) {
         LOGE("OOM");
