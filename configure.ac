@@ -205,6 +205,17 @@ AS_IF([test "x$enable_unit" = "xyes" -o "x$enable_integration" = "xyes" -o "x$en
 
 # END ENABLE UNIT
 
+# Macro that checks for existence of a python module
+AC_DEFUN([AC_PYTHON_MODULE],
+[AC_MSG_CHECKING([for module $2 in python])
+  echo "import $2" | $1 - 2>/dev/null
+  if test $? -ne 0 ; then
+    AC_MSG_ERROR([not found])
+  else
+    AC_MSG_RESULT(found)
+  fi
+])
+
 # START ENABLE INTEGRATION
 #
 # enable integration tests and check for simulator binary
@@ -321,6 +332,8 @@ AC_DEFUN([integration_test_checks], [
     [AC_SUBST([PYTHON_INTERPRETER], [$PYTHON])],
     [AC_MSG_ERROR([Integration tests enabled but python >= 3.7 executable not found.])]
   )
+
+  AC_PYTHON_MODULE([$PYTHON], [pkcs11])
 
   AS_IF([test "$have_fapi" = "1"], [
     AC_CHECK_PROG([tss2_provision], [tss2_provision], [yes], [no])
