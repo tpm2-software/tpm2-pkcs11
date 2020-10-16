@@ -702,6 +702,60 @@ static void test_rsa_x509_encrypt_decrypt_oneshot_good(void **state) {
     assert_memory_equal(&plaintext2[plaintext2_len - len], secret, len);
 }
 
+static void test_rsa_pkcs_encrypt_decrypt_public_5_2_returns_good(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_MECHANISM mechanism = {
+        CKM_RSA_PKCS, NULL, 0
+    };
+
+    CK_BYTE plaintext[] = {
+        'm', 'y', ' ', 's', 'e', 'c', 'r', 'e', 't', ' ', 'i', 's', 'c', 'o', 'o', 'l',
+    };
+
+    /* size of RSA 2048 modulus length */
+    CK_BYTE ciphertext[256] = { 0 };
+
+    /* init */
+    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.rsa.pub);
+    assert_int_equal(rv, CKR_OK);
+
+    /* get size */
+    CK_ULONG ciphertext_len = 42;
+    rv = C_Encrypt(session, plaintext, sizeof(plaintext),
+            NULL, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_not_equal(ciphertext_len, 42);
+
+    /* do encryption */
+    rv = C_Encrypt(session, plaintext, sizeof(plaintext),
+            ciphertext, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, sizeof(ciphertext));
+
+    /* plaintext should not match ciphertext */
+    assert_true(sizeof(plaintext) < ciphertext_len);
+    assert_memory_not_equal(plaintext, ciphertext, sizeof(plaintext));
+
+    rv = C_DecryptInit (session, &mechanism, ti->objects.rsa.priv);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE plaintext2[sizeof(ciphertext)];
+    CK_ULONG plaintext2_len = sizeof(plaintext2);
+
+    rv = C_Decrypt (session, ciphertext, ciphertext_len,
+            plaintext2, &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(plaintext2_len, sizeof(ciphertext));
+
+    /* strip padding */
+    const CK_BYTE_PTR p2 = &plaintext2[plaintext2_len - sizeof(plaintext)];
+    assert_memory_equal(plaintext, p2, sizeof(plaintext));
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
@@ -720,6 +774,8 @@ int main() {
         cmocka_unit_test_setup_teardown(test_cert_no_good,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_rsa_x509_encrypt_decrypt_oneshot_good,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_rsa_pkcs_encrypt_decrypt_public_5_2_returns_good,
                 test_setup, test_teardown),
     };
 
