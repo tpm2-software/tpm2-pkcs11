@@ -17,6 +17,9 @@
 
 #if (OPENSSL_VERSION_NUMBER < 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)) || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x20700000L) /* OpenSSL 1.1.0 */
 #define LIB_TPM2_OPENSSL_OPENSSL_PRE11
+/* LibreSSL does not appear to have evperr.h, so their is no need to define this otherwise */
+#elif (OPENSSL_VERSION_NUMBER >= 0x1010100fL) /* OpenSSL 1.1.1 */
+#define LIB_TPM2_OPENSSL_OPENSSL_POST111 0x1010100f
 #endif
 
 /* OpenSSL Backwards Compat APIs */

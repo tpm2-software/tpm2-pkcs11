@@ -15,6 +15,9 @@
 #include "ssl_util.h"
 #include "twist.h"
 
+#if defined(LIB_TPM2_OPENSSL_OPENSSL_POST111)
+#include <openssl/evperr.h>
+#endif
 
 #if defined(LIB_TPM2_OPENSSL_OPENSSL_PRE11)
 
@@ -117,8 +120,6 @@ EC_KEY *EVP_PKEY_get0_EC_KEY(EVP_PKEY *pkey) {
 
     return pkey->pkey.ec;
 }
-#else
-#include <openssl/evperr.h>
 #endif
 
 static CK_RV convert_pubkey_RSA(RSA **outkey, attr_list *attrs) {
