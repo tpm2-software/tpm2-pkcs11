@@ -33,7 +33,7 @@ echo "modpath=$modpath"
 
 function yaml_get_id() {
 
-python << pyscript
+"${PYTHON_INTERPRETER:-python3}" << pyscript
 from __future__ import print_function
 
 import sys
@@ -58,7 +58,7 @@ function yaml_get_kv() {
         third_arg=$3
     fi
 
-python << pyscript
+"${PYTHON_INTERPRETER:-python3}" << pyscript
 from __future__ import print_function
 
 import sys
