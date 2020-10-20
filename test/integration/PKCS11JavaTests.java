@@ -40,13 +40,16 @@ public class PKCS11JavaTests {
 		String cwd = System.getProperty("user.dir");
 		Path libPath = Paths.get(cwd, "src/.libs/libtpm2_pkcs11.so.0.0.0");
 
-		try {
+                String version = System.getProperty("java.version");
+                String [] chunks = version.split("\\.");
+                int major = Integer.parseInt(chunks[0]);
+                if (major >= 9) {
 			/* Java >= 9 */
 			Method configure = Provider.class.getMethod("configure", String.class);
 			String pkcs11Config = "--name = TPM2\nlibrary = " + libPath;
 			PROV = Security.getProvider("SunPKCS11");
 			PROV = (Provider) configure.invoke(PROV, pkcs11Config);
-		} catch (NoSuchMethodException e) {
+		} else {
 			/* Java <= 8 */
 			Constructor SunPKCS11 = Class.forName("sun.security.pkcs11.SunPKCS11").getConstructor(InputStream.class);
 			String pkcs11Config = "name = TPM2\nlibrary = " + libPath;
