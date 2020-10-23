@@ -1,6 +1,7 @@
 # Changelog
 
 ### next
+  * FIX C_Encrypt/C_Decrypt interface not setting size when output buffer in NULL.
   * Fix warning ../configure: line 14383: ]: command not found
   * Fix CKM_RSA_PKCS_PSS mechanism.
   * C_GetMechanismList: Fix index 0 being invalid.
