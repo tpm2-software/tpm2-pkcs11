@@ -117,11 +117,32 @@ static void test_session_operation_state(void **state) {
     assert_int_equal(rv, CKR_OPERATION_ACTIVE);
 }
 
+static void test_session_exhastion(void **state) {
+    UNUSED(state);
+
+    CK_SLOT_ID slots[6];
+    CK_ULONG count = ARRAY_LEN(slots);
+    CK_RV rv = C_GetSlotList(true, slots, &count);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_SESSION_HANDLE session;
+
+    while ((rv = C_OpenSession(slots[0], CKF_SERIAL_SESSION | CKF_RW_SESSION,
+            NULL_PTR, NULL_PTR, &session)) != CKR_SESSION_COUNT) {
+        assert_int_equal(rv, CKR_OK);
+    }
+
+    rv = C_CloseAllSessions(slots[0]);
+    assert_int_equal(rv, CKR_OK);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_session_operation_state,
                 test_setup, test_teardown),
+        /* this must go last to get C_Finalize from group_teardown called */
+        cmocka_unit_test(test_session_exhastion),
     };
 
     return cmocka_run_group_tests(tests, group_setup, group_teardown);
