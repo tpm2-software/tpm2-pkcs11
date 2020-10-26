@@ -14,7 +14,6 @@
 struct session_table {
     CK_ULONG cnt;
     CK_ULONG rw_cnt;
-    CK_SESSION_HANDLE free_handle;
     session_ctx *table[MAX_NUM_OF_SESSIONS];
 };
 
@@ -60,20 +59,29 @@ void session_table_get_cnt(session_table *t, CK_ULONG_PTR all, CK_ULONG_PTR rw, 
 CK_RV session_table_new_entry(session_table *t, CK_SESSION_HANDLE *handle,
         token *tok, CK_FLAGS flags) {
 
-    /*
-     * TODO need to search for open slot here so we don't
-     * exhaust handles.
-     */
-    session_ctx **open_slot = &t->table[t->free_handle];
-    assert(!*open_slot);
+    CK_SESSION_HANDLE free_handle = 0;
+    session_ctx **open_slot = NULL;
+    size_t i;
+    for (i=0; i < ARRAY_LEN(t->table); i++) {
+        if (!t->table[i]) {
+            /* 0 is not a good session handle, so offset by 1 */
+            free_handle = i + 1;
+            open_slot = &t->table[i];
+            break;
+        }
+    }
+
+    if (!open_slot) {
+        LOGV("No available session slot found");
+        return CKR_SESSION_COUNT;
+    }
 
     CK_RV rv = session_ctx_new(open_slot, tok, flags);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    *handle = t->free_handle;
-    t->free_handle++;
+    *handle = free_handle;
     t->cnt++;
 
     if(flags & CKF_RW_SESSION) {
@@ -126,11 +134,23 @@ static CK_RV session_table_free_ctx_by_ctx(token *t, session_ctx **ctx) {
     return rv;
 }
 
+static session_ctx **_session_table_lookup(session_table *t, CK_SESSION_HANDLE handle) {
+
+    if (handle == 0 || handle > ARRAY_LEN(t->table)) {
+        return NULL;
+    }
+
+    return &t->table[handle - 1];
+}
+
+session_ctx *session_table_lookup(session_table *t, CK_SESSION_HANDLE handle) {
+
+    return *_session_table_lookup(t, handle);
+}
+
 CK_RV session_table_free_ctx_by_handle(token *t, CK_SESSION_HANDLE handle) {
 
-    session_table *stable = t->s_table;
-
-    session_ctx **ctx = &stable->table[handle];
+    session_ctx **ctx = _session_table_lookup(t->s_table, handle);
     if (!*ctx) {
         return CKR_SESSION_HANDLE_INVALID;
     }
@@ -171,15 +191,6 @@ CK_RV session_table_free_ctx_all(token *t) {
 CK_RV session_table_free_ctx(token *t, CK_SESSION_HANDLE handle) {
 
     return session_table_free_ctx_by_handle(t, handle);
-}
-
-session_ctx *session_table_lookup(session_table *t, CK_SESSION_HANDLE handle) {
-
-    if (handle >= ARRAY_LEN(t->table)) {
-        return NULL;
-    }
-
-    return t->table[handle];
 }
 
 void session_table_login_event(session_table *s_table, CK_USER_TYPE user) {
