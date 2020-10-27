@@ -518,7 +518,7 @@ CK_RV rsa_pss_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
         test_type.mechanism = CKM_SHA512_RSA_PKCS_PSS;
 
     } else {
-        LOGE("Unknown hash algorithm: 0x%x", params->hashAlg);
+        LOGE("Unknown hash algorithm: 0x%lx", params->hashAlg);
         return CKR_MECHANISM_PARAM_INVALID;
     }
 
