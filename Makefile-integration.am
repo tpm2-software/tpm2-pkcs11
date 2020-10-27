@@ -45,18 +45,19 @@ check_PROGRAMS += \
 # add test scripts
 check_SCRIPTS += $(integration_scripts)
 
+AM_LOG_FLAGS = --tabrmd-tcti=$(TABRMD_TCTI)
 LOG_COMPILER = $(srcdir)/test/integration/scripts/int-test-setup.sh
 
-AM_INT_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
+AM_INT_LOG_FLAGS = --tabrmd-tcti=$(TABRMD_TCTI) --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
 INT_LOG_COMPILER=$(LOG_COMPILER)
 
-AM_SH_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
+AM_SH_LOG_FLAGS = --tabrmd-tcti=$(TABRMD_TCTI) --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
 SH_LOG_COMPILER=$(LOG_COMPILER)
 
-AM_NOSETUP_LOG_FLAGS = --tabrmd-tcti=mssim
+AM_NOSETUP_LOG_FLAGS = --tabrmd-tcti=$(TABRMD_TCTI)
 NOSETUP_LOG_COMPILER=$(LOG_COMPILER)
 
-AM_FAPI_LOG_FLAGS = --tabrmd-tcti=mssim
+AM_FAPI_LOG_FLAGS = --tabrmd-tcti=$(TABRMD_TCTI)
 FAPI_LOG_COMPILER=env TPM2_PKCS11_BACKEND=fapi $(LOG_COMPILER)
 
 test_integration_pkcs_find_objects_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
@@ -106,7 +107,7 @@ test_integration_pkcs_lockout_int_SOURCES = test/integration/pkcs-lockout.int.c 
 #
 # Java Tests
 #
-AM_JAVA_LOG_FLAGS = --tabrmd-tcti=mssim --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
+AM_JAVA_LOG_FLAGS = --tabrmd-tcti=$(TABRMD_TCTI) --tsetup-script=$(top_srcdir)/test/integration/scripts/create_pkcs_store.sh
 JAVA_LOG_COMPILER=$(LOG_COMPILER)
 dist_noinst_JAVA = test/integration/PKCS11JavaTests.java
 CLEANFILES += test/integration/PKCS11JavaTests.class

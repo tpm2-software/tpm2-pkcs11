@@ -46,7 +46,7 @@ The store itself defaults to `$HOME/.tpm2_pkcs11` unless specified via the envir
 * For all the illustrations below, we create a store under `~/tmp`.
 * We assume some working TPM connection. Under the hood the `tpm2_ptool` command calls `tpm2-tools`
   binaries. Thus configuring the `TCTI` is important. The easiest way to do this for testing is
-  to use the IBM TPM Simulator and tpm2-abrmd as documented in
+  to use a TPM Simulator and tpm2-abrmd as documented in
   [dependencies](BUILDING.md#step-1---satisfy-dependencies).
 
   Their is no requirement to use the simulator and abrmd, this is all configuration dependent.

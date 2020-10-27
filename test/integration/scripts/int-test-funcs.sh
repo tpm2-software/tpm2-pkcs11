@@ -63,8 +63,15 @@ simulator_start ()
     # simulator port is a random port between 1024 and 65535
 
     cd ${sim_tmp_dir}
-    daemon_start "${sim_bin}" "-port ${sim_port}" "${sim_log_file}" \
-        "${sim_pid_file}" ""
+    case "$sim_bin" in
+        *swtpm) daemon_start "$sim_bin" "socket --tpm2 --server port=$sim_port \
+                             --ctrl type=tcp,port=$((sim_port + 1)) \
+                             --flags not-need-init --tpmstate dir=$PWD" \
+                             "$sim_log_file" "$sim_pid_file";;
+        *tpm_server) daemon_start "$sim_bin" "-port $sim_port" \
+                                  "$sim_log_file" "$sim_pid_file";;
+        *) echo "Unknown TPM simulator $sim_bin"; return 1;;
+    esac
     local ret=$?
     cd -
     return $ret
