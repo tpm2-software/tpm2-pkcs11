@@ -1,6 +1,8 @@
 # Changelog
 
 ### next
+  * C_OpenSession: fix valid session handles starting at 0, 0 is invalid per the spec.
+  * C_OpenSession: fix handle issuance bug where handles could be exhausted at out of bounds.
   * Support swtpm in testing infrastructure.
   * FIX C_Encrypt/C_Decrypt interface not setting size when output buffer in NULL.
   * Fix warning ../configure: line 14383: ]: command not found
