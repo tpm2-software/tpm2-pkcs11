@@ -80,8 +80,8 @@ static CK_RV digest_sw_final(digest_op_data *opdata, CK_BYTE_PTR md, CK_ULONG_PT
      * Warn on truncation, this is likely not an issue unless digest message lengths overflow
      * int.
      */
-    if (*s > INT_MAX) {
-        LOGW("OSSL takes an int pointer, anything past %u is lost, got %lu", INT_MAX, *s);
+    if (*s > UINT_MAX) {
+        LOGW("OSSL takes an int pointer, anything past %u is lost, got %lu", UINT_MAX, *s);
     }
 
     int rc = EVP_DigestFinal_ex(opdata->mdctx, md, (unsigned int *)s);
