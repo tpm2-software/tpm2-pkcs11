@@ -3615,7 +3615,7 @@ WEAK CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
     TPM2B_PUBLIC in_pub = { 0 };
     CK_RV rv = templ->fn(tpm, &in_pub);
     if (rv != CKR_OK) {
-        LOGE("Template population routine failed: 0x%x", rv);
+        LOGE("Template population routine failed: 0x%lx", rv);
         return rv;
     }
 
