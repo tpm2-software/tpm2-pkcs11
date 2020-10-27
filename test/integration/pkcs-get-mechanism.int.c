@@ -165,8 +165,8 @@ void test_get_mechanism_info_good(void **state) {
         rv = C_GetMechanismInfo(slot_id, ecc_mechs[i].mech, &mech_info);
         assert_int_equal(rv, CKR_OK);
 
-        assert_int_equal(mech_info.ulMinKeySize, 256);
-        assert_int_equal(mech_info.ulMaxKeySize, 384);
+        assert_in_range(mech_info.ulMinKeySize, 192, 256);
+        assert_in_range(mech_info.ulMaxKeySize, 384, 638);
         assert_int_equal(mech_info.flags, ecc_mechs[i].flags);
     }
 
