@@ -284,6 +284,95 @@ static void test_digest_good(void **state) {
     assert_memory_equal(hash, expected_digest, sizeof(expected_digest));
 }
 
+static void test_digest_5_2_returns_oneshot(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE handle = ti->handles[0];
+
+    user_login(handle);
+
+    CK_MECHANISM hash_mechanism = {
+        CKM_SHA256, NULL_PTR, 0
+    };
+
+    /* digest create */
+    CK_RV rv = C_DigestInit(handle, &hash_mechanism);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE data[] = "Hello World This is My First Digest Message";
+    CK_BYTE hash[32];
+    CK_ULONG hashlen = 2;
+
+    rv = C_Digest(handle, data, sizeof(data) - 1,
+            hash, &hashlen);
+    assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
+    assert_int_equal(hashlen, 32);
+
+    /* finish the operation */
+    rv = C_Digest(handle, data, sizeof(data) - 1,
+            hash, &hashlen);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(hashlen, 32);
+
+    /*
+     * expected hash of data
+     */
+    CK_BYTE expected_digest[] = {
+      0xce, 0x89, 0xe6, 0x32, 0xe2, 0x56, 0x4c, 0x7b, 0xdb, 0x3c, 0x01, 0xca,
+      0x28, 0x20, 0x9b, 0x02, 0x9b, 0x80, 0x05, 0x99, 0x65, 0xb2, 0x8e, 0x58,
+      0xe0, 0xb3, 0xec, 0x88, 0x16, 0xe0, 0x77, 0x77
+    };
+
+    assert_int_equal(hashlen, sizeof(expected_digest));
+    assert_memory_equal(hash, expected_digest, sizeof(expected_digest));
+}
+
+static void test_digest_5_2_returns_multipart(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE handle = ti->handles[0];
+
+    user_login(handle);
+
+    CK_MECHANISM hash_mechanism = {
+        CKM_SHA256, NULL_PTR, 0
+    };
+
+    /* digest create */
+    CK_RV rv = C_DigestInit(handle, &hash_mechanism);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE data[] = "Hello World This is My First Digest Message";
+
+    rv = C_DigestUpdate(handle, data, sizeof(data) - 1);
+    assert_int_equal(rv, CKR_OK);
+
+    /* finish the operation */
+    CK_BYTE hash[32];
+    CK_ULONG hashlen = 2;
+    rv = C_DigestFinal(handle,
+            hash, &hashlen);
+    assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
+    assert_int_equal(hashlen, 32);
+
+    rv = C_DigestFinal(handle,
+            hash, &hashlen);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(hashlen, 32);
+
+    /*
+     * expected hash of data
+     */
+    CK_BYTE expected_digest[] = {
+      0xce, 0x89, 0xe6, 0x32, 0xe2, 0x56, 0x4c, 0x7b, 0xdb, 0x3c, 0x01, 0xca,
+      0x28, 0x20, 0x9b, 0x02, 0x9b, 0x80, 0x05, 0x99, 0x65, 0xb2, 0x8e, 0x58,
+      0xe0, 0xb3, 0xec, 0x88, 0x16, 0xe0, 0x77, 0x77
+    };
+
+    assert_int_equal(hashlen, sizeof(expected_digest));
+    assert_memory_equal(hash, expected_digest, sizeof(expected_digest));
+}
+
 static void test_session_cnt(void **state) {
 
     /* we populate state in this test */
@@ -405,6 +494,10 @@ int main() {
         cmocka_unit_test_setup_teardown(test_get_session_info,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_digest_good,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_digest_5_2_returns_oneshot,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_digest_5_2_returns_multipart,
                 test_setup, test_teardown),
         /*
          * manages it's own sessions
