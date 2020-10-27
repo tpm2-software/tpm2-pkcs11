@@ -1,6 +1,7 @@
 # Changelog
 
 ### next
+  * C_Digest/C_DigestFinal: Fix Section 5.2 style returns.
   * C_OpenSession: fix valid session handles starting at 0, 0 is invalid per the spec.
   * C_OpenSession: fix handle issuance bug where handles could be exhausted at out of bounds.
   * Support swtpm in testing infrastructure.
