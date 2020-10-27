@@ -13,7 +13,6 @@ source $TRAVIS_BUILD_DIR/.ci/download-deps.sh
 get_deps "$WORKSPACE"
 
 export LD_LIBRARY_PATH=/usr/local/lib/
-export PATH=/root/.local/bin/:/ibmtpm974/src:$PATH
 
 # Unfortunately, p11tool unlearned the option for $HOME/.config/pkcs11/modules
 # This is true for Fedora 30 container and upstream

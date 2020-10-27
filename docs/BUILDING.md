@@ -33,9 +33,10 @@ in known package managers are likely too old.
 
 ### Optional Dependencies for Enabling Testing
 1. [CMocka](https://cmocka.org/)
-2. [TPM 2.0 Simulator](https://sourceforge.net/projects/ibmswtpm2/files/ibmtpm1563.tar.gz/download): **Tested with version 1563**
-4. [tpm2-abrmd](https://github.com/tpm2-software/tpm2-abrmd)
-5. Dependencies for [tpm2-ptool](# Optional Dependencies for tpm2_ptool)
+2. [swtpm](https://github.com/stefanberger/swtpm) or
+   [tpm_server](https://sourceforge.net/projects/ibmswtpm2/) TPM 2.0 simulator
+3. [tpm2-abrmd](https://github.com/tpm2-software/tpm2-abrmd)
+4. Dependencies for [tpm2-ptool](# Optional Dependencies for tpm2_ptool)
 
 ## Step 2 - Bootstrapping
 
@@ -66,7 +67,7 @@ that *are outside of normal autoconf/automake options*, which are documented [he
     ```sh
     export PATH="/home/wcrobert/workspace/tpm2-tools/tools:/home/wcrobert/workspace/tpm2-pkcs11/tools:$HOME/workspace/ibmtpm974/src:$PATH"
     ```
-    **Normally** only tpm2-tools, IBM TPM Simulator and tpm2-ptool need to be added to `PATH`. Most other things, like CMocka and ss, are already
+    **Normally** only tpm2-tools, swtpm/tpm_server and tpm2-ptool need to be added to `PATH`. Most other things, like CMocka and ss, are already
     installed and thus on `PATH`. Your results will very based on what you build from source and/or install in non-standard locations.
 3. `--disable-hardening` - Compiler flag hardening options, this is enabled by default. Disabling hardening is **NOT RECOMMENDED FOR PRODUCTION BUILDS**,
       however, is often useful when adding in compiler flags for testing via `CFLAGS`. For example, one would need to disable this if configuring

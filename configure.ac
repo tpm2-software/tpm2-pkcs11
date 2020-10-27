@@ -288,9 +288,12 @@ AC_DEFUN([integration_test_checks], [
 
   PKG_CHECK_MODULES([TSS2_TCTI_TABRMD],[tss2-tcti-tabrmd])
 
+  AC_CHECK_PROG([swtpm], [swtpm], [yes], [no])
   AC_CHECK_PROG([tpm_server], [tpm_server], [yes], [no])
-  AS_IF([test "x$tpm_server" != "xyes"],
-    [AC_MSG_ERROR([Integration tests enabled but tpm_server not found, try setting PATH])])
+  AS_IF([test "$swtpm" = yes], [TABRMD_TCTI=swtpm],
+        [AS_IF([test "$tpm_server" = yes], [TABRMD_TCTI=mssim],
+               [AC_MSG_ERROR([Integration tests enabled but swtpm (or tpm_server) executable not found.])])])
+  AC_SUBST([TABRMD_TCTI])
 
   AC_CHECK_PROG([ss], [ss], [yes], [no])
     AS_IF([test "x$ss" != "xyes"],
