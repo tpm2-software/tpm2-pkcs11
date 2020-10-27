@@ -181,7 +181,6 @@ CK_RV digest_update_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_BYT
 
 CK_RV digest_final_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_BYTE_PTR digest, CK_ULONG_PTR digest_len) {
 
-    check_pointer(digest);
     check_pointer(digest_len);
 
     CK_RV rv = CKR_GENERAL_ERROR;

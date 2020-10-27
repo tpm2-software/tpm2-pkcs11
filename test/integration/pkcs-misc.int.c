@@ -303,9 +303,17 @@ static void test_digest_5_2_returns_oneshot(void **state) {
     CK_BYTE hash[32];
     CK_ULONG hashlen = 2;
 
+    /* CKR_BUFFER_TOO_SMALL - buffer supplied but too small */
     rv = C_Digest(handle, data, sizeof(data) - 1,
             hash, &hashlen);
     assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
+    assert_int_equal(hashlen, 32);
+
+    /* CKR_OK NULL buffer */
+    hashlen = 0;
+    rv = C_Digest(handle, data, sizeof(data) - 1,
+            NULL, &hashlen);
+    assert_int_equal(rv, CKR_OK);
     assert_int_equal(hashlen, 32);
 
     /* finish the operation */
@@ -347,12 +355,19 @@ static void test_digest_5_2_returns_multipart(void **state) {
     rv = C_DigestUpdate(handle, data, sizeof(data) - 1);
     assert_int_equal(rv, CKR_OK);
 
-    /* finish the operation */
+    /* finish the operation CKR_BUFFER_TOO_SMALL */
     CK_BYTE hash[32];
     CK_ULONG hashlen = 2;
     rv = C_DigestFinal(handle,
             hash, &hashlen);
     assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
+    assert_int_equal(hashlen, 32);
+
+    hashlen = 0;
+    /* CKR_OK - NULL output buffer */
+    rv = C_DigestFinal(handle,
+            NULL, &hashlen);
+    assert_int_equal(rv, CKR_OK);
     assert_int_equal(hashlen, 32);
 
     rv = C_DigestFinal(handle,
