@@ -3101,12 +3101,6 @@ CK_RV tpm_get_algorithms(tpm_ctx *ctx, TPMS_CAPABILITY_DATA **capabilityData) {
         return CKR_GENERAL_ERROR;
     }
 
-    if (!capabilityData) {
-        Esys_Free(capdata);
-        LOGE("TPM did not reply with correct amount of capabilities");
-        return CKR_GENERAL_ERROR;
-    }
-
     *capabilityData = ctx->tpms_alg_cache = capdata;
 
     return CKR_OK;
