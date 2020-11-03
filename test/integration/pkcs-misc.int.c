@@ -363,7 +363,7 @@ static void test_digest_5_2_returns_multipart(void **state) {
     assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
     assert_int_equal(hashlen, 32);
 
-    hashlen = 0;
+    hashlen = 64;
     /* CKR_OK - NULL output buffer */
     rv = C_DigestFinal(handle,
             NULL, &hashlen);
