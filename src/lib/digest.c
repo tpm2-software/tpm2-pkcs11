@@ -105,6 +105,7 @@ static CK_RV digest_get_min_size(session_ctx *ctx,
     if (!opdata) {
         CK_RV rv = session_ctx_opdata_get(ctx, operation_digest, &opdata);
         if (rv != CKR_OK) {
+            LOGE("Could not get session data");
             return rv;
         }
     }
