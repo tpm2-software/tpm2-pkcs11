@@ -99,7 +99,7 @@ out:
     return rv;
 }
 
-static CK_RV digest_check_output_buffer_length_op(session_ctx *ctx,
+static CK_RV digest_get_min_size(session_ctx *ctx,
         digest_op_data *opdata, CK_ULONG_PTR digest_len) {
 
     if (!opdata) {
@@ -109,13 +109,7 @@ static CK_RV digest_check_output_buffer_length_op(session_ctx *ctx,
         }
     }
 
-    int size = EVP_MD_CTX_size(opdata->mdctx);
-    assert(size >= 0);
-    if (*digest_len < (unsigned)size) {
-        *digest_len = size;
-        return CKR_BUFFER_TOO_SMALL;
-    }
-
+    *digest_len = EVP_MD_CTX_size(opdata->mdctx);
     return CKR_OK;
 }
 
@@ -195,18 +189,18 @@ CK_RV digest_final_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_BYTE
         opdata = supplied_opdata;
     }
 
-    rv = digest_check_output_buffer_length_op(ctx, opdata, digest_len);
+    CK_ULONG min_len = 0;
+    rv = digest_get_min_size(ctx, opdata, &min_len);
     if (rv != CKR_OK) {
-        /* A return of CKR_BUFFER_TOO_SMALL keeps the hashing state active and:
-         * data_len is null, return CKR_OK
-         * data_len is not null, return CKR_BUFFER_TOO_SMALL
-         * in both instances digest_len is set to the output len.
-         */
-        if (rv == CKR_BUFFER_TOO_SMALL) {
-            return digest ? rv : CKR_OK;
-        }
-        /* fatal error ends hashing state */
         goto error;
+    }
+
+    if (!digest) {
+        *digest_len = min_len;
+        return CKR_OK;
+    } else if (*digest_len < min_len) {
+        *digest_len = min_len;
+        return CKR_BUFFER_TOO_SMALL;
     }
 
     rv = digest_sw_final(opdata, digest, digest_len);
@@ -221,26 +215,20 @@ error:
 
 CK_RV digest_oneshot(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR digest, CK_ULONG_PTR digest_len) {
 
-    /*
-     * Check that the output buffer is large enough to hold the response before we update the hashing
-     * digest. We could normally just call EVP_MD_CTX_reset(), but OSSL < 1_1_0 doesn't support it. So
-     * just avoid updating the digest on oneshot invocations of hashing via C_Digest(). This way multiple
-     * calls to C_Digest that complete with proper buffer sizes don't attempt to hash the data input twice.
-     */
-    CK_RV rv = digest_check_output_buffer_length_op(ctx, NULL, digest_len);
+    CK_ULONG min_len = 0;
+    CK_RV rv = digest_get_min_size(ctx, NULL, &min_len);
     if (rv != CKR_OK) {
-        /* A return of CKR_BUFFER_TOO_SMALL keeps the hashing state active and:
-         * data_len is null, return CKR_OK
-         * data_len is not null, return CKR_BUFFER_TOO_SMALL
-         * in both instances digest_len is set to the output len.
-         */
-        if (rv == CKR_BUFFER_TOO_SMALL) {
-            return digest ? rv : CKR_OK;
-        }
-
         /* fatal error ends digest sate */
         session_ctx_opdata_clear(ctx);
         return rv;
+    }
+
+    if (!digest) {
+        *digest_len = min_len;
+        return CKR_OK;
+    } else if (*digest_len < min_len) {
+        *digest_len = min_len;
+        return CKR_BUFFER_TOO_SMALL;
     }
 
     rv = digest_update(ctx, data, data_len);
