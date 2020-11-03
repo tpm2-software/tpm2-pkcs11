@@ -749,11 +749,8 @@ static void test_rsa_pkcs_encrypt_decrypt_public_5_2_returns_good(void **state) 
     rv = C_Decrypt (session, ciphertext, ciphertext_len,
             plaintext2, &plaintext2_len);
     assert_int_equal(rv, CKR_OK);
-    assert_int_equal(plaintext2_len, sizeof(ciphertext));
-
-    /* strip padding */
-    const CK_BYTE_PTR p2 = &plaintext2[plaintext2_len - sizeof(plaintext)];
-    assert_memory_equal(plaintext, p2, sizeof(plaintext));
+    assert_int_equal(plaintext2_len, sizeof(plaintext));
+    assert_memory_equal(plaintext2, plaintext, sizeof(plaintext));
 }
 
 int main() {

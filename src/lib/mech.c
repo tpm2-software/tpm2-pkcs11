@@ -76,6 +76,7 @@ struct mdetail_entry {
 
     fn_validator validator;
     fn_synthesizer synthesizer;
+    fn_synthesizer unsynthesizer;
     fn_get_tpm_opdata get_tpm_opdata;
     fn_get_halg get_halg;
     fn_get_digester get_digester;
@@ -108,6 +109,10 @@ static CK_RV hash_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs)
 static CK_RV rsa_pkcs_synthesizer(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs,
         CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
+static CK_RV rsa_pkcs_unsynthesizer(mdetail *mdtl,
+        CK_MECHANISM_PTR mech, attr_list *attrs,
+        CK_BYTE_PTR inbuf, CK_ULONG inlen,
+        CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
 static CK_RV rsa_pss_synthesizer(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs,
         CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
@@ -135,7 +140,7 @@ static const mdetail_entry _g_mechs_templ[] = {
 
     { .type = CKM_RSA_X_509, .flags = mf_is_synthetic|mf_sign|mf_verify|mf_encrypt|mf_decrypt|mf_rsa, .get_tpm_opdata = tpm_rsa_pkcs_get_opdata, .padding = RSA_NO_PADDING },
 
-    { .type = CKM_RSA_PKCS,      .flags = mf_force_synthetic|mf_sign|mf_verify|mf_encrypt|mf_decrypt|mf_rsa, .validator = rsa_pkcs_validator, .synthesizer = rsa_pkcs_synthesizer, .get_tpm_opdata = tpm_rsa_pkcs_get_opdata, .padding = RSA_PKCS1_PADDING },
+    { .type = CKM_RSA_PKCS,      .flags = mf_force_synthetic|mf_sign|mf_verify|mf_encrypt|mf_decrypt|mf_rsa, .validator = rsa_pkcs_validator, .synthesizer = rsa_pkcs_synthesizer, .unsynthesizer = rsa_pkcs_unsynthesizer, .get_tpm_opdata = tpm_rsa_pkcs_get_opdata, .padding = RSA_PKCS1_PADDING },
 
     { .type = CKM_RSA_PKCS_PSS,  .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_validator, .synthesizer = rsa_pss_synthesizer, .get_digester = rsa_pss_get_digester, .get_tpm_opdata = tpm_rsa_pss_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
 
@@ -816,6 +821,50 @@ CK_RV rsa_pkcs_synthesizer(mdetail *mdtl,
     return CKR_OK;
 }
 
+CK_RV rsa_pkcs_unsynthesizer(mdetail *mdtl,
+        CK_MECHANISM_PTR mech, attr_list *attrs,
+        CK_BYTE_PTR inbuf, CK_ULONG inlen,
+        CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen) {
+    UNUSED(mech);
+    UNUSED(mdtl);
+
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(attrs, CKA_MODULUS_BITS);
+    if (!a) {
+        LOGE("Signing key has no CKA_MODULUS_BITS");
+        return CKR_GENERAL_ERROR;
+    }
+
+    if (a->ulValueLen != sizeof(CK_ULONG)) {
+        LOGE("Modulus bit pointer data not size of CK_ULONG, got %lu, expected %zu",
+                a->ulValueLen, sizeof(CK_ULONG));
+        return CKR_GENERAL_ERROR;
+    }
+
+    CK_ULONG_PTR keybits = (CK_ULONG_PTR)a->pValue;
+
+    size_t key_bytes = *keybits / 8;
+
+    unsigned char buf[4096];
+    int rc = RSA_padding_check_PKCS1_type_2(buf, sizeof(buf),
+                                       inbuf, inlen,
+                                       key_bytes);
+    if (rc < 0) {
+        LOGE("Could not recover CKM_RSA_PKCS Padding");
+        return CKR_GENERAL_ERROR;
+    }
+
+    /* cannot be < 0 because of check above */
+    if (!outbuf || (unsigned)rc > *outlen) {
+        *outlen = rc;
+        return outbuf ? CKR_BUFFER_TOO_SMALL : CKR_OK;
+    }
+
+    *outlen = rc;
+    memcpy(outbuf, buf, rc);
+
+    return CKR_OK;
+}
+
 CK_RV rsa_pss_synthesizer(mdetail *mdtl,
         CK_MECHANISM_PTR mech, attr_list *attrs,
         CK_BYTE_PTR inbuf, CK_ULONG inlen,
@@ -1164,6 +1213,43 @@ CK_RV mech_synthesize(
     }
 
     return d->synthesizer(mdtl, mech, attrs, inbuf, inlen, outbuf, outlen);
+}
+
+CK_RV mech_unsynthesize(
+        mdetail *mdtl,
+        CK_MECHANISM_PTR mech, attr_list *attrs,
+        CK_BYTE_PTR inbuf, CK_ULONG inlen,
+        CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen) {
+
+    check_pointer(mech);
+
+    mdetail_entry *d = mlookup(mdtl, mech->mechanism);
+    if (!d) {
+        LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
+        return CKR_MECHANISM_INVALID;
+    }
+
+    /* if it's supported by the tpm we don't need to call
+     * the synthesizer, just memcpy in to out.
+     */
+    if ((d->flags & mf_tpm_supported)
+            && !(d->flags & mf_force_synthetic)) {
+        if (outbuf) {
+            if (*outlen < inlen) {
+                return CKR_BUFFER_TOO_SMALL;
+            }
+            memcpy(outbuf, inbuf, inlen);
+        }
+        *outlen = inlen;
+        return CKR_OK;
+    }
+
+    if (!d->unsynthesizer) {
+        LOGE("Cannot unsynthesize mechanism: 0x%lx", d->type);
+        return CKR_MECHANISM_INVALID;
+    }
+
+    return d->unsynthesizer(mdtl, mech, attrs, inbuf, inlen, outbuf, outlen);
 }
 
 CK_RV mech_is_synthetic(mdetail *m, CK_MECHANISM_PTR mech,

@@ -92,9 +92,7 @@ public class PKCS11JavaTests {
 		int output = cipher.getOutputSize(encryptedData.length);
 		byte[] decryptedData = cipher.doFinal(encryptedData);
 
-		String decrypted = new String(decryptedData, output - plainData.length, plainData.length);
-
-		Assert.assertEquals(plaintext, decrypted);
+		Assert.assertArrayEquals(plainData, decryptedData);
 
 		/* Encrypt private decrypt public */
 		cipher.init(Cipher.ENCRYPT_MODE, rsaKey);
@@ -103,11 +101,6 @@ public class PKCS11JavaTests {
 		cipher.init(Cipher.DECRYPT_MODE, rsaPublicKey);
 		output = cipher.getOutputSize(encryptedData.length);
 		decryptedData = cipher.doFinal(encryptedData);
-
-		Assert.assertArrayEquals(plainData, decryptedData);
-
-		String s = new String(decryptedData);
-		Assert.assertEquals(plaintext, s);
 	}
 
 	@Test

@@ -192,6 +192,9 @@ struct tpm_op_data {
 
     CK_KEY_TYPE op_type;
 
+    mdetail *mdtl;
+    CK_MECHANISM mech;
+
     union {
         struct {
             TPMT_SIG_SCHEME sig;
@@ -208,8 +211,13 @@ struct tpm_op_data {
     };
 };
 
-static inline tpm_op_data *tpm_opdata_new(void) {
-    return (tpm_op_data *)calloc(1, sizeof(tpm_op_data));
+static inline tpm_op_data *tpm_opdata_new(mdetail *mdtl, CK_MECHANISM_PTR mech) {
+    tpm_op_data *opdata = (tpm_op_data *)calloc(1, sizeof(tpm_op_data));
+    if (opdata) {
+        opdata->mdtl = mdtl;
+        opdata->mech = *mech;
+    }
+    return opdata;
 }
 
 static ESYS_CONTEXT* esys_ctx_init(TSS2_TCTI_CONTEXT *tcti_ctx) {
@@ -1315,7 +1323,7 @@ CK_RV tpm_rsa_oaep_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, 
     }
     */
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(m, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -1355,7 +1363,7 @@ CK_RV tpm_rsa_pkcs_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, 
     assert(outdata);
     assert(mech);
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(m, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -1379,7 +1387,7 @@ CK_RV tpm_rsa_pss_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, t
     CK_RSA_PKCS_PSS_PARAMS_PTR params;
     SAFE_CAST(mech, params);
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(m, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -1418,7 +1426,7 @@ CK_RV tpm_rsa_pss_sha1_get_opdata(mdetail *mdtl,
     assert(outdata);
     assert(mech);
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -1440,7 +1448,7 @@ CK_RV tpm_rsa_pss_sha256_get_opdata(mdetail *mdtl,
     assert(outdata);
     assert(mech);
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -1462,7 +1470,7 @@ CK_RV tpm_rsa_pss_sha384_get_opdata(mdetail *mdtl,
     assert(outdata);
     assert(mech);
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -1484,7 +1492,7 @@ CK_RV tpm_rsa_pss_sha512_get_opdata(mdetail *mdtl,
     assert(outdata);
     assert(mech);
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -1506,7 +1514,7 @@ CK_RV tpm_rsa_pkcs_sha1_get_opdata(mdetail *mdtl,
     assert(outdata);
     assert(mech);
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -1528,7 +1536,7 @@ CK_RV tpm_rsa_pkcs_sha256_get_opdata(mdetail *mdtl,
     assert(outdata);
     assert(mech);
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -1550,7 +1558,7 @@ CK_RV tpm_rsa_pkcs_sha384_get_opdata(mdetail *mdtl,
     assert(outdata);
     assert(mech);
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -1572,7 +1580,7 @@ CK_RV tpm_rsa_pkcs_sha512_get_opdata(mdetail *mdtl,
     assert(outdata);
     assert(mech);
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -1594,7 +1602,7 @@ CK_RV tpm_ec_ecdsa_get_opdata(mdetail *mdtl,
     assert(outdata);
     assert(mech);
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -1621,7 +1629,7 @@ CK_RV tpm_ec_ecdsa_sha1_get_opdata(mdetail *mdtl,
     assert(outdata);
     assert(mech);
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -1658,7 +1666,7 @@ CK_RV tpm_aes_cbc_get_opdata(mdetail *mdtl,
     assert(outdata);
     assert(mech);
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -1682,7 +1690,7 @@ CK_RV tpm_aes_cfb_get_opdata(mdetail *mdtl,
     assert(outdata);
     assert(mech);
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -1706,7 +1714,7 @@ CK_RV tpm_aes_ecb_get_opdata(mdetail *mdtl,
     assert(outdata);
     assert(mech);
 
-    tpm_op_data *opdata = tpm_opdata_new();
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
     if (!opdata) {
         return CKR_HOST_MEMORY;
     }
@@ -2002,7 +2010,19 @@ CK_RV tpm_decrypt(crypto_op_data *opdata,
     tpm_op_data *tpm_enc_data = opdata->tpm_opdata;
 
     if (tpm_enc_data->op_type == CKK_RSA) {
-        return tpm_rsa_decrypt(tpm_enc_data, ctext, ctextlen, ptext, ptextlen);
+        CK_BYTE buf[4096];
+        CK_ULONG buf_len = sizeof(buf);
+
+        CK_RV rv = tpm_rsa_decrypt(tpm_enc_data, ctext, ctextlen, buf, &buf_len);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+
+        return mech_unsynthesize(
+                tpm_enc_data->mdtl,
+                &tpm_enc_data->mech, tpm_enc_data->tobj->attrs,
+                buf, buf_len,
+                ptext, ptextlen);
     }
 
     tpm_ctx *ctx = tpm_enc_data->ctx;

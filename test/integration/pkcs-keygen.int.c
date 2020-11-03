@@ -1131,10 +1131,8 @@ static void test_create_obj_rsa_public_key(void **state) {
     rv = C_Decrypt(session, ciphertext, ciphertext_len, plaintext2, &plaintext2_len);
     assert_int_equal(rv, CKR_OK);
 
-    /* mode has the plaintext at end, so strip */
-    CK_BYTE *p2 = &plaintext2[sizeof(plaintext2) - sizeof(plaintext)];
-
-    assert_memory_equal(plaintext, p2, sizeof(plaintext));
+    assert_int_equal(plaintext2_len, sizeof(plaintext));
+    assert_memory_equal(plaintext2, plaintext, sizeof(plaintext));
 }
 
 /*

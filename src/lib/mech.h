@@ -25,6 +25,12 @@ CK_RV mech_synthesize(mdetail *mdtl,
         CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
 
+CK_RV mech_unsynthesize(
+        mdetail *mdtl,
+        CK_MECHANISM_PTR mech, attr_list *attrs,
+        CK_BYTE_PTR inbuf, CK_ULONG inlen,
+        CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
+
 CK_RV mech_is_synthetic(mdetail *mdtl,
         CK_MECHANISM_PTR mech,
         bool *is_synthetic);
