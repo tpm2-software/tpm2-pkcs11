@@ -1090,7 +1090,7 @@ CK_RV mech_validate(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
 
     mdetail_entry *d = mlookup(m, mech->mechanism);
     if (!d) {
-        LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
+        LOGV("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
@@ -1267,7 +1267,7 @@ CK_RV mech_get_digester(
 
     mdetail_entry *d = mlookup(mdtl, mech->mechanism);
     if (!d) {
-        LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
+        LOGV("Mechanism not supported, got: 0x%lx", mech->mechanism);
         return CKR_MECHANISM_INVALID;
     }
 
