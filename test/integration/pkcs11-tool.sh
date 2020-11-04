@@ -74,4 +74,14 @@ pkcs11_tool --slot=1 -l --pin=myuserpin --write-object="$TPM2_PKCS11_STORE/cert.
     --type=cert --id=01 --label=device-cert
 echo "Certificate wrote"
 
+# Run the --test and ensure nothing breaks
+pkcs11_tool --test --login --pin=myuserpin 2>&1 | tee logz
+
+# this command doesn't return rc's for status, so we have to peek into the logz
+# pkcs11-tool is inconsistent in outputs, older ones don't provide any success
+# output of 'No errors', se we search that the last line *isnt* '<N> errors' where
+# N is a base10 digit.
+set -o pipefail
+tail -n1 logz | grep -vE '[0-9]+ errors'
+
 exit 0
