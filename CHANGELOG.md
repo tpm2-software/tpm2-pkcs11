@@ -9,7 +9,7 @@
   * FIX C_Encrypt/C_Decrypt interface not setting size when output buffer in NULL.
   * Fix warning ../configure: line 14383: ]: command not found
   * Fix CKM_RSA_PKCS_PSS mechanism.
-  * C_GetMechanismList: Fix index 0 being invalid.
+  * C_GetMechanismList: Fix index 0 of the returned list being invalid.
   * C_GetMechanismInfo: Fix errors like ERROR: Unknown mechanism, got: 0xd.
   * Docs: use full paths from project root to help fix 404 errors.
   * tpm2_ptool init to attempt to persistent created primary object at 0x81000001 and fallback to
