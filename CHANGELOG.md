@@ -1,6 +1,6 @@
 # Changelog
 
-### 1.5.0-rc0 - 2020-11-04
+### 1.5.0 - 2020-11-16
   * C_Decrypt: Fix CKM_RSA_PKCS11 scheme not removing PKCS v1.5 block padding from returned plaintext.
   * C_Digest/C_DigestFinal: Fix Section 5.2 style returns.
   * C_OpenSession: fix valid session handles starting at 0, 0 is invalid per the spec.
