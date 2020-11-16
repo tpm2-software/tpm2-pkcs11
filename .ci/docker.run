@@ -3,10 +3,10 @@
 
 set -e
 
-source $TRAVIS_BUILD_DIR/.ci/docker-prelude.sh
+source $DOCKER_BUILD_DIR/.ci/docker-prelude.sh
 
 # export ptool location
-export PATH=$PATH:"$TRAVIS_BUILD_DIR"/tools
+export PATH=$PATH:"$DOCKER_BUILD_DIR"/tools
 
 # Do not run tests when building on coverity_scan branch
 if [ "${COVERITY_SCAN_BRANCH}" == 1 ]; then
