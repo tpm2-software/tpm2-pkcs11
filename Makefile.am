@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
+# TEST
+
 INCLUDE_DIRS    = -I$(srcdir)/src -I$(top_srcdir)/src/lib
 ACLOCAL_AMFLAGS = -I m4 --install
 AM_CFLAGS       = $(INCLUDE_DIRS) $(EXTRA_CFLAGS) $(CODE_COVERAGE_CFLAGS) \
