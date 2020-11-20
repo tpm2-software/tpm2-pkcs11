@@ -584,7 +584,8 @@ class LinkCommand(NewKeyCommandBase):
             sys.exit('The primary object (id: {:d}) is persistent and'
                 ' the TSS Engine key does not have a persistent parent,'
                 ' got: 0x{:x}'.format(pid, phandle))
-        elif is_transient and phandle != 0:
+        elif is_transient and not (phandle == tpm2.TPM2_RH_OWNER or phandle == 0):
+            # tpm2-tss-engine < 1.1.0 used a phandle of 0 instead of tpm2.TPM2_RH_OWNER
             sys.exit('The primary object (id: {:d}) is transient and'
                 ' the TSS Engine key has a parent handle,'
                 ' got: 0x{:x}'.format(pid, phandle))
