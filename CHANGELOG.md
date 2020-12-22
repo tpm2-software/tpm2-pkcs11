@@ -1,6 +1,7 @@
 # Changelog
 
 ### next
+  * Docs: add a document describing SSH Hostkey configuration using tpm2-pkcs11.
   * Support changes in tpm2-tss-engine using TPM2_RH_OWNER instead of 0.
     * Since upstream commit tpm2-software/tpm2-tss-engine@06f57a3.
 
