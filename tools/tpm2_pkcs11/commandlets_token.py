@@ -133,8 +133,11 @@ class VerifyCommand(Command):
 
             verify_output['wrappingkey'] = {
                 'hex' : bytes.hex(wrappingkeyauth),
-                'auth' : usersealauth['hash']
             }
+            if userpin != None:
+                verify_output['wrappingkey']['auth'] = usersealauth['hash']
+            if sopin != None:
+                verify_output['wrappingkey']['soauth'] = sosealauth['hash']
 
             wrapper = AESAuthUnwrapper(wrappingkeyauth)
 
