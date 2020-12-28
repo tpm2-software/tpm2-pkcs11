@@ -1,7 +1,7 @@
 # SSH host keys configuration
 
-This example will go through using a TPM 2.0 for the openssh sshd host keys.
-As the ssh daemon supports using the SSH agent protocol we will use tpm2-pkcs11 with an ssh-agent.
+This example will go through using a TPM 2.0 for the OpenSSH sshd host keys.
+As the SSH daemon supports using the SSH agent protocol we will use tpm2-pkcs11 with an ssh-agent.
 
 # Create a store and key
 The PIN is currently needed as ssh-agent doesn't seem to support an empty string PIN (just no PIN at all)
@@ -42,5 +42,5 @@ HostHostKeyAgent /tmp/hostagent.sock
 ```
 # ssh-keyscan localhost
 ```
-You should now be able to see the same key as you saw with ssh-add -L
+You should now be able to see the same key as you saw with `ssh-add -L`.
 

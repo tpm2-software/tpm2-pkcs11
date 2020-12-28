@@ -220,7 +220,7 @@ static CK_RV mech_init(tpm_ctx *tctx, mdetail *m) {
     assert(tpm_mechs_len <= m->mdetail_len);
 
     /*
-     * Update whether or not the TPM supports it ot not
+     * Update whether or not the TPM supports it or not
      * and any other metadata
      */
     CK_ULONG i;

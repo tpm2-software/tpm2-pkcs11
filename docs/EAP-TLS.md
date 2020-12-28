@@ -59,7 +59,7 @@ cd /etc/freeradius/certs
 make
 ```
 
-## Configure Access Point client acccess
+## Configure Access Point client access
 
 In the RADIUS infrastructure, the Access Point (AP) is known as the client of the RADIUS server. The Wi-Fi connecting
 devices will be referred to as the Supplicants. Add the following section to the end of the `clients.conf` file to allow
@@ -163,7 +163,7 @@ The following packages and versions are required to complete this setup
 ### RADIUS Server Certificate Authority (CA) installation
 
 Download the RADIUS Server CA in the Supplicant system. The certificates can be found in the RADIUS server `certs`
-directory. Install the RADIUS Server CA in the `/etc/pki/SSID/ca.pem` location. 
+directory. Install the RADIUS Server CA in the `/etc/pki/SSID/ca.pem` location.
 
 #### CA Location in Fedora
 
@@ -242,7 +242,7 @@ Send the Client Certificate to the Supplicant system to complete the setup. Inst
 ### WPA Supplicant Configuration
 
 Generate a `wpa_supplicant` configuration file. The `private_key` attribute is a PKCS#11 URI specifying the private key
-stored in the TPM 2.0. Can be queried using the `p11tool` command using the user pin.
+stored in the TPM 2.0. It can be queried using the `p11tool` command using the user PIN.
 
 ```sh
 cat > wpa_supplicant.conf <<EOF
@@ -265,7 +265,7 @@ system.
 wpa_supplicant -c wpa_supplicant.conf -i wlp1s0
 ```
 
-An example output of a successfull authentication request is shown below for reference.
+An example output of a successful authentication request is shown below for reference.
 
 ```text
 Successfully initialized wpa_supplicant
@@ -343,11 +343,12 @@ semodule -i nm-selinux.pp
 Activate the connection
 
 ```sh
-nmcli conection up SSID
+nmcli connection up SSID
 ```
 
-An example output of succesfull connection activation is shown below for reference:
+An example output of successful connection activation is shown below for reference:
 
 ```text
 Connection successfully activated (D-Bus active path: /org/freedesktop/NetworkManager/ActiveConnection/13)
+```
 ```

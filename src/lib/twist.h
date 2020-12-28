@@ -50,7 +50,7 @@ extern twist twist_calloc(size_t size);
  * Creates a new, binary safe string. This string, like all
  * twist tstrings, is NULL terminated. However, this twist tstring
  * can have NULL bytes within its bounds. It is safe to pass to
- * C string routines and all twist routines, but note the the
+ * C string routines and all twist routines, but note the
  * C routines are not binary safe, so one should always use
  * twist routines.
  *

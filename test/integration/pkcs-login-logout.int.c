@@ -86,7 +86,7 @@ static void open_session(CK_SLOT_ID slot, bool is_rw, test_session_handle *tsh) 
 
 /**
  * Creates and populates a test_info structure but
- * DOESNT open ANY sessions.
+ * DOES NOT open ANY sessions.
  * @return
  *  test_info *, asserts on ENOMEM.
  */
@@ -371,12 +371,12 @@ static void test_user_global_login_logout_good(void **state) {
     user_login_expects(slot0_session1, CKR_USER_ALREADY_LOGGED_IN);
 
     /*
-     * logging out of slot 1 session 0 should yeild not logged in (different slot)
+     * logging out of slot 1 session 0 should yield not logged in (different slot)
      */
     logout_expects(slot1_session0, CKR_USER_NOT_LOGGED_IN);
 
     /*
-     * logging out of slot 0 should yeild a logout and no other sessions should
+     * logging out of slot 0 should yield a logout and no other sessions should
      * be logged in. Try cross session login/logout. Ie DONT login and logout from
      * the same session
      */
@@ -408,7 +408,7 @@ static void test_user_login_logout_time_two(void **state) {
     };
 
     /*
-     * Open an R/O session, state should be initally at
+     * Open an R/O session, state should be initially at
      * CKS_RO_PUBLIC_SESSION
      */
     open_session(slot_id, false, tsh[0]);
@@ -488,7 +488,7 @@ static void test_user_login_implicit_close_all_logout(void **state) {
     };
 
     /*
-     * Open an R/O session, state should be initally at
+     * Open an R/O session, state should be initially at
      * CKS_RO_PUBLIC_SESSION
      */
     open_session(slot_id, false, tsh[0]);
@@ -634,7 +634,7 @@ static void test_so_state_pin_init_good(void **state) {
     assert_int_equal(rv, CKR_OK);
 
     /*
-     * loging in as user with the old pin should fail
+     * logging in as user with the old pin should fail
      */
     logout(handle);
     login_expects(handle, CKU_USER, CKR_PIN_INCORRECT, C(GOOD_USERPIN), sizeof(GOOD_USERPIN) - 1);
@@ -732,7 +732,7 @@ static void test_init_token(void **state) {
 
     /*
      * Try to initialize a token of the same name to verify DB UNIQUE constraint error path
-     * We know that slot + 1 brings us to the next unitialized slot...
+     * We know that slot + 1 brings us to the next uninitialized slot...
      */
     rv = C_InitToken(slot + 1, sopin, sizeof(sopin) - 1, label);
     assert_int_equal(rv, CKR_GENERAL_ERROR);

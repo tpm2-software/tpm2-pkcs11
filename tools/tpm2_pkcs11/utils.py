@@ -193,7 +193,7 @@ def get_ec_params(alg):
 
     http://docs.oasis-open.org/pkcs11/pkcs11-curr/v2.40/cos01/pkcs11-curr-v2.40-cos01.html
 
-    Indicates that EC paramaters are byte arrays of a DER encoded ASN1 objects X9.62 parameter.
+    Indicates that EC parameters are byte arrays of a DER encoded ASN1 objects X9.62 parameter.
     This function will return a hex string without the leading 0x representing this encoding.
     """
 
@@ -247,7 +247,7 @@ def asn1_format_ec_point_uncompressed(x, y):
     return s
 
 def pemcert_to_attrs(certpath):
-            # rather than use pycryptography x509 parser, which gives native type access to certficiate
+            # rather than use pycryptography x509 parser, which gives native type access to certificate
         # fields use pyASN1 to get raw ASN1 encoded values for the fields as the spec requires them
         with open(certpath, "r") as f:
             substrate = pem.readPemFromFile(f)

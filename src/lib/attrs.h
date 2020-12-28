@@ -49,7 +49,7 @@ attr_list *attr_list_new(void);
  * @param old
  *  The attribute list to duplicate.
  * @param new
- *  The new attribute list, thats a duplicate of old.
+ *  The new attribute list, that's a duplicate of old.
  * @return
  *  CKR_OK on success.
  */
@@ -115,7 +115,7 @@ bool attr_list_add_int(attr_list *l, CK_ATTRIBUTE_TYPE type, CK_ULONG value);
 CK_ULONG attr_list_get_count(attr_list *l);
 
 /**
- * The pointer to the internal pkcs11 formated attribute list.
+ * The pointer to the internal pkcs11 formatted attribute list.
  * @param l
  *  The list to access.
  * @return
@@ -124,7 +124,7 @@ CK_ULONG attr_list_get_count(attr_list *l);
 CK_ATTRIBUTE_PTR attr_list_get_ptr(attr_list *l);
 
 /**
- * Frees all storage of the atribute list.
+ * Frees all storage of the attribute list.
  * @param attrs
  *  The attribute list to free.
  */
@@ -212,7 +212,7 @@ CK_RV attr_list_raw_invoke_handlers(const CK_ATTRIBUTE_PTR attrs, CK_ULONG count
         const attr_handler *handlers, size_t len, void *udata);
 
 /**
- * Invokes a list of handlers on a attr_list. Handlers using this interface may
+ * Invokes a list of handlers on an attr_list. Handlers using this interface may
  * expect typed_memory.h interface on pValue pointers.
  *
  * @param attrs

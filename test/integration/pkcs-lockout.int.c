@@ -114,7 +114,7 @@ static void open_session(CK_SLOT_ID slot, bool is_rw, test_session_handle *tsh) 
 
 /**
  * Creates and populates a test_info structure but
- * DOESNT open ANY sessions.
+ * DOES NOT open ANY sessions.
  * @return
  *  test_info *, asserts on ENOMEM.
  */

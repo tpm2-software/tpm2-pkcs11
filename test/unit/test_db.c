@@ -284,7 +284,7 @@ bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob,
     return d->rcb;
 }
 
-/* weak overide */
+/* weak override */
 CK_RV token_add_tobject_last(token *tok, tobject *t) {
     UNUSED(tok);
     UNUSED(t);

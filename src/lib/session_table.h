@@ -41,7 +41,7 @@ void session_table_login_event(session_table *s_table, CK_USER_TYPE user);
  * @param s_table
  *  The session table
  * @param called_session
- *  The session context that the logout event occured on.
+ *  The session context that the logout event occurred on.
  */
 void token_logout_all_sessions(token *tok);
 

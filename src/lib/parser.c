@@ -267,7 +267,7 @@ bool handle_attr_event(yaml_event_t *event,
         free(state->s->seqbuf);
         state->s->seqbuf = NULL;
         if (!res) {
-            LOGE("Cannot add seqence to attr list: 0x%lx", state->s->key);
+            LOGE("Cannot add sequence to attr list: 0x%lx", state->s->key);
             return res;
         }
         return pop_handler(state);

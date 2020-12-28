@@ -13,7 +13,7 @@ been through the [pkcs11-tool](PKCS11_TOOL.md) tutorial.
 Yubico has very complete instructions for configuring, see:
   - https://developers.yubico.com/YubiHSM2/Usage_Guides/OpenSSL_with_pkcs11_engine.html
 
-These instructions are mostly applicable, the only thing that needs to change is the
+These instructions are mostly applicable, the only thing that needs to change is that the
 MODULE_PATH needs to point to the tpm2-pkcs11 library.
 
 A sample OSSL config file is provided at [openssl.conf](../misc/tpm2-pkcs11.openssl.sample.conf).
@@ -29,10 +29,10 @@ called tpm2ssl, like so:
 alias tpm2ssl='OPENSSL_CONF=$HOME/tpm2-pkcs11.openssl.conf openssl'
 ```
 
-You'll also need to set up a `TPM2_PKCS11_STORE` and have an assymetric keypair generated. This is all
+You'll also need to set up a `TPM2_PKCS11_STORE` and have an asymmetric key pair generated. This is all
 shown in the [pkcs11-tool](PKCS11_TOOL.md) tutorial.
 
-Seeting up an alias makes life easier, so lets do that:
+Setting up an alias makes life easier, so lets do that:
 ```bash
 alias tpm2pkcs11-tool='pkcs11-tool --module /path/to/libtpm2_pkcs11.so
 ```
@@ -72,10 +72,10 @@ Public Key Object; EC  EC_POINT 256 bits
   Usage:      verify
 ```
 
-You're key could be RSA, thats fine. The imporant thing is to look at the label and pass it via the -key argument
-in openssl below. Note that this is key my-ecc-keypair in slot 1, even though the outout says slot 0. In pkcs11, the slotid is what matters, which is the 0x1. A slot id of 0x0 is not valid.
+Your key could be RSA, that's fine. The imporant thing is to look at the label and pass it via the `-key` argument
+in openssl below. Note that this is key my-ecc-keypair in slot 1, even though the output says slot 0. In PKCS11, the slotid is what matters, which is the 0x1. A slot id of 0x0 is not valid.
 
-To generate a self signed certificate, one can simply use the `req` command with openssl.
+To generate a self signed certificate, one can simply use the `req` command with `openssl`.
 
 ``` bash
 tpm2ssl req -new -x509 -days 365 -subj '/CN=my key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_my-ecc-keypair -out cert.pem
@@ -83,7 +83,7 @@ engine "pkcs11" set.
 Enter PKCS#11 token PIN for label:
 ```
 
-Note: Openssl can also find the key by using the `id` field. For example, update the key to:
+Note: OpenSSL can also find the key by using the `id` field. For example, update the key to:
 ```
 -key slot_1-id_38316235653539316533633232383139
 ```
@@ -120,9 +120,9 @@ cert:
   CKA_ID: '38316235653539316533633232383139'
 ```
 
-## Listing a Certficiate
+## Listing a Certificate
 
-After this, veiw your cert object, you can again just list the objects with pkcs11-tool.
+After this, view your cert object, you can again just list the objects with pkcs11-tool.
 
 ```bash
 tpm2pkcs11-tool --slot 1 -O

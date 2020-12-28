@@ -10,7 +10,7 @@ sudo apt-get install opensc
 # Step 1 - Initializing a Store
 
 Start by reading the document on initialization [here](INITIALIZING.md). Only brief commands
-will be provided here, so a a basic understanding of the initialization process is paramount.
+will be provided here, so a basic understanding of the initialization process is paramount.
 
 We start by creating a tpm2-pkcs11 *store* and set up an empty token.
 
@@ -18,7 +18,6 @@ We start by creating a tpm2-pkcs11 *store* and set up an empty token.
 tpm2_ptool.py init --path=~/tmp
 
 tpm2_ptool.py addtoken --pid=1 --sopin=mysopin --userpin=myuserpin --label=label --path ~/tmp
-
 ```
 
 # Step 2 - Exporting the Store
@@ -34,48 +33,48 @@ like `$HOME`.
 
 # Examples of pkcs11-tool
 
-This will not be exhaustive, as we don't wish to duplicate opensc's documentation of their tool. But we will show case
+This will not be exhaustive, as we do not wish to duplicate opensc's documentation of their tool. But we will show case
 a few commands for users wishing to use this tool with tpm2-pkcs11 project.
 
 **For each example below, --module is the path to the pkcs11.so library and will be machine dependent. Note that default builds
 will provide the library under src/.libs**
 
-It makes life simpler to set p an alias, so lets do that, making sure to update`--module`:
+It makes life simpler to set up an alias, so let's do that, making sure to update `--module`:
 
 ```bash
 alias tpm2pkcs11-tool='pkcs11-tool --module /path/to/libtpm2_pkcs11.so
 ```
 
-## Changing USER pin
+## Changing USER PIN
 
-How to change the user pin from *myuserpin* to *mynewpin*
+How to change the user PIN from *myuserpin* to *mynewpin*
 
 ```sh
 tpm2pkcs11-tool --label="label" --login --pin myuserpin --change-pin --new-pin mynewpin
 Using slot 0 with a present token (0x1)
 PIN successfully changed
 ```
-You can see [Checking USER pin](#checking-user-pin) for example of checking the pin.
+You can see [Checking USER PIN](#checking-user-pin) for example of checking the PIN.
 
-## Checking USER pin
+## Checking USER PIN
 
-How to check that the pin is valid. The pin value shown is based off of section [Changing USER pin](#changing-user-pin)
+How to check that the PIN is valid. The PIN value shown is based off of section [Changing USER PIN](#changing-user-pin)
 
 ```sh
 tpm2pkcs11-tool --label="label" --test --pin mynewpin
 ```
 
-## Initializing USER pin
+## Initializing USER PIN
 
-How to reset or initialize the user pin given the so pin.
+How to reset or initialize the user PIN given the SO PIN.
 ```sh
 tpm2pkcs11-tool --label="label" --init-pin --so-pin mysopin --pin mynewpin
 ```
 
 ## Generating Random Data
 
-The below example will generate 4 bytes of random data and assumes the pin has been changed as in section
-[Checking USER pin](#checking-user-pin) for example of checking the pin.
+The below example will generate 4 bytes of random data and assumes the PIN has been changed as in section
+[Checking USER PIN](#checking-user-pin) for example of checking the PIN.
 
 ```bash
 tpm2pkcs11-tool --label="label" --pin mynewpin --generate-random 4 | xxd
@@ -107,9 +106,9 @@ Public Key Object; EC  EC_POINT 256 bits
 Outside of using [tpm2_ptool.py](PKCS11_TOOL.md) to add objects, p11tool supports creating objects
 through the PKCS#11 interface.
 
-### Generating RSA Keypair
+### Generating RSA Key pair
 
-This will generate an RSA keypair using pkcs11-tool:
+This will generate an RSA key pair using pkcs11-tool:
 ```bash
 tpm2pkcs11-tool --label="label" --login --pin=myuserpin --keypairgen
 Using slot 0 with a present token (0x1)
@@ -124,9 +123,9 @@ Public Key Object; RSA 2048 bits
   Usage:      none
 ```
 
-### Generating ECC Keypair
+### Generating ECC Key pair
 
-This will generate an EC keypair using pkcs11-tool:
+This will generate an EC key pair using pkcs11-tool:
 ```bash
 tpm2pkcs11-tool --label="my-ecc-keypair" --login --pin=myuserpin --keypairgen --usage-sign --key-type EC:prime256v1
 Using slot 0 with a present token (0x1)
@@ -145,7 +144,7 @@ Public Key Object; EC  EC_POINT 256 bits
 
 ## Destroying Objects
 
-Let's destroy the key we created in the *Generating ECC Keypair* segment, IDs 3436 and 3437 for both the private and public portions
+Let's destroy the key we created in the *Generating ECC Key pair* segment, IDs 3436 and 3437 for both the private and public portions
 respectively.
 
 ### Private Key

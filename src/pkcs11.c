@@ -251,7 +251,7 @@ do { \
 
 /*
  * Below you'll find the auth routines that validate session
- * context. Becuase session context is required to be in a
+ * context. Because session context is required to be in a
  * certain state for things, these auth plugins check a vary
  * specific condition. Add more if you need different checks.
  */

@@ -254,7 +254,7 @@ CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK
     /*
      * Indicate that the token has been logged in. For CKU_CONTEXT_SPECIFIC the spec
      * states that on both cases (appears to be fail or success of C_Login) session
-     * state does not change. This is because C_Login(USER) should have already occured
+     * state does not change. This is because C_Login(USER) should have already occurred
      * and is validated above.
      */
     if (user == CKU_CONTEXT_SPECIFIC) {

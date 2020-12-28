@@ -493,7 +493,7 @@ static CK_RV do_sig_verify_ec(EVP_PKEY *pkey,
     }
 
     /*
-     * OpenSSL expects ASN1 framed signatures, PKCS11 does flate
+     * OpenSSL expects ASN1 framed signatures, PKCS11 does flat
      * R + S signatures, so convert it to ASN1 framing.
      * See:
      *   https://github.com/tpm2-software/tpm2-pkcs11/issues/277

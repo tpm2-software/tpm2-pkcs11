@@ -48,7 +48,7 @@ git clone https://github.com/OpenSC/pkcs11-helper.git
 # Note this could change, so check pkg-config --modversion libpkcs11-helper-1
 git checkout pkcs11-helper-1.22
 
-# Get the Patches that RPM built with. Noe that this PR could change, and do to
+# Get the Patches that RPM built with. Note that this PR could change, and do to
 # rebase conflicts do not apply cleanly anymore.
 wget https://github.com/OpenSC/pkcs11-helper/pull/4.patch
 
@@ -67,10 +67,10 @@ So one can just ignore it.
 
 **Note**: There are other ways to do this, and your mileage may vary.
 
-After you have ppkcs11-helper patched, you need to build and optionally install it:
+After you have pkcs11-helper patched, you need to build and optionally install it:
   - https://github.com/OpenSC/pkcs11-helper/wiki/How-to-compile-pkcs11-helper
 
-If you don't install it, you can set LD_LIBRARY_PATH or LD_PRELOAD variables to the location of the parent
+If you don't install it, you can set `LD_LIBRARY_PATH` or `LD_PRELOAD` variables to the location of the parent
 directory containing the library or the library path itself respectively.
 
 ## Configuring
@@ -215,7 +215,7 @@ pkcs11-id '${SERIALIZED_ID}'
 EOF
 ```
 
-The following diff illustrates the changes need to the client openvpn config file.
+The following diff illustrates the changes needed to the client openvpn config file.
 One needs to comment out the config file lines for cert and key. Your specific
 values for pkcs11-id, pkcs11-providers and remote may vary on distro and local
 configurations.

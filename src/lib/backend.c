@@ -30,7 +30,7 @@ static enum backend get_backend(void) {
  * distributing calls to different backends.
  * For now this will only be the esysdb backend that uses tss2-esys
  * and sqlite3 for operations.
- * In the future, logic will be added to also inlcude the tss2-fapi
+ * In the future, logic will be added to also include the tss2-fapi
  * library for storage and TPM interaction.
  */
 
@@ -249,8 +249,8 @@ CK_RV backend_init_user(token *t, const twist sealdata,
 
 /** Store a new object for a given token in the backend.
  *
- * Note: Adding the the object to the ring buffer in the token
- *       struct is done independantly.
+ * Note: Adding the object to the ring buffer in the token
+ *       struct is done independently.
  *
  * @param[in,out] t The token to add the object to.
  * @param[in] tobj The object to store.

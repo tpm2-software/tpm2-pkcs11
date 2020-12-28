@@ -76,7 +76,7 @@ From there, one can use that key as they would in other tutorials.
 via [tpm2\_createprimary](https://github.com/tpm2-software/tpm2-tools/blob/master/man/tpm2_createprimary.1.md)
 and persist them via [tpm2\_evictcontrol](https://github.com/tpm2-software/tpm2-tools/blob/master/man/tpm2_evictcontrol.1.md).
 
-You can create tokens and link keys generated with *tpm2-tools* as illustraded below. One crucial benefit of persisten objects,
+You can create tokens and link keys generated with *tpm2-tools* as illustraded below. One crucial benefit of persistent objects,
 besides token speed as it doesn't need to invoke the TPM2_CreatePrimary command, is that any template can be used for the
 persistent object; one is not limited to the few pre-defined templates.
 
@@ -103,7 +103,7 @@ pid="$(tpm2_ptool init --primary-handle=0x81000001 --path=~/tmp | grep id | cut 
 tpm2_ptool addtoken --pid=$pid --sopin=mysopin --userpin=myuserpin --label=mytoken --path=~/tmp
 
 # Link the key
-# Note: order of keypair objects does not matter
+# Note: order of key pair objects does not matter
 tpm2_ptool link --label=mytoken --userpin=myuserpin --key-label="link-key" key.pub key.priv
 ```
 
@@ -137,7 +137,7 @@ pid="$(tpm2_ptool init --transient-parent="tpm2-tools-default" --path=~/tmp | gr
 tpm2_ptool addtoken --pid=$pid --sopin=mysopin --userpin=myuserpin --label=mytoken --path=~/tmp
 
 # Link the key
-# Note: order of keypair objects does not matter
+# Note: order of key pair objects does not matter
 tpm2_ptool link --label=mytoken --userpin=myuserpin --key-label="link-key" key.pub key.priv
 ```
 
