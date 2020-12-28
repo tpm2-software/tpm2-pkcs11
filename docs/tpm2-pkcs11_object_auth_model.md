@@ -49,7 +49,7 @@ The PKCS11 design describes two specific roles: The security-officer or **SO**
 and the **USER**. Following are some relevant design considerations when
 comparing the roles:
 
-* The SO-PIN and USER-PIN info differentiates the role based accesses for the
+* The SO-PIN and USER-PIN info differentiate the role based accesses for the
 security officer and the user. Hence, PIN information should remain a secret to
 the specific role.
 
@@ -154,7 +154,7 @@ be able create the derived objects which define most of the design.
 Primary objects are also derived objects created using TPM2_CreatePrimary.
 However this paragraph describes the objects protected with keys derived from
 the seed values of the primary objects. Such an object is created with the
-invocation of the TPM2_Create command. Every invocation results in creation of a
+invocation of the TPM2_Create command. Every invocation results in creating a
 unique object. The uniqueness is a result of TPM generated data in the sensitive
 portion of the object. This object can be saved off the TPM or made persistent
 into the TPM NV memory to be reusable between boots.
@@ -166,7 +166,7 @@ Wrapping-Key-Sealing object.
 
 ### The NV Index/ object
 
-There are two types of TPM NV objects - those that are remain persistent after
+There are two types of TPM NV objects - those that remain persistent after
 creating/ importing the objects under a TPM hierarchy OR those defined as NV
 indexes to hold user defined data. NV index of size 0 is a valid definition. An
 NV index can have an authorization password and or policy for administrative and
@@ -176,7 +176,7 @@ object authorization simply protects read and write access to the object. Thus
 no new NV indexes need to be defined when changing the authorization.
 <br>
 
-In the design this object type is used define the SO-PIN/ USER-PIN auth
+In the design this object type is used to define the SO-PIN/ USER-PIN auth
 reference objects.
 
 ## tpm2-pkcs11 objects
@@ -201,9 +201,9 @@ object with the primary object as the parent.
 
 3. Wrapping-Key sealing object: The authorization value of this object is
 referenced off the USER-PIN object with a policy. The object itself doesn't have
-a auth value of it's own and so the unsealing user operation would need the auth
-satisifed through a policy requiring USER pin. It seals a wrapping key used to
-encrypt the auth value of existing TPM2 objects to be assumed into the
+an auth value of it's own and so the unsealing user operation would need the
+auth satisfied through a policy requiring USER PIN. It seals a wrapping key used
+to encrypt the auth value of existing TPM2 objects to be assumed into the
 tpm2-pkcs11 model. This is a transient derived object with the primary object as
 the parent.
 
@@ -216,7 +216,7 @@ objects with the primary object as the parent.
 
 NOTE:
   * All derived objects with the primary object as parent are saved off the
-  TPM . This involves saving two types of information about the derived objects
+  TPM. This involves saving two types of information about the derived objects
   to be able to load the objects back again to the TPM. Sensitive information
   which can be private portion of an asymmetric key or the symmetric encryption
   key. This information for convenience is called private. Sensitive information
@@ -255,7 +255,7 @@ tpm2-pkcs11 objects. The SO-PIN and USER-PIN objects are NV index objects while
 the Wrapping-Key sealing object and the USER(keys) objects are transient derived
 objects with the primary object as the parent.
 
-## NV poicy diagram
+## NV policy diagram
 
 Overview of policies used to satisfy standards requirements with NV objects used
 as SO/ USER-PIN reference objects.
@@ -308,18 +308,18 @@ SO-PIN and USER-PIN reference objects are transient derived objects with the
 primary object as the parent. In that, when the authorization of the objects is
 changed it creates a new sensitive portion of the object while the old sensitive
 information cannot be invalidated. To that effect, anyone who has a cached copy
-of an older object whose pin may have been compromised can still access the USER
-objects. This also violates the design consideration set out under "PKCS11 Roles
-". A malicious SO could create a second USER-PIN object for their own use, which
-the real USER would never know about and thus SO-PIN can be used to access USER
-objects.
+of an older object whose PIN may have been compromised can still access the USER
+objects. This also violates the design consideration set out under "PKCS11
+Roles". A malicious SO could create a second USER-PIN object for their own use,
+which the real USER would never know about and thus SO-PIN can be used to access
+USER objects.
 <br>
 
 The issue can be resolved by using NV indices as SO-PIN and USER-PIN reference
 objects instead. Although, we still need the sealing object to seal the
-wrapping secret for bringing the existing TPM objects into the pkcs11 fold as
+wrapping secret for bringing the existing TPM objects into the PKCS11 fold as
 well as the USER(keys) objects. However their auth will be tied to USER-PIN NV
-index and so despite the fact that the sealing and user(keys) objects are
+index and so despite the fact that the sealing and USER(keys) objects are
 transient derived objects with the primary object as the parent, a new sensitive
 portion is not created when the auth ought to change since these object simply
 reference the authorization of the USER-PIN NV object.
@@ -347,8 +347,8 @@ rm prim.ctx
 
 ### TRANSIENT
 
-* ***Creating the SO-pin-reference-object - Its a keyedhash that seals some
-random data that will not be used. The choice of creating the so object as
+* ***Creating the SO-PIN-reference-object - Its a keyedhash that seals some
+random data that will not be used. The choice of creating the SO object as
 a keyedhash object is simply because it takes minimum object attributes
 required for this design.***
 ```
@@ -357,7 +357,7 @@ tpm2_create -C 0x81010001 -u so_pin_ref_obj.pub -r so_pin_ref_obj.priv \
 -a "fixedtpm|fixedparent|userwithauth" -p sopin -i-
 ```
 
-* ***Policy to enable USER to change USER pin***
+* ***Policy to enable USER to change USER PIN***
 ```
 tpm2_startauthsession -S session.ctx
 tpm2_policypassword -S session.ctx
@@ -366,7 +366,8 @@ tpm2_policycommandcode -S session.ctx \
 tpm2_flushcontext session.ctx
 rm session.ctx
 ```
-* ***Policy to enable SO to change USER pin***
+
+* ***Policy to enable SO to change USER PIN***
 ```
 tpm2_load -C 0x81010001 -u so_pin_ref_obj.pub -r so_pin_ref_obj.priv \
 -c so_pin_ref_obj.ctx
@@ -380,7 +381,7 @@ tpm2_flushcontext -t
 rm so_pin_ref_obj.ctx
 ```
 
-* ***Compounded policy: USER (OR) SO can change the USER pin***
+* ***Compounded policy: USER (OR) SO can change the USER PIN***
 ```
 tpm2_startauthsession -S session.ctx
 tpm2_policyor -S session.ctx \
@@ -390,11 +391,11 @@ tpm2_flushcontext session.ctx
 rm session.ctx
 ```
 
-* ***Create the USER-pin-reference-object - The auth of the USER object can be
+* ***Create the USER-PIN-reference-object - The auth of the USER object can be
 changed by either SO or USER. Its a keyedhash that seals wrapping secret. The
 wrapping secret is used as a software wrapping key or the auth to a wrapping
 object that then encrypts the auth of the existing TPM objects to be assumed
-into the pkcs11 token. NOTE: NEVER UNSEAL THE WRAPPING SECRET TO STDOUT.***
+into the PKCS11 token. NOTE: NEVER UNSEAL THE WRAPPING SECRET TO STDOUT.***
 ```
 dd if=/dev/urandom bs=1 count=32 status=none | \
 tpm2_create -C 0x81010001 -u user_pin_ref_obj.pub -r user_pin_ref_obj.priv \
@@ -402,7 +403,7 @@ tpm2_create -C 0x81010001 -u user_pin_ref_obj.pub -r user_pin_ref_obj.priv \
 -L policy.pass_AND_ccobjch__OR__secret.so_AND_ccobjch -p userpin -i-
 ```
 
-* ***Policy to use USER ref pin as the auth for creating user objects***
+* ***Policy to use USER ref PIN as the auth for creating user objects***
 ```
 tpm2_load -C 0x81010001 -u user_pin_ref_obj.pub -r user_pin_ref_obj.priv \
 -c user_pin_ref_obj.ctx
@@ -428,11 +429,11 @@ tpm2_create -C 0x81010001 -u user_object.pub -r user_object.priv \
 tpm2_load -C 0x81010001 -c user_object.ctx -u user_object.pub \
 -r user_object.priv
 
-#load the USER pin ref object
+#load the USER PIN ref object
 tpm2_load -C 0x81010001 -c user_pin_ref_obj.ctx -u user_pin_ref_obj.pub \
 -r user_pin_ref_obj.priv
 
-#satisfy the policy of referred auth of the USER pin ref object
+#satisfy the policy of referred auth of the USER PIN ref object
 tpm2_startauthsession -S session.ctx --policy-session
 tpm2_policysecret -S session.ctx -c user_pin_ref_obj.ctx userpin
 
@@ -447,7 +448,7 @@ tpm2_flushcontext -t
 rm user_pin_ref_obj.ctx user_object.ctx session.ctx 
 ```
 
-* ***Change USER pin with USER pin***
+* ***Change USER PIN with USER PIN***
 ```
 tpm2_load -C 0x81010001 -u user_pin_ref_obj.pub -r user_pin_ref_obj.priv \
 -c user_pin_ref_obj.ctx
@@ -465,7 +466,7 @@ tpm2_flushcontext -t
 rm user_pin_ref_obj.ctx
 ```
 
-* ***Change USER pin with SO pin***
+* ***Change USER PIN with SO PIN***
 ```
 tpm2_load -C 0x81010001 -u so_pin_ref_obj.pub -r so_pin_ref_obj.priv \
 -c so_pin_ref_obj.ctx
@@ -486,7 +487,7 @@ rm so_pin_ref_obj.ctx
 rm user_pin_ref_obj.ctx
 ```
 
-* ***Change SO pin with SO pin***
+* ***Change SO PIN with SO PIN***
 ```
 tpm2_load -C 0x81010001 -u so_pin_ref_obj.pub -r so_pin_ref_obj.priv \
 -c so_pin_ref_obj.ctx
@@ -513,12 +514,12 @@ tpm2_nvdefine -C o -P ownerauth -p defaultsonvpin $SO_NV_INDEX \
 -a "authread|authwrite" -s 0 -L policy.pass_AND_ccnvobjch
 ```
 
-* ***Policy for USER pin change with USER pin***
+* ***Policy for USER PIN change with USER PIN***
 ```
 Same as Policy for SO-PIN ref NV object --> policy.pass_AND_ccnvobjch
 ```
 
-* ***Policy for USER pin change with SO pin***
+* ***Policy for USER PIN change with SO PIN***
 ```
 tpm2_startauthsession -S session.ctx
 tpm2_policysecret -S session.ctx -c $SO_NV_INDEX defaultsonvpin
@@ -528,7 +529,7 @@ tpm2_flushcontext session.ctx
 rm session.ctx
 ```
 
-* ***Compounded policy: USER (OR) SO can change the USER pin***
+* ***Compounded policy: USER (OR) SO can change the USER PIN***
 ```
 tpm2_startauthsession -S session.ctx
 tpm2_policyor -S session.ctx \
@@ -538,7 +539,7 @@ tpm2_flushcontext session.ctx
 rm session.ctx
 ```
 
-* ***Create the USER pin NV ref object***
+* ***Create the USER PIN NV ref object***
 ```
 USER_NV_INDEX=0x1500016
 tpm2_nvdefine -C o -P ownerauth -p usernvpin $USER_NV_INDEX \
@@ -546,7 +547,7 @@ tpm2_nvdefine -C o -P ownerauth -p usernvpin $USER_NV_INDEX \
 -L policy.pass_AND_ccnvobjch__OR__secret.so.nv_AND_ccnvobjch
 ```
 
-* ***Policy to use USER NV ref pin as the auth for creating user objects***
+* ***Policy to use USER NV ref PIN as the auth for creating user objects***
 ```
 tpm2_startauthsession -S session.ctx
 tpm2_policysecret -S session.ctx -c $USER_NV_INDEX \
@@ -555,11 +556,11 @@ tpm2_flushcontext session.ctx
 rm session.ctx
 ```
 
-* ***Create the USER pin NV ref sealing object - Its a keyedhash that seals the
+* ***Create the USER PIN NV ref sealing object - Its a keyedhash that seals the
 wrapping secret. The auth of the USER object can be changed by either SO or
 USER. The wrapping secret is used as a software wrapping key or the auth to a
 wrapping object to encrypt the auth of the existing TPM objects to be assumed
-into the pkcs11 token. NEVER UNSEAL THE WRAPPING SECRET TO STDOUT.***
+into the PKCS11 token. NEVER UNSEAL THE WRAPPING SECRET TO STDOUT.***
 ```
 dd if=/dev/urandom bs=1 count=32 status=none | \
 tpm2_create -C 0x81010001 -u user_seal_obj_user_nv_auth.pub \
@@ -567,7 +568,7 @@ tpm2_create -C 0x81010001 -u user_seal_obj_user_nv_auth.pub \
 -L policy.secret.user.nv -i-
 ```
 
-* ***Unseal the wrapping secret from USER sealing object with NV pin ref DO NOT
+* ***Unseal the wrapping secret from USER sealing object with NV PIN ref DO NOT
 UNSEAL TO STDOUT***
 ```
 tpm2_load -C 0x81010001 -u user_seal_obj_user_nv_auth.pub \
@@ -596,7 +597,7 @@ tpm2_create -C 0x81010001 -u user_object_user_nv_auth.pub \
 tpm2_load -C 0x81010001 -c user_object_user_nv_auth.ctx \
 -u user_object_user_nv_auth.pub -r user_object_user_nv_auth.priv
 
-#satisfy the policy of referred auth of the USER pin ref object
+#satisfy the policy of referred auth of the USER PIN ref object
 tpm2_startauthsession -S session.ctx --policy-session
 tpm2_policysecret -S session.ctx -c $USER_NV_INDEX \
 -L policy.secret.user.nv usernvpin
@@ -612,7 +613,7 @@ tpm2_flushcontext -t
 rm user_object_user_nv_auth.ctx session.ctx 
 ```
 
-* ***Change USER pin with SO pin***
+* ***Change USER PIN with SO PIN***
 ```
 tpm2_startauthsession -S session.ctx --policy-session
 tpm2_policysecret -S session.ctx -c $SO_NV_INDEX defaultsonvpin
@@ -624,7 +625,7 @@ tpm2_flushcontext session.ctx
 rm session.ctx
 ```
 
-* ***USER-PIN change with USER pin***
+* ***USER-PIN change with USER PIN***
 ```
 tpm2_startauthsession -S session.ctx --policy-session
 tpm2_policypassword -S session.ctx
@@ -637,7 +638,7 @@ tpm2_flushcontext session.ctx
 rm session.ctx
 ```
 
-* ***SO-PIN change with SO pin***
+* ***SO-PIN change with SO PIN***
 ```
 tpm2_startauthsession -S session.ctx --policy-session
 tpm2_policypassword -S session.ctx

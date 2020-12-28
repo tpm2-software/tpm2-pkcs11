@@ -1,7 +1,7 @@
 # SSH Configuration
 
 Below, will be examples and discussion on how to configure SSH with tpm2-pkcs11 to ssh to
-the local host. The Example described here could be extended for remote ssh login as well.
+the local host. The example described here could be extended for remote ssh login as well.
 
 We assume a machine configured in such a state where a user can ssh locally and login with
 a password prompt, ala:
@@ -17,7 +17,7 @@ works.
 # Step 1 - Initializing a Store
 
 Start by reading the document on initialization [here](INITIALIZING.md). Only brief commands
-will be provided here, so a a basic understanding of the initialization process is paramount.
+will be provided here, so a basic understanding of the initialization process is paramount.
 
 We start by creating a tpm2-pkcs11 *store* and set up an RSA2048 key that SSH can used.
 **Note**: Most SSH configurations allow RSA2048 keys to be used, but this can be turned off
@@ -44,7 +44,7 @@ like `$HOME`.
 
 # Step 3 - Generating the SSH key public portion
 
-The next step will use `ssh-keygen` comand to generate the public portion of an ssh key. The command is slightly complicated
+The next step will use `ssh-keygen` command to generate the public portion of an ssh key. The command is slightly complicated
 as we use tee to redirect the output to both a file called `my.pub` and to *stdout* for viewing.
 
 Note: You may need to update the path to the tpm2-pkcs11 shared object below.
@@ -56,7 +56,7 @@ ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC0CTmUAAB8jfNNHrw99m7K3U/+qbV1pAb7es3L+COq
 
 # Step 4 - Configuring SSH to Accept the Key
 
-Now that the public portion of the key is in ssh format and located in file `my.pub` we can add this to the authorized_keys2 file for the user:
+Now that the public portion of the key is in ssh format and located in file `my.pub` we can add this to the `authorized_keys2` file for the user:
 ```bash
 cat my.pub >> ~/.ssh/authorized_keys2
 ```
@@ -78,7 +78,7 @@ and `sudo make install` method.
 
 # Step 6 - Logging In via SSH
 
-To log in, one used the `ssh` client application and specifies the path to the PKCS11 library via the `-I` option. It will prompt for the user pin, which
+To log in, one used the `ssh` client application and specifies the path to the PKCS11 library via the `-I` option. It will prompt for the user PIN, which
 in the example is set to `myuserpin`.
 
 ```bash

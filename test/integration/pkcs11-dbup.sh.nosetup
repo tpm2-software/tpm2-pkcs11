@@ -80,9 +80,9 @@ echo "Got schema version as $v"
 test 1 -eq $v
 
 # do an upgrade
-echo "Generating RSA keypair"
+echo "Generating RSA key pair"
 pkcs11_tool --slot=1 --label="myrsakey" --login --pin=myuserpin --keypairgen
-echo "RSA Keypair generated"
+echo "RSA Key pair generated"
 
 echo "Checking schema version as > 1"
 v=$(sqlite3 "$TPM2_PKCS11_STORE/tpm2_pkcs11.sqlite3" 'select schema_version from schema;')

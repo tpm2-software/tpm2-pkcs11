@@ -63,7 +63,7 @@ static int test_setup_by_label(void **state) {
 
     assert_in_range(i, 0, count - 1);
 
-    /* open a session on foudn slot */
+    /* open a session on found slot */
     CK_SESSION_HANDLE session;
     rv = C_OpenSession(slot, CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL,
             NULL, &session);

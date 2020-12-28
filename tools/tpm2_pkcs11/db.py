@@ -63,7 +63,7 @@ class Db(object):
         return x
 
     def rmtoken(self, label):
-        # This works on the premise of a cascading delete tied by foriegn
+        # This works on the premise of a cascading delete tied by foreign
         # key relationships.
         self._conn.execute('DELETE from tokens WHERE label=?', (label, ))
 
@@ -74,7 +74,7 @@ class Db(object):
         return x
 
     def rmprimary(self, pid):
-        # This works on the premise of a cascading delete tied by foriegn
+        # This works on the premise of a cascading delete tied by foreign
         # key relationships.
         self._conn.execute('DELETE from pobjects WHERE id=?', (pid, ))
 

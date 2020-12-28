@@ -45,4 +45,4 @@ to also pass options. More can be found [here](https://www.gnu.org/software/auto
 The issue with that, however, is that the granularity is per-file extension. So in this case, we define a `.fuzz` extension that
 all executable tests will have, and the [script](test/fuzz/scripts/fuzz-runner.sh) will wrap each execution. We define the options
 controlling the run duration and jobs in the script. Using something like `AM_FUZZ_LOG_FLAGS` could also be used, but we would have
-to then reorder the command line more to ensure that libfuzzer options apear in front of the fuzz target executable.
+to then reorder the command line more to ensure that libfuzzer options appear in front of the fuzz target executable.

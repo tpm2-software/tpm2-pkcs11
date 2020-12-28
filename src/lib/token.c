@@ -61,7 +61,7 @@ WEAK CK_RV token_min_init(token *t) {
     }
 
     /*
-     * Initalize the per-token mechanism details table
+     * Initialize the per-token mechanism details table
      */
     rv = mdetail_new(t->tctx, &t->mdtl, t->config.pss_sigs_good);
     if (rv != CKR_OK) {
@@ -391,7 +391,7 @@ CK_RV token_init(token *t, CK_BYTE_PTR pin, CK_ULONG pin_len, CK_BYTE_PTR label)
 
     rv = slot_add_uninit_token();
     if (rv != CKR_OK) {
-        LOGW("Could not add unitialized token");
+        LOGW("Could not add uninitialized token");
     }
 
     rv =  CKR_OK;

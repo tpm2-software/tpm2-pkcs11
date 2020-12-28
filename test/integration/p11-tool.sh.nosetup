@@ -131,12 +131,12 @@ GNUTLS_PIN=mynewuserpin \
 p11_tool --initialize-pin ${TOKENURL2}
 echo "Userpin2 initialized"
 
-echo "Generating RSA keypair"
+echo "Generating RSA key pair"
 GNUTLS_PIN=mynewuserpin \
 p11_tool --generate-rsa --bits 2048 --login --label="myrsakey" --outfile="${tempdir}/pubkey.pem" ${TOKENURL}
 GNUTLS_PIN=mynewuserpin \
 p11_tool --login --list-all ${TOKENURL}
-echo "RSA Keypair generated"
+echo "RSA Key pair generated"
 
 echo "Generating RSA keypair2"
 GNUTLS_PIN=mynewuserpin \
@@ -145,14 +145,14 @@ GNUTLS_PIN=mynewuserpin \
 p11_tool --login --list-all ${TOKENURL2}
 echo "RSA Keypair2 generated"
 
-echo "Change the keypair label"
+echo "Change the key pair label"
 GNUTLS_PIN=mynewuserpin \
 p11_tool --login --set-label="myrsakey2" "${TOKENURL};object=myrsakey;object-type=private"
 GNUTLS_PIN=mynewuserpin \
 p11_tool --login --list-all ${TOKENURL}
 GNUTLS_PIN=mynewuserpin \
 p11_tool --login --set-label="myrsakey" "${TOKENURL};object=myrsakey2;object-type=private"
-echo "RSA Keypair generated"
+echo "RSA Key pair generated"
 
 echo "Testing signing via openssl"
 osslconf="$tempdir/ossl.cnf"

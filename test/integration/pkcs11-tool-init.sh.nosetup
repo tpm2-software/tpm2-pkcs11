@@ -37,9 +37,9 @@ echo "TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
 
 echo "testdata">${tempdir}/data
 
-echo "Should have unitialized token"
+echo "Should have uninitialized token"
 pkcs11_tool -T | grep -q uninitialized
-echo "Found unitialized token"
+echo "Found uninitialized token"
 
 pkcs11_tool -I
 pkcs11_tool -T
@@ -54,9 +54,9 @@ echo "Initializing user pin"
 pkcs11_tool --slot-index=0 --login --login-type="so" --init-pin --so-pin=mynewsopin --pin=mynewuserpin
 echo "Userpin initialized"
 
-echo "Generating RSA keypair"
+echo "Generating RSA key pair"
 pkcs11_tool --slot-index=0 --label="myrsakey" --login --pin=mynewuserpin --keypairgen
-echo "RSA Keypair generated"
+echo "RSA Key pair generated"
 
 echo "Testing RSA signature"
 pkcs11_tool -v --list-objects --login --pin mynewuserpin

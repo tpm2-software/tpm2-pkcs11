@@ -68,7 +68,7 @@ class VerifyCommand(Command):
             '--label', help='The label to verify.\n', required=True)
         group_parser.add_argument(
             '--hierarchy-auth',
-            help='The authorization password for the owner hiearchy when using a token with a transient primary object\n',
+            help='The authorization password for the owner hierarchy when using a token with a transient primary object\n',
             default="")
     @staticmethod
     def verify(db, args):
@@ -209,7 +209,7 @@ class AddTokenCommand(Command):
             required=True)
         group_parser.add_argument(
             '--hierarchy-auth',
-            help='The authorization password for the owner hiearchy when using a token with a transient primary object\n',
+            help='The authorization password for the owner hierarchy when using a token with a transient primary object\n',
             default="")
     @staticmethod
     def do_token_init(db, path, args):
@@ -317,7 +317,7 @@ class AddEmptyTokenCommand(AddTokenCommand):
             required=True),
         group_parser.add_argument(
             '--hierarchy-auth',
-            help='The authorization password for the owner hiearchy when using a token with a transient primary object\n',
+            help='The authorization password for the owner hierarchy when using a token with a transient primary object\n',
             default="")
 
     def __call__(self, args):
@@ -350,7 +350,7 @@ class ChangePinCommand(Command):
             required=True)
         group_parser.add_argument(
             '--hierarchy-auth',
-            help='The authorization password for the owner hiearchy when using a token with a transient primary object\n',
+            help='The authorization password for the owner hierarchy when using a token with a transient primary object\n',
             default="")
 
     @staticmethod
@@ -415,7 +415,7 @@ class InitPinCommand(Command):
             required=True)
         group_parser.add_argument(
             '--hierarchy-auth',
-            help='The authorization password for the owner hiearchy when using a token with a transient primary object\n',
+            help='The authorization password for the owner hierarchy when using a token with a transient primary object\n',
             default="")
 
     @staticmethod

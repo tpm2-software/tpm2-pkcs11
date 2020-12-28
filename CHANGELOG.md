@@ -21,7 +21,7 @@
     first available address on failure.
 
 ### 1.4.0 - 2020-08-24
-  * Fix superflous error message when falling back from TPM2\_EncryptDecrypt2 interface.
+  * Fix superfluous error message when falling back from TPM2\_EncryptDecrypt2 interface.
   * Support importing EC keys via tpm2\_ptool import.
   * C\_InitToken: Fix improper SRK handle of 0x81000000, it should be 0x81000001.
   * Fix a leak in in tpm.c of an EVP\_PKEY object.
@@ -32,7 +32,7 @@
   * Fix Java PKCS11 Provider Signature Verification: #401
   * VerifyRecover support, known working with Public Key RSA objects and
     mechanism CKM_RSA_PKCS.
-  * db: Modfiy search and create behavior. See
+  * db: Modify search and create behavior. See
     [docs/INITIALIZING.md](https://github.com/tpm2-software/tpm2-pkcs11/blob/master/docs/INITIALIZING.md)
     for details.
   * Fix printf(3) format specifier errors.
@@ -100,7 +100,7 @@
   * Fix store search logic to fail when TPM2_PKCS11_STORE cannot be accessed.
   * Fix potential double free in token_free() logic.
   * Fix -Werror=format-truncation with GCC >= 7 #415
-  * Fix unitialized variable warnings #416
+  * Fix uninitialized variable warnings #416
   * test: use release tarball vs source code.
   * build: clean leftover file in make clean.
   * release: add missing tests to tarball no matter configure options.

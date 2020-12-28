@@ -21,7 +21,7 @@
 #include "ssl_util.h"
 #include "utils.h"
 
-/* 3 in db tokens + 1 unitialized token */
+/* 3 in db tokens + 1 uninitialized token */
 #define TOKEN_COUNT (3 + 1)
 
 #define GOOD_USERPIN "myuserpin"

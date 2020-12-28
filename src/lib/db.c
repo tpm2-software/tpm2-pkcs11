@@ -1814,7 +1814,7 @@ static CK_RV db_update(sqlite3 **xdb, const char *dbpath, unsigned old_version, 
      * Swap the current db with the backup db, by:
      * 1. closing them
      * 2. renaming the current db as .old
-     * 3. renaming the bakup db as the old db
+     * 3. renaming the backup db as the old db
      * 4. unlinking the .old db
      * 5. opening the new db
      */

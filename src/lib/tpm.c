@@ -2607,7 +2607,7 @@ static CK_RV tpm_data_init(CK_MECHANISM_PTR mechanism,
             break;
         default:
             /* should never happen checked at entry */
-            LOGE("Unsupported keypair mechanism: 0x%lx",
+            LOGE("Unsupported key pair mechanism: 0x%lx",
                     mechanism->mechanism);
             assert(0);
             return CKR_MECHANISM_INVALID;
@@ -3591,7 +3591,7 @@ WEAK CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
     TPM2B_AUTH hieararchy_auth = { 0 };
 
     /*
-     * Hiearchy is currently fixed to owner auth, but eventually
+     * Hierarchy is currently fixed to owner auth, but eventually
      * this could be:
      * TPM2_PKCS11_<hierarchy>_AUTH where <hierarchy> is one of:
      * OWNER

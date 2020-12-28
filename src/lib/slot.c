@@ -179,7 +179,7 @@ CK_RV slot_add_uninit_token(void) {
         for (i=0; i < global.token_cnt; i++) {
            token *t = &global.token[i];
            if (!t->config.is_initialized) {
-               LOGV("Skipping adding unitialized token, one found");
+               LOGV("Skipping adding uninitialized token, one found");
                rv = CKR_OK;
                goto out;
            }

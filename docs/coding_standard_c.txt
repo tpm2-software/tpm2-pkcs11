@@ -27,12 +27,14 @@ There are four acceptable commenting styles: block, critical-line, next-line, an
 // Don't do this.
 ```
 
-The size of the comment should be proportional to the size of the code that it refers to. Consequently, properties of code that can fit within a single 24-line screen should not be commented unless they are not obvious. By contrast, even obvious global properties and invariants may need to be made explicit. This doesn't have to be through comments, though. The assert() macro is an excellent executable comment." [2]  All source files and functions require leading block comments for consistency.
+The size of the comment should be proportional to the size of the code that it refers to. Consequently, properties of code that can fit within a single 24-line screen should not be commented unless they are not obvious. By contrast, even obvious global properties and invariants may need to be made explicit. This doesn't have to be through comments, though. The assert() macro is an excellent executable comment. [2]  All source files and functions require leading block comments for consistency.
 
 ## Naming conventions
 Variable names should clearly imply what their values mean... do not rely on the types of variables to do this.  Multiple word names are descriptive and most easily read if words are separated with the underscore character, **_**.  DoNotUseCamelBackStyle because ItIsNotAs easy to read, especially when actual whitespace IsAddedFor syntactical purposes.  It is common practice to keep variable and function names completely lowercase.  Constants are usually lowercase as well, but some groups prefer the standard of all-caps so they have the eye feel of older `#define` macros.
 
+```c
 unsigned int table_index = find_index(jacket_table, "color", COLOR_RED);
+```
 
 Boolean variables should be named to reflect the true condition... even if the variable is used to detect false conditions. Boolean variables should be declared as type bool using <stdbool.h>.
 
@@ -103,7 +105,7 @@ Typically, every header file has the same base filename as an associated source 
 /* externalized function definitions */
 /* static function definitions */
 ```
-Header files should only `#include` what is necessary to allow a file that includes it to compile.  Associated source files will always `#include` the header of the same name, but should #include files whose resources are used within the source even if they are already included in that header.  This provides a complete context for readers of the source file... i.e., they don't have to search through headers to determine  where a resource came from.  For example, consider a header and source that use FILE pointers declared in stdio.h.  The header must `#include <stdio.h>` to ensure files that include it will be able to compile.  The corresponding source `#includes` the associated header and therefore receives the benefit of stdio.h automatically.  The source would be unnerving if the `FILE` type was used and `stdio.h` was not #included.
+Header files should only `#include` what is necessary to allow a file that includes it to compile.  Associated source files will always `#include` the header of the same name, but should `#include` files whose resources are used within the source even if they are already included in that header.  This provides a complete context for readers of the source file... i.e., they don't have to search through headers to determine  where a resource came from.  For example, consider a header and source that use FILE pointers declared in stdio.h.  The header must `#include <stdio.h>` to ensure files that include it will be able to compile.  The corresponding source `#includes` the associated header and therefore receives the benefit of stdio.h automatically.  The source would be unnerving if the `FILE` type was used and `stdio.h` was not `#included`.
 
 ## Variable Scope and types
 Variables should be declared and scoped to the smallest scope of use.
@@ -154,10 +156,10 @@ Conditional statements (such as if, else, while, for, switch, etc) should always
 
 Line Length should not exceed 80 characters and should be split on the nearest whitespace or delimiter character.
 
-## Formatters:
-Code formatters can found under misc/formatters
+## Formatters
+Code formatters can be found under misc/formatters
 
 References
 1: Alan Bridger, Mick Brooks, and Jim Pisano, C Coding Standards, 2001, http://www.alma.nrao.edu/development/computing/docs/joint/0009/2001-02-28.pdf
 2: Jim Larson, Standards and Style for Coding in ANSI C, 1996, http://www.jetcafe.org/jim/c-style.html
-3: Brian Kernighan, Dennis Ritchie, The C Programing Language, 1988
+3: Brian Kernighan, Dennis Ritchie, The C Programming Language, 1988

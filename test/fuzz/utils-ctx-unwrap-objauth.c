@@ -52,7 +52,7 @@ static void test(void **state) {
 
     twist unwrapped = NULL;
     /*
-     * under the hood this expects very specifically formated hex data, make sure that code
+     * under the hood this expects very specifically formatted hex data, make sure that code
      * doesn't blow up
      */
     CK_RV rv = utils_ctx_unwrap_objauth(wrappingkey, wrapped, &unwrapped);

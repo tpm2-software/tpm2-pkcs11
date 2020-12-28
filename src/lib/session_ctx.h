@@ -143,7 +143,7 @@ tobject *session_ctx_opdata_get_tobject(session_ctx *ctx);
 
 /**
  * Clears the session_ctx opdata state. NOTE that callers
- * are required to perfrom memory managment on what
+ * are required to perform memory management on what
  * is stored in the void pointer.
  * @param tok
  *  The session_ctx to clear operational data from.

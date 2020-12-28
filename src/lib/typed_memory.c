@@ -107,6 +107,6 @@ const char *type_to_str(CK_BYTE type) {
     case TYPE_BYTE_HEX_STR:
         return "hex-str";
     default:
-        return "unkown";
+        return "unknown";
     }
 }

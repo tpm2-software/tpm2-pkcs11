@@ -30,7 +30,7 @@ Step one is to satisfy the following dependencies:
 
 Details on building can be found in [BUILDING.md](BUILDING.md).
 
-After satisfying the dependencies one invoke the regular autotools build process:
+After satisfying the dependencies one invokes the regular autotools build process:
 ```bash
 ./bootstrap
 ./configure

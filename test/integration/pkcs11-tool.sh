@@ -38,7 +38,7 @@ pkcs11-tool --module "$modpath" --slot=1 --login --pin myuserpin --change-pin --
 echo "Pin changed"
 
 # change userpin from sopin
-echo "Reseting pin"
+echo "Resetting pin"
 pkcs11_tool --slot=1 --init-pin --login --so-pin=mysopin --pin=myuserpin
 echo "Pin Reset"
 
@@ -47,15 +47,15 @@ echo "Getting random"
 pkcs11_tool --slot=1 --generate-random 4 | xxd
 echo "Random got"
 
-# test generating RSA keypair
-echo "Generating RSA keypair"
+# test generating RSA key pair
+echo "Generating RSA key pair"
 pkcs11_tool --slot=1 --label="myrsakey" --login --pin=myuserpin --keypairgen
-echo "RSA Keypair generated"
+echo "RSA Key pair generated"
 
-# test generating EC keypair
-echo "Generating EC keypair"
+# test generating EC key pair
+echo "Generating EC key pair"
 pkcs11_tool --slot=1 --label="myecckey" --login --pin=myuserpin --keypairgen --usage-sign --key-type EC:prime256v1
-echo "EC Keypair generated"
+echo "EC Key pair generated"
 
 echo "Deleting privkey"
 pkcs11_tool --slot=1 --pin=myuserpin --login --delete-object --type=privkey --label=myecckey
@@ -65,7 +65,7 @@ echo "Deleting pubkey"
 pkcs11_tool --slot=1 --pin=myuserpin --login --delete-object --type=pubkey --label=myecckey
 echo "Pubkey deleted"
 
-# Verify we can add a certifcate, since this is a setup a test, the store should contain a cert to use.
+# Verify we can add a certificate, since this is a setup a test, the store should contain a cert to use.
 echo "Writing certificate"
 # Not all versions of pkcs11-tool handle PEM to DER conversions, 0.15 doesn't, 0.19 does. So always
 # convert to DER
@@ -79,7 +79,7 @@ pkcs11_tool --test --login --pin=myuserpin 2>&1 | tee logz
 
 # this command doesn't return rc's for status, so we have to peek into the logz
 # pkcs11-tool is inconsistent in outputs, older ones don't provide any success
-# output of 'No errors', se we search that the last line *isnt* '<N> errors' where
+# output of 'No errors', se we search that the last line *isn't* '<N> errors' where
 # N is a base10 digit.
 set -o pipefail
 tail -n1 logz | grep -vE '[0-9]+ errors'
