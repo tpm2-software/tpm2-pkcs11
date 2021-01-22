@@ -2503,7 +2503,7 @@ static void test_db_add_token_sqlite3_finalize_fail(void **state) {
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
         { .rc = SQLITE_DONE               }, /* sqlite3_step */
-        { .rc = 42                        }, /* sqlite3_last_insert_rowid*/
+        { .u64 = 42                       }, /* sqlite3_last_insert_rowid*/
         { .rc = SQLITE_ERROR              }, /* sqlite3_finalize */
         { .rc = SQLITE_OK                 }, /* TRANSACTION_END */
         { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
@@ -2544,7 +2544,7 @@ static void test_db_add_token_sqlite3_prepare_v2_2_fail(void **state) {
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
         { .rc = SQLITE_DONE               }, /* sqlite3_step */
-        { .rc = 42                        }, /* sqlite3_last_insert_rowid*/
+        { .u64 = 42                       }, /* sqlite3_last_insert_rowid*/
         { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
         { .rc = SQLITE_ERROR              }, /* sqlite3_prepare_v2 */
         { .rc = SQLITE_OK                 }, /* TRANSACTION_END */
@@ -2586,7 +2586,7 @@ static void test_db_add_token_sqlite3_bind_int_2_fail(void **state) {
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
         { .rc = SQLITE_DONE               }, /* sqlite3_step */
-        { .rc = 42                        }, /* sqlite3_last_insert_rowid*/
+        { .u64 = 42                       }, /* sqlite3_last_insert_rowid*/
         { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
         { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
         { .rc = SQLITE_ERROR              }, /* sqlite3_bind_int */
@@ -2631,7 +2631,7 @@ static void test_db_add_token_sqlite3_bind_text_3_fail(void **state) {
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
         { .rc = SQLITE_DONE               }, /* sqlite3_step */
-        { .rc = 42                        }, /* sqlite3_last_insert_rowid*/
+        { .u64 = 42                       }, /* sqlite3_last_insert_rowid*/
         { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
         { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
@@ -2687,7 +2687,7 @@ static void test_db_add_token_sqlite3_bind_blob_1_fail(void **state) {
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
         { .rc = SQLITE_DONE               }, /* sqlite3_step */
-        { .rc = 42                        }, /* sqlite3_last_insert_rowid*/
+        { .u64 = 42                       }, /* sqlite3_last_insert_rowid*/
         { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
         { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
@@ -2746,7 +2746,7 @@ static void test_db_add_token_sqlite3_bind_blob_2_fail(void **state) {
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
         { .rc = SQLITE_DONE               }, /* sqlite3_step */
-        { .rc = 42                        }, /* sqlite3_last_insert_rowid*/
+        { .u64 = 42                       }, /* sqlite3_last_insert_rowid*/
         { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
         { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
@@ -2807,7 +2807,7 @@ static void test_db_add_token_sqlite3_step_2_fail(void **state) {
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_text */
         { .rc = SQLITE_DONE               }, /* sqlite3_step */
-        { .rc = 42                        }, /* sqlite3_last_insert_rowid*/
+        { .u64 = 42                       }, /* sqlite3_last_insert_rowid*/
         { .rc = SQLITE_OK                 }, /* sqlite3_finalize */
         { .rc = SQLITE_OK                 }, /* sqlite3_prepare_v2 */
         { .rc = SQLITE_OK                 }, /* sqlite3_bind_int */
