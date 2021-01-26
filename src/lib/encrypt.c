@@ -220,11 +220,6 @@ static CK_RV common_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdat
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    twist input = twistbin_new(part, part_len);
-    if (!input) {
-        return CKR_HOST_MEMORY;
-    }
-
     twist output = NULL;
 
     encrypt_op_data *opdata = NULL;
@@ -273,7 +268,6 @@ static CK_RV common_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdat
     rv = CKR_OK;
 
 out:
-    twist_free(input);
     twist_free(output);
 
     return rv;
