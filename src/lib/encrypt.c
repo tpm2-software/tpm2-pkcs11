@@ -220,18 +220,16 @@ static CK_RV common_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdat
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    twist output = NULL;
-
     encrypt_op_data *opdata = NULL;
     if (!supplied_opdata) {
         rv = session_ctx_opdata_get(ctx, op, &opdata);
         if (rv != CKR_OK) {
-            goto out;
+            return rv;
         }
 
         rv = session_ctx_tobject_authenticated(ctx);
         if (rv != CKR_OK) {
-            goto out;
+            return rv;
         }
     } else {
         opdata = supplied_opdata;
@@ -259,18 +257,8 @@ static CK_RV common_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdat
         return CKR_GENERAL_ERROR;
     }
 
-    rv = fop(&opdata->cryptopdata, part, part_len,
+    return fop(&opdata->cryptopdata, part, part_len,
             encrypted_part, encrypted_part_len);
-    if (rv != CKR_OK) {
-        goto out;
-    }
-
-    rv = CKR_OK;
-
-out:
-    twist_free(output);
-
-    return rv;
 }
 
 static CK_RV common_final_op(session_ctx *ctx, encrypt_op_data *supplied_opdata, operation op,
