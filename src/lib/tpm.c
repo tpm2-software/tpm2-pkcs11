@@ -1875,65 +1875,41 @@ static TSS2_RC tpm_supports_cc(tpm_ctx *tpm, TPMA_CC check_cc, bool *is_supporte
     return TSS2_RC_SUCCESS;
 }
 
-static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_ALG_SYM_MODE mode, TPMI_YES_NO is_decrypt,
-        TPM2B_IV *iv, CK_BYTE_PTR data_in, CK_ULONG data_in_len, CK_BYTE_PTR data_out, CK_ULONG_PTR data_out_len) {
+static TSS2_RC do_part_encrypt_decrypt(
+        tpm_ctx *ctx, uint32_t handle,
+        TPMI_ALG_SYM_MODE mode, TPMI_YES_NO is_decrypt,
+        const TPM2B_MAX_BUFFER *data_in, const TPM2B_IV *iv_in,
+        TPM2B_MAX_BUFFER **data_out, TPM2B_IV **iv_out) {
 
-	TSS2_RC rval = TSS2_RC_SUCCESS;
-    CK_RV rv = CKR_GENERAL_ERROR;
+    TSS2_RC rval = TSS2_RC_SUCCESS;
 
     /* figure out what command to use */
     if (!ctx->did_check_for_encdec2) {
         /* do not free, value is cached */
         rval = tpm_supports_cc(ctx, TPM2_CC_EncryptDecrypt2,
-        		&ctx->use_encdec2);
+                &ctx->use_encdec2);
         if (rval != TSS2_RC_SUCCESS) {
-        	return rval;
+            return rval;
         }
     }
 
-    bool result = set_esys_auth(ctx->esys_ctx, handle, objauth);
-    if (!result) {
-        return CKR_GENERAL_ERROR;
-    }
-
-    /*
-     * Copy the data into TPM structures
-     */
-    TPM2B_MAX_BUFFER tpm_data_in = {
-         .size = data_in_len,
-    };
-
-    if (data_in_len > sizeof(tpm_data_in.buffer)) {
-        return false;
-    }
-
-    memcpy(tpm_data_in.buffer, data_in, tpm_data_in.size);
-
-    TPM2B_IV empty_iv_in = { .size = sizeof(empty_iv_in.buffer), .buffer = { 0 } };
-    if (!iv) {
-        iv = &empty_iv_in;
-    }
-
     /* setup the output structures */
-    TPM2B_MAX_BUFFER *tpm_data_out = NULL;
-    TPM2B_IV *tpm_iv_out = NULL;
-
     unsigned version = 2;
     if (ctx->use_encdec2) {
-		rval = Esys_EncryptDecrypt2(
-			ctx->esys_ctx,
-			handle,
-			ctx->hmac_session,
-			ESYS_TR_NONE,
-			ESYS_TR_NONE,
-			&tpm_data_in,
-			is_decrypt,
-			mode,
-			iv,
-			&tpm_data_out,
-			&tpm_iv_out);
+        rval = Esys_EncryptDecrypt2(
+            ctx->esys_ctx,
+            handle,
+            ctx->hmac_session,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            data_in,
+            is_decrypt,
+            mode,
+            iv_in,
+            data_out,
+            iv_out);
     } else {
-    	version = 1;
+        version = 1;
         flags_turndown(ctx, TPMA_SESSION_DECRYPT);
         rval = Esys_EncryptDecrypt(
             ctx->esys_ctx,
@@ -1943,47 +1919,103 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
             ESYS_TR_NONE,
             is_decrypt,
             mode,
-            iv,
-            &tpm_data_in,
-            &tpm_data_out,
-            &tpm_iv_out);
+            iv_in,
+            data_in,
+            data_out,
+            iv_out);
         flags_restore(ctx);
     }
 
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Esys_EncryptDecrypt%u: %s", version,
                 Tss2_RC_Decode(rval));
+    }
+
+    return rval;
+}
+
+static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_ALG_SYM_MODE mode, TPMI_YES_NO is_decrypt,
+        TPM2B_IV *iv, CK_BYTE_PTR data_in, CK_ULONG data_in_len, CK_BYTE_PTR data_out, CK_ULONG_PTR data_out_len) {
+
+    /*
+     * Handle 5.2 style queries for output buffer size
+     *
+     * XXX This might not be the best spot, and logic may need to be extended
+     * for different modes to include padding sizes, not sure yet.
+     */
+    if (!data_out) {
+        *data_out_len = data_in_len;
+        return CKR_OK;
+    } else if(data_in_len > *data_out_len) {
+        *data_out_len = data_in_len;
+        return CKR_BUFFER_TOO_SMALL;
+    }
+
+    bool result = set_esys_auth(ctx->esys_ctx, handle, objauth);
+    if (!result) {
         return CKR_GENERAL_ERROR;
     }
 
-    assert(tpm_data_out);
-    assert(tpm_iv_out);
+    TPM2B_IV empty_iv = { .size = sizeof(empty_iv.buffer), .buffer = { 0 } };
 
-    if (!data_out) {
-        *data_out_len = tpm_data_out->size;
-        rv = CKR_OK;
-        goto out;
+    /*
+     * Copy the data into TPM structures
+     */
+    TPM2B_IV current_iv = iv ? *iv : empty_iv;
+
+    CK_ULONG offset = 0;
+
+    while (offset < data_in_len) {
+
+        TPM2B_MAX_BUFFER tpm_data_in = { 0 };
+
+        assert(offset <= data_in_len);
+
+        CK_ULONG data_left = data_in_len - offset;
+        assert(data_left != 0);
+
+        /* How much can we encrypt in this part, bounded by TPM data structure sizes */
+        CK_ULONG part_len = data_left > sizeof(tpm_data_in.buffer) ?
+                sizeof(tpm_data_in.buffer) : data_left;
+
+        /* copy it into the structure and set size */
+        tpm_data_in.size = part_len;
+        memcpy(tpm_data_in.buffer, &data_in[offset], part_len);
+
+        /* send to TPM */
+        TPM2B_MAX_BUFFER *tpm_data_out = NULL;
+        TPM2B_IV *tpm_iv_out = NULL;
+        TSS2_RC rc = do_part_encrypt_decrypt(ctx, handle, mode, is_decrypt,
+                &tpm_data_in, &current_iv,
+                &tpm_data_out, &tpm_iv_out);
+        if (rc != TSS2_RC_SUCCESS) {
+            return CKR_GENERAL_ERROR;
+        }
+
+        /* shuffle IVs */
+        current_iv = *tpm_iv_out;
+        Esys_Free(tpm_iv_out);
+        tpm_iv_out = NULL;
+
+        /* shuffle to output buffer */
+        assert(tpm_data_out->size == part_len);
+        memcpy(&data_out[offset], tpm_data_out->buffer, part_len);
+        Esys_Free(tpm_data_out);
+        tpm_data_out = NULL;
+
+        /* update the offset for the next go around */
+        offset += part_len;
     }
 
-    if (tpm_data_out->size > *data_out_len) {
-        *data_out_len = tpm_data_out->size;
-        rv = CKR_BUFFER_TOO_SMALL;
-        goto out;
-    }
+    assert(offset == data_in_len);
 
-    *data_out_len = tpm_data_out->size;
-    memcpy(data_out, tpm_data_out->buffer, tpm_data_out->size);
+    /* update the operations IV */
+    *iv = current_iv;
 
-    /* swap iv's */
-    memcpy(iv, tpm_iv_out, sizeof(*tpm_iv_out));
+    /* set the output size */
+    *data_out_len = data_in_len;
 
-    rv = CKR_OK;
-
-out:
-    free(tpm_data_out);
-    free(tpm_iv_out);
-
-    return rv;
+    return CKR_OK;
 }
 
 /*
