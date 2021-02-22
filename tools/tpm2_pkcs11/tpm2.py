@@ -96,7 +96,7 @@ class Tpm2(object):
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         stdout, stderr = p.communicate()
         if (p.wait()):
-            raise RuntimeError("Could not execute tpm2_evictcontrol: %s",
+            raise RuntimeError("Could not execute tpm2_evictcontrol: %s" %
                                stderr)
         return tr_file
 
@@ -112,7 +112,7 @@ class Tpm2(object):
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         stdout, stderr = p.communicate()
         if (p.wait()):
-            raise RuntimeError("Could not execute tpm2_readpublic: %s",
+            raise RuntimeError("Could not execute tpm2_readpublic: %s" %
                                stderr)
         return (stdout, tr_file if get_tr_file else None)
 
@@ -146,7 +146,7 @@ class Tpm2(object):
         _, stderr = p.communicate()
         rc = p.wait()
         if rc:
-            raise RuntimeError("Could not execute tpm2_load: %s", stderr)
+            raise RuntimeError("Could not execute tpm2_load: %s" % stderr)
         return ctx
 
     def unseal(self, ctx, auth):
@@ -157,7 +157,7 @@ class Tpm2(object):
         stdout, stderr = p.communicate()
         rc = p.wait()
         if rc:
-            raise RuntimeError("Could not execute tpm2_unseal: %s", stderr)
+            raise RuntimeError("Could not execute tpm2_unseal: %s" % stderr)
         return stdout
 
     def _encryptdecrypt(self, ctx, auth, data, decrypt=False):
@@ -171,7 +171,7 @@ class Tpm2(object):
         stdout, stderr = p.communicate(input=data)
         rc = p.wait()
         if rc:
-            raise RuntimeError("Could not execute tpm2_encryptdecrypt: %s",
+            raise RuntimeError("Could not execute tpm2_encryptdecrypt: %s" %
                                stderr)
         return stdout
 
@@ -228,7 +228,7 @@ class Tpm2(object):
         stdout, stderr = p.communicate()
         rc = p.wait()
         if rc:
-            raise RuntimeError("Could not execute tpm2_getcap: %s", stderr)
+            raise RuntimeError("Could not execute tpm2_getcap: %s" % stderr)
         return stdout
 
     def importkey(self,
@@ -243,7 +243,7 @@ class Tpm2(object):
         if privkey and len(privkey) > 0:
             exists = os.path.isfile(privkey)
             if not exists:
-                raise RuntimeError("File '%s' path is invalid or is missing",
+                raise RuntimeError("File '%s' path is invalid or is missing" %
                                    privkey)
         else:
             sys.exit("Invalid file path")
@@ -280,7 +280,7 @@ class Tpm2(object):
             os.remove(priv)
             print("command: %s" % str(" ".join(cmd)))
             raise RuntimeError("Could not execute tpm2_import: %s" %
-                               str(stderr))
+                               stderr)
 
         return priv, pub, stdout
 
@@ -304,7 +304,7 @@ class Tpm2(object):
         _, stderr = p.communicate()
         rc = p.wait()
         if rc:
-            raise RuntimeError("Could not execute tpm2_changeauth: %s", stderr)
+            raise RuntimeError("Could not execute tpm2_changeauth: %s" % stderr)
 
         return newpriv
 
