@@ -34,7 +34,7 @@ def bytes_to_file(bites, tmpdir):
 
 def rand_hex_str(num=32):
     if num % 2:
-        raise RuntimeError("Expected even number of bytes, got: %u", num)
+        raise RuntimeError("Expected even number of bytes, got: %u" % num)
 
     return binascii.hexlify(os.urandom(num // 2)).decode()
 
