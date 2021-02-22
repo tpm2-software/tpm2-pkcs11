@@ -53,13 +53,6 @@ static CK_RV handle_extractable(CK_ATTRIBUTE_PTR attr,void *udata) {
     return handle_extractable_common(attr, true, udata);
 }
 
-static CK_RV handle_always_auth(CK_ATTRIBUTE_PTR attr,void *udata) {
-    UNUSED(udata);
-
-    CK_BBOOL value;
-    return attr_CK_BBOOL(attr, &value);
-}
-
 static CK_RV handle_expect_false(CK_ATTRIBUTE_PTR attr,void *udata) {
     UNUSED(udata);
 
@@ -87,7 +80,6 @@ CK_RV check_common_attrs(
         { CKA_SIGN_RECOVER,      handle_expect_false  },
         { CKA_VERIFY_RECOVER,    handle_expect_false  },
         { CKA_TRUSTED,           handle_expect_false  },
-        { CKA_ALWAYS_AUTHENTICATE, handle_always_auth },
     };
 
     sanity_check_data udata = { 0 };
