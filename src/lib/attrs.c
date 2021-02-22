@@ -1212,6 +1212,46 @@ error:
     return rv;
 }
 
+static CK_RV check_attr(CK_ATTRIBUTE_PTR a, CK_BYTE memtype) {
+
+    CK_BBOOL bbool;
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    /* validate sizes */
+    CK_ULONG ulValueLen = a->ulValueLen;
+
+    switch (memtype) {
+    case TYPE_BYTE_INT:
+        if (ulValueLen != sizeof(CK_ULONG)) {
+            LOGE("ulValueLen(%lu) != sizeof(CK_ULONG)", ulValueLen);
+            return CKR_MECHANISM_PARAM_INVALID;
+        }
+        break;
+    case TYPE_BYTE_BOOL:
+        rv = attr_CK_BBOOL(a, &bbool);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+        break;
+    case TYPE_BYTE_INT_SEQ:
+        if (ulValueLen % sizeof(CK_ULONG)) {
+            LOGE("ulValueLen(%lu) %% sizeof(CK_ULONG)",
+                    ulValueLen % sizeof(CK_ULONG));
+            return CKR_MECHANISM_PARAM_INVALID;
+        }
+        break;
+    case TYPE_BYTE_HEX_STR:
+        /* nothing to do */
+        break;
+    default:
+        LOGE("Unknown data type representation, got: %u",
+                memtype);
+        return CKR_GENERAL_ERROR;
+    }
+
+    return CKR_OK;
+}
+
 CK_RV attr_list_update_entry(attr_list *attrs, CK_ATTRIBUTE_PTR untrusted_attr) {
     assert(attrs);
     assert(untrusted_attr);
@@ -1219,6 +1259,7 @@ CK_RV attr_list_update_entry(attr_list *attrs, CK_ATTRIBUTE_PTR untrusted_attr) 
     CK_ATTRIBUTE_TYPE t = untrusted_attr->type;
 
     attr_handler2 *handler = attr_lookup(t);
+    assert(handler);
 
     CK_ATTRIBUTE_PTR found = attr_get_attribute_by_type(attrs, t);
     if (!found) {
@@ -1238,38 +1279,13 @@ CK_RV attr_list_update_entry(attr_list *attrs, CK_ATTRIBUTE_PTR untrusted_attr) 
         return CKR_GENERAL_ERROR;
     }
 
-    /* validate sizes */
+    CK_RV rv = check_attr(untrusted_attr, handler->memtype);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
     void *pValue = untrusted_attr->pValue;
     CK_ULONG ulValueLen = untrusted_attr->ulValueLen;
-
-    switch (handler->memtype) {
-    case TYPE_BYTE_INT:
-        if (ulValueLen != sizeof(CK_ULONG)) {
-            LOGE("ulValueLen(%lu) != sizeof(CK_ULONG)", ulValueLen);
-            return CKR_ATTRIBUTE_VALUE_INVALID;
-        }
-        break;
-    case TYPE_BYTE_BOOL:
-        if (ulValueLen != sizeof(CK_BBOOL)) {
-            LOGE("ulValueLen(%lu) != sizeof(CK_BBOOL)", ulValueLen);
-            return CKR_ATTRIBUTE_VALUE_INVALID;
-        }
-        break;
-    case TYPE_BYTE_INT_SEQ:
-        if (ulValueLen % sizeof(CK_ULONG)) {
-            LOGE("ulValueLen(%lu) %% sizeof(CK_ULONG)",
-                    ulValueLen % sizeof(CK_ULONG));
-            return CKR_ATTRIBUTE_VALUE_INVALID;
-        }
-        break;
-    case TYPE_BYTE_HEX_STR:
-        /* nothing to do */
-        break;
-    default:
-        LOGE("Unknown data type representation, got: %u",
-                handler->memtype);
-        return CKR_GENERAL_ERROR;
-    }
 
     if (ulValueLen != found->ulValueLen) {
         void *new_pValue = type_zrealloc(found->pValue, ulValueLen, handler->memtype);
@@ -1292,6 +1308,16 @@ CK_RV attr_list_append_entry(attr_list **attrs, CK_ATTRIBUTE_PTR untrusted_attr)
     assert(attrs);
     assert(*attrs);
     assert(untrusted_attr);
+
+    CK_ATTRIBUTE_TYPE t = untrusted_attr->type;
+
+    attr_handler2 *handler = attr_lookup(t);
+    assert(handler);
+
+    CK_RV rv = check_attr(untrusted_attr, handler->memtype);
+    if (rv != CKR_OK) {
+        return rv;
+    }
 
     attr_list *new_item = NULL;
     bool res = attr_typify(untrusted_attr, 1, &new_item);
