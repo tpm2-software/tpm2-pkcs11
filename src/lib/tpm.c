@@ -2587,7 +2587,7 @@ static const attr_handler tpm_handlers[] = {
     { CKA_TRUSTED,           generic_bbool_false },
     { CKA_SIGN_RECOVER,      generic_bbool_false },
     { CKA_VERIFY_RECOVER,    generic_bbool_false },
-    { CKA_DERIVE,            generic_bbool_false },
+    { CKA_DERIVE,            generic_bbool_any },
 };
 
 static CK_RV tpm_data_init(CK_MECHANISM_PTR mechanism,

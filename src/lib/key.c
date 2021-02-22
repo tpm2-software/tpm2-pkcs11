@@ -84,7 +84,6 @@ CK_RV check_common_attrs(
     static const attr_handler common_attr_check_handlers[] = {
         { CKA_PRIVATE,           handle_sensitive     },
         { CKA_EXTRACTABLE,       handle_extractable   },
-        { CKA_DERIVE,            handle_expect_false  },
         { CKA_SIGN_RECOVER,      handle_expect_false  },
         { CKA_VERIFY_RECOVER,    handle_expect_false  },
         { CKA_TRUSTED,           handle_expect_false  },

@@ -413,6 +413,70 @@ static void test_ecc_keygen_p11tool_templ(void **state) {
     verify_missing_priv_attrs_ecc(session, priv_handle_dup);
 }
 
+static void test_ecc_keygen_CKA_DERIVE_CK_TRUE(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_BBOOL ck_true = CK_TRUE;
+    CK_BBOOL ck_false = CK_FALSE;
+    CK_BYTE id[] = "p11-templ-key-id-ecc";
+    CK_UTF8CHAR label[] = "p11-templ-key-label-ecc";
+
+    /*
+     * DER-encoding of an ANSI X9.62 Parameters value
+     *
+     * Windows, surprisingly, had great documentation on how this works:
+     * https://docs.microsoft.com/en-us/windows/desktop/seccertenroll/about-object-identifier
+     */
+    CK_BYTE ec_params[] = {
+        0x06, 0x08, 0x2a, 0x86, 0x48,
+        0xce, 0x3d, 0x03, 0x01, 0x07
+    };
+
+    CK_ATTRIBUTE pub[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_ARRAY(CKA_ID, id),
+        ADD_ATTR_BASE(CKA_VERIFY, ck_true),
+        ADD_ATTR_ARRAY(CKA_EC_PARAMS, ec_params),
+        ADD_ATTR_STR(CKA_LABEL, label)
+    };
+
+    CK_ATTRIBUTE priv[] = {
+        ADD_ATTR_ARRAY(CKA_ID, id),
+        ADD_ATTR_BASE(CKA_SIGN, ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_SENSITIVE, ck_false),
+        ADD_ATTR_BASE(CKA_DERIVE, ck_true)
+    };
+
+    CK_MECHANISM mech = {
+        .mechanism = CKM_EC_KEY_PAIR_GEN,
+        .pParameter = NULL,
+        .ulParameterLen = 0
+    };
+
+    CK_OBJECT_HANDLE pubkey;
+    CK_OBJECT_HANDLE privkey;
+
+    user_login(session);
+
+    CK_RV rv = C_GenerateKeyPair (session,
+            &mech,
+            pub, ARRAY_LEN(pub),
+            priv, ARRAY_LEN(priv),
+            &pubkey, &privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    /* verify that we can use it via a sign operation */
+    mech.mechanism =  CKM_ECDSA;
+    rv = C_SignInit(session, &mech, privkey);
+    assert_int_equal(rv, CKR_OK);
+}
+
 static void test_destroy(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -1265,6 +1329,8 @@ int main() {
         cmocka_unit_test_setup_teardown(test_rsa_keypairgen_unwrap,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_rsa_keypairgen_wrap_unwrap,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_ecc_keygen_CKA_DERIVE_CK_TRUE,
                 test_setup, test_teardown),
     };
 
