@@ -8,6 +8,7 @@
     * Since upstream commit tpm2-software/tpm2-tss-engine@06f57a3.
   * Fix endian issue in test_db.
   * Fix tpm2_ptool error messages when exceptions are raised during execution of tpm2-tools commands.
+  * Support CKA_DERIVE=true which will support the newest pkcs11-tool EC template.
 
 ### 1.5.0 - 2020-11-16
   * C_Decrypt: Fix CKM_RSA_PKCS11 scheme not removing PKCS v1.5 block padding from returned plaintext.
