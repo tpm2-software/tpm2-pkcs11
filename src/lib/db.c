@@ -407,7 +407,7 @@ DEBUG_VISIBILITY int init_pobject_from_stmt(sqlite3_stmt *stmt, tpm_ctx *tpm, po
             LOGE("Expected persistent pobject config to have ESYS_TR blob");
             return SQLITE_ERROR;
         }
-        res = tpm_deserialize_handle(tpm, pobj->config.blob, &pobj->handle, NULL);
+        res = tpm_deserialize_handle(tpm, pobj->config.blob, &pobj->handle);
         if (!res) {
             /* just set a general error as rc could be success right now */
             return SQLITE_ERROR;

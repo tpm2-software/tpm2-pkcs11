@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <tss2/tss2_esys.h>
+
 #include "attrs.h"
 #include "debug.h"
 #include "object.h"
@@ -94,7 +96,14 @@ bool tpm_flushcontext(tpm_ctx *ctx, uint32_t handle);
 
 twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth);
 
-WEAK bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle, uint32_t *tpmHandle);
+#ifdef ESYS_2_4
+/* Any (optional) component using this function needs to add a dependency on
+ * tss2-esys >= 2.4 to its configure checks.
+ */
+WEAK bool tpm_get_tpmhandle(tpm_ctx *ctx, uint32_t handle, uint32_t *tpm_handle);
+#endif
+
+WEAK bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle);
 
 bool tpm_contextload_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle);
 

@@ -835,7 +835,25 @@ CK_RV tpm_stirrandom(tpm_ctx *ctx, CK_BYTE_PTR seed, CK_ULONG seed_len) {
     return CKR_OK;
 }
 
-bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle, uint32_t *tpmHandle) {
+#ifdef ESYS_2_4
+/* Esys_TR_GetTpmHandle() was only added to tss2-esys in v2.4. Its
+ * functionality is merely used in optional backends. Splice out into a
+ * dedicated function, so the main codebase can keep a more lenient versioned
+ * dependency on tss2-esys.
+ */
+bool tpm_get_tpmhandle(tpm_ctx *ctx, uint32_t handle, uint32_t *tpm_handle) {
+
+    TSS2_RC rval = Esys_TR_GetTpmHandle(ctx->esys_ctx, handle, tpm_handle);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_TR_GetTpmHandle: %s:", Tss2_RC_Decode(rval));
+        return false;
+    }
+
+    return true;
+}
+#endif
+
+bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle) {
 
     TSS2_RC rval = Esys_TR_Deserialize(ctx->esys_ctx,
                         (uint8_t *)handle_blob,
@@ -843,14 +861,6 @@ bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle, u
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Esys_TR_Deserialize: %s:", Tss2_RC_Decode(rval));
         return false;
-    }
-
-    if (tpmHandle) {
-        rval = Esys_TR_GetTpmHandle(ctx->esys_ctx, *handle, tpmHandle);
-        if (rval != TSS2_RC_SUCCESS) {
-            LOGE("Esys_TR_GetTpmHandle: %s:", Tss2_RC_Decode(rval));
-            return false;
-        }
     }
 
     return true;

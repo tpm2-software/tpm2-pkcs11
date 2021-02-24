@@ -46,9 +46,19 @@ static CK_RV get_key(FAPI_CONTEXT *fapictx, tpm_ctx *tctx, const char *path, uin
         }
         return CKR_OK;
     case FAPI_ESYSBLOB_DESERIALIZE:
-        ret = tpm_deserialize_handle(tctx, twistdata, esysHandle, tpmHandle);
+        ret = tpm_deserialize_handle(tctx, twistdata, esysHandle);
         if (!ret) {
             LOGE("Error on deserialize");
+            return CKR_GENERAL_ERROR;
+        }
+        /* Esys_TR_GetTpmHandle() was added to tss2-esys in v2.4. The rest
+         * of the code works fine with older versions. Hence, we open-code
+         * the function call here to restrict the dependency on >= 2.4 to
+         * FAPI-enabled builds.
+         */
+        ret = tpm_get_tpmhandle(tctx, *esysHandle, tpmHandle);
+        if (!ret) {
+            LOGE("Error on get_tpmhandle");
             return CKR_GENERAL_ERROR;
         }
         return CKR_OK;

@@ -270,15 +270,23 @@ char *emit_pobject_to_conf_string(pobject_config *config) {
 }
 
 /* weak override */
+bool tpm_get_tpmhandle(tpm_ctx *ctx, uint32_t handle,
+                       uint32_t *tpm_handle) {
+    UNUSED(ctx);
+    UNUSED(handle);
+
+    if (tpm_handle)
+        *tpm_handle = 42;
+
+    return true;
+}
+
+/* weak override */
 bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob,
-        uint32_t *handle, uint32_t *tpm_handle) {
+        uint32_t *handle) {
     UNUSED(ctx);
     UNUSED(handle_blob);
     UNUSED(handle);
-
-    if (tpm_handle) {
-        *tpm_handle = 42;
-    }
 
     will_return_data *d = mock_type(will_return_data *);
     return d->rcb;
