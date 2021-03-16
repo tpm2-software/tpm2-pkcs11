@@ -22,6 +22,7 @@ The project depends on:
      Others may not work, some distros package versions too old. Either install or just copy the contents of the
      autoconf-archive's m4 directory to the m4 subdirectory of the tpm2-pkcs11 project. If the m4 folder is not
      present, simply create it with mkdir.
+9. [libyaml](https://github.com/yaml/libyaml)
 
 ### Optional Dependencies for tpm2_ptool
 1. [tpm2-tools](https://github.com/tpm2-software/tpm2-tools): **Requires version >= 4.0.1**
