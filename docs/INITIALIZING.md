@@ -95,7 +95,7 @@ name called a *label* is provided. The *label* is used in subsequent commands to
 
 **Example**:
 ```sh
-tpm2_ptool.py addtoken --pid=1 --pobj-pin=mypobjpin --sopin=mysopin --userpin=myuserpin --label=label --path ~/tmp
+tpm2_ptool.py addtoken --pid=1 --hierarchy-auth=mypobjpin --sopin=mysopin --userpin=myuserpin --label=label --path ~/tmp
 ```
 
 To create N tokens under a given `--pid` or primary object id, just run the command N times. Thus it is possible to have
