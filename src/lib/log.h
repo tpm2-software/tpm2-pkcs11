@@ -28,9 +28,13 @@ static const char *log_strings[] = {
     "UNKNOWN",
 };
 
-#define LOGV(fmt, ...) _log(log_level_verbose, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define LOGW(fmt, ...) _log(log_level_warn, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define LOGE(fmt, ...) _log(log_level_error, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define _LOGV(filename, lineno, fmt, ...) _log(log_level_verbose, filename, lineno, fmt, ##__VA_ARGS__)
+#define _LOGW(filename, lineno, fmt, ...) _log(log_level_warn,    filename, lineno, fmt, ##__VA_ARGS__)
+#define _LOGE(filename, lineno, fmt, ...) _log(log_level_error,   filename, lineno, fmt, ##__VA_ARGS__)
+
+#define LOGV(fmt, ...) _LOGV(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define LOGW(fmt, ...) _LOGW(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define LOGE(fmt, ...) _LOGE(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
 static log_level _g_current_log_level = log_level_error;
 
