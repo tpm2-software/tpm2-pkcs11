@@ -204,6 +204,7 @@ struct tpm_op_data {
         struct {
             TPMI_ALG_SYM_MODE mode;
             TPM2B_IV iv;
+            twist prev_data;
         } sym;
         struct {
             TPMT_SIG_SCHEME sig;
@@ -1745,6 +1746,7 @@ CK_RV tpm_aes_ecb_get_opdata(mdetail *mdtl,
 void tpm_opdata_free(tpm_op_data **opdata) {
 
     if (opdata) {
+        twist_free((*opdata)->sym.prev_data);
         free(*opdata);
         *opdata = NULL;
     }
@@ -2024,6 +2026,73 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
 #define ENCRYPT 0
 #define DECRYPT 1
 
+static CK_RV do_buffered_encdec(tpm_op_data *tpm_enc_data,
+        int encdec,
+        CK_BYTE_PTR in, CK_ULONG inlen,
+        CK_BYTE_PTR out, CK_ULONG_PTR outlen) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    tpm_ctx *ctx = tpm_enc_data->ctx;
+    TPMI_ALG_SYM_MODE mode = tpm_enc_data->sym.mode;
+    TPM2B_IV *iv = &tpm_enc_data->sym.iv;
+
+    twist auth = tpm_enc_data->tobj->unsealed_auth;
+    ESYS_TR handle = tpm_enc_data->tobj->tpm_handle;
+
+    /*
+     * if the application doesn't ask for a block boundary,
+     * buffer the extra till later when you can make a block.
+     * Manipulate the input to the TPM to be on a boundary.
+     */
+    twist full_buffer = twistbin_append(tpm_enc_data->sym.prev_data, in, inlen);
+    if (!full_buffer) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+    /* done with this buffer, transfered to full_buffer */
+    tpm_enc_data->sym.prev_data = NULL;
+
+    /* pass only the "good blocks here */
+    size_t full_buffer_len = twist_len(full_buffer);
+    CK_ULONG extra = full_buffer_len % 16;
+    CK_ULONG blocks = full_buffer_len / 16;
+    CK_ULONG modified_full_buffer_len = full_buffer_len - extra;
+
+    if (blocks) {
+        rv = encrypt_decrypt(ctx, handle, auth, mode, encdec,
+                iv,
+                (CK_BYTE_PTR)full_buffer, modified_full_buffer_len,
+                out, outlen);
+        if (rv != CKR_OK) {
+            goto error;
+        }
+    } else {
+        /* no blocks to encrypt, nothing to output */
+        *outlen = 0;
+    }
+
+    /* if we have extra data, save it for next round */
+    if (extra) {
+        tpm_enc_data->sym.prev_data = NULL;
+        tpm_enc_data->sym.prev_data = twistbin_new(
+                &full_buffer[modified_full_buffer_len],
+                extra);
+        if (!tpm_enc_data->sym.prev_data) {
+            LOGE("oom");
+            rv = CKR_HOST_MEMORY;
+            goto error;
+        }
+    }
+
+    rv = CKR_OK;
+
+error:
+    twist_free(full_buffer);
+
+    return rv;
+}
+
 CK_RV tpm_encrypt(crypto_op_data *opdata,
         CK_BYTE_PTR ptext, CK_ULONG ptextlen,
         CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen) {
@@ -2034,15 +2103,39 @@ CK_RV tpm_encrypt(crypto_op_data *opdata,
         return tpm_rsa_decrypt(tpm_enc_data, ptext, ptextlen, ctext, ctextlen);
     }
 
-    tpm_ctx *ctx = tpm_enc_data->ctx;
-    TPMI_ALG_SYM_MODE mode = tpm_enc_data->sym.mode;
-    TPM2B_IV *iv = &tpm_enc_data->sym.iv;
+    return do_buffered_encdec(tpm_enc_data, ENCRYPT, ptext, ptextlen,
+            ctext, ctextlen);
+}
 
-    twist auth = tpm_enc_data->tobj->unsealed_auth;
-    ESYS_TR handle = tpm_enc_data->tobj->tpm_handle;
+CK_RV tpm_final_encrypt(crypto_op_data *opdata,
+        CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
 
-    return encrypt_decrypt(ctx, handle, auth, mode, ENCRYPT,
-            iv, ptext, ptextlen, ctext, ctextlen);
+    UNUSED(last_part);
+
+    /* non-aes things don't matter */
+    if (opdata->tpm_opdata->op_type != CKK_AES) {
+        if (last_part_len) {
+            *last_part_len = 0;
+        }
+        return CKR_OK;
+    }
+
+    size_t extra = opdata->tpm_opdata->sym.prev_data ?
+            twist_len(opdata->tpm_opdata->sym.prev_data) : 0;
+
+    /*
+     * For padding modes, this is where you would apply the pad  or error
+     * for non-padding modes
+     */
+    if (extra) {
+        return CKR_DATA_LEN_RANGE;
+    }
+
+    if (last_part_len) {
+        *last_part_len = 0;
+    }
+
+    return CKR_OK;
 }
 
 CK_RV tpm_decrypt(crypto_op_data *opdata,
@@ -2067,15 +2160,39 @@ CK_RV tpm_decrypt(crypto_op_data *opdata,
                 ptext, ptextlen);
     }
 
-    tpm_ctx *ctx = tpm_enc_data->ctx;
-    TPMI_ALG_SYM_MODE mode = tpm_enc_data->sym.mode;
-    TPM2B_IV *iv = &tpm_enc_data->sym.iv;
+    return do_buffered_encdec(tpm_enc_data, DECRYPT,
+            ctext, ctextlen, ptext, ptextlen);
+}
 
-    twist auth = tpm_enc_data->tobj->unsealed_auth;
-    ESYS_TR handle = tpm_enc_data->tobj->tpm_handle;
+CK_RV tpm_final_decrypt(crypto_op_data *opdata,
+        CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
 
-    return encrypt_decrypt(ctx, handle, auth, mode, DECRYPT,
-            iv, ctext, ctextlen, ptext, ptextlen);
+    UNUSED(last_part);
+
+    /* non-aes things don't matter */
+    if (opdata->tpm_opdata->op_type != CKK_AES) {
+        if (last_part_len) {
+            *last_part_len = 0;
+        }
+        return CKR_OK;
+    }
+
+    size_t extra = opdata->tpm_opdata->sym.prev_data ?
+            twist_len(opdata->tpm_opdata->sym.prev_data) : 0;
+
+    /*
+     * For padding modes, this is where you would remove the pad  or error
+     * for non-padding modes
+     */
+    if (extra) {
+        return CKR_ENCRYPTED_DATA_LEN_RANGE;
+    }
+
+    if (last_part_len) {
+        *last_part_len = 0;
+    }
+
+    return CKR_OK;
 }
 
 CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handle,
