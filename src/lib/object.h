@@ -104,6 +104,9 @@ CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech);
  */
 attr_list *tobject_get_attrs(tobject *tobj);
 
+CK_RV _tobject_user_decrement(tobject *tobj, const char *filename, int lineno);
+CK_RV _tobject_user_increment(tobject *tobj, const char *filename, int lineno);
+
 /**
  * Marks a tobject no longer being used by an operation.
  *
@@ -112,7 +115,7 @@ attr_list *tobject_get_attrs(tobject *tobj);
  * @return
  *  CKR_OK on success, CKR_GENERAL_ERROR if not active.
  */
-CK_RV tobject_user_decrement(tobject *tobj);
+#define tobject_user_decrement(tobj) _tobject_user_decrement(tobj, __FILE__, __LINE__)
 
 /**
  * Marks a tobject as in use by an operation.
@@ -122,7 +125,7 @@ CK_RV tobject_user_decrement(tobject *tobj);
  * @return
  *  CKR_OK on success, CKR_GENERAL_ERROR if not active.
  */
-CK_RV tobject_user_increment(tobject *tobj);
+#define tobject_user_increment(tobj) _tobject_user_increment(tobj, __FILE__, __LINE__)
 
 CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object);
 
