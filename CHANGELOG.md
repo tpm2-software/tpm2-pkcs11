@@ -10,6 +10,7 @@
   * Fix tpm2_ptool error messages when exceptions are raised during execution of tpm2-tools commands.
   * Support CKA_DERIVE=true which will support the newest pkcs11-tool EC template.
   * Fix requirement of having ESYS >= 2.4, see #632 for details.
+  * Fix docs/INITIALIZING.md reference to `--pobj-pin`, should be `--hierarchy-auth`.
 
 ### 1.5.0 - 2020-11-16
   * C_Decrypt: Fix CKM_RSA_PKCS11 scheme not removing PKCS v1.5 block padding from returned plaintext.
