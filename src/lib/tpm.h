@@ -133,7 +133,11 @@ void tpm_opdata_free(tpm_op_data **opdata);
 
 CK_RV tpm_encrypt(crypto_op_data *opdata, CK_BYTE_PTR ptext, CK_ULONG ptextlen, CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen);
 
+CK_RV tpm_final_encrypt(crypto_op_data *opdata, CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len);
+
 CK_RV tpm_decrypt(crypto_op_data *opdata, CK_BYTE_PTR ctext, CK_ULONG ctextlen, CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen);
+
+CK_RV tpm_final_decrypt(crypto_op_data *opdata, CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len);
 
 CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handle,
         twist oldauth, twist newauth,

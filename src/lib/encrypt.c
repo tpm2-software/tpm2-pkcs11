@@ -264,42 +264,63 @@ static CK_RV common_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdat
 static CK_RV common_final_op(session_ctx *ctx, encrypt_op_data *supplied_opdata, operation op,
         CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
 
-    /*
-     * We have no use for these.
-     */
-    UNUSED(last_part);
-    UNUSED(last_part_len);
-
     CK_RV rv = CKR_GENERAL_ERROR;
 
-    /* nothing to do if opdata is supplied externally */
-    if (supplied_opdata) {
-        /* do not goto out, no opdata to clear */
-        return CKR_OK;
-    }
+    encrypt_op_data *opdata = supplied_opdata;
+    if (!opdata) {
+        rv = session_ctx_opdata_get(ctx, op, &opdata);
+        if (rv != CKR_OK) {
+            return rv;
+        }
 
-    encrypt_op_data *opdata = NULL;
-    rv = session_ctx_opdata_get(ctx, op, &opdata);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    rv = session_ctx_tobject_authenticated(ctx);
-    if (rv != CKR_OK) {
-        return rv;
+        rv = session_ctx_tobject_authenticated(ctx);
+        if (rv != CKR_OK) {
+            return rv;
+        }
     }
 
     tobject *tobj = session_ctx_opdata_get_tobject(ctx);
     assert(tobj);
-    tobj->is_authenticated = false;
-    rv = tobject_user_decrement(tobj);
-    if (rv != CKR_OK) {
-        return rv;
+
+    /* we may have some TPM symmetric data to deal with */
+    if (!opdata->use_sw) {
+
+        rv = (op == operation_encrypt) ?
+            tpm_final_encrypt(&opdata->cryptopdata, last_part, last_part_len) :
+            tpm_final_decrypt(&opdata->cryptopdata, last_part, last_part_len);
+        if (rv != CKR_OK) {
+            goto out;
+        }
+
+    } else if (!last_part) {
+        /* For all other encrypt operations deal with 5.2 style returns */
+        if (last_part_len) {
+            *last_part_len = 0;
+        }
     }
 
-    session_ctx_opdata_clear(ctx);
+    rv = CKR_OK;
 
-    return CKR_OK;
+out:
+    /*
+     * we're only done if last_part is specified or the buffer isn't too small
+     *
+     * We also don't want to decrement the tobject unless we're using session ctx
+     * not internal routines.
+     */
+    if (rv != CKR_BUFFER_TOO_SMALL && last_part && !supplied_opdata) {
+        tobj->is_authenticated = false;
+        if (!supplied_opdata) {
+            session_ctx_opdata_clear(ctx);
+        }
+
+        CK_RV tmp_rv = tobject_user_decrement(tobj);
+        if (tmp_rv != CKR_OK && rv == CKR_OK) {
+            rv = tmp_rv;
+        }
+    }
+
+    return rv;
 }
 
 CK_RV encrypt_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {
@@ -334,21 +355,59 @@ CK_RV decrypt_final_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_B
 
 CK_RV decrypt_oneshot_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR encrypted_data, CK_ULONG encrypted_data_len, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
 
+    check_pointer(data_len);
+
+    bool is_buffer_too_small = false;
+    CK_ULONG tmp_len = *data_len;
+
     CK_RV rv = decrypt_update_op(ctx, supplied_opdata, encrypted_data, encrypted_data_len,
-            data, data_len);
-    if (rv != CKR_OK || !data) {
+            data, &tmp_len);
+    if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
         return rv;
     }
 
-    return decrypt_final_op(ctx, supplied_opdata, NULL, NULL);
+    CK_ULONG update_len = tmp_len;
+    if (rv == CKR_BUFFER_TOO_SMALL) {
+        data = NULL;
+        is_buffer_too_small = true;
+    } else {
+        if (data) {
+            data = &data[update_len];
+            assert(tmp_len <= *data_len);
+        }
+        tmp_len = *data_len - tmp_len;
+    }
+
+    rv = decrypt_final_op(ctx, supplied_opdata, data, &tmp_len);
+    *data_len = update_len + tmp_len;
+    return !is_buffer_too_small ? rv : CKR_BUFFER_TOO_SMALL;
 }
 
 CK_RV encrypt_oneshot_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR encrypted_data, CK_ULONG_PTR encrypted_data_len) {
 
-    CK_RV rv = encrypt_update_op (ctx, supplied_opdata, data, data_len, encrypted_data, encrypted_data_len);
-    if (rv != CKR_OK || !encrypted_data) {
+    check_pointer(encrypted_data_len);
+
+    bool is_buffer_too_small = false;
+    CK_ULONG tmp_len = *encrypted_data_len;
+
+    CK_RV rv = encrypt_update_op (ctx, supplied_opdata, data, data_len, encrypted_data, &tmp_len);
+    if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
         return rv;
     }
 
-    return encrypt_final_op(ctx, supplied_opdata, NULL, NULL);
+    CK_ULONG update_len = tmp_len;
+    if (rv == CKR_BUFFER_TOO_SMALL) {
+        encrypted_data = NULL;
+        is_buffer_too_small = true;
+    } else {
+        if (encrypted_data) {
+            encrypted_data = &encrypted_data[update_len];
+            assert(tmp_len <= *encrypted_data_len);
+        }
+        tmp_len = *encrypted_data_len - tmp_len;
+    }
+
+    rv = encrypt_final_op(ctx, supplied_opdata, encrypted_data, &tmp_len);
+    *encrypted_data_len = update_len + tmp_len;
+    return !is_buffer_too_small ? rv : CKR_BUFFER_TOO_SMALL;
 }
