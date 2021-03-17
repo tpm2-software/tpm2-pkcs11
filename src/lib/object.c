@@ -816,7 +816,7 @@ attr_list *tobject_get_attrs(tobject *tobj) {
     return tobj->attrs;
 }
 
-CK_RV tobject_user_increment(tobject *tobj) {
+CK_RV _tobject_user_increment(tobject *tobj, const char *filename, int lineno) {
 
     if (tobj->active == UINT_MAX) {
        LOGE("tobject active at max count, cannot issue. id: %u", tobj->id);
@@ -824,11 +824,12 @@ CK_RV tobject_user_increment(tobject *tobj) {
     }
 
     tobj->active++;
+    _LOGV(filename, lineno, "Incremented tobject id: %u, value: %u", tobj->id, tobj->active);
 
     return CKR_OK;
 }
 
-CK_RV tobject_user_decrement(tobject *tobj) {
+CK_RV _tobject_user_decrement(tobject *tobj, const char *filename, int lineno) {
 
     if (!tobj->active) {
         LOGE("Returning a non-active tobject id: %u", tobj->id);
@@ -836,6 +837,7 @@ CK_RV tobject_user_decrement(tobject *tobj) {
     }
 
     tobj->active--;
+    _LOGV(filename, lineno, "Decremented tobject id: %u, value: %u", tobj->id, tobj->active);
 
     return CKR_OK;
 }
