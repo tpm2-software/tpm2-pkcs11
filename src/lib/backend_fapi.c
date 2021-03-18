@@ -422,6 +422,8 @@ error:
     if (rv == CKR_OK) {
         rv = CKR_GENERAL_ERROR;
     }
+    token_free_list(tok, *len);
+    *len = 0;
     goto out;
 }
 

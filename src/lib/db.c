@@ -555,25 +555,18 @@ DEBUG_VISIBILITY WEAK void db_get_label(token *t, sqlite3_stmt *stmt, int iCol) 
                         sqlite3_column_text(stmt, iCol));
 }
 
-CK_RV db_get_tokens(token **tok, size_t *len) {
+CK_RV db_get_tokens(token *tok, size_t *len) {
 
     size_t cnt = 0;
-
-    token *tmp = calloc(MAX_TOKEN_CNT, sizeof(token));
-    if (!tmp) {
-        LOGE("oom");
-        return CKR_HOST_MEMORY;
-    }
 
     const char *sql =
             "SELECT * FROM tokens";
 
-    sqlite3_stmt *stmt;
+    sqlite3_stmt *stmt = NULL;
     int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
-        free(tmp);
         LOGE("Cannot prepare tobject query: %s\n", sqlite3_errmsg(global.db));
-        return CKR_GENERAL_ERROR;
+        goto error;
     }
 
     size_t row = 0;
@@ -584,7 +577,7 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
             goto error;
         }
 
-        token *t = &tmp[row++];
+        token *t = &tok[row++];
         int col_count = sqlite3_data_count(stmt);
 
         int i;
@@ -651,15 +644,17 @@ CK_RV db_get_tokens(token **tok, size_t *len) {
         cnt++;
     }
 
-    *tok = tmp;
     *len = cnt;
     sqlite3_finalize(stmt);
 
     return CKR_OK;
 
 error:
-    token_free_list(tmp, cnt);
-    sqlite3_finalize(stmt);
+    token_free_list(tok, cnt);
+    *len = 0;
+    if (stmt) {
+        sqlite3_finalize(stmt);
+    }
     return CKR_GENERAL_ERROR;
 }
 
