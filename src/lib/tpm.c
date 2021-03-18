@@ -2205,7 +2205,7 @@ static CK_RV common_final_encrypt_decrypt(int encdec, crypto_op_data *opdata,
         rv = CKR_OK;
     }
 
-    return CKR_OK;
+    return rv;
 }
 
 CK_RV tpm_final_encrypt(crypto_op_data *opdata,

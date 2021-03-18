@@ -930,7 +930,6 @@ static void test_aes_cbc_non_block_boundry_plaintext(void **state) {
     /* cipher text should be fully acquired at this point (AES CBC mode) */
     assert_int_equal(counter, sizeof(ciphertext));
 
-
     /*
      * call final to get the last remaining block,
      * which in AES CBC mode shouldn't have one
@@ -955,7 +954,7 @@ static void test_aes_cbc_non_block_boundry_plaintext(void **state) {
     assert_int_equal(ciphertext_len, 0);
     assert_memory_equal(tmp, all_zeros, sizeof(all_zeros));
 
-    /* now do something wonky for decrypt crossing boundries in weird ways */
+    /* now do something wonky for decrypt crossing boundaries in weird ways */
     counter = 0;
     offset = 0;
     rv = C_DecryptInit (session, &mechanism, ti->objects.aes);
@@ -1000,7 +999,7 @@ static void test_aes_cbc_non_block_boundry_plaintext(void **state) {
     offset += 1;
 
     rv = C_DecryptFinal(session,
-            ciphertext, &ciphertext_len);
+            plaintext2, &plaintext2_len);
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(ciphertext_len, 0);
 
@@ -1137,6 +1136,5 @@ int main() {
                 test_setup, test_teardown),
     };
 
-    //return cmocka_run_group_tests(tests, group_setup, group_teardown);
-    return _cmocka_run_group_tests("tests", &tests[3], 1, group_setup, group_teardown);
+    return cmocka_run_group_tests(tests, group_setup, group_teardown);
 }
