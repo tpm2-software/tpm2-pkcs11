@@ -1132,7 +1132,7 @@ static void test_aes_cbc_pad_small_oneshot(void **state) {
     CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.aes);
     assert_int_equal(rv, CKR_OK);
 
-    unsigned long ciphertext_len = sizeof(plaintext);
+    unsigned long ciphertext_len = sizeof(ciphertext);
     rv = C_Encrypt(session,
             plaintext, sizeof(plaintext),
             ciphertext, &ciphertext_len);

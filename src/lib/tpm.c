@@ -2029,7 +2029,7 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
 static CK_RV do_buffered_encdec(tpm_op_data *tpm_enc_data,
         int encdec,
         CK_BYTE_PTR in, CK_ULONG inlen,
-        CK_BYTE_PTR out, CK_ULONG_PTR outlen, bool is_final) {
+        CK_BYTE_PTR out, CK_ULONG_PTR outlen) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -2040,7 +2040,8 @@ static CK_RV do_buffered_encdec(tpm_op_data *tpm_enc_data,
     twist auth = tpm_enc_data->tobj->unsealed_auth;
     ESYS_TR handle = tpm_enc_data->tobj->tpm_handle;
 
-    bool hold_block_back = tpm_enc_data->mech.mechanism == CKM_AES_CBC_PAD && !is_final;
+    /* final calls don't have input data, they just exhaust the internal buffer if present */
+    bool is_final = !in;
 
     /*
      * if the application doesn't ask for a block boundary,
@@ -2060,6 +2061,10 @@ static CK_RV do_buffered_encdec(tpm_op_data *tpm_enc_data,
     CK_ULONG extra = full_buffer_len % 16;
     CK_ULONG blocks = full_buffer_len / 16;
     CK_ULONG modified_full_buffer_len = full_buffer_len - extra;
+
+    bool hold_block_back = !is_final
+            && blocks == 1
+            && tpm_enc_data->mech.mechanism == CKM_AES_CBC_PAD;
 
     if (blocks && hold_block_back) {
         blocks--;
@@ -2112,7 +2117,7 @@ CK_RV tpm_encrypt(crypto_op_data *opdata,
     }
 
     return do_buffered_encdec(tpm_enc_data, ENCRYPT, ptext, ptextlen,
-            ctext, ctextlen, false);
+            ctext, ctextlen);
 }
 
 static CK_RV common_final_encrypt_decrypt(int encdec, crypto_op_data *opdata,
@@ -2162,16 +2167,21 @@ static CK_RV common_final_encrypt_decrypt(int encdec, crypto_op_data *opdata,
                 return CKR_BUFFER_TOO_SMALL;
             }
 
+            /* swap the internal buffer with the padded variant for the last call */
+            opdata->tpm_opdata->sym.prev_data = padded_data;
+            padded_data = NULL;
+            twist_free(extra);
+            extra = NULL;
+
             rv = do_buffered_encdec(tpm_enc_data, encdec,
-                    (CK_BYTE_PTR)padded_data, twist_len(padded_data),
-                    last_part, last_part_len, true);
-            twist_free(padded_data);
+                    NULL, 0,
+                    last_part, last_part_len);
         } else {
             CK_BYTE padded[16];
             CK_ULONG padded_len = sizeof(padded);
             rv = do_buffered_encdec(tpm_enc_data, encdec,
-                    (CK_BYTE_PTR)extra, extra_len,
-                    padded, &padded_len, true);
+                    NULL, 0,
+                    padded, &padded_len);
             if (rv != CKR_OK) {
                 return rv;
             }
@@ -2182,7 +2192,7 @@ static CK_RV common_final_encrypt_decrypt(int encdec, crypto_op_data *opdata,
                 return rv;
             }
 
-            if (padded_len > *last_part_len) {
+            if (unpadded_len > *last_part_len) {
                 *last_part_len = unpadded_len;
                 return last_part ? CKR_OK : CKR_BUFFER_TOO_SMALL;
             }
@@ -2237,7 +2247,7 @@ CK_RV tpm_decrypt(crypto_op_data *opdata,
     }
 
     return do_buffered_encdec(tpm_enc_data, DECRYPT,
-            ctext, ctextlen, ptext, ptextlen, false);
+            ctext, ctextlen, ptext, ptextlen);
 }
 
 CK_RV tpm_final_decrypt(crypto_op_data *opdata,
