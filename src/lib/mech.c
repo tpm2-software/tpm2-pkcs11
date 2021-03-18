@@ -167,6 +167,7 @@ static const mdetail_entry _g_mechs_templ[] = {
     { .type = CKM_AES_KEY_GEN, .flags = mf_is_keygen|mf_aes },
 
     { .type = CKM_AES_CBC,    .flags = mf_encrypt|mf_decrypt|mf_aes, .get_tpm_opdata = tpm_aes_cbc_get_opdata },
+    { .type = CKM_AES_CBC_PAD, .flags = mf_encrypt|mf_decrypt|mf_aes|mf_force_synthetic, .get_tpm_opdata = tpm_aes_cbc_get_opdata },
     { .type = CKM_AES_CFB128, .flags = mf_encrypt|mf_decrypt|mf_aes, .get_tpm_opdata = tpm_aes_cfb_get_opdata },
     { .type = CKM_AES_ECB,    .flags = mf_encrypt|mf_decrypt|mf_aes, .get_tpm_opdata = tpm_aes_ecb_get_opdata },
 

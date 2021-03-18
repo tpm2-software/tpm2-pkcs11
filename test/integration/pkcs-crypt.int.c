@@ -317,8 +317,9 @@ static void test_aes_encrypt_decrypt_5_2_returns(void **state) {
     assert_int_equal(rv, CKR_OK);
     assert_int_equal(plaintext2_len, 16);
 
-    rv = C_DecryptFinal (session, NULL, NULL);
+    rv = C_DecryptFinal (session, &final, &final_len);
     assert_int_equal(rv, CKR_OK);
+    assert_int_equal(final_len, 0);
 
     assert_memory_equal(plaintext, plaintext2, sizeof(plaintext2));
 }

@@ -454,3 +454,40 @@ CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid) {
 
     return CKR_OK;
 }
+
+twist apply_pkcs7_pad(const CK_BYTE_PTR in, size_t inlen) {
+
+    size_t total_bytes = (inlen + 16) - (inlen % 16);
+
+    twist t = twist_calloc(total_bytes);
+    if (!t) {
+        LOGE("oom");
+        return NULL;
+    }
+
+    int pad_value = total_bytes - inlen;
+    memcpy((void *)t, in, inlen);
+    memset((void *)(&t[inlen]), pad_value, pad_value);
+
+    return t;
+}
+
+CK_RV remove_pkcs7_pad(CK_BYTE_PTR in, CK_ULONG inlen,
+        CK_ULONG_PTR outlen) {
+
+    if (inlen % 16) {
+        LOGE("AES_CBC_PAD data should be block sized, got: %lu", inlen);
+        return CKR_ENCRYPTED_DATA_LEN_RANGE;
+    }
+
+    CK_BYTE pad_value = in[inlen - 1];
+    if (pad_value < 1 || pad_value > 16) {
+        LOGE("Nonesensical pad value, got: %u, expected 1-16", pad_value);
+        return CKR_ENCRYPTED_DATA_INVALID;
+    }
+
+    CK_ULONG new_size = inlen - pad_value;
+    *outlen = new_size;
+
+    return CKR_OK;
+}

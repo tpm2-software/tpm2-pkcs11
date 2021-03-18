@@ -84,6 +84,32 @@ CK_RV utils_ctx_wrap_objauth(twist wrappingkey, twist objauth, twist *wrapped_au
  */
 CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid);
 
+/**
+ * Removes a PKCS7 padding on a 16 byte block.
+ * @param in
+ *  The PKCS5 padded input.
+ * @param inlen
+ *  The length of the input, should be multiples of block size. Set on successful
+ *  calls to the size of the data with the padding stripped.
+ * @param outlen
+ *  The length of the data sans trailing padding.
+ * @return
+ *  CKR_OK on success.
+ */
+CK_RV remove_pkcs7_pad(CK_BYTE_PTR in, CK_ULONG inlen,
+        CK_ULONG_PTR outlen);
+
+/**
+ * Applies a PKCS7 padding to a blocksize of 16.
+ * @param in
+ *  The buffer to pad to AES blocksize of 16.
+ * @param inlen
+ *  The length of the input buffer.
+ * @return
+ *  Returns a twist on success or NULL on OOM.
+ */
+twist apply_pkcs7_pad(const CK_BYTE_PTR in, size_t inlen);
+
 /*
  * Work around bugs in clang not including the builtins, and when asan is enabled
  * ending up in a nightmare of having both the ASAN and BUILTINS defined and linked

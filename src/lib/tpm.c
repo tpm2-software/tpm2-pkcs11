@@ -2029,7 +2029,7 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
 static CK_RV do_buffered_encdec(tpm_op_data *tpm_enc_data,
         int encdec,
         CK_BYTE_PTR in, CK_ULONG inlen,
-        CK_BYTE_PTR out, CK_ULONG_PTR outlen) {
+        CK_BYTE_PTR out, CK_ULONG_PTR outlen, bool is_final) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -2039,6 +2039,8 @@ static CK_RV do_buffered_encdec(tpm_op_data *tpm_enc_data,
 
     twist auth = tpm_enc_data->tobj->unsealed_auth;
     ESYS_TR handle = tpm_enc_data->tobj->tpm_handle;
+
+    bool hold_block_back = tpm_enc_data->mech.mechanism == CKM_AES_CBC_PAD && !is_final;
 
     /*
      * if the application doesn't ask for a block boundary,
@@ -2058,6 +2060,12 @@ static CK_RV do_buffered_encdec(tpm_op_data *tpm_enc_data,
     CK_ULONG extra = full_buffer_len % 16;
     CK_ULONG blocks = full_buffer_len / 16;
     CK_ULONG modified_full_buffer_len = full_buffer_len - extra;
+
+    if (blocks && hold_block_back) {
+        blocks--;
+        extra = blocks == 0 ? 16 : blocks * 16;
+        modified_full_buffer_len = blocks * 16;
+    }
 
     if (blocks) {
         rv = encrypt_decrypt(ctx, handle, auth, mode, encdec,
@@ -2104,13 +2112,17 @@ CK_RV tpm_encrypt(crypto_op_data *opdata,
     }
 
     return do_buffered_encdec(tpm_enc_data, ENCRYPT, ptext, ptextlen,
-            ctext, ctextlen);
+            ctext, ctextlen, false);
 }
 
-CK_RV tpm_final_encrypt(crypto_op_data *opdata,
+static CK_RV common_final_encrypt_decrypt(int encdec, crypto_op_data *opdata,
         CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
 
-    UNUSED(last_part);
+    tpm_op_data *tpm_enc_data = opdata->tpm_opdata;
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    /* TODO use the synthesizer mechanism for all of this */
 
     /* non-aes things don't matter */
     if (opdata->tpm_opdata->op_type != CKK_AES) {
@@ -2120,22 +2132,86 @@ CK_RV tpm_final_encrypt(crypto_op_data *opdata,
         return CKR_OK;
     }
 
-    size_t extra = opdata->tpm_opdata->sym.prev_data ?
-            twist_len(opdata->tpm_opdata->sym.prev_data) : 0;
+    twist extra = opdata->tpm_opdata->sym.prev_data;
+    size_t extra_len = extra ?
+            twist_len(extra) : 0;
 
     /*
-     * For padding modes, this is where you would apply the pad  or error
+     * For padding modes, this is where you would apply the pad or error
      * for non-padding modes
      */
-    if (extra) {
-        return CKR_DATA_LEN_RANGE;
-    }
 
-    if (last_part_len) {
-        *last_part_len = 0;
+    if (extra_len && (opdata->tpm_opdata->mech.mechanism == CKM_AES_CBC_PAD)) {
+        /* if it's a padding mode, apply the pad */
+        if (encdec == ENCRYPT) {
+            twist padded_data = apply_pkcs7_pad((CK_BYTE_PTR)extra, extra_len);
+            if (!padded_data) {
+                return CKR_HOST_MEMORY;
+            }
+
+            /* just asking for size as in 5.2 style returns */
+            if (!last_part) {
+                *last_part_len = twist_len(padded_data);
+                twist_free(padded_data);
+                return CKR_OK;
+            }
+
+            if (twist_len(padded_data) > *last_part_len) {
+                *last_part_len = twist_len(padded_data);
+                twist_free(padded_data);
+                return CKR_BUFFER_TOO_SMALL;
+            }
+
+            rv = do_buffered_encdec(tpm_enc_data, encdec,
+                    (CK_BYTE_PTR)padded_data, twist_len(padded_data),
+                    last_part, last_part_len, true);
+            twist_free(padded_data);
+        } else if (extra_len) {
+            CK_BYTE padded[16];
+            CK_ULONG padded_len = sizeof(padded);
+            rv = do_buffered_encdec(tpm_enc_data, encdec,
+                    (CK_BYTE_PTR)extra, extra_len,
+                    padded, &padded_len, true);
+            if (rv != CKR_OK) {
+                return rv;
+            }
+
+            CK_ULONG unpadded_len = 0;
+            rv = remove_pkcs7_pad(padded, padded_len, &unpadded_len);
+            if (rv != CKR_OK) {
+                return rv;
+            }
+
+            if (padded_len > *last_part_len) {
+                *last_part_len = unpadded_len;
+                return last_part ? CKR_OK : CKR_BUFFER_TOO_SMALL;
+            }
+
+            *last_part_len = unpadded_len;
+            memcpy(last_part, padded, unpadded_len);
+        }
+        /* no extra data, nothing to do */
+    } else if (extra_len) {
+        /* mode should be one of the non padding modes */
+            assert(
+                (opdata->tpm_opdata->mech.mechanism == CKM_AES_CBC)
+            ||  (opdata->tpm_opdata->mech.mechanism == CKM_AES_CFB128)
+            ||  (opdata->tpm_opdata->mech.mechanism == CKM_AES_ECB));
+            rv = CKR_DATA_LEN_RANGE;
+    } else {
+        /* everything ended on a block boundary */
+        assert(extra_len == 0);
+        *last_part_len = extra_len;
+        rv = CKR_OK;
     }
 
     return CKR_OK;
+}
+
+CK_RV tpm_final_encrypt(crypto_op_data *opdata,
+        CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
+
+    return common_final_encrypt_decrypt(ENCRYPT, opdata, last_part, last_part_len);
 }
 
 CK_RV tpm_decrypt(crypto_op_data *opdata,
@@ -2161,38 +2237,13 @@ CK_RV tpm_decrypt(crypto_op_data *opdata,
     }
 
     return do_buffered_encdec(tpm_enc_data, DECRYPT,
-            ctext, ctextlen, ptext, ptextlen);
+            ctext, ctextlen, ptext, ptextlen, false);
 }
 
 CK_RV tpm_final_decrypt(crypto_op_data *opdata,
         CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
 
-    UNUSED(last_part);
-
-    /* non-aes things don't matter */
-    if (opdata->tpm_opdata->op_type != CKK_AES) {
-        if (last_part_len) {
-            *last_part_len = 0;
-        }
-        return CKR_OK;
-    }
-
-    size_t extra = opdata->tpm_opdata->sym.prev_data ?
-            twist_len(opdata->tpm_opdata->sym.prev_data) : 0;
-
-    /*
-     * For padding modes, this is where you would remove the pad  or error
-     * for non-padding modes
-     */
-    if (extra) {
-        return CKR_ENCRYPTED_DATA_LEN_RANGE;
-    }
-
-    if (last_part_len) {
-        *last_part_len = 0;
-    }
-
-    return CKR_OK;
+    return common_final_encrypt_decrypt(DECRYPT, opdata, last_part, last_part_len);
 }
 
 CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handle,
