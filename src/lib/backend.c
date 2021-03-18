@@ -171,8 +171,14 @@ CK_RV backend_get_tokens(token **tok, size_t *len) {
         return CKR_GENERAL_ERROR;
     }
 
+    token *tmp = calloc(MAX_TOKEN_CNT, sizeof(token));
+    if (!tmp) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
+    }
+
     if (esysdb_init) {
-        rv = backend_esysdb_get_tokens(tok, len);
+        rv = backend_esysdb_get_tokens(tmp, len);
         if (rv) {
             LOGE("Getting tokens from esysdb backend failed.");
             return rv;
@@ -181,12 +187,11 @@ CK_RV backend_get_tokens(token **tok, size_t *len) {
     }
 
     if (fapi_init) {
-        rv = backend_fapi_add_tokens(*tok, len);
+        rv = backend_fapi_add_tokens(tmp, len);
         if (rv) {
             static const char *msg = "Getting tokens from fapi backend failed.";
             if (backend == backend_fapi) {
                 LOGE(msg);
-                token_free_list(*tok, *len);
                 return rv;
             } else {
                 LOGW(msg);
@@ -198,15 +203,16 @@ CK_RV backend_get_tokens(token **tok, size_t *len) {
     /* -1 for starting at id 1 and -1 for the empty token */
     if (*len >= MAX_TOKEN_CNT - 2) {
         LOGW("Too many tokens, must have less than %d to show empty tokens", MAX_TOKEN_CNT - 1);
-        return CKR_OK;
+        token_free_list(tmp, *len);
+        return CKR_GENERAL_ERROR;
     }
 
-    token *t = &(*tok)[*len];
+    token *t = &tmp[*len];
 
-    for (t->id = 1; t->id < MAX_TOKEN_CNT; t->id += 1) {
+    for (t->id = 1; t->id < MAX_TOKEN_CNT && *len; t->id += 1) {
         size_t i = 0;
         for (; i < *len; i++) {
-            if (((*tok)[i]).id == t->id) {
+            if ((tmp[i]).id == t->id) {
                 break;
             }
         }
@@ -220,6 +226,8 @@ CK_RV backend_get_tokens(token **tok, size_t *len) {
     if (rv != CKR_OK) {
         return rv;
     }
+
+    *tok = tmp;
 
     LOGV("Esysdb + FAPI returned %zi token", *len);
 
