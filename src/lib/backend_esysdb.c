@@ -155,7 +155,7 @@ error:
  *
  * See backend_get_tokens()
  */
-CK_RV backend_esysdb_get_tokens(token **tok, size_t *len) {
+CK_RV backend_esysdb_get_tokens(token *tok, size_t *len) {
     return db_get_tokens(tok, len);
 }
 
