@@ -39,7 +39,7 @@
 #define TPM2_PKCS11_STORE_DIR "/etc/tpm2_pkcs11"
 #endif
 
-#define DB_VERSION 4
+#define DB_VERSION 5
 
 #define goto_oom(x, l) if (!x) { LOGE("oom"); goto l; }
 #define goto_error(x, l) if (x) { goto l; }
@@ -954,7 +954,7 @@ error:
     return rv;
 }
 
-CK_RV db_update_tobject_attrs(unsigned id, attr_list *attrs) {
+CK_RV _db_update_tobject_attrs(sqlite3 *db, unsigned id, attr_list *attrs) {
     assert(attrs);
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -971,9 +971,9 @@ CK_RV db_update_tobject_attrs(unsigned id, attr_list *attrs) {
           "UPDATE tobjects SET"
             " attrs=?"      // index: 1 type: TEXT (JSON)
             " WHERE id=?;";  // Index 2 type: int
-    int rc = sqlite3_prepare_v2(global.db, sql, -1, &stmt, NULL);
+    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
-        LOGE("%s", sqlite3_errmsg(global.db));
+        LOGE("%s", sqlite3_errmsg(db));
         goto error;
     }
 
@@ -995,6 +995,12 @@ error:
     sqlite3_finalize_warn(stmt);
     free(attr_str);
     return rv;
+}
+
+CK_RV db_update_tobject_attrs(unsigned id, attr_list *attrs) {
+    assert(attrs);
+
+    return _db_update_tobject_attrs(global.db, id,  attrs);
 }
 
 CK_RV db_add_token(token *tok) {
@@ -1684,6 +1690,126 @@ error:
     return rv;
 }
 
+static CK_RV dbup_handler_from_4_to_5(sqlite3 *updb) {
+
+    /*
+     * Between version 3 and 4 of the DB the following changes need to be made:
+     *
+     * Table tobjects:
+     *
+     * The YAML attributes need to include CKM_AES_CBC_PAD in the CKM_ALLOWED_MECHANISMS list.
+     */
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+    sqlite3_stmt *stmt = NULL;
+
+    int rc = sqlite3_prepare_v2(updb, "SELECT * from tobjects", -1, &stmt, 0);
+    if (rc != SQLITE_OK) {
+        LOGE("Failed to fetch data: %s", sqlite3_errmsg(updb));
+        goto error;
+    }
+
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_DONE) {
+        goto out;
+    } else if (rc != SQLITE_ROW) {
+        LOGE("Failed to step: %s", sqlite3_errmsg(updb));
+        goto error;
+    }
+
+    while (rc == SQLITE_ROW) {
+
+        CK_MECHANISM_TYPE *new_mechs = NULL;
+
+        tobject *tobj = db_tobject_new(stmt);
+        if (!tobj) {
+            LOGE("Could not process tobjects for upgrade");
+            goto error;
+        }
+
+        CK_OBJECT_CLASS cka_class = attr_list_get_CKA_CLASS(tobj->attrs, CK_OBJECT_CLASS_BAD);
+        if (cka_class != CKO_SECRET_KEY) {
+            goto next;
+        }
+
+        CK_KEY_TYPE cka_key_type = attr_list_get_CKA_KEY_TYPE(tobj->attrs, CKA_KEY_TYPE_BAD);
+        if (cka_key_type != CKK_AES) {
+            goto next;
+        }
+
+        CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_ALLOWED_MECHANISMS);
+
+        CK_ULONG mech_num = a ? (a->ulValueLen/sizeof(CK_MECHANISM_TYPE)) : 0;
+        safe_adde(mech_num, 1);
+
+        CK_ULONG total_bytes = 0;
+        safe_mul(total_bytes, mech_num, sizeof(CK_MECHANISM_TYPE));
+
+        new_mechs = calloc(mech_num, sizeof(CK_MECHANISM_TYPE));
+        if (!new_mechs) {
+            tobject_free(tobj);
+            rv = CKR_HOST_MEMORY;
+            goto error;
+        }
+
+        CK_ULONG i;
+        for (i=0; i < mech_num - 1; i++) {
+            CK_MECHANISM_TYPE old_mech = ((CK_MECHANISM_TYPE_PTR)(a->pValue))[i];
+            if (old_mech == CKM_AES_CBC_PAD) {
+                /* skip, already has it for some reason */
+                goto next;
+            }
+            new_mechs[i] = old_mech;
+        }
+
+        /* append CKM_AES_CBC_PAD */
+        new_mechs[mech_num - 1] = CKM_AES_CBC_PAD;
+
+        CK_ATTRIBUTE updated_attr = {
+            .type = CKA_ALLOWED_MECHANISMS,
+            .ulValueLen = total_bytes,
+            .pValue = new_mechs
+        };
+
+        /*
+         * if the object had CKA_ALLOWED_MECHANISMS we UPDATE the entry,
+         * else we just add it to the list
+         */
+        rv = a ? attr_list_update_entry(tobj->attrs, &updated_attr) :
+                attr_list_append_entry(&tobj->attrs, &updated_attr);
+        if (rv != CKR_OK) {
+            SAFE_FREE(new_mechs);
+            tobject_free(tobj);
+            goto error;
+        }
+
+        /* persist the changes in the update db */
+        rv = _db_update_tobject_attrs(updb, tobj->id, tobj->attrs);
+        if (rv != CKR_OK) {
+            SAFE_FREE(new_mechs);
+            tobject_free(tobj);
+            goto error;
+        }
+
+next:
+        tobject_free(tobj);
+        SAFE_FREE(new_mechs);
+
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_ROW && rc != SQLITE_DONE) {
+            LOGE("Failed to fetch data: %s\n", sqlite3_errmsg(updb));
+            goto error;
+        }
+    }
+
+out:
+    rv = CKR_OK;
+
+error:
+    sqlite3_finalize(stmt);
+    return rv;
+}
+
 static CK_RV db_backup(sqlite3 *db, const char *dbpath, sqlite3 **updb, char **copypath) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -1756,6 +1882,7 @@ static CK_RV db_update(sqlite3 **xdb, const char *dbpath, unsigned old_version, 
             dbup_handler_from_1_to_2,
             dbup_handler_from_2_to_3,
             dbup_handler_from_3_to_4,
+            dbup_handler_from_4_to_5
     };
 
     /*
@@ -1786,7 +1913,7 @@ static CK_RV db_update(sqlite3 **xdb, const char *dbpath, unsigned old_version, 
      */
     size_t i;
     for(i=old_version; i < ARRAY_LEN(updaters) && i < new_version; i++) {
-        CK_RV rv = updaters[i](dbbak);
+        rv = updaters[i](dbbak);
         if (rv != CKR_OK) {
             LOGE("Running updater index %zu failed", i);
             goto out;

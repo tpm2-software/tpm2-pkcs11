@@ -2166,7 +2166,7 @@ static CK_RV common_final_encrypt_decrypt(int encdec, crypto_op_data *opdata,
                     (CK_BYTE_PTR)padded_data, twist_len(padded_data),
                     last_part, last_part_len, true);
             twist_free(padded_data);
-        } else if (extra_len) {
+        } else {
             CK_BYTE padded[16];
             CK_ULONG padded_len = sizeof(padded);
             rv = do_buffered_encdec(tpm_enc_data, encdec,

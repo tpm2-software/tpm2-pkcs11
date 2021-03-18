@@ -24,6 +24,8 @@
 
 #define UNUSED(x) (void)x
 
+#define SAFE_FREE(x) do { free(x); x = NULL; } while (0)
+
 #define SAFE_CAST(m, r) \
     do { \
         if (!m->pParameter || m->ulParameterLen != sizeof(typeof(*r))) { \

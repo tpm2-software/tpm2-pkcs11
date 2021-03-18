@@ -1165,22 +1165,6 @@ static void test_init_sealobjects_bad_col_name_fail(void **state) {
     assert_int_not_equal(rc, SQLITE_OK);
 }
 
-static void test_db_get_tokens_calloc_fail(void **state) {
-    UNUSED(state);
-
-    will_return_data d[] = {
-        { .data = NULL        }, /* calloc */
-    };
-
-    will_return(__wrap_calloc,  &d[0]);
-
-    size_t len = 0;
-    token *t = NULL;
-
-    CK_RV rv = db_get_tokens(&t, &len);
-    assert_int_equal(rv, CKR_HOST_MEMORY);
-}
-
 static void test_db_get_tokens_sqlite3_prepare_v2_fail(void **state) {
     UNUSED(state);
 
@@ -2900,7 +2884,6 @@ int main(int argc, char* argv[]) {
         cmocka_unit_test(test_init_sealobjects_sqlite3_bind_int_fail),
         cmocka_unit_test(test_init_sealobjects_sqlite3_step_fail),
         cmocka_unit_test(test_init_sealobjects_bad_col_name_fail),
-        cmocka_unit_test(test_db_get_tokens_calloc_fail),
         cmocka_unit_test(test_db_get_tokens_sqlite3_prepare_v2_fail),
         cmocka_unit_test(test_db_get_tokens_token_overcount_fail),
         cmocka_unit_test(test_db_get_tokens_token_min_init_fail),

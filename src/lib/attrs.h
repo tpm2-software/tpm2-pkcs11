@@ -266,6 +266,8 @@ CK_BBOOL attr_list_get_CKA_PRIVATE(attr_list *attrs, CK_BBOOL defvalue);
 
 CK_BBOOL attr_list_get_CKA_TOKEN(attr_list *attrs, CK_BBOOL defvalue);
 
+CK_KEY_TYPE attr_list_get_CKA_KEY_TYPE(attr_list *attrs, CK_KEY_TYPE defvalue);
+
 CK_OBJECT_CLASS attr_list_get_CKA_CLASS(attr_list *attrs, CK_OBJECT_CLASS defvalue);
 
 /**

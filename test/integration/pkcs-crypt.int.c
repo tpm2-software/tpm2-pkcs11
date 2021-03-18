@@ -1103,9 +1103,61 @@ static void test_aes_0_bytes(void **state) {
     assert_int_equal(ciphertext_len, 0);
 }
 
+static void test_aes_cbc_pad_small_oneshot(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+
+    CK_SESSION_HANDLE session = ti->handle;
+
+    /* init encryption */
+    CK_BYTE iv[16] = {
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xDE, 0xAD, 0xBE, 0xEF,
+    };
+
+    CK_MECHANISM mechanism = {
+        CKM_AES_CBC_PAD, iv, sizeof(iv)
+    };
+
+    CK_BYTE plaintext[15] = {
+         1,  2,  3,  4,  5,  6,  7,  8,  9, 10,
+        11, 12, 13, 14, 15
+    };
+
+    CK_BYTE ciphertext[sizeof(plaintext) + 1] = { 0 };
+
+    /* encrypt init */
+    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.aes);
+    assert_int_equal(rv, CKR_OK);
+
+    unsigned long ciphertext_len = sizeof(plaintext);
+    rv = C_Encrypt(session,
+            plaintext, sizeof(plaintext),
+            ciphertext, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, sizeof(ciphertext));
+
+    /* decrypt init */
+    rv = C_DecryptInit(session, &mechanism, ti->objects.aes);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE plaintext2[sizeof(plaintext)] = { 0 };
+    unsigned long plaintext2_len = sizeof(plaintext2);
+    rv = C_Decrypt(session,
+            ciphertext, ciphertext_len,
+            plaintext2, &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(plaintext2_len, sizeof(plaintext2));
+    assert_memory_equal(plaintext2, plaintext, sizeof(plaintext2));
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_aes_cbc_pad_small_oneshot,
+                test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_aes_always_authenticate,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_aes_encrypt_decrypt_oneshot_5_2_returns,
@@ -1136,5 +1188,6 @@ int main() {
                 test_setup, test_teardown),
     };
 
-    return cmocka_run_group_tests(tests, group_setup, group_teardown);
+    return _cmocka_run_group_tests("tests", tests, 1, group_setup, group_teardown);
+    //return cmocka_run_group_tests(tests, group_setup, group_teardown);
 }
