@@ -1793,7 +1793,7 @@ static CK_RV db_update(sqlite3 **xdb, const char *dbpath, unsigned old_version, 
      */
     size_t i;
     for(i=old_version; i < ARRAY_LEN(updaters) && i < new_version; i++) {
-        CK_RV rv = updaters[i](dbbak);
+        rv = updaters[i](dbbak);
         if (rv != CKR_OK) {
             LOGE("Running updater index %zu failed", i);
             goto out;
