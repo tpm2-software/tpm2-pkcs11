@@ -1268,23 +1268,6 @@ CK_RV attr_list_update_entry(attr_list *attrs, CK_ATTRIBUTE_PTR untrusted_attr) 
         return CKR_GENERAL_ERROR;
     }
 
-    /* the existing type memory should match the expected type memory */
-    CK_BYTE expected_memory_type = type_from_ptr(found->pValue,
-            found->ulValueLen);
-
-    /* internal state check */
-    if (expected_memory_type != handler->memtype) {
-        LOGE("expected memory(%u-%s) != handler memory(%u-%s)",
-            expected_memory_type, type_to_str(expected_memory_type),
-            handler->memtype, type_to_str(handler->memtype));
-        return CKR_GENERAL_ERROR;
-    }
-
-    CK_RV rv = check_attr(untrusted_attr, handler->memtype);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
     void *pValue = untrusted_attr->pValue;
     CK_ULONG ulValueLen = untrusted_attr->ulValueLen;
 
