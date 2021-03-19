@@ -304,6 +304,7 @@ class PKCS11AESKey(PKCS11SecretKey):
         mechs = []
         if 'cbc' in y:
             mechs.append(CKM_AES_CBC)
+            mechs.append(CKM_AES_CBC_PAD)
         if 'cfb' in y:
             mechs.append(CKM_AES_CFB128)
         if 'ecb' in y:

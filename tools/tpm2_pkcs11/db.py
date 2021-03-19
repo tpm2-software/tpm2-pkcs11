@@ -1,12 +1,22 @@
 # SPDX-License-Identifier: BSD-2-Clause
 import fcntl
+import io
 import os
 import sys
 import sqlite3
 import textwrap
 import yaml
 
-VERSION = 4
+from .pkcs11t import (
+    CKA_ALLOWED_MECHANISMS,
+    CKA_CLASS,
+    CKO_SECRET_KEY,
+    CKA_KEY_TYPE,
+    CKM_AES_CBC_PAD,
+    CKK_AES
+)
+
+VERSION = 5
 
 #
 # With Db() as db:
@@ -194,14 +204,18 @@ class Db(object):
         c.execute(sql, list(tobject.values()))
         return c.lastrowid
 
-    def updatetertiary(self, tid, attrs):
-
-        c = self._conn.cursor()
+    @staticmethod
+    def _updatetertiary(db, tid, attrs):
+        c = db.cursor()
         attrs = yaml.safe_dump(attrs, canonical=True)
         values = [attrs, tid]
 
         sql = 'UPDATE tobjects SET attrs=? WHERE id=?'
         c.execute(sql, values)
+
+    def updatetertiary(self, tid, attrs):
+
+        self._updatetertiary(tid, attrs)
 
     def updatepin(self, is_so, token, sealauth, sealpriv, sealpub=None):
 
@@ -381,6 +395,39 @@ class Db(object):
         # Rename the new table to the correct table name
         s = 'ALTER TABLE pobjects2 RENAME TO pobjects;'
         dbbakcon.execute(s)
+
+    def _update_on_5(self, dbbakcon):
+        '''
+        Between version 4 and 5 of the DB the following changes need to be made:
+
+        Table tobjects:
+
+        The YAML attributes need to include CKM_AES_CBC_PAD in the CKM_ALLOWED_MECHANISMS list.
+        '''
+
+        c = dbbakcon.cursor()
+
+        c.execute('SELECT * from tobjects')
+        tobjs = c.fetchall()
+
+        for t in tobjs:
+            attrs = yaml.safe_load(io.StringIO(t['attrs']))
+
+            # IF the object is definitely a SECRET KEY of AES and has
+            # CKM_AES_CBC_PAD in allowed mechanisms, skip it.
+            if CKA_CLASS not in attrs or \
+                attrs[CKA_CLASS] != CKO_SECRET_KEY or \
+                CKA_KEY_TYPE not in attrs or \
+                attrs[CKA_KEY_TYPE] != CKK_AES or \
+                CKA_ALLOWED_MECHANISMS not in attrs or \
+                CKM_AES_CBC_PAD in attrs[CKA_ALLOWED_MECHANISMS]:
+                continue
+
+            # Is an AES KEY and needs CKM_AES_CBC_PAD
+            attrs[CKA_ALLOWED_MECHANISMS].append(CKM_AES_CBC_PAD)
+
+            Db._updatetertiary(dbbakcon, t['id'], attrs)
+
 
     def update_db(self, old_version, new_version=VERSION):
 
