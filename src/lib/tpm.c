@@ -204,7 +204,10 @@ struct tpm_op_data {
         struct {
             TPMI_ALG_SYM_MODE mode;
             TPM2B_IV iv;
-            twist prev_data;
+            struct {
+                CK_ULONG len;
+                CK_BYTE data[16];
+            } prev;
         } sym;
         struct {
             TPMT_SIG_SCHEME sig;
@@ -1746,7 +1749,6 @@ CK_RV tpm_aes_ecb_get_opdata(mdetail *mdtl,
 void tpm_opdata_free(tpm_op_data **opdata) {
 
     if (opdata) {
-        twist_free((*opdata)->sym.prev_data);
         free(*opdata);
         *opdata = NULL;
     }
@@ -2040,24 +2042,52 @@ static CK_RV do_buffered_encdec(tpm_op_data *tpm_enc_data,
     twist auth = tpm_enc_data->tobj->unsealed_auth;
     ESYS_TR handle = tpm_enc_data->tobj->tpm_handle;
 
+    /* final calls don't have input data, they just exhaust the internal buffer if present */
+    bool is_final = !in;
+
     /*
      * if the application doesn't ask for a block boundary,
      * buffer the extra till later when you can make a block.
      * Manipulate the input to the TPM to be on a boundary.
      */
-    twist full_buffer = twistbin_append(tpm_enc_data->sym.prev_data, in, inlen);
+    binarybuffer data[] = {
+        { .data = tpm_enc_data->sym.prev.data, .size = tpm_enc_data->sym.prev.len },
+        { .data = in,                          .size = inlen                      },
+    };
+
+    twist full_buffer = twistbin_create(data, ARRAY_LEN(data));
     if (!full_buffer) {
         LOGE("oom");
         return CKR_HOST_MEMORY;
     }
-    /* done with this buffer, transfered to full_buffer */
-    tpm_enc_data->sym.prev_data = NULL;
 
     /* pass only the "good blocks here */
     size_t full_buffer_len = twist_len(full_buffer);
-    CK_ULONG extra = full_buffer_len % 16;
+    CK_ULONG extralen = full_buffer_len % 16;
     CK_ULONG blocks = full_buffer_len / 16;
-    CK_ULONG modified_full_buffer_len = full_buffer_len - extra;
+    CK_ULONG modified_full_buffer_len = full_buffer_len - extralen;
+
+    /*
+     * Hold a block back on the following conditions:
+     * 1. Decrypt, as one block will have padding. Encrypt can just fire off blocks like
+     *    normal. Decrypt will need a final block to strip padding from.
+     * 2. Its not the final round, the final round better be right or error.
+     * 3. There are blocks to hold back
+     * 4. There is NO extra data, just send the blocks we have.
+     *    the blocks we have.
+     * 5. We have a padding mechanism, so we need to hold it back for possible final pad.
+     */
+    bool hold_block_back = encdec == DECRYPT
+            && !is_final
+            && blocks > 0
+            && extralen == 0
+            && tpm_enc_data->mech.mechanism == CKM_AES_CBC_PAD;
+
+    if (hold_block_back) {
+        blocks--;
+        extralen = blocks == 0 ? 16 : blocks * 16;
+        modified_full_buffer_len = blocks * 16;
+    }
 
     if (blocks) {
         rv = encrypt_decrypt(ctx, handle, auth, mode, encdec,
@@ -2073,16 +2103,16 @@ static CK_RV do_buffered_encdec(tpm_op_data *tpm_enc_data,
     }
 
     /* if we have extra data, save it for next round */
-    if (extra) {
-        tpm_enc_data->sym.prev_data = NULL;
-        tpm_enc_data->sym.prev_data = twistbin_new(
-                &full_buffer[modified_full_buffer_len],
-                extra);
-        if (!tpm_enc_data->sym.prev_data) {
-            LOGE("oom");
-            rv = CKR_HOST_MEMORY;
-            goto error;
-        }
+    /* make sure we don't exceed the space of the internal static buffer */
+    if (extralen > sizeof(tpm_enc_data->sym.prev.data)) {
+        LOGE("Internal buffer too small");
+        rv = CKR_GENERAL_ERROR;
+        goto error;
+    }
+
+    tpm_enc_data->sym.prev.len = extralen;
+    if (extralen) {
+        memcpy(tpm_enc_data->sym.prev.data, &full_buffer[modified_full_buffer_len], extralen);
     }
 
     rv = CKR_OK;
@@ -2107,10 +2137,12 @@ CK_RV tpm_encrypt(crypto_op_data *opdata,
             ctext, ctextlen);
 }
 
-CK_RV tpm_final_encrypt(crypto_op_data *opdata,
+static CK_RV common_final_encrypt_decrypt(int encdec, crypto_op_data *opdata,
         CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
 
-    UNUSED(last_part);
+    tpm_op_data *tpm_enc_data = opdata->tpm_opdata;
+
+    CK_RV rv = CKR_GENERAL_ERROR;
 
     /* non-aes things don't matter */
     if (opdata->tpm_opdata->op_type != CKK_AES) {
@@ -2120,22 +2152,113 @@ CK_RV tpm_final_encrypt(crypto_op_data *opdata,
         return CKR_OK;
     }
 
-    size_t extra = opdata->tpm_opdata->sym.prev_data ?
-            twist_len(opdata->tpm_opdata->sym.prev_data) : 0;
-
     /*
-     * For padding modes, this is where you would apply the pad  or error
+     * For padding modes, this is where you would apply the pad or error
      * for non-padding modes
      */
-    if (extra) {
-        return CKR_DATA_LEN_RANGE;
+
+    if (opdata->tpm_opdata->mech.mechanism == CKM_AES_CBC_PAD) {
+        /* if it's a padding mode, apply the pad */
+        if (encdec == ENCRYPT) {
+
+            /*
+             * pad the data preserving the extra data
+             * This call might be for buffer size, so we don't want to attempt to apply padding
+             * twice, so we only copy the padded data into the internal buffer as needed.
+             */
+            CK_BYTE out[sizeof(opdata->tpm_opdata->sym.prev.data)];
+            CK_ULONG outlen = sizeof(out);
+            rv = mech_synthesize(tpm_enc_data->mdtl,
+                    &tpm_enc_data->mech, tpm_enc_data->tobj->attrs,
+                    opdata->tpm_opdata->sym.prev.data,
+                    opdata->tpm_opdata->sym.prev.len,
+                    out,
+                    &outlen);
+            if (rv != CKR_OK) {
+                return rv;
+            }
+
+            /* just asking for size as in 5.2 style returns */
+            if (!last_part) {
+                *last_part_len = outlen;
+                return CKR_OK;
+            }
+
+            if (outlen > *last_part_len) {
+                *last_part_len = outlen;
+                return CKR_BUFFER_TOO_SMALL;
+            }
+
+            /* swap the internal buffer with the padded variant for the last call */
+            opdata->tpm_opdata->sym.prev.len = outlen;
+            memcpy(opdata->tpm_opdata->sym.prev.data, out, outlen);
+
+            rv = do_buffered_encdec(tpm_enc_data, encdec,
+                    NULL, 0,
+                    last_part, last_part_len);
+        } else {
+            /* remove the pad */
+
+            /* decrypt into the padded buffer */
+            CK_BYTE padded[16];
+            CK_ULONG padded_len = sizeof(padded);
+            rv = do_buffered_encdec(tpm_enc_data, encdec,
+                    NULL, 0,
+                    padded, &padded_len);
+            if (rv != CKR_OK) {
+                return rv;
+            }
+
+            /* remove the pad */
+            CK_BYTE out[sizeof(padded)];
+            CK_ULONG outlen = sizeof(out);
+
+            rv = mech_unsynthesize(tpm_enc_data->mdtl,
+                    &tpm_enc_data->mech, tpm_enc_data->tobj->attrs,
+                    padded,
+                    padded_len,
+                    out,
+                    &outlen);
+            if (rv != CKR_OK) {
+                return rv;
+            }
+
+            /* just asking for size as in 5.2 style returns */
+            if (!last_part) {
+                *last_part_len = outlen;
+                return CKR_OK;
+            }
+
+            if (outlen > *last_part_len) {
+                *last_part_len = outlen;
+                return CKR_BUFFER_TOO_SMALL;
+            }
+
+            *last_part_len = outlen;
+            memcpy(last_part, out, outlen);
+        }
+        /* no extra data, nothing to do */
+    } else if (opdata->tpm_opdata->sym.prev.len) {
+        /* mode should be one of the non padding modes */
+            assert(
+                (opdata->tpm_opdata->mech.mechanism == CKM_AES_CBC)
+            ||  (opdata->tpm_opdata->mech.mechanism == CKM_AES_CFB128)
+            ||  (opdata->tpm_opdata->mech.mechanism == CKM_AES_ECB));
+            rv = CKR_DATA_LEN_RANGE;
+    } else {
+        /* everything ended on a block boundary */
+        assert(opdata->tpm_opdata->sym.prev.len == 0);
+        *last_part_len = opdata->tpm_opdata->sym.prev.len;
+        rv = CKR_OK;
     }
 
-    if (last_part_len) {
-        *last_part_len = 0;
-    }
+    return rv;
+}
 
-    return CKR_OK;
+CK_RV tpm_final_encrypt(crypto_op_data *opdata,
+        CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
+
+    return common_final_encrypt_decrypt(ENCRYPT, opdata, last_part, last_part_len);
 }
 
 CK_RV tpm_decrypt(crypto_op_data *opdata,
@@ -2167,32 +2290,7 @@ CK_RV tpm_decrypt(crypto_op_data *opdata,
 CK_RV tpm_final_decrypt(crypto_op_data *opdata,
         CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
 
-    UNUSED(last_part);
-
-    /* non-aes things don't matter */
-    if (opdata->tpm_opdata->op_type != CKK_AES) {
-        if (last_part_len) {
-            *last_part_len = 0;
-        }
-        return CKR_OK;
-    }
-
-    size_t extra = opdata->tpm_opdata->sym.prev_data ?
-            twist_len(opdata->tpm_opdata->sym.prev_data) : 0;
-
-    /*
-     * For padding modes, this is where you would remove the pad  or error
-     * for non-padding modes
-     */
-    if (extra) {
-        return CKR_ENCRYPTED_DATA_LEN_RANGE;
-    }
-
-    if (last_part_len) {
-        *last_part_len = 0;
-    }
-
-    return CKR_OK;
+    return common_final_encrypt_decrypt(DECRYPT, opdata, last_part, last_part_len);
 }
 
 CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handle,
@@ -3400,6 +3498,7 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
         add_mech(CKM_AES_KEY_GEN);
 
         if_add_mech(algs, TPM2_ALG_CBC, CKM_AES_CBC);
+        if_add_mech(algs, TPM2_ALG_CBC, CKM_AES_CBC_PAD);
         if_add_mech(algs, TPM2_ALG_CFB, CKM_AES_CFB128);
         if_add_mech(algs, TPM2_ALG_ECB, CKM_AES_ECB);
     }

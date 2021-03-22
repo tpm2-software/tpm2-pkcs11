@@ -264,6 +264,8 @@ static CK_RV common_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdat
 static CK_RV common_final_op(session_ctx *ctx, encrypt_op_data *supplied_opdata, operation op,
         CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
 
+    check_pointer(last_part_len);
+
     CK_RV rv = CKR_GENERAL_ERROR;
 
     encrypt_op_data *opdata = supplied_opdata;

@@ -95,6 +95,7 @@ void token_free_list(token *t, size_t len) {
     for (i=0; i < len; i++) {
         token_free(&t[i]);
     }
+    memset(t, 0, sizeof(*t) * len);
     free(t);
 }
 
