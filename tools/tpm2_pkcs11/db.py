@@ -402,7 +402,8 @@ class Db(object):
 
         Table tobjects:
 
-        The YAML attributes need to include CKM_AES_CBC_PAD in the CKM_ALLOWED_MECHANISMS list.
+        The YAML attributes need to include CKM_AES_CBC_PAD and CKM_AES_CTR in the
+        CKM_ALLOWED_MECHANISMS list.
         '''
 
         c = dbbakcon.cursor()
@@ -414,17 +415,24 @@ class Db(object):
             attrs = yaml.safe_load(io.StringIO(t['attrs']))
 
             # IF the object is definitely a SECRET KEY of AES and has
-            # CKM_AES_CBC_PAD in allowed mechanisms, skip it.
+            # CKM_AES_CBC_PAD AND CKM_AES_CTR in allowed mechanisms, skip it.
             if CKA_CLASS not in attrs or \
                 attrs[CKA_CLASS] != CKO_SECRET_KEY or \
                 CKA_KEY_TYPE not in attrs or \
                 attrs[CKA_KEY_TYPE] != CKK_AES or \
-                CKA_ALLOWED_MECHANISMS not in attrs or \
-                CKM_AES_CBC_PAD in attrs[CKA_ALLOWED_MECHANISMS]:
+                CKA_ALLOWED_MECHANISMS not in attrs \
+                (CKM_AES_CBC_PAD in attrs[CKA_ALLOWED_MECHANISMS] \
+                 and \
+                 CKM_AES_CTR in attrs[CKA_ALLOWED_MECHANISMS]):
                 continue
 
             # Is an AES KEY and needs CKM_AES_CBC_PAD
-            attrs[CKA_ALLOWED_MECHANISMS].append(CKM_AES_CBC_PAD)
+            if not CKM_AES_CBC_PAD in attrs[CKA_ALLOWED_MECHANISMS]:
+                attrs[CKA_ALLOWED_MECHANISMS].append(CKM_AES_CBC_PAD)
+
+            # Is an AES KEY and needs CKM_AES_CBC_PAD
+            if not CKM_AES_CTR in attrs[CKA_ALLOWED_MECHANISMS]:
+                attrs[CKA_ALLOWED_MECHANISMS].append(CKM_AES_CBC_PAD)
 
             Db._updatetertiary(dbbakcon, t['id'], attrs)
 
