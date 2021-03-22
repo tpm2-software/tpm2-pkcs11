@@ -215,7 +215,7 @@ class Db(object):
 
     def updatetertiary(self, tid, attrs):
 
-        self._updatetertiary(tid, attrs)
+        self._updatetertiary(self._conn, tid, attrs)
 
     def updatepin(self, is_so, token, sealauth, sealpriv, sealpub=None):
 

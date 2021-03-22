@@ -121,6 +121,7 @@ void test_get_mechanism_info_good(void **state) {
         CKM_AES_CBC,
         CKM_AES_CFB128,
         CKM_AES_ECB,
+        CKM_AES_CBC_PAD,
     };
     for (size_t i = 0; i < ARRAY_LEN(aes_mechs); i++) {
         rv = C_GetMechanismInfo(slot_id, aes_mechs[i], &mech_info);

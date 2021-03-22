@@ -119,6 +119,13 @@ static CK_RV rsa_pss_synthesizer(mdetail *m, CK_MECHANISM_PTR mech, attr_list *a
 static CK_RV rsa_pkcs_hash_synthesizer(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs,
         CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
+static CK_RV aes_cbc_synthesizer(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs,
+        CK_BYTE_PTR inbuf, CK_ULONG inlen,
+        CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
+static CK_RV aes_cbc_unsynthesizer(mdetail *mdtl,
+        CK_MECHANISM_PTR mech, attr_list *attrs,
+        CK_BYTE_PTR inbuf, CK_ULONG inlen,
+        CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
 static CK_RV rsa_pss_get_halg(CK_MECHANISM_PTR mech, CK_MECHANISM_TYPE_PTR halg);
 static CK_RV rsa_oaep_get_halg(CK_MECHANISM_PTR mech, CK_MECHANISM_TYPE_PTR halg);
 static CK_RV sha1_get_halg(CK_MECHANISM_PTR mech, CK_MECHANISM_TYPE_PTR halg);
@@ -167,6 +174,7 @@ static const mdetail_entry _g_mechs_templ[] = {
     { .type = CKM_AES_KEY_GEN, .flags = mf_is_keygen|mf_aes },
 
     { .type = CKM_AES_CBC,    .flags = mf_encrypt|mf_decrypt|mf_aes, .get_tpm_opdata = tpm_aes_cbc_get_opdata },
+    { .type = CKM_AES_CBC_PAD, .flags = mf_encrypt|mf_decrypt|mf_aes|mf_force_synthetic, .get_tpm_opdata = tpm_aes_cbc_get_opdata, .synthesizer = aes_cbc_synthesizer, .unsynthesizer = aes_cbc_unsynthesizer },
     { .type = CKM_AES_CFB128, .flags = mf_encrypt|mf_decrypt|mf_aes, .get_tpm_opdata = tpm_aes_cfb_get_opdata },
     { .type = CKM_AES_ECB,    .flags = mf_encrypt|mf_decrypt|mf_aes, .get_tpm_opdata = tpm_aes_ecb_get_opdata },
 
@@ -1032,6 +1040,30 @@ CK_RV rsa_pkcs_hash_synthesizer(mdetail *mdtl,
     memcpy(&hdr_buf[hdr_size], inbuf, hash_len);
 
     return rsa_pkcs_synthesizer(mdtl, mech, attrs, hdr_buf, total_size, outbuf, outlen);
+}
+
+static CK_RV aes_cbc_synthesizer(mdetail *mdtl,
+        CK_MECHANISM_PTR mech, attr_list *attrs,
+        CK_BYTE_PTR inbuf, CK_ULONG inlen,
+        CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen) {
+
+    UNUSED(mdtl);
+    UNUSED(mech);
+    UNUSED(attrs);
+
+    return apply_pkcs7_pad(inbuf, inlen, outbuf, outlen);
+}
+
+static CK_RV aes_cbc_unsynthesizer(mdetail *mdtl,
+        CK_MECHANISM_PTR mech, attr_list *attrs,
+        CK_BYTE_PTR inbuf, CK_ULONG inlen,
+        CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen) {
+
+    UNUSED(mdtl);
+    UNUSED(mech);
+    UNUSED(attrs);
+
+    return remove_pkcs7_pad(inbuf, inlen, outbuf, outlen);
 }
 
 static CK_RV get_rsa_mechinfo(tpm_ctx *tctx, CK_MECHANISM_INFO_PTR info) {
