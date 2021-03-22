@@ -1492,6 +1492,244 @@ static void test_aes_cbc_pad_multiple_blocks_with_extra(void **state) {
     assert_memory_equal(plaintext, plaintext2, sizeof(plaintext2));
 }
 
+static void test_aes_ctr_multiple_blocks(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+
+    CK_SESSION_HANDLE session = ti->handle;
+
+    /* init encryption */
+    CK_AES_CTR_PARAMS params = {
+        .ulCounterBits = sizeof(params.cb) * 8,
+        /* initialize the counter to something other than 0 */
+        .cb = {
+            0, 1, 2, 3, 4, 5, 6, 7, 8,
+            9, 10, 11, 12, 13, 14, 15,
+        }
+    };
+
+    CK_MECHANISM mechanism = {
+        CKM_AES_CTR, &params, sizeof(params)
+    };
+
+    CK_BYTE plaintext[48] = {
+         1,  2,  3,  4,  5,  6,  7,  8,  9, 10,
+        11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+        21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+        31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+        41, 42, 43, 44, 45, 46, 47, 48
+    };
+
+    CK_BYTE ciphertext[sizeof(plaintext)] = { 0 };
+
+    /* init */
+    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.aes);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG counter = 0;
+    CK_ULONG offset = 0;
+    /* less than a block */
+    unsigned long ciphertext_len = sizeof(plaintext);
+    rv = C_EncryptUpdate(session,
+            plaintext, 15,
+            ciphertext, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, 0);
+    counter += ciphertext_len;
+    offset += 15;
+
+    /* add a block, 31 bytes should return a single block of 16 bytes */
+    ciphertext_len = sizeof(plaintext) - counter;
+    rv = C_EncryptUpdate(session,
+            &plaintext[offset], 16,
+            &ciphertext[counter], &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, 16);
+    counter += ciphertext_len;
+    offset += 16;
+
+    /* add remaining 17 bytes with 15 bytes in the internal state buffer should yield 32 */
+    ciphertext_len = sizeof(plaintext) - counter;
+    rv = C_EncryptUpdate(session,
+            &plaintext[offset], 17,
+            &ciphertext[counter], &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, 32);
+    counter += ciphertext_len;
+    offset += 17;
+
+    /* plain text should be exhausted at this point */
+    assert_int_equal(offset, sizeof(plaintext));
+
+    /* cipher text should be fully acquired at this point (AES CTR mode) */
+    assert_int_equal(counter, sizeof(ciphertext));
+
+    /*
+     * call final to get the last remaining block,
+     * which in AES CTR mode shouldn't have one
+     */
+    ciphertext_len = 42;
+    rv = C_EncryptFinal(session,
+            NULL, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, 0);
+
+    /*
+     *  call it again with a buffer to finish the operation
+     *  This shouldn't change the contents of ciphertext buffer,
+     *  so pass it in so we can detect bugs where we mutate the
+     *  contents.
+     */
+    static const CK_BYTE all_zeros[sizeof(ciphertext)] = { 0 };
+    CK_BYTE tmp[sizeof(ciphertext)] = { 0 };
+    rv = C_EncryptFinal(session,
+            ciphertext, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, 0);
+    assert_memory_equal(tmp, all_zeros, sizeof(all_zeros));
+
+    /* now do something wonky for decrypt crossing boundaries in weird ways */
+    counter = 0;
+    offset = 0;
+    rv = C_DecryptInit (session, &mechanism, ti->objects.aes);
+    assert_int_equal(rv, CKR_OK);
+
+    unsigned char plaintext2[sizeof(plaintext)]= { 0 };
+    unsigned long plaintext2_len = sizeof(plaintext2);
+
+    /* go one past the block boundry */
+    rv = C_DecryptUpdate (session, ciphertext, 17,
+            plaintext2, &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(plaintext2_len, 16);
+    counter += plaintext2_len;
+    offset += 17;
+
+    /* add less than a block, 1 byte on internal buffer */
+    plaintext2_len = sizeof(plaintext) - counter;
+    rv = C_DecryptUpdate (session, &ciphertext[offset], 14,
+            &plaintext2[counter], &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(plaintext2_len, 0);
+    counter += plaintext2_len;
+    offset += 14;
+
+    /* 15 bytes on internal buffer, add a block, 1 byte remains */
+    plaintext2_len = sizeof(plaintext) - counter;
+    rv = C_DecryptUpdate (session, &ciphertext[offset], 16,
+            &plaintext2[counter], &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(plaintext2_len, 16);
+    counter += plaintext2_len;
+    offset += 16;
+
+    /* 15 bytes on internal buffer, add remaining byte, we should get a block back */
+    plaintext2_len = sizeof(plaintext) - counter;
+    rv = C_DecryptUpdate (session, &ciphertext[offset], 1,
+            &plaintext2[counter], &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(plaintext2_len, 16);
+    counter += plaintext2_len;
+    offset += 1;
+
+    rv = C_DecryptFinal(session,
+            plaintext2, &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, 0);
+
+    /* we should have decrypted ALL of the ciphertext */
+    assert_int_equal(offset, sizeof(ciphertext));
+
+    /* we should have acquired all the plaintext */
+    assert_int_equal(counter, sizeof(plaintext2));
+
+    /* the original plaintext and the decrypted plaintext should match */
+    assert_memory_equal(plaintext, plaintext2, sizeof(plaintext2));
+}
+
+static void test_aes_ctr_one_block_oneshot(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+
+    CK_SESSION_HANDLE session = ti->handle;
+
+    /* init encryption */
+    CK_AES_CTR_PARAMS params = {
+        .ulCounterBits = sizeof(params.cb) * 8,
+        /* initialize the counter to something other than 0 */
+        .cb = {
+            0, 1, 2, 3, 4, 5, 6, 7, 8,
+            9, 10, 11, 12, 13, 14, 15,
+        }
+    };
+
+    CK_MECHANISM mechanism = {
+        CKM_AES_CTR, &params, sizeof(params)
+    };
+
+    CK_BYTE plaintext[16] = {
+         1,  2,  3,  4,  5,  6,  7,  8,  9, 10,
+        11, 12, 13, 14, 15, 16
+    };
+
+    CK_BYTE ciphertext[sizeof(plaintext)] = { 0 };
+
+    /* init */
+    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.aes);
+    assert_int_equal(rv, CKR_OK);
+
+    unsigned long ciphertext_len = sizeof(ciphertext);
+    rv = C_Encrypt(session,
+            plaintext, sizeof(plaintext),
+            ciphertext, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, sizeof(ciphertext));
+
+    rv = C_DecryptInit (session, &mechanism, ti->objects.aes);
+    assert_int_equal(rv, CKR_OK);
+
+    unsigned char plaintext2[sizeof(plaintext)]= { 0 };
+    unsigned long plaintext2_len = sizeof(plaintext2);
+
+    /* go one past the block boundary */
+    rv = C_Decrypt (session, ciphertext, sizeof(ciphertext),
+            plaintext2, &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+
+    assert_int_equal(plaintext2_len, sizeof(plaintext));
+
+    /* the original plaintext and the decrypted plaintext should match */
+    assert_memory_equal(plaintext, plaintext2, sizeof(plaintext2));
+}
+
+static void test_aes_ctr_bad_counter_size(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+
+    CK_SESSION_HANDLE session = ti->handle;
+
+    /* init encryption */
+    CK_AES_CTR_PARAMS params = {
+        .ulCounterBits = 12,
+        /* initialize the counter to something other than 0 */
+        .cb = {
+            1, 2, 3, 4, 5, 6, 7, 8,
+            9, 10, 11, 12, 0, 0, 0,
+        }
+    };
+
+    CK_MECHANISM mechanism = {
+        CKM_AES_CTR, &params, sizeof(params)
+    };
+
+    /* init */
+    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.aes);
+    assert_int_equal(rv, CKR_MECHANISM_PARAM_INVALID);
+
+    rv = C_DecryptInit (session, &mechanism, ti->objects.aes);
+    assert_int_equal(rv, CKR_MECHANISM_PARAM_INVALID);
+}
+
 int main() {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_aes_always_authenticate,
@@ -1527,6 +1765,12 @@ int main() {
         cmocka_unit_test_setup_teardown(test_aes_cbc_pad_multiple_blocks,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_aes_cbc_pad_multiple_blocks_with_extra,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_aes_ctr_multiple_blocks,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_aes_ctr_one_block_oneshot,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_aes_ctr_bad_counter_size,
                 test_setup, test_teardown),
     };
 

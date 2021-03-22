@@ -1699,7 +1699,7 @@ static CK_RV dbup_handler_from_4_to_5(sqlite3 *updb) {
      *
      * Table tobjects:
      *
-     * The YAML attributes need to include CKM_AES_CBC_PAD in the CKM_ALLOWED_MECHANISMS list.
+     * The YAML attributes need to include CKM_AES_CBC_PAD and CKM_AES_CTR in the CKM_ALLOWED_MECHANISMS list.
      */
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -1742,7 +1742,8 @@ static CK_RV dbup_handler_from_4_to_5(sqlite3 *updb) {
         CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_ALLOWED_MECHANISMS);
 
         CK_ULONG mech_num = a ? (a->ulValueLen/sizeof(CK_MECHANISM_TYPE)) : 0;
-        safe_adde(mech_num, 1);
+        /* plus two: one for CBC_PAD one for CTR modes */
+        safe_adde(mech_num, 2);
 
         CK_ULONG total_bytes = 0;
         safe_mul(total_bytes, mech_num, sizeof(CK_MECHANISM_TYPE));
@@ -1754,19 +1755,28 @@ static CK_RV dbup_handler_from_4_to_5(sqlite3 *updb) {
             goto error;
         }
 
+        /* copy the old mechanism into the list and add CBC_PAD and CTR */
         CK_ULONG i;
         for (i=0; i < mech_num - 1; i++) {
             assert(a && a->pValue && a->ulValueLen);
             CK_MECHANISM_TYPE old_mech = ((CK_MECHANISM_TYPE_PTR)(a->pValue))[i];
-            if (old_mech == CKM_AES_CBC_PAD) {
-                /* skip, already has it for some reason */
-                goto next;
+            if (old_mech == CKM_AES_CBC_PAD ||
+                    old_mech == CKM_AES_CTR) {
+                /*
+                 * don't add the ones were adding, just to make the add below
+                 * unconditional. This is an unlikely case as someone would have
+                 * had to twiddle their object config by hand.
+                 */
+                continue;
             }
+
             new_mechs[i] = old_mech;
         }
 
-        /* append CKM_AES_CBC_PAD */
-        new_mechs[mech_num - 1] = CKM_AES_CBC_PAD;
+
+        /* append the missing mechanisms */
+        new_mechs[mech_num - 2] = CKM_AES_CBC_PAD;
+        new_mechs[mech_num - 1] = CKM_AES_CTR;
 
         CK_ATTRIBUTE updated_attr = {
             .type = CKA_ALLOWED_MECHANISMS,

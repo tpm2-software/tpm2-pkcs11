@@ -128,6 +128,7 @@ CK_RV tpm_ec_ecdsa_sha1_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR m
 CK_RV tpm_aes_cbc_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
 CK_RV tpm_aes_cfb_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
 CK_RV tpm_aes_ecb_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_aes_ctr_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata);
 
 void tpm_opdata_free(tpm_op_data **opdata);
 

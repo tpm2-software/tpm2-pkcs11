@@ -205,6 +205,9 @@ struct tpm_op_data {
             TPMI_ALG_SYM_MODE mode;
             TPM2B_IV iv;
             struct {
+                BIGNUM *counter;
+            } ctr;
+            struct {
                 CK_ULONG len;
                 CK_BYTE data[16];
             } prev;
@@ -1746,9 +1749,65 @@ CK_RV tpm_aes_ecb_get_opdata(mdetail *mdtl,
     return CKR_OK;
 }
 
+CK_RV tpm_aes_ctr_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
+    assert(outdata);
+    assert(mech);
+
+    CK_AES_CTR_PARAMS *params = NULL;
+    SAFE_CAST(mech, params);
+
+    /*
+     * The TPM has the counter bits equal to block size,
+     * so it should be set to use the FULL cb value which is
+     * 16 bytes.
+     */
+    if (params->ulCounterBits != (8 * sizeof(params->cb))) {
+        LOGE("TPM Requires ulCounterBits to be %zu, got %lu", sizeof(params->cb),
+                params->ulCounterBits);
+        return CKR_MECHANISM_PARAM_INVALID;
+    }
+
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->sym.mode = TPM2_ALG_CTR;
+
+    opdata->tobj = tobj;
+    opdata->ctx = tctx;
+    opdata->op_type = CKK_AES;
+
+    /* to detect overflow, start a counter at 0 and detect when it overflows 16 bytes */
+    opdata->sym.ctr.counter = BN_new();
+    if (!opdata->sym.ctr.counter) {
+        free(opdata);
+        return CKR_HOST_MEMORY;
+    }
+
+    /* the counter buffer and the iv buffer should be big enough */
+    assert(sizeof(params->cb) <= sizeof(opdata->sym.iv.buffer));
+
+    /* The counter value for the TPM IS THE WHOLE IV, SO USE IV */
+    opdata->sym.iv.size = sizeof(params->cb);
+    memcpy(opdata->sym.iv.buffer, params->cb, sizeof(params->cb));
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
 void tpm_opdata_free(tpm_op_data **opdata) {
 
     if (opdata) {
+
+        if (*opdata && (*opdata)->mech.mechanism == CKM_AES_CTR) {
+            BN_free((*opdata)->sym.ctr.counter);
+            (*opdata)->sym.ctr.counter = NULL;
+        }
+
         free(*opdata);
         *opdata = NULL;
     }
@@ -2090,6 +2149,27 @@ static CK_RV do_buffered_encdec(tpm_op_data *tpm_enc_data,
     }
 
     if (blocks) {
+
+        if (tpm_enc_data->mech.mechanism == CKM_AES_CTR) {
+
+            /* Detect CTR wrapping, ie CTR should never repeat iteself */
+            int rc = BN_add_word(tpm_enc_data->sym.ctr.counter, blocks);
+            if (!rc) {
+                SSL_UTIL_LOGE("BN_add_word");
+                rv = CKR_GENERAL_ERROR;
+                goto error;
+            }
+
+            /* it shouldn't be over 16 bytes */
+            int bytes = BN_num_bytes(tpm_enc_data->sym.ctr.counter);
+            assert(bytes >= 0);
+            if ((unsigned)bytes > sizeof(((CK_AES_CTR_PARAMS *)NULL)->cb)) {
+                LOGE("CTR counter wrapped");
+                rv = CKR_DATA_LEN_RANGE;
+                goto error;
+            }
+        }
+
         rv = encrypt_decrypt(ctx, handle, auth, mode, encdec,
                 iv,
                 (CK_BYTE_PTR)full_buffer, modified_full_buffer_len,
@@ -2243,7 +2323,8 @@ static CK_RV common_final_encrypt_decrypt(int encdec, crypto_op_data *opdata,
             assert(
                 (opdata->tpm_opdata->mech.mechanism == CKM_AES_CBC)
             ||  (opdata->tpm_opdata->mech.mechanism == CKM_AES_CFB128)
-            ||  (opdata->tpm_opdata->mech.mechanism == CKM_AES_ECB));
+            ||  (opdata->tpm_opdata->mech.mechanism == CKM_AES_ECB)
+            ||  (opdata->tpm_opdata->mech.mechanism == CKM_AES_CTR));
             rv = CKR_DATA_LEN_RANGE;
     } else {
         /* everything ended on a block boundary */
@@ -3501,6 +3582,7 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
         if_add_mech(algs, TPM2_ALG_CBC, CKM_AES_CBC_PAD);
         if_add_mech(algs, TPM2_ALG_CFB, CKM_AES_CFB128);
         if_add_mech(algs, TPM2_ALG_ECB, CKM_AES_ECB);
+        if_add_mech(algs, TPM2_ALG_CTR, CKM_AES_CTR);
     }
 
 out:
