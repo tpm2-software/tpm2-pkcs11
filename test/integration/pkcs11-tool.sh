@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
 
-set -e
+set -eo pipefail
 
 source "$T/test/integration/scripts/helpers.sh"
 
@@ -43,9 +43,13 @@ pkcs11_tool --slot=1 --init-pin --login --so-pin=mysopin --pin=myuserpin
 echo "Pin Reset"
 
 # test getting random data w/o login
-echo "Getting random"
-pkcs11_tool --slot=1 --generate-random 4 | xxd
-echo "Random got"
+if [[ "${DOCKER_IMAGE:-nodocker}" != "ubuntu-16.04" && "${DOCKER_IMAGE:-nodocker}" != "ubuntu-18.04" ]]; then
+    echo "Getting random"
+    pkcs11_tool --slot=1 --generate-random 4 | xxd
+    echo "Random got"
+else
+    echo "Skipping pkcs11-tool --generate-random, not supported on ${DOCKER_IMAGE}"
+fi
 
 # test generating RSA key pair
 echo "Generating RSA key pair"
@@ -75,13 +79,17 @@ pkcs11_tool --slot=1 -l --pin=myuserpin --write-object="$TPM2_PKCS11_STORE/cert.
 echo "Certificate wrote"
 
 # Run the --test and ensure nothing breaks
-pkcs11_tool --test --login --pin=myuserpin 2>&1 | tee logz
-
-# this command doesn't return rc's for status, so we have to peek into the logz
-# pkcs11-tool is inconsistent in outputs, older ones don't provide any success
-# output of 'No errors', se we search that the last line *isn't* '<N> errors' where
-# N is a base10 digit.
-set -o pipefail
-tail -n1 logz | grep -vE '[0-9]+ errors'
+# Note that pkcs11-tools 0.15 have invalid OAEP params size of things like
+# mechanism->ulParameterLen: 4225.
+if [[ "${DOCKER_IMAGE:-nodocker}" != "ubuntu-16.04" && "${DOCKER_IMAGE:-nodocker}" != "ubuntu-18.04" ]]; then
+    pkcs11_tool --test --login --pin=myuserpin 2>&1 | tee logz
+    # this command doesn't ALWAYS return rc's for status, so we have to peek into the logz
+    # pkcs11-tool is inconsistent in outputs, older ones don't provide any success
+    # output of 'No errors', se we search that the last line *isn't* '<N> errors' where
+    # N is a base10 digit.
+    tail -n1 logz | grep -vE '[0-9]+ errors'
+else
+    echo "Skipping  pkcs11-tool --test due to errors on ${DOCKER_IMAGE}"
+fi
 
 exit 0
