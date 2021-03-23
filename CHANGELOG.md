@@ -12,6 +12,11 @@
   * Fix requirement of having ESYS >= 2.4, see #632 for details.
   * Fix docs/INITIALIZING.md reference to `--pobj-pin`, should be `--hierarchy-auth`.
   * Fix missing libyaml dependency in documentation.
+  * Fix bug in DB update logic where errors in handlers were ignored.
+  * Fix NPD bug when ESAPI and FAPI return 0 tokens.
+  * Add support for over TPM sized AES buffers.
+  * Add support for mechanism CKM_AES_CBC_PAD.
+  * Add support for mechanism CKM_AES_CTR.
 
 ### 1.5.0 - 2020-11-16
   * C_Decrypt: Fix CKM_RSA_PKCS11 scheme not removing PKCS v1.5 block padding from returned plaintext.
