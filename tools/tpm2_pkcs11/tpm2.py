@@ -19,8 +19,9 @@ class Tpm2(object):
         "|fixedparent|sensitivedataorigin"
 
     ALGS = [
-        'rsa1024', 'rsa2048', 'aes128', 'aes256', 'ecc224', 'ecc256',
-        'ecc384', 'ecc521'
+        'rsa1024', 'rsa2048', 'rsa3072',
+        'aes128', 'aes256',
+        'ecc224', 'ecc256', 'ecc384', 'ecc521'
     ]
 
     TEMPLATES = {

@@ -92,4 +92,46 @@ else
     echo "Skipping  pkcs11-tool --test due to errors on ${DOCKER_IMAGE}"
 fi
 
+# verify that RSA3072 keys work if supported, turn off set -e so we can check the rc
+set +e
+tpm2_testparms rsa3072
+if [ $? -ne 0 ]; then
+	echo "TPM Does not support RSA3072, skipping"
+    exit 0
+fi
+set -e
+
+#
+# pkcs11-tool is always fun, it seems to be ignoring --label, so things like --label="fake" will still work.
+# set an id as it seems to respect that.
+#
+tpm2_ptool addkey --label="label" --id="myrsa3072key" --key-label="myrsa3072key" --userpin="myuserpin" --algorithm="rsa3072" --path="$TPM2_PKCS11_STORE"
+
+# Since the PKCS11 Store gets automagically cleaned up, use that as our tempdir scratch space
+tempdir=$TPM2_PKCS11_STORE
+
+# pkcs11-tool --id is hex encoded input, so encode "myrsa3072key" as hex: 6d79727361333037326b6579
+# python -c 'print("6d79727361333037326b6579".decode("hex"))'
+# myrsa3072key
+echo "testdata">${tempdir}/data
+pkcs11_tool --sign --login --slot=1 --id="6d79727361333037326b6579" --pin="myuserpin" \
+            --input-file ${tempdir}/data --output-file ${tempdir}/sig \
+            --mechanism SHA256-RSA-PKCS
+
+size="$(stat --printf="%s" ${tempdir}/sig)"
+test "$size" -eq "384"
+
+# Test that we can generate a RSA3072 key via the CAPI
+pkcs11_tool --slot=1 --login --pin=myuserpin --keypairgen --id="11223344556677889900" --label="myrsa3072CKey" --key-type rsa:3072
+
+# validate key is 384 bytes and usable
+rm ${tempdir}/sig
+echo "testdata">${tempdir}/data
+pkcs11_tool --sign --login --slot=1 --id="6d79727361333037326b6579" --pin="myuserpin" \
+            --input-file ${tempdir}/data --output-file ${tempdir}/sig \
+            --mechanism SHA256-RSA-PKCS
+
+size="$(stat --printf="%s" ${tempdir}/sig)"
+test "$size" -eq "384"
+
 exit 0
