@@ -2652,6 +2652,7 @@ out:
 
 typedef struct tpm_key_data tpm_key_data;
 struct tpm_key_data {
+    tpm_ctx *ctx;
     TPM2B_PUBLIC pub;
     TPM2B_SENSITIVE_CREATE priv;
 };
@@ -2710,8 +2711,15 @@ static CK_RV handle_modulus(CK_ATTRIBUTE_PTR attr, void *udata) {
         return rv;
     }
 
-    // TODO get known bit sizes from TPM on init and check
-    if (value != 1024 && value != 2048) {
+    CK_ULONG min = 0;
+    CK_ULONG max = 0;
+    rv = tpm_find_max_rsa_keysize(keydat->ctx, &min, &max);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    if (value < min || value > max) {
+        LOGE("Keysize %lu not supported.", value);
         return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 
@@ -2928,7 +2936,8 @@ static const attr_handler tpm_handlers[] = {
     { CKA_DERIVE,            generic_bbool_any },
 };
 
-static CK_RV tpm_data_init(CK_MECHANISM_PTR mechanism,
+static CK_RV tpm_data_init(
+        CK_MECHANISM_PTR mechanism,
         attr_list *pubattrs,
         attr_list *privattrs,
         tpm_key_data *tpmdat) {
@@ -2950,7 +2959,6 @@ static CK_RV tpm_data_init(CK_MECHANISM_PTR mechanism,
             assert(0);
             return CKR_MECHANISM_INVALID;
     }
-
 
     CK_RV rv = attr_list_invoke_handlers(pubattrs,
             tpm_handlers, ARRAY_LEN(tpm_handlers), tpmdat);
@@ -3278,8 +3286,11 @@ CK_RV tpm2_generate_key(
         goto error;
     }
 
-    tpm_key_data tpmdat;
-    rv = tpm_data_init(mechanism,
+    tpm_key_data tpmdat = {
+        .ctx = tpm
+    };
+    rv = tpm_data_init(
+        mechanism,
         pubattrs,
         privattrs,
         &tpmdat);
