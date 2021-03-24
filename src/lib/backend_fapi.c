@@ -5,6 +5,8 @@
 #include <tss2/tss2_fapi.h>
 #endif
 
+#include <inttypes.h>
+
 #include "backend_fapi.h"
 #include "emitter.h"
 #include "parser.h"
@@ -14,13 +16,14 @@
 FAPI_CONTEXT *fctx = NULL;
 unsigned maxobjectid = 0;
 
-static CK_RV get_key(FAPI_CONTEXT *fapictx, tpm_ctx *tctx, const char *path, uint32_t *esysHandle, uint32_t *tpmHandle) {
+static CK_RV get_key(FAPI_CONTEXT *fapictx, tpm_ctx *tctx, const char *path, uint32_t *esysHandle, uint32_t *pid) {
 
     bool ret;
     TSS2_RC rc;
     uint8_t type;
     uint8_t *data;
     size_t length;
+    twist name = NULL;
 
     rc = Fapi_GetEsysBlob(fapictx, path, &type, &data, &length);
     if (rc != TSS2_RC_SUCCESS) {
@@ -41,32 +44,45 @@ static CK_RV get_key(FAPI_CONTEXT *fapictx, tpm_ctx *tctx, const char *path, uin
             LOGE("Error on contextload");
             return CKR_GENERAL_ERROR;
         }
-        if (tpmHandle) {
-            *tpmHandle = 0;
-        }
-        return CKR_OK;
+        break;
     case FAPI_ESYSBLOB_DESERIALIZE:
         ret = tpm_deserialize_handle(tctx, twistdata, esysHandle);
         if (!ret) {
             LOGE("Error on deserialize");
             return CKR_GENERAL_ERROR;
         }
-        /* Esys_TR_GetTpmHandle() was added to tss2-esys in v2.4. The rest
-         * of the code works fine with older versions. Hence, we open-code
-         * the function call here to restrict the dependency on >= 2.4 to
-         * FAPI-enabled builds.
-         */
-        ret = tpm_get_tpmhandle(tctx, *esysHandle, tpmHandle);
-        if (!ret) {
-            LOGE("Error on get_tpmhandle");
-            return CKR_GENERAL_ERROR;
-        }
-        return CKR_OK;
+        break;
     default:
         LOGE("Unknown FAPI type for ESYS blob.");
         twist_free(twistdata);
         return CKR_GENERAL_ERROR;
     }
+
+    /*
+     * For debugging multiple tokens, populate pid with something.
+     * That something will be the LAST four octets of name. To avoid
+     * the name algorithm identifier bits that are common to all Names.
+     * This way its likely to be unique, but ultimately it doesn't
+     * matter.
+     */
+    ret = tpm_get_name(tctx, *esysHandle, &name);
+    if (ret) {
+        length = twist_len(name);
+        if (length >= sizeof(*pid)) {
+            memcpy(pid, &name[length - sizeof(*pid)], sizeof(*pid));
+            LOGV("pid set to: 0x%"PRIX32, *pid);
+        } else {
+            LOGW("Name length smaller than sizeof(uint32_t), got: %zu"
+                    "Not populating pid", length);
+            *pid = 0;
+        }
+    } else {
+        LOGW("Could not get name to populate pid");
+        *pid = 0;
+    }
+    twist_free(name);
+
+    return CKR_OK;
 }
 
 CK_RV backend_fapi_init(void) {

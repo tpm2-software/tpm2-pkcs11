@@ -48,10 +48,6 @@ AC_DEFUN([do_esapi_manage_flags], [
 # Check for ESYS version below 2.2.1 which requires us to manage ESYS session flags
 PKG_CHECK_EXISTS([tss2-esys < 2.2.1], [do_esapi_manage_flags])
 
-# ESYS >= 2.4 introduces additional functions that we use with certain optional features
-PKG_CHECK_EXISTS([tss2-esys >= 2.4],
-                 [AC_DEFINE([ESYS_2_4], [1], [New functions in ESAPI version 2.4])])
-
 # ESYS >= 3.0 uses a different ABI param hierarchy in Esys_LoadExternal()
 PKG_CHECK_EXISTS([tss2-esys >= 3.0],
                  [AC_DEFINE([ESYS_3], [1], [Esys3])])
@@ -85,8 +81,8 @@ AC_ARG_ENABLE(
 AC_DEFUN([do_fapi_configure], [
 
   AS_IF([test "x$enable_fapi" = "xauto"],
-      [ PKG_CHECK_MODULES([TSS2_FAPI], [tss2-fapi >= 3.0 tss2-esys >= 2.4], [have_fapi=1], [have_fapi=0]) ],
-	  [ PKG_CHECK_MODULES([TSS2_FAPI], [tss2-fapi >= 3.0 tss2-esys >= 2.4], [have_fapi=1]) ]
+      [ PKG_CHECK_MODULES([TSS2_FAPI], [tss2-fapi >= 3.0 ], [have_fapi=1], [have_fapi=0]) ],
+	  [ PKG_CHECK_MODULES([TSS2_FAPI], [tss2-fapi >= 3.0 ], [have_fapi=1]) ]
   )
 ])
 
