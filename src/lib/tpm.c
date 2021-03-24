@@ -842,23 +842,26 @@ CK_RV tpm_stirrandom(tpm_ctx *ctx, CK_BYTE_PTR seed, CK_ULONG seed_len) {
     return CKR_OK;
 }
 
-#ifdef ESYS_2_4
-/* Esys_TR_GetTpmHandle() was only added to tss2-esys in v2.4. Its
- * functionality is merely used in optional backends. Splice out into a
- * dedicated function, so the main codebase can keep a more lenient versioned
- * dependency on tss2-esys.
- */
-bool tpm_get_tpmhandle(tpm_ctx *ctx, uint32_t handle, uint32_t *tpm_handle) {
+bool tpm_get_name(tpm_ctx *ctx, uint32_t handle, twist *name) {
 
-    TSS2_RC rval = Esys_TR_GetTpmHandle(ctx->esys_ctx, handle, tpm_handle);
+    TPM2B_NAME *tname = NULL;
+
+    TSS2_RC rval = Esys_TR_GetName(ctx->esys_ctx, handle, &tname);
     if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_TR_GetTpmHandle: %s:", Tss2_RC_Decode(rval));
         return false;
     }
 
+    twist t = twistbin_new(tname->name, tname->size);
+    Esys_Free(tname);
+    if (!t) {
+        LOGE("OOM");
+        return false;
+    }
+
+    *name = t;
+
     return true;
 }
-#endif
 
 bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle) {
 

@@ -26,6 +26,7 @@ typedef union crypto_op_data crypto_op_data;
 typedef struct mdetail mdetail;
 typedef struct pobject pobject;
 
+
 /**
  * Destroys the system API context, and when the refcnt
  * hits 0 for the tcti context, destroys it as well.
@@ -95,13 +96,6 @@ CK_RV tpm_loadobj(tpm_ctx *ctx, uint32_t phandle, twist auth,
 bool tpm_flushcontext(tpm_ctx *ctx, uint32_t handle);
 
 twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth);
-
-#ifdef ESYS_2_4
-/* Any (optional) component using this function needs to add a dependency on
- * tss2-esys >= 2.4 to its configure checks.
- */
-WEAK bool tpm_get_tpmhandle(tpm_ctx *ctx, uint32_t handle, uint32_t *tpm_handle);
-#endif
 
 WEAK bool tpm_deserialize_handle(tpm_ctx *ctx, twist handle_blob, uint32_t *handle);
 
@@ -193,6 +187,8 @@ CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
         uint32_t *primary_handle);
 
 CK_RV tpm_get_pss_sig_state(tpm_ctx *tctx, tobject *tobj, bool *pss_sigs_good);
+
+bool tpm_get_name(tpm_ctx *ctx, uint32_t handle, twist *name);
 
 void tpm_init(void);
 
