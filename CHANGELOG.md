@@ -18,6 +18,8 @@
   * Add support for mechanism CKM_AES_CBC_PAD.
   * Add support for mechanism CKM_AES_CTR.
   * Add support for RSA 3072 (3k) keys.
+  * Remove usage of function Esys_TR_GetTpmHandle. FAPI Backend will no longer depend on ESAPI 2.4 or
+    greater.
 
 ### 1.5.0 - 2020-11-16
   * C_Decrypt: Fix CKM_RSA_PKCS11 scheme not removing PKCS v1.5 block padding from returned plaintext.
