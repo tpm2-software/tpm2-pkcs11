@@ -239,7 +239,8 @@ class Tpm2(object):
                   privkey,
                   objattrs=None,
                   seal=None,
-                  alg=None):
+                  alg=None,
+                  passin=None):
 
         if privkey and len(privkey) > 0:
             exists = os.path.isfile(privkey)
@@ -272,6 +273,9 @@ class Tpm2(object):
 
         if alg != None:
             cmd.extend(['-G', alg])
+
+        if passin is not None:
+            cmd.extend(['--passin', passin])
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, stdin=PIPE, env=os.environ)
         stdout, stderr = p.communicate(input=seal)
