@@ -59,7 +59,7 @@ class NewKeyCommandBase(Command):
         pinopts.add_argument('--userpin', help='The User pin.\n'),
 
     # Implemented by derived class
-    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, d):
+    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d):
         raise NotImplementedError('Implement: new_key')
 
     def new_key_init(self, label, sopin, userpin, hierarchyauth, pobj, sealobjects, tpm2, d):
@@ -167,6 +167,7 @@ class NewKeyCommandBase(Command):
                 key_label = args['key_label']
                 tid = args['id']
                 hierarchyauth = args['hierarchy_auth']
+                passin = args['passin'] if 'passin' in args else None
 
                 privkey = None
                 try:
@@ -185,7 +186,7 @@ class NewKeyCommandBase(Command):
                     pobj, sealobjects, tpm2, d)
 
                 tertiarypriv, tertiarypub, tertiarypubdata = self.new_key_create(
-                    pobj, objauth, hierarchyauth, tpm2, alg, privkey, d)
+                    pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d)
 
                 # handle options that can add additional attributes
                 always_auth = args['attr_always_authenticate']
@@ -215,14 +216,18 @@ class ImportCommand(NewKeyCommandBase):
             help='The type of the key.\n',
             choices=['rsa', 'ecc'],
             required=True)
+        group_parser.add_argument(
+            '--passin',
+            help='Password of the input private key file like OpenSSL (example: "pass:secret").\n',
+            required=False)
 
     # Imports a new key
-    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, d):
+    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d):
 
         pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
 
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.importkey(
-            pobj_handle, pobj['objauth'], objauth, privkey=privkey, alg=alg)
+            pobj_handle, pobj['objauth'], objauth, privkey=privkey, alg=alg, passin=passin)
 
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 
@@ -247,7 +252,7 @@ class AddKeyCommand(NewKeyCommandBase):
             required=True)
 
     # Creates a new key
-    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, d):
+    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d):
 
         pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
 
