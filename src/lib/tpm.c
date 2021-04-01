@@ -178,12 +178,6 @@ struct tpm_ctx {
 #define TPM2B_INIT(xsize) { .size = xsize, }
 #define TPM2B_EMPTY_INIT TPM2B_INIT(0)
 
-#define TPM2_ERROR_TSS2_RC_ERROR_MASK 0xFFFF
-
-static inline UINT16 tpm2_error_get(TSS2_RC rc) {
-    return ((rc & TPM2_ERROR_TSS2_RC_ERROR_MASK));
-}
-
 struct tpm_op_data {
 
     tpm_ctx *ctx;
