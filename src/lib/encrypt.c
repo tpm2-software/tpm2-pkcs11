@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
+#include "config.h"
+#include <assert.h>
 
 #include <openssl/bn.h>
 #include <openssl/ec.h>
@@ -280,6 +282,8 @@ static CK_RV common_final_op(session_ctx *ctx, encrypt_op_data *supplied_opdata,
             return rv;
         }
     }
+
+    assert(opdata);
 
     tobject *tobj = session_ctx_opdata_get_tobject(ctx);
     assert(tobj);
