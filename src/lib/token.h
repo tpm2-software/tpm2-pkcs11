@@ -135,8 +135,10 @@ void token_config_free(token_config *c);
  *  The token list to free
  * @param len
  *  The number of elements to free
+ * @note
+ *  Sets the token pointer to NULL and len to 0.
  */
-void token_free_list(token *t, size_t len);
+void token_free_list(token **t, size_t *len);
 
 /**
  * Adds a tobject into the token tobject list filling in

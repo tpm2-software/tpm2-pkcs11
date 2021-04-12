@@ -192,6 +192,9 @@ CK_RV backend_get_tokens(token **tok, size_t *len) {
             static const char *msg = "Getting tokens from fapi backend failed.";
             if (backend == backend_fapi) {
                 LOGE(msg);
+                token_free_list(tok, len);
+                *len = 0;
+                *tok = NULL;
                 return rv;
             } else {
                 LOGW(msg);
@@ -203,7 +206,7 @@ CK_RV backend_get_tokens(token **tok, size_t *len) {
     /* -1 for starting at id 1 and -1 for the empty token */
     if (*len >= MAX_TOKEN_CNT - 2) {
         LOGW("Too many tokens, must have less than %d to show empty tokens", MAX_TOKEN_CNT - 1);
-        token_free_list(tmp, *len);
+        token_free_list(&tmp, len);
         return CKR_GENERAL_ERROR;
     }
 

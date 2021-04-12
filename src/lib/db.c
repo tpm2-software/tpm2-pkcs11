@@ -650,7 +650,7 @@ CK_RV db_get_tokens(token *tok, size_t *len) {
     return CKR_OK;
 
 error:
-    token_free_list(tok, cnt);
+    token_free_list(&tok, &cnt);
     *len = 0;
     if (stmt) {
         sqlite3_finalize(stmt);
