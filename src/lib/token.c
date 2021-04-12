@@ -89,7 +89,15 @@ void token_reset(token *t) {
      */
 }
 
-void token_free_list(token *t, size_t len) {
+void token_free_list(token **tok_ptr, size_t *ptr_len) {
+
+    size_t len = *ptr_len;
+    token *t = *tok_ptr;
+    *tok_ptr = NULL;
+    *ptr_len = 0;
+    if (!t) {
+        return;
+    }
 
     size_t i;
     for (i=0; i < len; i++) {

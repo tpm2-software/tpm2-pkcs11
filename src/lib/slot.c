@@ -37,7 +37,7 @@ static void slot_unlock(void) {
 
 void slot_destroy(void) {
 
-    token_free_list(global.token, global.token_cnt);
+    token_free_list(&global.token, &global.token_cnt);
 
     CK_RV rv = mutex_destroy(global.mutex);
     global.mutex = NULL;
