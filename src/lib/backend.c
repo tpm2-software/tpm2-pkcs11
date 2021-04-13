@@ -192,9 +192,7 @@ CK_RV backend_get_tokens(token **tok, size_t *len) {
             static const char *msg = "Getting tokens from fapi backend failed.";
             if (backend == backend_fapi) {
                 LOGE(msg);
-                token_free_list(tok, len);
-                *len = 0;
-                *tok = NULL;
+                token_free_list(&tmp, len);
                 return rv;
             } else {
                 LOGW(msg);
