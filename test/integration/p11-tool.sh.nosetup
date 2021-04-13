@@ -145,6 +145,13 @@ GNUTLS_PIN=mynewuserpin \
 p11_tool --login --list-all ${TOKENURL2}
 echo "RSA Keypair2 generated"
 
+echo "Generating EC keypair"
+GNUTLS_PIN=mynewuserpin \
+p11_tool --generate-ecc --curve secp384r1 --login --label="myecckey" --outfile="${tempdir}/eccpubkey.pem" ${TOKENURL2}
+GNUTLS_PIN=mynewuserpin \
+p11_tool --login --list-all ${TOKENURL2}
+echo "EC Keypair generated"
+
 echo "Change the key pair label"
 GNUTLS_PIN=mynewuserpin \
 p11_tool --login --set-label="myrsakey2" "${TOKENURL};object=myrsakey;object-type=private"
@@ -179,6 +186,13 @@ openssl dgst -engine pkcs11 -keyform engine \
 openssl pkeyutl -sign -engine pkcs11 -keyform engine \
         -inkey ${TOKENURL} -passin pass:mynewuserpin \
         -in ${tempdir}/data -out ${tempdir}/sig
-echo "Signing tested"
+echo "RSA Signing tested"
+
+echo "Test ECC Signing"
+ECC_KEY_URL="${TOKENURL2};object=myecckey;type=private"
+openssl dgst -engine pkcs11 -keyform engine -sha1 -sign "$ECC_KEY_URL" -out ${tempdir}/sig -passin pass:mynewuserpin ${tempdir}/data
+
+openssl dgst -sha1 -verify ${tempdir}/eccpubkey.pem -signature ${tempdir}/sig ${tempdir}/data
+echo "ECC Signing tested"
 
 exit 0
