@@ -111,6 +111,44 @@ static void sign_opdata_free(sign_opdata **opdata) {
     *opdata = NULL;
 }
 
+static CK_RV update_pss_sig_state(token *tok, tobject *tobj) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    /*
+     * Only test for PSS signature state if it's an RSA object. This avoids printing superfluous errors
+     */
+    CK_OBJECT_CLASS cka_class = attr_list_get_CKA_CLASS(tobj->attrs, CK_OBJECT_CLASS_BAD);
+    if (cka_class != CKK_RSA) {
+        return CKR_OK;
+    }
+
+    /*
+     * Tokens added in previous versions may not have a known PSS signature
+     * state, so check and populate here.
+     */
+    bool pss_sigs_good = false;
+    pss_config_state pss_cfg = tok->config.pss_sigs_good;
+    if (pss_cfg == pss_config_state_unk) {
+        rv = tpm_get_pss_sig_state(tok->tctx, tobj,
+                &pss_sigs_good);
+        if (rv != CKR_OK) {
+            LOGW("Could not determine PSS signature format,"
+                    "assuming maximized slen");
+            tok->config.pss_sigs_good = pss_sigs_good ?
+                    pss_config_state_good : pss_config_state_bad;
+        }
+
+        mdetail_set_pss_status(tok->mdtl, pss_sigs_good);
+        rv = backend_update_token_config(tok);
+        if (rv != CKR_OK) {
+            LOGW("Could not update token config backend, moving on");
+        }
+    }
+
+    return rv;
+}
+
 static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
 
     check_pointer(mechanism);
@@ -165,33 +203,14 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
     tpm_op_data *tpm_opdata = NULL;
     if (op == operation_sign) {
 
-        /*
-         * Tokens added in previous versions may not have a known PSS signature
-         * state, so check and populate here.
-         */
-        bool pss_sigs_good = false;
-        pss_config_state pss_cfg = tok->config.pss_sigs_good;
-        if (pss_cfg == pss_config_state_unk) {
-            rv = tpm_get_pss_sig_state(tok->tctx, tobj,
-                    &pss_sigs_good);
-            if (rv != CKR_OK) {
-                LOGW("Could not determine PSS signature format,"
-                        "assuming maximized slen");
-                tok->config.pss_sigs_good = pss_sigs_good ?
-                        pss_config_state_good : pss_config_state_bad;
-            }
-
-            mdetail_set_pss_status(tok->mdtl, pss_sigs_good);
-            rv = backend_update_token_config(tok);
-            if (rv != CKR_OK) {
-                LOGW("Could not update token config backend, moving on");
-            }
+        rv = update_pss_sig_state(tok, tobj);
+        if (rv != CKR_OK) {
+            return rv;
         }
 
         rv = mech_get_tpm_opdata(tok->mdtl,
                 tok->tctx, mechanism, tobj, &tpm_opdata);
         if (rv != CKR_OK) {
-            tpm_opdata_free(&tpm_opdata);
             return rv;
         }
     }
