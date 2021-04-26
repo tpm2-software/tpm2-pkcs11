@@ -1,6 +1,6 @@
 # Changelog
 
-### next
+### 1.6.0-rc0 - 2021-04-26
   * Spelling and grammar fixes throughout the project.
   * tpm2_ptool: fix bug in verify commandlet where `--sopin` leads to local variable referenced before assignment. See #624.
   * Docs: add a document describing SSH Hostkey configuration using tpm2-pkcs11.
