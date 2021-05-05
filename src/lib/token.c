@@ -317,8 +317,8 @@ CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
     }
 
     // Identification
-    str_padded_copy(info->label, t->label, sizeof(info->label));
-    str_padded_copy(info->serialNumber, (unsigned char*) TPM2_TOKEN_SERIAL_NUMBER, sizeof(info->serialNumber));
+    str_padded_copy(info->label, t->label);
+    str_padded_copy(info->serialNumber, TPM2_TOKEN_SERIAL_NUMBER);
 
 
     // Memory: TODO not sure what memory values should go here, the platform?

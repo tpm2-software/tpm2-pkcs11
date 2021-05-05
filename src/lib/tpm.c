@@ -740,15 +740,14 @@ CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
     unsigned char manufacturerID[sizeof(UINT32)+1] = {0}; // 4 bytes + '\0' as temp storage
     UINT32 manufacturer = ntohl(tpmProperties[TPM2_PT_MANUFACTURER - TPM2_PT_FIXED].value);
     memcpy(manufacturerID, (unsigned char*) &manufacturer, sizeof(uint32_t));
-    str_padded_copy(info->manufacturerID, manufacturerID, sizeof(info->manufacturerID));
+    str_padded_copy(info->manufacturerID, manufacturerID);
 
     // Map human readable Manufacturer String, if available,
     // otherwise 4 byte ID was already padded and will be used.
     for (unsigned int i=0; i < ARRAY_LEN(TPM2_MANUFACTURER_MAP); i++){
         if (!strncasecmp((char *)info->manufacturerID, TPM2_MANUFACTURER_MAP[i][0], 4)) {
             str_padded_copy(info->manufacturerID,
-                            (unsigned char *)TPM2_MANUFACTURER_MAP[i][1],
-                            sizeof(info->manufacturerID));
+                            (unsigned char *)TPM2_MANUFACTURER_MAP[i][1]);
         }
     }
 
@@ -758,7 +757,7 @@ CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
     vendor[1] = ntohl(tpmProperties[TPM2_PT_VENDOR_STRING_2 - TPM2_PT_FIXED].value);
     vendor[2] = ntohl(tpmProperties[TPM2_PT_VENDOR_STRING_3 - TPM2_PT_FIXED].value);
     vendor[3] = ntohl(tpmProperties[TPM2_PT_VENDOR_STRING_4 - TPM2_PT_FIXED].value);
-    str_padded_copy(info->model, (unsigned char*) &vendor, sizeof(info->model));
+    str_padded_copy(info->model, (unsigned char*) &vendor);
 
     return CKR_OK;
 }
