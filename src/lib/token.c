@@ -20,6 +20,8 @@
 #include "token.h"
 #include "utils.h"
 
+static const CK_UTF8CHAR TPM2_TOKEN_SERIAL_NUMBER[] = "0000000000000000";
+
 void pobject_config_free(pobject_config *c) {
 
     if (c->is_transient) {
