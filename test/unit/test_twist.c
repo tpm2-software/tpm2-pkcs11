@@ -244,15 +244,23 @@ void test_twistbin_create(void **state) {
 void test_twistbin_new_overflow_1(void **state) {
     (void) state;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
 	twist actual = twistbin_new((void *) 0xDEADBEEF, ~0);
 	assert_null(actual);
+#pragma GCC diagnostic pop
 }
 
 void test_twistbin_new_overflow_2(void **state) {
     (void) state;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
 	twist actual = twistbin_new((void *) 0xDEADBEEF, ~0 - sizeof(void *));
 	assert_null(actual);
+#pragma GCC diagnostic pop
 }
 
 void test_twistbin_new_overflow_3(void **state) {
@@ -318,8 +326,12 @@ void test_twistbin_aappend_twist_null(void **state) {
 	twist actual = twistbin_aappend(expected, NULL, 42);
 	assert_ptr_equal((void * )actual, (void * )expected);
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
 	actual = twistbin_aappend(expected, (binarybuffer *) 0xDEADBEEF, 0);
 	assert_ptr_equal((void * )actual, (void * )expected);
+#pragma GCC diagnostic pop
 
 	twist_free(actual);
 }
