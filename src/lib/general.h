@@ -10,7 +10,7 @@
 #define TPM2_TOKEN_LABEL                "TPM2 PKCS#11 Token"
 #define TPM2_TOKEN_MANUFACTURER         "Intel"
 #define TPM2_TOKEN_MODEL                "TPM2 PKCS#11"
-#define TPM2_TOKEN_SERIAL_NUMBER        "0000000000000000"
+static const CK_UTF8CHAR TPM2_TOKEN_SERIAL_NUMBER[] = "0000000000000000";
 #define TPM2_TOKEN_HW_VERSION           { 0, 0 }
 #define TPM2_TOKEN_FW_VERSION           { 0, 0 }
 

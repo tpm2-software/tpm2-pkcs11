@@ -119,8 +119,8 @@ CK_RV slot_get_info (CK_SLOT_ID slot_id, CK_SLOT_INFO *info) {
         return CKR_GENERAL_ERROR;
     }
 
-    str_padded_copy(info->manufacturerID, token_info.manufacturerID, sizeof(info->manufacturerID));
-    str_padded_copy(info->slotDescription, token_info.label, sizeof(info->slotDescription));
+    str_padded_copy(info->manufacturerID, token_info.manufacturerID);
+    str_padded_copy(info->slotDescription, token_info.label);
 
     info->hardwareVersion = token_info.hardwareVersion;
     info->firmwareVersion = token_info.firmwareVersion;
