@@ -7,8 +7,6 @@
 
 #include "pkcs11.h"
 
-static const CK_UTF8CHAR TPM2_TOKEN_SERIAL_NUMBER[] = "0000000000000000";
-
 CK_RV general_init(void *init_args);
 CK_RV general_get_func_list(CK_FUNCTION_LIST **function_list);
 CK_RV general_get_info(CK_INFO *info);
