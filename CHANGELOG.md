@@ -2,6 +2,7 @@
 
 ### next
   * Fixed compilation issues with GCC11.
+  * Only add -Werror for non-release builds.
 
 ### 1.6.0 - 2021-05-03
   * Spelling and grammar fixes throughout the project.
