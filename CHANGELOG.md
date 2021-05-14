@@ -1,5 +1,8 @@
 # Changelog
 
+### next
+  * Fixed compilation issues with GCC11.
+
 ### 1.6.0 - 2021-05-03
   * Spelling and grammar fixes throughout the project.
   * tpm2_ptool: fix bug in verify commandlet where `--sopin` leads to local variable referenced before assignment. See #624.
