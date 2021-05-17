@@ -576,7 +576,6 @@ class Db(object):
     def _do_create(self):
 
         # perform an update if we need to
-        dbbakpath = None
         try:
             old_version = self._get_version()
 
@@ -599,7 +598,7 @@ class Db(object):
                 return True
 
         except Exception as e:
-            sys.stderr.write('DB Upgrade failed: "{}", backup located in "{}"'.format(e, dbbakpath))
+            sys.stderr.write('DB Upgrade failed: "{}"\n'.format(e))
             raise e
 
     def _create(self):
