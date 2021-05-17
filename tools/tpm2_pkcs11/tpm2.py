@@ -264,7 +264,9 @@ class Tpm2(object):
         if privey_data.startswith(b'-----BEGIN OPENSSH PRIVATE KEY-----'):
             if passin:
                 # Parse passin to extract the password
-                if passin.startswith('file:'):
+                if passin.startswith('env:'):
+                    password_bytes = os.getenvb(passin[4:].encode())
+                elif passin.startswith('file:'):
                     with open(passin[5:], 'rb') as f:
                         password_bytes = f.read()
                 elif passin.startswith('pass:'):
