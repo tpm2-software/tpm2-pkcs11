@@ -297,6 +297,16 @@ class Tpm2(object):
             os.write(pem_priv_fd, pem_key)
             os.close(pem_priv_fd)
             privkey = pem_priv_name
+        elif alg is None:
+            # Guess the key algorithm from the PEM header
+            if privey_data.startswith(b'-----BEGIN EC PARAMETERS-----'):
+                alg = 'ecc'
+            elif privey_data.startswith(b'-----BEGIN EC PRIVATE KEY-----'):
+                alg = 'ecc'
+            elif privey_data.startswith(b'-----BEGIN RSA PRIVATE KEY-----'):
+                alg = 'rsa'
+            else:
+                raise RuntimeError("Unable to detect key type, use --algorithm to specify it")
 
         parent_path = str(phandle)
         cmd = [

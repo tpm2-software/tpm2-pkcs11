@@ -215,7 +215,7 @@ class ImportCommand(NewKeyCommandBase):
             '--algorithm',
             help='The type of the key.\n',
             choices=['rsa', 'ecc'],
-            required=True)
+            required=False)
         group_parser.add_argument(
             '--passin',
             help='Password of the input private key file like OpenSSL (example: "pass:secret").\n',
