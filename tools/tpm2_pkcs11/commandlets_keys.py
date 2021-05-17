@@ -647,7 +647,7 @@ class LinkCommand(NewKeyCommandBase):
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 
     # Links a new key
-    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, keypaths, d):
+    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, keypaths, passin, d):
 
         if keypaths is None:
             sys.exit("Keypath must be specified")
