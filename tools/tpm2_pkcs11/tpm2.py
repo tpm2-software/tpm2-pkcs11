@@ -8,6 +8,10 @@ import uuid
 
 from subprocess import Popen, PIPE
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+
 from .utils import str2bytes
 
 class Tpm2(object):
@@ -253,6 +257,47 @@ class Tpm2(object):
         _, priv = mkstemp(prefix='', suffix='.priv', dir=self._tmp)
         _, pub = mkstemp(prefix='', suffix='.pub', dir=self._tmp)
 
+        # If the key is an OpenSSH key, convert it to PEM format
+        pem_priv_name = None
+        with open(privkey, "rb") as f:
+            privey_data = f.read()
+        if privey_data.startswith(b'-----BEGIN OPENSSH PRIVATE KEY-----'):
+            if passin:
+                # Parse passin to extract the password
+                if passin.startswith('file:'):
+                    with open(passin[5:], 'rb') as f:
+                        password_bytes = f.read()
+                elif passin.startswith('pass:'):
+                    password_bytes = passin[5:].encode()
+                else:
+                    raise NotImplementedError("Unsupported OpenSSL password input {} to read OpenSSH key".format(
+                        repr(passin)))
+                enc_alg = serialization.BestAvailableEncryption(password_bytes)
+            else:
+                password_bytes = None
+                enc_alg = serialization.NoEncryption()
+
+            ssh_key = serialization.load_ssh_private_key(privey_data, password=password_bytes)
+
+            if alg is None:
+                # Find the algorithm
+                if isinstance(ssh_key, EllipticCurvePrivateKey):
+                    alg = 'ecc'
+                elif isinstance(ssh_key, RSAPrivateKey):
+                    alg = 'rsa'
+                else:
+                    raise NotImplementedError("Unsupported SSH key type {}".format(type(ssh_key)))
+
+            pem_key = ssh_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=enc_alg)
+
+            pem_priv_fd, pem_priv_name = mkstemp(prefix='', suffix='.privpem', dir=self._tmp)
+            os.write(pem_priv_fd, pem_key)
+            os.close(pem_priv_fd)
+            privkey = pem_priv_name
+
         parent_path = str(phandle)
         cmd = [
             'tpm2_import', '-V', '-C', parent_path, '-i', privkey, '-u', pub,
@@ -280,6 +325,8 @@ class Tpm2(object):
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, stdin=PIPE, env=os.environ)
         stdout, stderr = p.communicate(input=seal)
         rc = p.wait()
+        if pem_priv_name is not None:
+            os.remove(pem_priv_name)
         if (rc != 0):
             os.remove(pub)
             os.remove(priv)
