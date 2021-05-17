@@ -195,8 +195,10 @@ class Tpm2(object):
                seal=None,
                alg=None):
         # tpm2_create -Q -C context.out -g $gAlg -G $GAlg -u key.pub -r key.priv
-        _, priv = mkstemp(prefix='', suffix='.priv', dir=self._tmp)
-        _, pub = mkstemp(prefix='', suffix='.pub', dir=self._tmp)
+        privfd, priv = mkstemp(prefix='', suffix='.priv', dir=self._tmp)
+        os.close(privfd)
+        pubfd, pub = mkstemp(prefix='', suffix='.pub', dir=self._tmp)
+        os.close(pubfd)
 
         cmd = ['tpm2_create', '-C', str(phandle), '-u', pub, '-r', priv]
 
@@ -255,8 +257,10 @@ class Tpm2(object):
         else:
             sys.exit("Invalid file path")
 
-        _, priv = mkstemp(prefix='', suffix='.priv', dir=self._tmp)
-        _, pub = mkstemp(prefix='', suffix='.pub', dir=self._tmp)
+        privfd, priv = mkstemp(prefix='', suffix='.priv', dir=self._tmp)
+        os.close(privfd)
+        pubfd, pub = mkstemp(prefix='', suffix='.pub', dir=self._tmp)
+        os.close(pubfd)
 
         # If the key is an OpenSSH key, convert it to PEM format
         pem_priv_name = None
