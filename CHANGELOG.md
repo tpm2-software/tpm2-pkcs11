@@ -3,6 +3,7 @@
 ### next
   * Fixed compilation issues with GCC11.
   * Only add -Werror for non-release builds.
+  * Fix error message when the DB is too new in tpm2_ptool.
 
 ### 1.6.0 - 2021-05-03
   * Spelling and grammar fixes throughout the project.
