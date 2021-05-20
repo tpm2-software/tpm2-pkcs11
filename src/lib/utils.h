@@ -43,7 +43,6 @@ int str_to_ul(const char *val, size_t *res);
 static inline void _str_padded_copy(CK_UTF8CHAR_PTR dst, size_t dst_len, const CK_UTF8CHAR *src, size_t src_len) {
     memset(dst, ' ', dst_len);
     memcpy(dst, src, src_len);
-    LOGE("BILL(%zu): %.*s\n", dst_len, dst_len, dst);
 }
 
 twist utils_hash_pass(const twist pin, const twist salt);
