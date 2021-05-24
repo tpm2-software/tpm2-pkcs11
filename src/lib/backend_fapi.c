@@ -4,6 +4,7 @@
 #ifdef HAVE_FAPI
 #include <tss2/tss2_fapi.h>
 #endif
+#include <tss2/tss2_rc.h>
 
 #include <inttypes.h>
 
@@ -15,6 +16,27 @@
 #ifdef HAVE_FAPI
 FAPI_CONTEXT *fctx = NULL;
 unsigned maxobjectid = 0;
+
+static void fail_fapi_msg(TSS2_RC rc) {
+
+    bool is_release = false;
+    const char *split = strchr(VERSION, '-');
+    if (split) {
+        /* Something like:
+         * 1.6.0-20-gb57b05742878-dirty
+         * 1.6.0-rc0
+         */
+        is_release = !strncmp(split, "rc", 2);
+    } else {
+        /* something like 1.2.3 */
+        is_release = true;
+    }
+
+    const char *version = is_release  ? VERSION : "master";
+    LOGW("Listing FAPI token objects failed: \"%s\"\n"
+            "Please see https://github.com/tpm2-software/tpm2-pkcs11/blob/%s/docs/FAPI.md "
+            "for more details", Tss2_RC_Decode(rc), version);
+}
 
 static CK_RV get_key(FAPI_CONTEXT *fapictx, tpm_ctx *tctx, const char *path, uint32_t *esysHandle, uint32_t *pid) {
 
@@ -93,7 +115,7 @@ CK_RV backend_fapi_init(void) {
     LOGV("Calling Fapi_Initialize");
     TSS2_RC rc = Fapi_Initialize(&fctx, NULL);
     if (rc) {
-        LOGW("Could not initialize FAPI");
+        fail_fapi_msg(rc);
         return CKR_GENERAL_ERROR;
     }
     return CKR_OK;
@@ -253,10 +275,8 @@ CK_RV backend_fapi_add_tokens(token *tok, size_t *len) {
     if (rc == TSS2_FAPI_RC_IO_ERROR) {
         /* If no token seals were found, we're done here. */
         LOGV("No FAPI token seals found.");
-        return CKR_OK;
-    }
-    if (rc) {
-        LOGE("Listing FAPI token objects failed.");
+    } else if (rc != TSS2_RC_SUCCESS) {
+        fail_fapi_msg(rc);
         return CKR_GENERAL_ERROR;
     }
 

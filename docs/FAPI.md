@@ -2,9 +2,9 @@
 
 ## Introduction
 
-The feature API is a high level API for interacting with the TPM 2.0 device. It exposes a subset of the TPM operations as well as provided on disk key management,
-automatic encrypted sessions and format conversions (PEM) where possible, among other things. The tpm2-pkcs11 project predates the Feature API, and the original
-code was implemented using the Enhanced System API and for on disk storage of TPM protected keys, a sqlite3 database. Because of this
+The feature API is a high level API for interacting with the TPM 2.0 device. It exposes a subset of the TPM operations as well as provides on disk key management,
+automatic encrypted sessions and format conversions, like PEM, where possible. The tpm2-pkcs11 project predates the Feature API, and the original
+code was implemented using the Enhanced System API (ESAPI) and for on disk storage of TPM protected keys, a sqlite3 database.
 
 ## Configuring
 
@@ -21,7 +21,7 @@ superfluous errors and warnings. The library is built to ignore these errors, li
 
 You can take a few actions if you run into this issue:
 1. Ignore them, and optionally disable FAPI error logging:
-    - export TSS2\_LOG=fapi+NONE
+    - `export TSS2_LOG=fapi+NONE`
 
 2. Reconfigure the package with `--with-fapi=no`:
     - `./configure --with-fapi=no`
