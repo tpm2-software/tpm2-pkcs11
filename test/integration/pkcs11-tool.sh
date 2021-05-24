@@ -134,4 +134,26 @@ pkcs11_tool --sign --login --slot=1 --id="6d79727361333037326b6579" --pin="myuse
 size="$(stat --printf="%s" ${tempdir}/sig)"
 test "$size" -eq "384"
 
+#
+# Test that the imported SSH keys are useable
+#
+pkcs11_tool --token-label="import-keys" --login --pin=anotheruserpin --list-objects
+
+# pkcs11-tool --label doesn't always work, so use id's which are hex encoded.
+echo "testdata">${tempdir}/data
+pkcs11_tool --sign --login --token-label="import-keys" --id="696d706f727465645f7373685f7273615f6b6579" --pin="anotheruserpin" \
+            --input-file ${tempdir}/data --output-file ${tempdir}/sig \
+            --mechanism SHA256-RSA-PKCS
+
+size="$(stat --printf="%s" ${tempdir}/sig)"
+test "$size" -eq "256"
+
+echo "testdata">${tempdir}/data
+pkcs11_tool --sign --login --token-label="import-keys" --id="696d706f727465645f7373685f6563635f6b6579" --pin="anotheruserpin" \
+            --input-file ${tempdir}/data --output-file ${tempdir}/sig \
+            --mechanism ECDSA-SHA1
+
+size="$(stat --printf="%s" ${tempdir}/sig)"
+test "$size" -eq "64"
+
 exit 0
