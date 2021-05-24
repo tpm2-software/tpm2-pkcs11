@@ -32,7 +32,7 @@ setup(
     # Dependencies got here aka install_requires=['tensorflow']
     install_requires=[
         'bcrypt',
-        'cryptography',
+        'cryptography>=3.0',
         'pyyaml',
         'pyasn1',
         'pyasn1_modules',
