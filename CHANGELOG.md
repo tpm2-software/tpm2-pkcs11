@@ -4,6 +4,7 @@
   * Fixed compilation issues with GCC11.
   * Only add -Werror for non-release builds.
   * Fix error message when the DB is too new in tpm2_ptool.
+  * Support for tpm2_ptool import with ssh-keygen format keys. Note: Requires cryptography >= 3.0.
 
 ### 1.6.0 - 2021-05-03
   * Spelling and grammar fixes throughout the project.
