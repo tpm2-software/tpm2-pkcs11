@@ -176,6 +176,12 @@ echo "importing ECCp256 key under token 'import-keys'"
 openssl ecparam -name prime256v1 -genkey -noout -out "$TPM2_PKCS11_STORE/private.ecc.pem"
 tpm2_ptool import --privkey="$TPM2_PKCS11_STORE/private.ecc.pem" --algorithm=ecc --key-label="imported_ecc_key" --label="import-keys" --userpin=anotheruserpin --path=$TPM2_PKCS11_STORE
 
+# import an ECC and RSA key in the ssh-keygen format
+ssh-keygen -t rsa -b 2048 -f "$TPM2_PKCS11_STORE/id_rsa_pass" -N 'secret'
+ssh-keygen -t ecdsa -b 256 -f "$TPM2_PKCS11_STORE/id_ec_nopass" -N ''
+tpm2_ptool import --privkey="$TPM2_PKCS11_STORE/id_rsa_pass" --key-label="imported_ssh_rsa_key" --id='imported_ssh_rsa_key' --label="import-keys" --userpin=anotheruserpin --passin 'pass:secret' --path=$TPM2_PKCS11_STORE
+tpm2_ptool import --privkey="$TPM2_PKCS11_STORE/id_ec_nopass" --key-label="imported_ssh_ecc_key" --id='imported_ssh_ecc_key' --label="import-keys" --userpin=anotheruserpin --path=$TPM2_PKCS11_STORE
+
 echo "RUN COMMAND BELOW BEFORE make check"
 echo "export TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
 
