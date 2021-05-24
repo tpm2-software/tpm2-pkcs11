@@ -96,3 +96,5 @@ config.h
 config.h.in
 
 test/unit/test_db
+
+*~
