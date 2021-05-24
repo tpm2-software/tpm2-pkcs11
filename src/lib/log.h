@@ -36,7 +36,7 @@ static const char *log_strings[] = {
 #define LOGW(fmt, ...) _LOGW(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
 #define LOGE(fmt, ...) _LOGE(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
-static log_level _g_current_log_level = log_level_error;
+static log_level _g_current_log_level = log_level_warn;
 
 static inline void log_set_level(const char *level_str) {
 
