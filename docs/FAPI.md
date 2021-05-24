@@ -17,7 +17,7 @@ with `--with-fapi=yes|no`.
 
 If the tss2-fapi library is configured, it will dynamically attempt to locate and list tokens provisioned with tss2-fapi. Because FAPI might be in a bad state, this could cause
 superfluous errors and warnings. The library is built to ignore these errors, like:
-  - https://github.com/tpm2-software/tpm2-pkcs11/issues/655
+  - <https://github.com/tpm2-software/tpm2-pkcs11/issues/655>
 
 You can take a few actions if you run into this issue:
 1. Ignore them, and optionally disable FAPI error logging:
@@ -27,7 +27,7 @@ You can take a few actions if you run into this issue:
     - `./configure --with-fapi=no`
 
 3. Provision FAPI using `tss2_provision`. See the tpm2-tools project for more information:
-    - https://github.com/tpm2-software/tpm2-tools/blob/master/man/tss2\_provision.1.md
+    - <https://github.com/tpm2-software/tpm2-tools/blob/master/man/tss2_provision.1.md>
 
 
 Additionally at run time, the token creation function, C\_InitToken, may be invoked to create a new token. By default, the token always using the original
