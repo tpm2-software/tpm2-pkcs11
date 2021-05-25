@@ -31,6 +31,7 @@ setup(
 
     # Dependencies got here aka install_requires=['tensorflow']
     install_requires=[
+        'bcrypt',
         'cryptography',
         'pyyaml',
         'pyasn1',
