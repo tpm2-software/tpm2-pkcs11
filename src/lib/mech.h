@@ -70,4 +70,6 @@ void mdetail_set_pss_status(mdetail *m, bool pss_sigs_good);
 
 CK_RV mech_is_HMAC(mdetail *m, CK_MECHANISM_PTR mech, bool *is_hmac);
 
+CK_RV mech_is_ecc(mdetail *m, CK_MECHANISM_TYPE mech_type, bool *is_ecc);
+
 #endif /* SRC_LIB_MECH_H_ */

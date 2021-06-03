@@ -1766,8 +1766,10 @@ CK_RV tpm_ec_ecdsa_get_opdata(mdetail *mdtl,
     return CKR_OK;
 }
 
-CK_RV tpm_ec_ecdsa_sha1_get_opdata(mdetail *mdtl,
-        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+static CK_RV tpm_ec_ecdsa_get_opdata_common(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj,
+        TPMI_ALG_HASH halg, tpm_op_data **outdata) {
+
     UNUSED(mdtl);
     UNUSED(mech);
     assert(outdata);
@@ -1779,7 +1781,7 @@ CK_RV tpm_ec_ecdsa_sha1_get_opdata(mdetail *mdtl,
     }
 
     opdata->ecc.sig.scheme = TPM2_ALG_ECDSA;
-    opdata->ecc.sig.details.any.hashAlg = TPM2_ALG_SHA1;
+    opdata->ecc.sig.details.any.hashAlg = halg;
 
     set_common_opdata(opdata, tctx, tobj, CKK_EC);
 
@@ -1787,6 +1789,19 @@ CK_RV tpm_ec_ecdsa_sha1_get_opdata(mdetail *mdtl,
 
     return CKR_OK;
 }
+
+#define TPM_EC_ECDSA_GET_OPDATA(name, halg) \
+CK_RV tpm_ec_ecdsa_##name##_get_opdata(mdetail *mdtl, \
+    tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, \
+    tpm_op_data **outdata) { \
+    return tpm_ec_ecdsa_get_opdata_common(mdtl, tctx, mech, tobj, \
+            halg, outdata); \
+}
+
+TPM_EC_ECDSA_GET_OPDATA(sha1, TPM2_ALG_SHA1)
+TPM_EC_ECDSA_GET_OPDATA(sha256, TPM2_ALG_SHA256)
+TPM_EC_ECDSA_GET_OPDATA(sha384, TPM2_ALG_SHA384)
+TPM_EC_ECDSA_GET_OPDATA(sha512, TPM2_ALG_SHA512)
 
 static CK_RV aes_common_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data *opdata) {
 
@@ -3798,6 +3813,10 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
         add_mech(CKM_EC_KEY_PAIR_GEN);
         if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA);
         if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA_SHA1);
+        if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA_SHA256);
+        if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA_SHA384);
+        if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA_SHA512);
+
     }
 
     /* AES */

@@ -495,6 +495,174 @@ static void test_sign_verify_CKM_ECDSA_SHA1(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
+static void test_sign_verify_CKM_ECDSA_SHA256(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_OBJECT_CLASS key_class = CKO_PRIVATE_KEY;
+    CK_KEY_TYPE key_type = CKK_EC;
+    CK_ATTRIBUTE tmpl[] = {
+        { CKA_CLASS, &key_class, sizeof(key_class) },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+    };
+
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    user_login(session);
+
+    /* Find an EC key */
+    CK_ULONG count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_MECHANISM mech = { .mechanism = CKM_ECDSA_SHA256 };
+
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE ckm_ecdsa_sha256_sig[4096];
+    CK_ULONG ckm_ecdsa_sha256_siglen = 0;
+
+    /* Call C_Sign for Size */
+    rv = C_Sign(session, (CK_BYTE_PTR ) _data, sizeof(_data),
+            NULL, &ckm_ecdsa_sha256_siglen);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_not_equal(ckm_ecdsa_sha256_siglen, 0);
+
+    CK_ULONG tmp_len = ckm_ecdsa_sha256_siglen;
+    rv = C_Sign(session, (CK_BYTE_PTR ) _data, sizeof(_data),
+            ckm_ecdsa_sha256_sig, &ckm_ecdsa_sha256_siglen);
+    assert_int_equal(rv, CKR_OK);
+    /* actual size must not be larger than previously indicated */
+    assert_in_range(ckm_ecdsa_sha256_siglen, 1, tmp_len);
+
+    rv = C_VerifyInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Verify(session, (CK_BYTE_PTR ) _data, sizeof(_data),
+            ckm_ecdsa_sha256_sig, ckm_ecdsa_sha256_siglen);
+    assert_int_equal(rv, CKR_OK);
+}
+
+static void test_sign_verify_CKM_ECDSA_SHA384(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_OBJECT_CLASS key_class = CKO_PRIVATE_KEY;
+    CK_KEY_TYPE key_type = CKK_EC;
+    CK_ATTRIBUTE tmpl[] = {
+        { CKA_CLASS, &key_class, sizeof(key_class) },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+    };
+
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    user_login(session);
+
+    /* Find an EC key */
+    CK_ULONG count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_MECHANISM mech = { .mechanism = CKM_ECDSA_SHA256 };
+
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE ckm_ecdsa_sha384_sig[4096];
+    CK_ULONG ckm_ecdsa_sha384_siglen = 0;
+
+    /* Call C_Sign for Size */
+    rv = C_Sign(session, (CK_BYTE_PTR ) _data, sizeof(_data),
+            NULL, &ckm_ecdsa_sha384_siglen);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_not_equal(ckm_ecdsa_sha384_siglen, 0);
+
+    CK_ULONG tmp_len = ckm_ecdsa_sha384_siglen;
+    rv = C_Sign(session, (CK_BYTE_PTR ) _data, sizeof(_data),
+            ckm_ecdsa_sha384_sig, &ckm_ecdsa_sha384_siglen);
+    assert_int_equal(rv, CKR_OK);
+    /* actual size must not be larger than previously indicated */
+    assert_in_range(ckm_ecdsa_sha384_siglen, 1, tmp_len);
+
+    rv = C_VerifyInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Verify(session, (CK_BYTE_PTR ) _data, sizeof(_data),
+            ckm_ecdsa_sha384_sig, ckm_ecdsa_sha384_siglen);
+    assert_int_equal(rv, CKR_OK);
+}
+
+static void test_sign_verify_CKM_ECDSA_SHA512(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_OBJECT_CLASS key_class = CKO_PRIVATE_KEY;
+    CK_KEY_TYPE key_type = CKK_EC;
+    CK_ATTRIBUTE tmpl[] = {
+        { CKA_CLASS, &key_class, sizeof(key_class) },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+    };
+
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    user_login(session);
+
+    /* Find an EC key */
+    CK_ULONG count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_MECHANISM mech = { .mechanism = CKM_ECDSA_SHA256 };
+
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE ckm_ecdsa_sha512_sig[4096];
+    CK_ULONG ckm_ecdsa_sha512_siglen = 0;
+
+    /* Call C_Sign for Size */
+    rv = C_Sign(session, (CK_BYTE_PTR ) _data, sizeof(_data),
+            NULL, &ckm_ecdsa_sha512_siglen);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_not_equal(ckm_ecdsa_sha512_siglen, 0);
+
+    CK_ULONG tmp_len = ckm_ecdsa_sha512_siglen;
+    rv = C_Sign(session, (CK_BYTE_PTR ) _data, sizeof(_data),
+            ckm_ecdsa_sha512_sig, &ckm_ecdsa_sha512_siglen);
+    assert_int_equal(rv, CKR_OK);
+    /* actual size must not be larger than previously indicated */
+    assert_in_range(ckm_ecdsa_sha512_siglen, 1, tmp_len);
+
+    rv = C_VerifyInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Verify(session, (CK_BYTE_PTR ) _data, sizeof(_data),
+            ckm_ecdsa_sha512_sig, ckm_ecdsa_sha512_siglen);
+    assert_int_equal(rv, CKR_OK);
+}
+
 static void test_pss(CK_SESSION_HANDLE session,
         CK_OBJECT_HANDLE key[2], CK_MECHANISM_TYPE halg) {
 
@@ -1170,7 +1338,6 @@ static void test_sign_verify_CKM_SHA256_HMAC(void **state) {
 
     rv = C_Verify(session, (CK_BYTE_PTR)msg, (CK_ULONG)strlen(msg), sig, sig_len);
     assert_int_equal(rv, CKR_OK);
-
     rv = C_Logout(session);
     assert_int_equal(rv, CKR_OK);
 }
@@ -1201,6 +1368,12 @@ int main() {
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_RSA_PKCS_sha512,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_ECDSA_SHA1,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_verify_CKM_ECDSA_SHA256,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_verify_CKM_ECDSA_SHA384,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_verify_CKM_ECDSA_SHA512,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_ECDSA,
             test_setup, test_teardown),
