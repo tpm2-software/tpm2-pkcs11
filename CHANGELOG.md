@@ -5,8 +5,8 @@
     - **Backup your DB before upgrading**
   * Fixed compilation issues with GCC11.
   * Fixed erros on releases due to newer compilers from failing by only adding `-Werror` for non-release builds.
-  * Fixed error message when the DB is too new in tpm2_ptool.
-  * Added support for tpm2_ptool import with ssh-keygen format keys. Note: Requires cryptography >= 3.0.
+  * Fixed error message when the DB is too new in tpm2\_ptool.
+  * Added support for tpm2\_ptool import with ssh-keygen format keys. Note: Requires cryptography >= 3.0.
   * Changed default long level from error to warning.
   * Added better error message for FAPI backend errors along with [docs/FAPI.md](docs/FAPI.md) document.
   * Changed `tpm2_ptool` make `--algorithm` optional.
