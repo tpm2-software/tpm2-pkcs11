@@ -1,6 +1,8 @@
 # Changelog
 
 ### next
+  * DB Schema Change from 5 to 6.
+    - **Backup your DB before upgrading**
   * Fixed compilation issues with GCC11.
   * Fixed erros on releases due to newer compilers from failing by only adding `-Werror` for non-release builds.
   * Fixed error message when the DB is too new in tpm2_ptool.
@@ -9,6 +11,10 @@
   * Added better error message for FAPI backend errors along with [docs/FAPI.md](docs/FAPI.md) document.
   * Changed `tpm2_ptool` make `--algorithm` optional.
   * Fixed error message of wrong attribute name on expected attribute check to be false.
+  * Added support for ECDSA 256, 384 and 512.
+  * Fixed a bug in the Python code DB upgrade path from 4 to 5 where it didn't add AES mode CTR to
+    CKA\_ALLOWED\_MECHANISMS.
+  * Added tpm2\_ptool support for ECC key size 192.
 
 ### 1.6.0 - 2021-05-03
   * Spelling and grammar fixes throughout the project.

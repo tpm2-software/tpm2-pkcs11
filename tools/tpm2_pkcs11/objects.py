@@ -202,7 +202,7 @@ class PKCS11ECPublicKey(PKCS11PublicKey):
         super(PKCS11ECPublicKey, self).__init__(CKK_EC, attrs, auth, tpm_priv, tpm_pub)
 
     def genmechs(self, tpm):
-        pubmech = [ CKM_ECDSA, CKM_ECDSA_SHA1 ]
+        pubmech = [ CKM_ECDSA, CKM_ECDSA_SHA1, CKM_ECDSA_SHA256, CKM_ECDSA_SHA384, CKM_ECDSA_SHA512 ]
         self.update({CKA_ALLOWED_MECHANISMS: pubmech})
 
 class PKCS11PrivateKey(PKCS11Key):
