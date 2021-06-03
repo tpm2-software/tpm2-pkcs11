@@ -39,7 +39,7 @@
 #define TPM2_PKCS11_STORE_DIR "/etc/tpm2_pkcs11"
 #endif
 
-#define DB_VERSION 5
+#define DB_VERSION 6
 
 #define goto_oom(x, l) if (!x) { LOGE("oom"); goto l; }
 #define goto_error(x, l) if (x) { goto l; }
@@ -1823,6 +1823,237 @@ error:
     return rv;
 }
 
+#define CKR_VENDOR_SKIP (CKR_VENDOR_DEFINED | 0x01)
+
+static CK_RV handle_ECDSA_5_to_6(tobject *tobj) {
+
+    CK_OBJECT_CLASS cka_class = attr_list_get_CKA_CLASS(tobj->attrs, CK_OBJECT_CLASS_BAD);
+    if (cka_class != CKO_PRIVATE_KEY) {
+        return CKR_VENDOR_SKIP;
+    }
+
+    CK_KEY_TYPE cka_key_type = attr_list_get_CKA_KEY_TYPE(tobj->attrs, CKA_KEY_TYPE_BAD);
+    if (cka_key_type != CKK_EC) {
+        return CKR_VENDOR_SKIP;
+    }
+
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_ALLOWED_MECHANISMS);
+
+    CK_ULONG mech_num = a ? (a->ulValueLen/sizeof(CK_MECHANISM_TYPE)) : 0;
+    /* plus three: SHA256 SHA384 and SHA512 */
+    safe_adde(mech_num, 3);
+
+    CK_ULONG total_bytes = 0;
+    safe_mul(total_bytes, mech_num, sizeof(CK_MECHANISM_TYPE));
+
+    CK_MECHANISM_TYPE *new_mechs = calloc(mech_num, sizeof(CK_MECHANISM_TYPE));
+    if (!new_mechs) {
+        tobject_free(tobj);
+        return CKR_HOST_MEMORY;
+    }
+
+    /* copy the old mechanism into the list and add CBC_PAD and CTR */
+    CK_ULONG i;
+    CK_ULONG pos = 0;
+    for (i=0; i < mech_num - 1; i++) {
+        assert(a && a->pValue && a->ulValueLen);
+        CK_MECHANISM_TYPE old_mech = ((CK_MECHANISM_TYPE_PTR)(a->pValue))[i];
+        if (old_mech == CKM_ECDSA_SHA256 ||
+                old_mech == CKM_ECDSA_SHA384 ||
+                old_mech == CKM_ECDSA_SHA512) {
+            /*
+             * don't add the ones were adding, just to make the add below
+             * unconditional. This is an unlikely case as someone would have
+             * had to twiddle their object config by hand.
+             */
+            continue;
+        }
+
+        new_mechs[pos++] = old_mech;
+    }
+
+    /* append the missing mechanisms */
+    new_mechs[mech_num - 3] = CKM_ECDSA_SHA256;
+    new_mechs[mech_num - 2] = CKM_ECDSA_SHA384;
+    new_mechs[mech_num - 1] = CKM_ECDSA_SHA512;
+
+    CK_ATTRIBUTE updated_attr = {
+        .type = CKA_ALLOWED_MECHANISMS,
+        .ulValueLen = total_bytes,
+        .pValue = new_mechs
+    };
+
+    /*
+     * if the object had CKA_ALLOWED_MECHANISMS we UPDATE the entry,
+     * else we just add it to the list
+     */
+    CK_RV rv = a ? attr_list_update_entry(tobj->attrs, &updated_attr) :
+            attr_list_append_entry(&tobj->attrs, &updated_attr);
+    if (rv != CKR_OK) {
+        SAFE_FREE(new_mechs);
+        return rv;
+    }
+
+    return CKR_OK;
+}
+
+/*
+ * A bug in the python code added CBC_PAD twice and missed CTR mode, filter out the CBC_PAD
+ * and CTR mode and add them both back in properly, ie one of each in CKA_ALLOWED_MECHANISMS.
+ */
+static CK_RV handle_AES_5_to_6(tobject *tobj) {
+
+    CK_OBJECT_CLASS cka_class = attr_list_get_CKA_CLASS(tobj->attrs, CK_OBJECT_CLASS_BAD);
+    if (cka_class != CKO_SECRET_KEY) {
+        return CKR_VENDOR_SKIP;
+    }
+
+    CK_KEY_TYPE cka_key_type = attr_list_get_CKA_KEY_TYPE(tobj->attrs, CKA_KEY_TYPE_BAD);
+    if (cka_key_type != CKK_AES) {
+        return CKR_VENDOR_SKIP;
+    }
+
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_ALLOWED_MECHANISMS);
+
+    CK_ULONG mech_num = a ? (a->ulValueLen/sizeof(CK_MECHANISM_TYPE)) : 0;
+    /* plus two: one for CBC_PAD one for CTR modes */
+    safe_adde(mech_num, 2);
+
+    CK_ULONG total_bytes = 0;
+    safe_mul(total_bytes, mech_num, sizeof(CK_MECHANISM_TYPE));
+
+    CK_MECHANISM_TYPE *new_mechs = calloc(mech_num, sizeof(CK_MECHANISM_TYPE));
+    if (!new_mechs) {
+        tobject_free(tobj);
+        return CKR_HOST_MEMORY;
+    }
+
+    /* copy the old mechanism into the list and add CBC_PAD and CTR */
+    CK_ULONG i;
+    for (i=0; i < mech_num - 1; i++) {
+        assert(a && a->pValue && a->ulValueLen);
+        CK_MECHANISM_TYPE old_mech = ((CK_MECHANISM_TYPE_PTR)(a->pValue))[i];
+        if (old_mech == CKM_AES_CBC_PAD ||
+                old_mech == CKM_AES_CTR) {
+            /*
+             * don't add the ones were adding, just to make the add below
+             * unconditional. This is an unlikely case as someone would have
+             * had to twiddle their object config by hand.
+             */
+            continue;
+        }
+
+        new_mechs[i] = old_mech;
+    }
+
+
+    /* append the missing mechanisms */
+    new_mechs[mech_num - 2] = CKM_AES_CBC_PAD;
+    new_mechs[mech_num - 1] = CKM_AES_CTR;
+
+    CK_ATTRIBUTE updated_attr = {
+        .type = CKA_ALLOWED_MECHANISMS,
+        .ulValueLen = total_bytes,
+        .pValue = new_mechs
+    };
+
+    /*
+     * if the object had CKA_ALLOWED_MECHANISMS we UPDATE the entry,
+     * else we just add it to the list
+     */
+    CK_RV rv = a ? attr_list_update_entry(tobj->attrs, &updated_attr) :
+            attr_list_append_entry(&tobj->attrs, &updated_attr);
+    if (rv != CKR_OK) {
+        SAFE_FREE(new_mechs);
+        return rv;
+    }
+
+    return CKR_OK;
+
+}
+
+static CK_RV dbup_handler_from_5_to_6(sqlite3 *updb) {
+
+    /*
+     * Between version 3 and 4 of the DB the following changes need to be made:
+     *
+     * Table tobjects:
+     *
+     * The YAML attributes need to include CKM_AES_CBC_PAD and CKM_AES_CTR in the CKM_ALLOWED_MECHANISMS list.
+     */
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+    sqlite3_stmt *stmt = NULL;
+
+    int rc = sqlite3_prepare_v2(updb, "SELECT * from tobjects", -1, &stmt, 0);
+    if (rc != SQLITE_OK) {
+        LOGE("Failed to fetch data: %s", sqlite3_errmsg(updb));
+        goto error;
+    }
+
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_DONE) {
+        goto out;
+    } else if (rc != SQLITE_ROW) {
+        LOGE("Failed to step: %s", sqlite3_errmsg(updb));
+        goto error;
+    }
+
+    while (rc == SQLITE_ROW) {
+
+
+        tobject *tobj = db_tobject_new(stmt);
+        if (!tobj) {
+            LOGE("Could not process tobjects for upgrade");
+            goto error;
+        }
+
+        rv = handle_ECDSA_5_to_6(tobj);
+        if (rv == CKR_OK) {
+            goto handled;
+        } else if (rv != CKR_VENDOR_SKIP) {
+            /* actual error */
+            tobject_free(tobj);
+            goto error;
+        }
+
+        rv = handle_AES_5_to_6(tobj);
+        if (rv == CKR_OK) {
+            goto handled;
+        } else if (rv == CKR_VENDOR_SKIP) {
+            goto next;
+        } else {
+            /* actual error */
+            tobject_free(tobj);
+            goto error;
+        }
+
+handled:
+        /* persist the changes in the update db */
+        rv = _db_update_tobject_attrs(updb, tobj->id, tobj->attrs);
+        if (rv != CKR_OK) {
+            tobject_free(tobj);
+            goto error;
+        }
+
+next:
+        tobject_free(tobj);
+
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_ROW && rc != SQLITE_DONE) {
+            LOGE("Failed to fetch data: %s\n", sqlite3_errmsg(updb));
+            goto error;
+        }
+    }
+
+out:
+    rv = CKR_OK;
+
+error:
+    sqlite3_finalize(stmt);
+    return rv;
+}
+
 static CK_RV db_backup(sqlite3 *db, const char *dbpath, sqlite3 **updb, char **copypath) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -1895,7 +2126,8 @@ static CK_RV db_update(sqlite3 **xdb, const char *dbpath, unsigned old_version, 
             dbup_handler_from_1_to_2,
             dbup_handler_from_2_to_3,
             dbup_handler_from_3_to_4,
-            dbup_handler_from_4_to_5
+            dbup_handler_from_4_to_5,
+            dbup_handler_from_5_to_6
     };
 
     /*

@@ -119,6 +119,9 @@ CK_RV tpm_rsa_pkcs_sha512_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR
 
 CK_RV tpm_ec_ecdsa_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
 CK_RV tpm_ec_ecdsa_sha1_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_ec_ecdsa_sha256_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_ec_ecdsa_sha384_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
+CK_RV tpm_ec_ecdsa_sha512_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
 
 CK_RV tpm_aes_cbc_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
 CK_RV tpm_aes_cfb_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);

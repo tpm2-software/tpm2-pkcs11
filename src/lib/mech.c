@@ -169,7 +169,10 @@ static const mdetail_entry _g_mechs_templ[] = {
 
     { .type = CKM_ECDSA,           .flags = mf_sign|mf_verify|mf_ecc, .validator = ecdsa_validator, .get_tpm_opdata = tpm_ec_ecdsa_get_opdata },
 
-    { .type = CKM_ECDSA_SHA1,      .flags = mf_sign|mf_verify|mf_ecc, .validator = ecdsa_validator, .get_halg = sha1_get_halg, .get_digester = sha1_get_digester, .get_tpm_opdata = tpm_ec_ecdsa_sha1_get_opdata },
+    { .type = CKM_ECDSA_SHA1,      .flags = mf_sign|mf_verify|mf_ecc, .validator = ecdsa_validator, .get_halg = sha1_get_halg, .get_digester = sha1_get_digester,     .get_tpm_opdata = tpm_ec_ecdsa_sha1_get_opdata },
+    { .type = CKM_ECDSA_SHA256,    .flags = mf_sign|mf_verify|mf_ecc, .validator = ecdsa_validator, .get_halg = sha256_get_halg, .get_digester = sha256_get_digester, .get_tpm_opdata = tpm_ec_ecdsa_sha256_get_opdata },
+    { .type = CKM_ECDSA_SHA384,    .flags = mf_sign|mf_verify|mf_ecc, .validator = ecdsa_validator, .get_halg = sha384_get_halg, .get_digester = sha384_get_digester, .get_tpm_opdata = tpm_ec_ecdsa_sha384_get_opdata },
+    { .type = CKM_ECDSA_SHA512,    .flags = mf_sign|mf_verify|mf_ecc, .validator = ecdsa_validator, .get_halg = sha512_get_halg, .get_digester = sha512_get_digester, .get_tpm_opdata = tpm_ec_ecdsa_sha512_get_opdata },
 
     /* AES */
     { .type = CKM_AES_KEY_GEN, .flags = mf_is_keygen|mf_aes },
@@ -1553,4 +1556,19 @@ CK_RV mech_get_info(mdetail *m, tpm_ctx *tctx,
     LOGE("Unknown mechanism, got: 0x%lx", mech_type);
 
     return CKR_MECHANISM_INVALID;
+}
+
+CK_RV mech_is_ecc(mdetail *m, CK_MECHANISM_TYPE mech_type, bool *is_ecc) {
+
+    *is_ecc = false;
+
+    mdetail_entry *d = mlookup(m, mech_type);
+    if (!d) {
+        LOGE("Mechanism not supported, got: 0x%lx", mech_type);
+        return CKR_MECHANISM_INVALID;
+    }
+
+    *is_ecc = !!(d->flags & mf_ecc);
+
+    return CKR_OK;
 }

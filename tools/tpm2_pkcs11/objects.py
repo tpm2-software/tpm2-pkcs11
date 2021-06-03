@@ -201,8 +201,28 @@ class PKCS11ECPublicKey(PKCS11PublicKey):
 
         super(PKCS11ECPublicKey, self).__init__(CKK_EC, attrs, auth, tpm_priv, tpm_pub)
 
+    @staticmethod
+    def ecc_gen_mechs_common(tpm):
+        capdata = tpm.getcap('algorithms')
+        y = yaml.safe_load(capdata)
+
+        # TPM's always support these
+        mechs = [
+            CKM_ECDSA,
+            CKM_ECDSA_SHA1,
+            CKM_ECDSA_SHA256
+        ]
+
+        if 'sha384' in y:
+            mechs.append(CKM_ECDSA_SHA384)
+
+        if 'sha512' in y:
+            mechs.append(CKM_ECDSA_SHA512)
+
+        return mechs
+
     def genmechs(self, tpm):
-        pubmech = [ CKM_ECDSA, CKM_ECDSA_SHA1 ]
+        pubmech = PKCS11ECPublicKey.ecc_gen_mechs_common(tpm)
         self.update({CKA_ALLOWED_MECHANISMS: pubmech})
 
 class PKCS11PrivateKey(PKCS11Key):
@@ -260,7 +280,7 @@ class PKCS11ECPrivateKey(PKCS11PrivateKey):
         super(PKCS11ECPrivateKey, self).__init__(CKK_EC, attrs, auth, tpm_priv, tpm_pub)
 
     def genmechs(self, tpm):
-        privmech = [ CKM_ECDSA, CKM_ECDSA_SHA1 ]
+        privmech = PKCS11ECPublicKey.ecc_gen_mechs_common(tpm)
         self.update({CKA_ALLOWED_MECHANISMS: privmech})
 
 class PKCS11SecretKey(PKCS11Key):

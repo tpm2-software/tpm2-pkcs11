@@ -335,19 +335,19 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
 
     twist digest_buf = NULL;
 
-    size_t tmp_len = 0;
-    rv = tobject_get_max_buf_size(tobj, &tmp_len);
+    size_t expected_sig_len = 0;
+    rv = tobject_get_max_buf_size(tobj, &expected_sig_len);
     if (rv != CKR_OK) {
         return rv;
     }
 
     if (!signature) {
-        *signature_len = tmp_len;
+        *signature_len = expected_sig_len;
         goto out;
     }
 
-    if (*signature_len < tmp_len) {
-        *signature_len = tmp_len;
+    if (*signature_len < expected_sig_len) {
+        *signature_len = expected_sig_len;
         rv = CKR_BUFFER_TOO_SMALL;
         goto out;
     }
@@ -367,6 +367,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
             LOGE("Hash algorithm cannot have 0 size");
             return CKR_GENERAL_ERROR;
         }
+
         digest_buf = twist_calloc(hash_len);
         if (!digest_buf) {
             LOGE("oom");
@@ -387,6 +388,18 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
     CK_BYTE syn_buf[4096];
     CK_ULONG syn_buf_len = sizeof(syn_buf);
     CK_ULONG digest_buf_len = twist_len(digest_buf);
+
+    bool is_ecc = false;
+    rv = mech_is_ecc(tok->mdtl, opdata->mech.mechanism, &is_ecc);
+    if (rv != CKR_OK) {
+        LOGE("COuld not determine if mechanism is ECC: %lu", rv);
+        return rv;
+    }
+
+    if (is_ecc && (digest_buf_len > expected_sig_len)) {
+        LOGV("Truncating hash for EC Signature from %lu to %lu", digest_buf_len, expected_sig_len);
+        digest_buf_len = expected_sig_len;
+    }
 
     rv = mech_synthesize(
             tok->mdtl,
