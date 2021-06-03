@@ -17,12 +17,13 @@ struct attr_list {
     CK_ATTRIBUTE_PTR attrs;
 };
 
-#define ADD_ATTR_HANDLER(t, m) { .type = t, .memtype = m }
+#define ADD_ATTR_HANDLER(t, m) { .type = t, .name = #t, .memtype = m }
 
 typedef struct attr_handler2 attr_handler2;
 struct attr_handler2 {
     CK_ATTRIBUTE_TYPE type;
     CK_BYTE memtype;
+    const char *name;
 };
 
 #define ALLOC_LEN 16
@@ -172,7 +173,7 @@ static attr_handler2 attr_handlers[] = {
     ADD_ATTR_HANDLER(CKA_TPM2_ENC_BLOB, TYPE_BYTE_HEX_STR),
 };
 
-static attr_handler2 default_handler = { .memtype = 0 };
+static attr_handler2 default_handler = { .memtype = 0, .name="UNKNOWN" };
 
 static attr_handler2 *attr_lookup(CK_ATTRIBUTE_TYPE t) {
 
@@ -1320,6 +1321,14 @@ CK_RV attr_list_append_entry(attr_list **attrs, CK_ATTRIBUTE_PTR untrusted_attr)
     *attrs = x;
 
     return CKR_OK;
+}
+
+const char *attr_get_name(CK_ATTRIBUTE_TYPE t) {
+
+    attr_handler2 *attr = attr_lookup(t);
+    assert(attr);
+    assert(attr->name);
+    return attr->name;
 }
 
 #define UTILS_GENERIC_ATTR_TYPE_CONVERT(T) \
