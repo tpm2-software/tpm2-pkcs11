@@ -63,7 +63,7 @@ static CK_RV handle_expect_false(CK_ATTRIBUTE_PTR attr,void *udata) {
     }
 
     if (value) {
-        LOGE("CKA_DERIVE=true not supported");
+        LOGE("%s=true not supported", attr_get_name(attr->type));
         return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 
