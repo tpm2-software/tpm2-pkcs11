@@ -11,12 +11,18 @@ from .pkcs11t import (
     CKA_ALLOWED_MECHANISMS,
     CKA_CLASS,
     CKO_SECRET_KEY,
+    CKO_PRIVATE_KEY,
     CKA_KEY_TYPE,
     CKM_AES_CBC_PAD,
-    CKK_AES
+    CKM_AES_CTR,
+    CKK_AES,
+    CKK_EC,
+    CKM_ECDSA_SHA256,
+    CKM_ECDSA_SHA384,
+    CKM_ECDSA_SHA512
 )
 
-VERSION = 5
+VERSION = 6
 
 #
 # With Db() as db:
@@ -431,11 +437,57 @@ class Db(object):
                 attrs[CKA_ALLOWED_MECHANISMS].append(CKM_AES_CBC_PAD)
 
             # Is an AES KEY and needs CKM_AES_CBC_PAD
+            # This is a BUG that we add CBC_PAD twice, but we can't fix this
+            # here and will have to do it on bump to version 6.
             if not CKM_AES_CTR in attrs[CKA_ALLOWED_MECHANISMS]:
                 attrs[CKA_ALLOWED_MECHANISMS].append(CKM_AES_CBC_PAD)
 
             Db._updatetertiary(dbbakcon, t['id'], attrs)
 
+    def _update_on_6(self, dbbakcon):
+        '''
+        Between version 5 and 6 of the DB the following changes need to be made:
+
+        Table tobjects:
+
+        The YAML attributes need to include CKM_ECDSA_SHA256 and CKM_ECDSA_SHA384,
+        CKM_ECDSA_SHA512 in the CKM_ALLOWED_MECHANISMS list.
+        '''
+
+        c = dbbakcon.cursor()
+
+        c.execute('SELECT * from tobjects')
+        tobjs = c.fetchall()
+
+        algs_to_add = set([ CKM_ECDSA_SHA256, CKM_ECDSA_SHA384, CKM_ECDSA_SHA512])
+
+        for t in tobjs:
+            attrs = yaml.safe_load(io.StringIO(t['attrs']))
+
+            # Fix the duplicate add of CBC_PAD from version 4 -> 5 upgrade and
+            # replace one with CBC_CTR
+            if attrs[CKA_CLASS] == CKO_SECRET_KEY and \
+                attrs[CKA_KEY_TYPE] == CKK_AES:
+                    deduped_attrs = set(attrs[CKA_ALLOWED_MECHANISMS])
+                    deduped_attrs.add(CKM_AES_CTR)
+                    attrs[CKA_ALLOWED_MECHANISMS] = list(deduped_attrs)
+                    Db._updatetertiary(dbbakcon, t['id'], attrs)
+                    continue
+
+            # IF the object is definitely a PRIVATE_KEY of EC and needs
+            # one or more of the missing ECDSA algorithms added
+            if CKA_CLASS not in attrs or \
+                attrs[CKA_CLASS] != CKO_PRIVATE_KEY or \
+                CKA_KEY_TYPE not in attrs or \
+                attrs[CKA_KEY_TYPE] != CKK_EC:
+                    # It is EC Private Key
+                    allowed_mechs = set(attrs[CKA_ALLOWED_MECHANISMS] if CKA_ALLOWED_MECHANISMS in attrs else [])
+                    # Needs one or more algs? If not skip
+                    if algs_to_add.issubset(allowed_mechs):
+                        continue
+
+                    attrs[CKA_ALLOWED_MECHANISMS] = list(allowed_mechs | algs_to_add)
+                    Db._updatetertiary(dbbakcon, t['id'], attrs)
 
     def update_db(self, old_version, new_version=VERSION):
 

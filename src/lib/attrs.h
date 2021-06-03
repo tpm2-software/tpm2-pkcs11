@@ -311,4 +311,6 @@ CK_RV attr_list_append_entry(attr_list **attrs, CK_ATTRIBUTE_PTR untrusted_attr)
 
 CK_RV attr_list_update_entry(attr_list *attrs, CK_ATTRIBUTE_PTR untrusted_attr);
 
+const char *attr_get_name(CK_ATTRIBUTE_TYPE t);
+
 #endif /* SRC_LIB_ATTRS_H_ */
