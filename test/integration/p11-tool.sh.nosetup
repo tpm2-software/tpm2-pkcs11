@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
 
+if [ -z "$T" ]; then
+    export T="$(cd "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
+
 #WARNING: If your system hangs on this test, then the reason is typically that
 #you are running clang on a fedora-30 or similar system that has a buggy combination
 #of p11-tool p11-kit and libasan (clang). Consider using gcc or exporting
@@ -70,7 +74,7 @@ p11tool --list-tokens
 if ! p11_tool --list-tokens | grep -q "Model: SW   TPM"; then
   echo "p11tool did not find this token."
   echo "If you are running a recent version of p11tool then you need to configure the module system-wide:"
-  echo "echo \"module: $TRAVIS_BUILD_DIR/build/src/.libs/libtpm2_pkcs11.so\" >/etc/pkcs11/modules/tpm2_pkcs11.module"
+  echo "echo \"module: $T/src/.libs/libtpm2_pkcs11.so\" >/etc/pkcs11/modules/tpm2_pkcs11.module"
 
   if [[ "${DOCKER_IMAGE:-nodocker}" = "fedora-30" || "${DOCKER_IMAGE:-nodocker}" = "ubuntu-20.04" ]]; then
     echo "p11-tool on fedora-30 or ubuntu-20.04 with clang is dysfunctional even without asan"

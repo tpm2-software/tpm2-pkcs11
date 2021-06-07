@@ -2,7 +2,7 @@
 #!/usr/bin/env bash
 
 if [ -z "$T" ]; then
-    export T="$(pwd)"
+    export T="$(cd "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
 
 if [ -z "$TEST_FIXTURES" ]; then

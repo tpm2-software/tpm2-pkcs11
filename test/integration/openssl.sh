@@ -3,6 +3,10 @@
 
 set -exo pipefail
 
+if [ -z "$T" ]; then
+    export T="$(cd "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
+
 source "$T/test/integration/scripts/helpers.sh"
 
 PIN="myuserpin"

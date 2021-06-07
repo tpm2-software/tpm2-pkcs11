@@ -3,6 +3,10 @@
 
 set -xo pipefail
 
+if [ -z "$T" ]; then
+    export T="$(cd "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
+
 EXT_FILE="$TEST_FIXTURES/smimeextensions"
 CLIENT_CNF="$TEST_FIXTURES/client.cnf"
 
