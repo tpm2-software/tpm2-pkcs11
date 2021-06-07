@@ -8,6 +8,7 @@
   * Changed default long level from error to warning.
   * Added better error message for FAPI backend errors along with [docs/FAPI.md](docs/FAPI.md) document.
   * Changed `tpm2_ptool` make `--algorithm` optional.
+  * Fixed: Running integration tests when Java version has the `-ea`, like on Debian 11 and OpenJDK 17.
 
 ### 1.6.0 - 2021-05-03
   * Spelling and grammar fixes throughout the project.
