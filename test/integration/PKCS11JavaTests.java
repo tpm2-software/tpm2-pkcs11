@@ -40,10 +40,11 @@ public class PKCS11JavaTests {
 		String cwd = System.getProperty("user.dir");
 		Path libPath = Paths.get(cwd, "src/.libs/libtpm2_pkcs11.so.0.0.0");
 
-                String version = System.getProperty("java.version");
-                String [] chunks = version.split("\\.");
-                int major = Integer.parseInt(chunks[0]);
-                if (major >= 9) {
+		String version = System.getProperty("java.version");
+		/* Parse for example "11.0.11" or "17-ea" */
+		String [] chunks = version.split("[\\.-]");
+		int major = Integer.parseInt(chunks[0]);
+		if (major >= 9) {
 			/* Java >= 9 */
 			Method configure = Provider.class.getMethod("configure", String.class);
 			String pkcs11Config = "--name = TPM2\nlibrary = " + libPath;
