@@ -95,9 +95,16 @@ Sometimes it is useful to be able to run tests in a fresh environment where ever
 Using a container is a light way to ensure the environment of the test is quite clean.
 There are several containers provided in [tpm2-software-container](https://github.com/tpm2-software/tpm2-software-container) project.
 
-For example here is a command which builds tpm2-pkcs11 and runs continuous integration tests in a Fedora 32 container with [podman](https://podman.io/):
+For example here is a command which builds tpm2-pkcs11 and runs continuous integration tests in a Fedora 32 container with [Docker](https://www.docker.com/) or [Podman](https://podman.io/):
 
 ```sh
+sudo docker run --rm -v "$(pwd):/workspace/tpm2-pkcs11" --env-file .ci/docker.env \
+    --workdir /workspace/tpm2-pkcs11 -ti ghcr.io/tpm2-software/fedora-32 \
+    bash -c .ci/docker.run
+# NB. sudo can be omitted if the user is added to the "docker" group, but this
+# configuration impacts security in your system, as documented in
+# https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user
+
 podman run --rm -v "$(pwd):/workspace/tpm2-pkcs11" --env-file .ci/docker.env \
     --workdir /workspace/tpm2-pkcs11 -ti ghcr.io/tpm2-software/fedora-32 \
     bash -c .ci/docker.run
