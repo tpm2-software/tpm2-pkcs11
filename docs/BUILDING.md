@@ -115,7 +115,7 @@ Building the project and running tests can be also done with specific shell comm
 ```sh
 # Configure tpm2-pkcs11 to build unit and integration tests
 ./bootstrap
-./configure --enable-esapi-session-manage-flags --enable-fapi --enable-unit --enable-integration
+./configure --enable-fapi --enable-unit --enable-integration
 
 # Build the project and run tests
 make -j $(nproc)
