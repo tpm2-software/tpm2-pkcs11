@@ -88,3 +88,32 @@ To enable testing, run `make check`.
 
 **Note:** If make check runs 0 tests, you likely need the configure options `--enable-unit` and `--enable-integration`. See [Configure Options](#configure-options)
 for more details.
+
+## Running tests in a container
+
+Sometimes it is useful to be able to run tests in a fresh environment where everything is configured by default.
+Using a container is a light way to ensure the environment of the test is quite clean.
+There are several containers provided in [tpm2-software-container](https://github.com/tpm2-software/tpm2-software-container) project.
+
+For example here is a command which builds tpm2-pkcs11 and runs continuous integration tests in a Fedora 32 container with [podman](https://podman.io/):
+
+```sh
+podman run --rm -v "$(pwd):/workspace/tpm2-pkcs11" --env-file .ci/docker.env \
+    --workdir /workspace/tpm2-pkcs11 -ti ghcr.io/tpm2-software/fedora-32 \
+    bash -c .ci/docker.run
+```
+
+Building the project and running tests can be also done with specific shell commands inside a container:
+
+```sh
+# Configure tpm2-pkcs11 to build unit and integration tests
+./bootstrap
+./configure --enable-esapi-session-manage-flags --enable-fapi --enable-unit --enable-integration
+
+# Build the project and run tests
+make -j $(nproc)
+make check
+
+# Run a single test, for example to debug a failure
+make check TESTS=test/integration/pkcs-get-mechanism.int
+```
