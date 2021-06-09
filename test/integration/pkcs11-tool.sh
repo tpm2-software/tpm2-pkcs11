@@ -160,4 +160,27 @@ pkcs11_tool --sign --login --token-label="import-keys" --id="696d706f727465645f7
 size="$(stat --printf="%s" ${tempdir}/sig)"
 test "$size" -eq "64"
 
+#
+# Test that the keys with empty PIN are useable
+#
+pkcs11_tool --token-label="empty-pin" --list-objects
+# The Private Key Objects are enumerated without login
+pkcs11_tool --token-label="empty-pin" --list-objects | grep 'Private Key Object'
+
+echo "testdata">${tempdir}/data
+pkcs11_tool --sign --token-label="empty-pin" --id="7273615f6b6579" \
+            --input-file ${tempdir}/data --output-file ${tempdir}/sig \
+            --mechanism SHA256-RSA-PKCS
+
+size="$(stat --printf="%s" ${tempdir}/sig)"
+test "$size" -eq "256"
+
+echo "testdata">${tempdir}/data
+pkcs11_tool --sign --token-label="empty-pin" --id="6563635f6b6579" \
+            --input-file ${tempdir}/data --output-file ${tempdir}/sig \
+            --mechanism ECDSA-SHA1
+
+size="$(stat --printf="%s" ${tempdir}/sig)"
+test "$size" -eq "64"
+
 exit 0
