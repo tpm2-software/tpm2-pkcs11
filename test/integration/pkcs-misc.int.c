@@ -144,7 +144,7 @@ static void parse_lib_version(CK_BYTE *major, CK_BYTE *minor) {
 
     endptr = NULL;
     val = strtoul(minor_str, &endptr, 10);
-    if (errno != 0 || endptr[0] || val > UINT8_MAX) {
+    if (errno != 0 || (endptr[0] != '\0' && endptr[0] != '.') || val > UINT8_MAX) {
         *major = *minor = 0;
         return;
     }
@@ -174,6 +174,7 @@ static void test_get_info(void **state) {
     CK_BYTE major;
     CK_BYTE minor;
     parse_lib_version(&major, &minor);
+    assert_int_not_equal(major | minor, 0);
     assert_int_equal(info.libraryVersion.major, major);
     assert_int_equal(info.libraryVersion.minor, minor);
 }

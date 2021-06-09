@@ -22,6 +22,19 @@ pkcs11_tool() {
   return $?
 }
 
+echo "Check library line from --show-info"
+pkcs11_info="$(pkcs11_tool --show-info)"
+if ! printf "%s" "$pkcs11_info" | grep -q "^Library\s\+TPM2.0 Cryptoki " ; then
+    echo "pkcs11-tool did not report using TPM2.0 Cryptoki library:"
+    printf "%s\n" "$pkcs11_info"
+    exit 1
+fi
+if ! printf "%s" "$pkcs11_info" | grep -q "^Library\s\+TPM2.0 Cryptoki (ver [^0][0-9]*\." ; then
+    echo "pkcs11-tool reported an erroneous library version:"
+    printf "%s\n" "$pkcs11_info"
+    exit 1
+fi
+
 echo "Finding cert"
 id=$(pkcs11_tool --label label --list-objects --type cert | grep 'ID:' | cut -d':' -f2- | sed s/' '//g)
 echo "Found cert: $id"

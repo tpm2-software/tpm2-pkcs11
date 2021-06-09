@@ -59,7 +59,7 @@ static void parse_lib_version(CK_BYTE *major, CK_BYTE *minor) {
 
     endptr = NULL;
     val = strtoul(minor_str, &endptr, 10);
-    if (errno != 0 || endptr[0] || val > UINT8_MAX) {
+    if (errno != 0 || (endptr[0] != '\0' && endptr[0] != '.') || val > UINT8_MAX) {
         LOGW("Could not strtoul(%s): %s", minor_str, strerror(errno));
         *major = *minor = 0;
         return;
