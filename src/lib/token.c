@@ -310,8 +310,11 @@ CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
     }
 
     // Support Flags
-    info->flags = CKF_RNG
-        | CKF_LOGIN_REQUIRED;
+    info->flags = CKF_RNG;
+
+    if (!t->config.empty_user_pin) {
+        info->flags |= CKF_LOGIN_REQUIRED;
+    }
 
     if (t->config.is_initialized) {
         info->flags |= CKF_TOKEN_INITIALIZED;
@@ -465,10 +468,29 @@ CK_RV token_setpin(token *tok, CK_UTF8CHAR_PTR oldpin, CK_ULONG oldlen, CK_UTF8C
         goto out;
     }
 
+    /* Clear empty-user-pin if a new user PIN is being set */
+    if (!is_so && newlen && tok->config.empty_user_pin) {
+        tok->config.empty_user_pin = false;
+        rv = backend_update_token_config(tok);
+        if (rv != CKR_OK) {
+            LOGE("Clearing empty user PIN state");
+            goto out;
+        }
+    }
+
     rv = backend_token_changeauth(tok, !is_so, toldpin, tnewpin);
     if (rv != CKR_OK) {
         LOGE("Changing token auth");
         goto out;
+    }
+
+    if (!is_so && !newlen && !tok->config.empty_user_pin) {
+        tok->config.empty_user_pin = true;
+        rv = backend_update_token_config(tok);
+        if (rv != CKR_OK) {
+            /* Failing to set empty-user-pin is not fatal, as the PIN changed */
+            LOGW("Setting empty user PIN state failed");
+        }
     }
 
 out:
@@ -512,9 +534,28 @@ CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
         goto out;
     }
 
+    /* Clear empty-user-pin if a new user PIN is being set */
+    if (newlen && tok->config.empty_user_pin) {
+        tok->config.empty_user_pin = false;
+        rv = backend_update_token_config(tok);
+        if (rv != CKR_OK) {
+            LOGE("Clearing empty user PIN state");
+            goto out;
+        }
+    }
+
     rv = backend_init_user(tok, sealdata, newauthhex, newsalthex);
     if (rv != CKR_OK) {
         goto out;
+    }
+
+    if (!newlen && !tok->config.empty_user_pin) {
+        tok->config.empty_user_pin = true;
+        rv = backend_update_token_config(tok);
+        if (rv != CKR_OK) {
+            /* Failing to set empty-user-pin is not fatal, as the user was initialized */
+            LOGW("Setting empty user PIN state failed");
+        }
     }
 
     rv = CKR_OK;
@@ -536,10 +577,24 @@ out:
 }
 
 CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj) {
-
+    CK_RV rv;
     tpm_ctx *tpm = tok->tctx;
 
-    CK_RV rv = token_find_tobject(tok, key, loaded_tobj);
+    /* Unseal the wrapping key, if the user PIN is empty */
+    if (!tok->wrappingkey && tok->config.empty_user_pin) {
+        twist tpin = twistbin_new("", 0);
+        if (!tpin) {
+            return CKR_HOST_MEMORY;
+        }
+        rv = backend_token_unseal_wrapping_key(tok, true, tpin);
+        twist_free(tpin);
+        if (rv != CKR_OK) {
+            LOGE("Error unsealing wrapping key");
+            return rv;
+        }
+    }
+
+    rv = token_find_tobject(tok, key, loaded_tobj);
     if (rv != CKR_OK) {
         return rv;
     }

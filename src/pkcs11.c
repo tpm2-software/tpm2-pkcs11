@@ -272,6 +272,12 @@ static inline CK_RV auth_min_ro_user(session_ctx *ctx) {
         /* no default */
     }
 
+    /* If the token does not require a PIN, allow calling the function */
+    token *t = session_ctx_get_token(ctx);
+    if (t && t->config.empty_user_pin) {
+        LOGV("No user PIN is needed for token %u\n", t->id);
+        return CKR_OK;
+    }
     return CKR_USER_NOT_LOGGED_IN;
 }
 

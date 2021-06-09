@@ -79,9 +79,18 @@ class VerifyCommand(Command):
         if token is None:
             sys.exit('No token labeled "%s"' % label)
 
+        token_config = yaml.safe_load(io.StringIO(token['config']))
+
         sopin = args['sopin']
         userpin = args['userpin']
         hierarchyauth = args['hierarchy_auth']
+
+        if userpin is None and sopin is None:
+            # Use empty PIN if the token has an empty user PIN
+            if token_config.get('empty-user-pin'):
+                userpin = ''
+            else:
+                sys.exit('error: at least one of the arguments --sopin --userpin is required')
 
         verify_output = {}
         verify_output['label'] = label
@@ -91,7 +100,7 @@ class VerifyCommand(Command):
 
         wrappingkeyauth = None
 
-        verify_output['config'] = yaml.safe_load(io.StringIO(token['config']))
+        verify_output['config'] = token_config
 
         verify_output['pin'] = {}
 
@@ -177,9 +186,6 @@ class VerifyCommand(Command):
         print(yaml_dump)
 
     def __call__(self, args):
-        if args['userpin'] is None and args['sopin'] is None:
-            sys.exit("Expected one or both of sopin or userpin")
-
         with Db(args['path']) as db:
             VerifyCommand.verify(db, args)
 
@@ -263,6 +269,8 @@ class AddTokenCommand(Command):
                 'token-init': True,
                 'pss-sigs-good' : pss_sig_good
             }
+            if userpin == '':
+                config['empty-user-pin'] = True
             tokid = db.addtoken(pobject['id'], config, label=label)
 
             # now we update the sealobject table with the tokid to seal objects mapping
@@ -343,7 +351,7 @@ class ChangePinCommand(Command):
             default='user',
             help='Which pin to change. Defaults to "user".\n')
         group_parser.add_argument(
-            '--old', type=str, help='The old pin.\n', required=True)
+            '--old', type=str, help='The old pin.\n')
         group_parser.add_argument(
             '--new', type=str, help='The new pin.\n', required=True)
         group_parser.add_argument(
@@ -367,6 +375,15 @@ class ChangePinCommand(Command):
         hierarchyauth = args['hierarchy_auth']
 
         token = db.gettoken(label)
+        token_config = yaml.safe_load(io.StringIO(token['config']))
+        if oldpin is None:
+            if is_so:
+                sys.exit('error: the SO PIN is missing, argument --old is required')
+            # Use empty PIN if the token has an empty user PIN
+            if token_config.get('empty-user-pin'):
+                oldpin = ''
+            else:
+                sys.exit('error: the user PIN is missing, argument --old is required')
 
         pobjectid = token['pid']
         pobject = db.getprimary(pobjectid)
@@ -385,8 +402,18 @@ class ChangePinCommand(Command):
             newsealpriv = tpm2.changeauth(pobj_handle, sealctx, sealauth,
                                           newsealauth['hash'])
 
+        # update 'empty-user-pin' in a safe way: clear it before setting a
+        # non-empty PIN and set it after setting an empty PIN
+        if not is_so and newpin != '' and token_config.get('empty-user-pin'):
+            del token_config['empty-user-pin']
+            db.updateconfig(token, token_config)
+
         # update the database
         db.updatepin(is_so, token, newsealauth, newsealpriv)
+
+        if not is_so and newpin == '' and not token_config.get('empty-user-pin'):
+            token_config['empty-user-pin'] = True
+            db.updateconfig(token, token_config)
 
     def __call__(self, args):
 
@@ -430,6 +457,7 @@ class InitPinCommand(Command):
         newpin = args['userpin']
 
         token = db.gettoken(label)
+        token_config = yaml.safe_load(io.StringIO(token['config']))
 
         # load and unseal the data from the SO seal object
         pobjectid = token['pid']
@@ -449,15 +477,23 @@ class InitPinCommand(Command):
             #    the wrapping key auth value
             newsealauth = hash_pass(newpin)
 
-
             newsealpriv, newsealpub, _ = tpm2.create(
                 pobj_handle,
                 pobjauth,
                 newsealauth['hash'],
                 seal=wrappingkeyauth)
 
+        # update 'empty-user-pin' in a safe way
+        if newpin != '' and token_config.get('empty-user-pin'):
+            del token_config['empty-user-pin']
+            db.updateconfig(token, token_config)
+
         # update the database
         db.updatepin(False, token, newsealauth, newsealpriv, newsealpub)
+
+        if newpin == '' and not token_config.get('empty-user-pin'):
+            token_config['empty-user-pin'] = True
+            db.updateconfig(token, token_config)
 
     def __call__(self, args):
 
@@ -472,6 +508,11 @@ class InitPinCommand(Command):
 def _empty_validator(s):
     return s
 
+
+def _forbid_set_empty_user_pin(_):
+    raise RuntimeError("'empty-user-pin' can only be set with changepin or initpin")
+
+
 @commandlet("config")
 class ConfigCommand(Command):
     '''
@@ -480,7 +521,8 @@ class ConfigCommand(Command):
     _keys = {
         'token-init' : str2bool,
         'log-level'  : _empty_validator.__func__,
-        'tcti'       : _empty_validator.__func__
+        'tcti'       : _empty_validator.__func__,
+        'empty-user-pin': _forbid_set_empty_user_pin,
     }
 
     # adhere to an interface

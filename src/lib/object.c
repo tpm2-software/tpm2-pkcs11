@@ -393,8 +393,8 @@ CK_RV object_find(session_ctx *ctx, CK_OBJECT_HANDLE *object, CK_ULONG max_objec
         // Get the current object, and grab it's id for the object handle
         CK_OBJECT_HANDLE handle = opdata->cur->tobj_handle;
 
-        // filter out CKA_PRIVATE set to CK_TRUE if not logged in
-        if (opdata->cur->cka_private && !token_is_user_logged_in(tok)) {
+        // filter out CKA_PRIVATE set to CK_TRUE if not logged in and PIN is needed
+        if (opdata->cur->cka_private && !token_is_user_logged_in(tok) && !tok->config.empty_user_pin) {
             opdata->cur = opdata->cur->next;
             continue;
         }

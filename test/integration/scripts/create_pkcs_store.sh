@@ -110,6 +110,27 @@ tpm2_ptool verify --label=label --sopin=mysopin --userpin=myverynewuserpin --pat
 # change it back
 tpm2_ptool initpin --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 
+# Create a token with an empty user PIN
+tpm2_ptool addtoken --pid=1 --sopin=sopin4 --userpin= --label=empty-pin --path $TPM2_PKCS11_STORE
+tpm2_ptool verify --label=empty-pin --path=$TPM2_PKCS11_STORE
+tpm2_ptool config --label=empty-pin --path $TPM2_PKCS11_STORE | grep '^empty-user-pin: true$'
+
+# Define a PIN. The verify command should fail because a PIN is required
+tpm2_ptool changepin --label=empty-pin --user=user --new=myuserpin --path $TPM2_PKCS11_STORE
+! tpm2_ptool verify --label=empty-pin --path=$TPM2_PKCS11_STORE
+! tpm2_ptool config --label=empty-pin --path=$TPM2_PKCS11_STORE | grep '^empty-user-pin:'
+tpm2_ptool changepin --label=empty-pin --user=user --old=myuserpin --new= --path $TPM2_PKCS11_STORE
+tpm2_ptool verify --label=empty-pin --path=$TPM2_PKCS11_STORE
+tpm2_ptool config --label=empty-pin --path $TPM2_PKCS11_STORE | grep '^empty-user-pin: true$'
+
+# Define and clear the PIN using the SO PIN
+tpm2_ptool initpin --label=empty-pin --sopin=sopin4 --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+! tpm2_ptool verify --label=empty-pin --path=$TPM2_PKCS11_STORE
+! tpm2_ptool config --label=empty-pin --path=$TPM2_PKCS11_STORE | grep '^empty-user-pin:'
+tpm2_ptool initpin --label=empty-pin --sopin=sopin4 --userpin= --path=$TPM2_PKCS11_STORE
+tpm2_ptool verify --label=empty-pin --path=$TPM2_PKCS11_STORE
+tpm2_ptool config --label=empty-pin --path $TPM2_PKCS11_STORE | grep '^empty-user-pin: true$'
+
 echo "Adding 3 AES 256 keys under token \"label\""
 tpm2_ptool addkey --algorithm=aes256 --label="label" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 tpm2_ptool addkey --algorithm=aes256 --label="label" --key-label=mykeylabel --userpin=myuserpin --path=$TPM2_PKCS11_STORE
@@ -181,6 +202,10 @@ ssh-keygen -t rsa -b 2048 -f "$TPM2_PKCS11_STORE/id_rsa_pass" -N 'secret'
 ssh-keygen -t ecdsa -b 256 -f "$TPM2_PKCS11_STORE/id_ec_nopass" -N ''
 tpm2_ptool import --privkey="$TPM2_PKCS11_STORE/id_rsa_pass" --key-label="imported_ssh_rsa_key" --id='imported_ssh_rsa_key' --label="import-keys" --userpin=anotheruserpin --passin 'pass:secret' --path=$TPM2_PKCS11_STORE
 tpm2_ptool import --privkey="$TPM2_PKCS11_STORE/id_ec_nopass" --key-label="imported_ssh_ecc_key" --id='imported_ssh_ecc_key' --label="import-keys" --userpin=anotheruserpin --path=$TPM2_PKCS11_STORE
+
+# add an ECC and RSA key under label "empty-pin"
+tpm2_ptool addkey --algorithm=rsa2048 --label="empty-pin" --key-label="rsa_key" --id='rsa_key' --path=$TPM2_PKCS11_STORE
+tpm2_ptool addkey --algorithm=ecc256 --label="empty-pin" --key-label="ecc_key" --id='ecc_key' --path=$TPM2_PKCS11_STORE
 
 echo "RUN COMMAND BELOW BEFORE make check"
 echo "export TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
