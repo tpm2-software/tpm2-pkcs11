@@ -22,6 +22,7 @@ struct token_config {
     bool is_initialized;  /* token initialization state */
     char *tcti;           /* token specific tcti config */
     pss_config_state pss_sigs_good;
+    bool empty_user_pin;  /* user PIN of the token is empty */
 };
 
 typedef struct session_table session_table;

@@ -54,7 +54,7 @@ class NewKeyCommandBase(Command):
             '--hierarchy-auth',
             help='The hierarchyauth, required for transient pobjects.\n',
             default='')
-        pinopts = group_parser.add_mutually_exclusive_group(required=True)
+        pinopts = group_parser.add_mutually_exclusive_group()
         pinopts.add_argument('--sopin', help='The Administrator pin.\n'),
         pinopts.add_argument('--userpin', help='The User pin.\n'),
 
@@ -178,6 +178,14 @@ class NewKeyCommandBase(Command):
                 token = db.gettoken(label)
                 pobjectid = token['pid']
                 pobj = db.getprimary(pobjectid)
+
+                if userpin is None and sopin is None:
+                    # Use empty PIN if the token has an empty user PIN
+                    token_config = yaml.safe_load(io.StringIO(token['config']))
+                    if token_config.get('empty-user-pin'):
+                        userpin = ''
+                    else:
+                        sys.exit('error: at least one of the arguments --sopin --userpin is required')
 
                 sealobjects = db.getsealobject(token['id'])
 
