@@ -1134,8 +1134,7 @@ CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OB
     assert(tok);
     attr_list *new_attrs = NULL;
 
-    if (key_type == CKK_RSA ||
-            clazz == CKO_PUBLIC_KEY) {
+    if (key_type == CKK_RSA && clazz == CKO_PUBLIC_KEY) {
         rv = handle_rsa_public(templ, count, &new_attrs);
     } else if (clazz == CKO_DATA) {
         rv = handle_data_object(tok, templ, count, &new_attrs);
