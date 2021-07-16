@@ -12,18 +12,16 @@ extraction:
     after_prepare:
     - cd "$LGTM_WORKSPACE"
     - mkdir installdir
-    - wget https://github.com/tpm2-software/tpm2-tss/archive/master.tar.gz
-    - tar xf master.tar.gz && rm master.tar.gz
-    - cd tpm2-tss-master
+    - git clone https://github.com/tpm2-software/tpm2-tss.git
+    - cd tpm2-tss
     - ./bootstrap
     - ./configure --prefix="$LGTM_WORKSPACE/installdir/usr" --disable-doxygen-doc
     - make install
     - export PKG_CONFIG_PATH="$LGTM_WORKSPACE/installdir/usr/lib/pkgconfig:$PKG_CONFIG_PATH"
     - export LD_LIBRARY_PATH="$LGTM_WORKSPACE/installdir/usr/lib:$LD_LIBRARY_PATH"
     - cd "$LGTM_WORKSPACE"
-    - wget https://github.com/tpm2-software/tpm2-tools/archive/master.tar.gz
-    - tar -xavf master.tar.gz && rm master.tar.gz
-    - cd "tpm2-tools-master"
+    - git clone https://github.com/tpm2-software/tpm2-tools.git
+    - cd "tpm2-tools"
     - ./bootstrap
     - ./configure --prefix="$LGTM_WORKSPACE/installdir/usr"
     - make install
