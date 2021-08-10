@@ -196,6 +196,9 @@ struct tpm_op_data {
             TPM2B_DATA label;
         } rsa;
         struct {
+            TPMT_SIG_SCHEME sig;
+        } hmac;
+        struct {
             TPMI_ALG_SYM_MODE mode;
             TPM2B_IV iv;
             struct {
@@ -1113,6 +1116,38 @@ static CK_RV flatten_ecdsa(TPMS_SIGNATURE_ECDSA *ecdsa, CK_BYTE_PTR sig, CK_ULON
     return CKR_OK;
 }
 
+static CK_RV flatten_hmac(TPMT_HA *hmac, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+
+    CK_ULONG buffer_len = 0;
+    switch(hmac->hashAlg) {
+    case TPM2_ALG_SHA1:
+        buffer_len = 20;
+        break;
+    case TPM2_ALG_SHA256:
+        buffer_len = 32;
+        break;
+    case TPM2_ALG_SHA384:
+        buffer_len = 48;
+        break;
+    case TPM2_ALG_SHA512:
+        buffer_len = 64;
+        break;
+    default:
+        LOGE("Could not flatten HMAC signature");
+        return CKR_GENERAL_ERROR;
+    }
+
+    if (buffer_len > *siglen) {
+        return CKR_BUFFER_TOO_SMALL;
+    }
+
+    /* copy N bytes (digest length) from the biggest buffer union */
+    memcpy(sig, hmac->digest.sha512, buffer_len);
+    *siglen = buffer_len;
+
+    return CKR_OK;
+}
+
 static CK_RV sig_flatten(TPMT_SIGNATURE *signature, TPMT_SIG_SCHEME *scheme, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
 
     switch(scheme->scheme) {
@@ -1122,6 +1157,8 @@ static CK_RV sig_flatten(TPMT_SIGNATURE *signature, TPMT_SIG_SCHEME *scheme, CK_
         return flatten_rsapss(&signature->signature.rsapss, sig, siglen);
     case TPM2_ALG_ECDSA:
         return flatten_ecdsa(&signature->signature.ecdsa, sig, siglen);
+    case TPM2_ALG_HMAC:
+        return flatten_hmac(&signature->signature.hmac, sig, siglen);
         /* no default */
     }
 
@@ -1169,8 +1206,22 @@ CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_
     TPMI_DH_OBJECT handle = tobj->tpm_handle;
     ESYS_CONTEXT *ectx = tctx->esys_ctx;
     ESYS_TR session = tctx->hmac_session;
-    TPMT_SIG_SCHEME *scheme = opdata->op_type == CKK_RSA ? &opdata->rsa.sig :
-            &opdata->ecc.sig;
+    TPMT_SIG_SCHEME *scheme = NULL;
+    switch(opdata->op_type) {
+        case CKK_RSA:
+            scheme = &opdata->rsa.sig;
+            break;
+        case CKK_EC:
+            scheme = &opdata->ecc.sig;
+            break;
+        case CKK_GENERIC_SECRET:
+            scheme = &opdata->hmac.sig;
+            break;
+        default:
+            LOGE("Unknown opdata op_type selector for sign, got: 0x%x", opdata->op_type);
+            return CKR_GENERAL_ERROR;
+    }
+
 
     TPM2B_DIGEST tdigest;
     if (sizeof(tdigest.buffer) < datalen) {
@@ -1221,6 +1272,86 @@ CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_
     free(signature);
 
     return rv;
+}
+
+static CK_RV init_sig_from_mech(TPMT_SIG_SCHEME *scheme, CK_BYTE_PTR sig, CK_ULONG siglen, TPMT_SIGNATURE *tpmsig) {
+
+    tpmsig->sigAlg = scheme->scheme;
+    tpmsig->signature.any.hashAlg = scheme->details.any.hashAlg;
+
+    if (tpmsig->sigAlg != TPM2_ALG_HMAC) {
+        LOGE("Cannot convert signature format, expected TPM2_ALG_HMAC, got 0x%x", tpmsig->sigAlg);
+        return CKR_GENERAL_ERROR;
+    }
+
+    /* Just populate the biggest buffer in the union */
+    if (siglen > sizeof(tpmsig->signature.hmac.digest.sha512)) {
+        LOGE("Expected HMAC signature to be less than %zu, got %lu",
+                sizeof(tpmsig->signature.hmac.digest.sha512), siglen);
+        return CKR_BUFFER_TOO_SMALL;
+    }
+
+    memcpy(tpmsig->signature.hmac.digest.sha512, sig, siglen);
+
+    return CKR_OK;
+}
+
+CK_RV tpm_verify(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen) {
+    assert(opdata);
+
+    tobject *tobj = opdata->tobj;
+    assert(tobj);
+
+    tpm_ctx *tctx = opdata->ctx;
+    assert(tctx);
+
+    TPMI_DH_OBJECT handle = tobj->tpm_handle;
+    ESYS_CONTEXT *ectx = tctx->esys_ctx;
+
+    /*
+     * Only HMAC should be going the way of verify to the TPM, asym ciphers should use SW for both ease of
+     * integration with certificate objects but performance as well.
+     */
+    assert(opdata->op_type == CKK_GENERIC_SECRET);
+    TPMT_SIG_SCHEME *scheme = &opdata->hmac.sig;
+
+    // Copy the data into the digest block
+    TPM2B_DIGEST msgdigest;
+    if (sizeof(msgdigest.buffer) < datalen) {
+        return CKR_DATA_LEN_RANGE;
+    }
+    memcpy(msgdigest.buffer, data, datalen);
+    msgdigest.size = datalen;
+
+    /*
+     * TODO this would be a good candidate to move into the init
+     */
+    TPMT_SIGNATURE tpmsig;
+    CK_RV rv = init_sig_from_mech(scheme, sig, siglen, &tpmsig);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    TPMT_TK_VERIFIED *validation = NULL;
+    TSS2_RC rval = Esys_VerifySignature(
+            ectx,
+            handle,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            &msgdigest,
+            &tpmsig,
+            &validation);
+    if (rval != TPM2_RC_SUCCESS) {
+        if (rval != TPM2_RC_SIGNATURE) {
+            LOGE("Esys_VerifySignature: %s", Tss2_RC_Decode(rval));
+            return CKR_GENERAL_ERROR;
+        }
+        return CKR_SIGNATURE_INVALID;
+    }
+
+    Esys_Free(validation);
+    return CKR_OK;
 }
 
 CK_RV tpm_readpub(tpm_ctx *ctx,
@@ -1789,6 +1920,94 @@ CK_RV tpm_aes_ctr_get_opdata(mdetail *mdtl,
     /* The counter value for the TPM IS THE WHOLE IV, SO USE IV */
     opdata->sym.iv.size = sizeof(params->cb);
     memcpy(opdata->sym.iv.buffer, params->cb, sizeof(params->cb));
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_hmac_sha1_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
+    UNUSED(mech);
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->hmac.sig.scheme = TPM2_ALG_HMAC;
+    opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA1;
+
+    set_common_opdata(opdata, tctx, tobj, CKK_GENERIC_SECRET);
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_hmac_sha256_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
+    UNUSED(mech);
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->hmac.sig.scheme = TPM2_ALG_HMAC;
+    opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA256;
+
+    set_common_opdata(opdata, tctx, tobj, CKK_GENERIC_SECRET);
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_hmac_sha384_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
+    UNUSED(mech);
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->hmac.sig.scheme = TPM2_ALG_HMAC;
+    opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA384;
+
+    set_common_opdata(opdata, tctx, tobj, CKK_GENERIC_SECRET);
+
+    *outdata = opdata;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_hmac_sha512_get_opdata(mdetail *mdtl,
+        tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata) {
+    UNUSED(mdtl);
+    UNUSED(mech);
+    assert(outdata);
+    assert(mech);
+
+    tpm_op_data *opdata = tpm_opdata_new(mdtl, mech);
+    if (!opdata) {
+        return CKR_HOST_MEMORY;
+    }
+
+    opdata->hmac.sig.scheme = TPM2_ALG_HMAC;
+    opdata->rsa.sig.details.any.hashAlg = TPM2_ALG_SHA512;
+
+    set_common_opdata(opdata, tctx, tobj, CKK_GENERIC_SECRET);
 
     *outdata = opdata;
 
@@ -3590,6 +3809,14 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
         if_add_mech(algs, TPM2_ALG_CFB, CKM_AES_CFB128);
         if_add_mech(algs, TPM2_ALG_ECB, CKM_AES_ECB);
         if_add_mech(algs, TPM2_ALG_CTR, CKM_AES_CTR);
+    }
+
+    /* HMAC */
+    if (is_algorithm_supported(algs, TPM2_ALG_KEYEDHASH)) {
+        if_add_mech(algs, TPM2_ALG_SHA1, CKM_SHA_1_HMAC);
+        if_add_mech(algs, TPM2_ALG_SHA256, CKM_SHA256_HMAC);
+        if_add_mech(algs, TPM2_ALG_SHA384, CKM_SHA384_HMAC);
+        if_add_mech(algs, TPM2_ALG_SHA512, CKM_SHA512_HMAC);
     }
 
 out:

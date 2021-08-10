@@ -199,9 +199,20 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
         }
     }
 
-    /* TPM is only used on sign operations, not verify */
+    /* TPM is only used on sign operations, not verify. This is because
+     * with asymmetric key pairs we can use the public key for verification in SW
+     * without needing to involve the TPM. This with HMAC we need to use the TPM
+     * verify since the key is only resident in the TPM.
+     */
+    bool is_hmac = false;
+    rv = mech_is_HMAC(tok->mdtl, mechanism, &is_hmac);
+    if (rv != CKR_OK) {
+        LOGE("Could not determine if algorithm is HMAC or not");
+        return rv;
+    }
+
     tpm_op_data *tpm_opdata = NULL;
-    if (op == operation_sign) {
+    if (op == operation_sign || is_hmac) {
 
         rv = update_pss_sig_state(tok, tobj);
         if (rv != CKR_OK) {
@@ -232,7 +243,8 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
         return CKR_HOST_MEMORY;
     }
 
-    if (op != operation_sign) {
+    /* Use SW Verify if it's an asymmetric key with pkey set */
+    if (op != operation_sign && opdata->pkey) {
         opdata->crypto_opdata->use_sw = true;
         rv = sw_encrypt_data_init(tok->mdtl,
                 mechanism, tobj, &opdata->crypto_opdata->cryptopdata.sw_enc_data);
@@ -559,8 +571,12 @@ CK_RV verify_final (session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG signature_
         memcpy(hash, opdata->buffer, datalen);
     }
 
-    rv = ssl_util_sig_verify(opdata->pkey, opdata->padding, opdata->md,
+    if (opdata->pkey) {
+        rv = ssl_util_sig_verify(opdata->pkey, opdata->padding, opdata->md,
             hash, hash_len, signature, signature_len);
+    } else {
+        rv = tpm_verify(opdata->crypto_opdata->cryptopdata.tpm_opdata, hash, hash_len, signature, signature_len);
+    }
 
 out:
     assert(tobj);

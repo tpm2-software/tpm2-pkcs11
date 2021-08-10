@@ -25,7 +25,8 @@ class Tpm2(object):
     ALGS = [
         'rsa1024', 'rsa2048', 'rsa3072', 'rsa4096',
         'aes128', 'aes256',
-        'ecc224', 'ecc256', 'ecc384', 'ecc521'
+        'ecc224', 'ecc256', 'ecc384', 'ecc521',
+        'hmac:sha1', 'hmac:sha256', 'hmac:sha384', 'hmac:sha512'
     ]
 
     TEMPLATES = {
