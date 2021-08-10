@@ -207,6 +207,10 @@ tpm2_ptool import --privkey="$TPM2_PKCS11_STORE/id_ec_nopass" --key-label="impor
 tpm2_ptool addkey --algorithm=rsa2048 --label="empty-pin" --key-label="rsa_key" --id='rsa_key' --path=$TPM2_PKCS11_STORE
 tpm2_ptool addkey --algorithm=ecc256 --label="empty-pin" --key-label="ecc_key" --id='ecc_key' --path=$TPM2_PKCS11_STORE
 
+# verify the token and all the objects
+echo "Adding 1 x509 Certificate under token \"label\""
+tpm2_ptool verify --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+
 echo "RUN COMMAND BELOW BEFORE make check"
 echo "export TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
 
