@@ -243,6 +243,15 @@ CK_RV ssl_util_tobject_to_evp(EVP_PKEY **outpkey, tobject *obj) {
         return rv;
     }
 
+    else if (key_type == CKK_SHA_1_HMAC ||
+               key_type == CKK_SHA256_HMAC ||
+               key_type == CKK_SHA384_HMAC ||
+               key_type == CKK_SHA512_HMAC) {
+           /* Ignore HMAC keys no public operation possible */
+           *outpkey = NULL;
+           return CKR_OK;
+    }
+
     EVP_PKEY *pkey = EVP_PKEY_new();
     if (!pkey) {
         LOGE("oom");

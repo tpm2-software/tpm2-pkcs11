@@ -35,6 +35,7 @@ enum mechanism_flags {
     mf_ecc           = 1 << 10,
     mf_aes           = 1 << 11,
     mf_force_synthetic = 1 << 12,
+    mf_hmac          = 1 << 13,
 };
 
 typedef struct mdetail_entry mdetail_entry;
@@ -184,6 +185,12 @@ static const mdetail_entry _g_mechs_templ[] = {
     { .type = CKM_SHA256, .flags = mf_is_digester|mf_aes, .validator = hash_validator, .get_digester = sha256_get_digester },
     { .type = CKM_SHA384, .flags = mf_is_digester|mf_aes, .validator = hash_validator, .get_digester = sha384_get_digester },
     { .type = CKM_SHA512, .flags = mf_is_digester|mf_aes, .validator = hash_validator, .get_digester = sha512_get_digester },
+
+    /* hmac */
+    { .type = CKM_SHA_1_HMAC,  .flags = mf_sign|mf_verify|mf_hmac, .validator = hash_validator, .get_halg = sha1_get_halg, .get_digester = sha1_get_digester, .get_tpm_opdata = tpm_hmac_sha1_get_opdata },
+    { .type = CKM_SHA256_HMAC, .flags = mf_sign|mf_verify|mf_hmac, .validator = hash_validator, .get_halg = sha256_get_halg, .get_digester = sha256_get_digester, .get_tpm_opdata = tpm_hmac_sha256_get_opdata },
+    { .type = CKM_SHA384_HMAC, .flags = mf_sign|mf_verify|mf_hmac, .validator = hash_validator, .get_halg = sha384_get_halg, .get_digester = sha384_get_digester, .get_tpm_opdata = tpm_hmac_sha384_get_opdata },
+    { .type = CKM_SHA512_HMAC, .flags = mf_sign|mf_verify|mf_hmac, .validator = hash_validator, .get_halg = sha512_get_halg, .get_digester = sha512_get_digester, .get_tpm_opdata = tpm_hmac_sha512_get_opdata },
 };
 
 const rsa_detail _g_rsa_keysizes_templ [] = {
@@ -1331,6 +1338,23 @@ CK_RV mech_is_hashing_needed(mdetail *m,
     }
 
     *is_hashing_needed = halg != 0;
+
+    return CKR_OK;
+}
+
+CK_RV mech_is_HMAC(mdetail *m, CK_MECHANISM_PTR mech, bool *is_hmac) {
+
+    check_pointer(m);
+    check_pointer(mech);
+    check_pointer(is_hmac);
+
+    mdetail_entry *d = mlookup(m, mech->mechanism);
+    if (!d) {
+        LOGE("Mechanism not supported, got: 0x%lx", mech->mechanism);
+        return CKR_MECHANISM_INVALID;
+    }
+
+    *is_hmac = !!(d->flags & mf_hmac);
 
     return CKR_OK;
 }

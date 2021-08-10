@@ -176,6 +176,26 @@ CK_RV tobject_get_max_buf_size(tobject *tobj, size_t *maxsize) {
         return CKR_OK;
     }
 
+    if (key_type == CKK_SHA_1_HMAC) {
+        *maxsize = 20;
+        return CKR_OK;
+    }
+
+    if (key_type == CKK_SHA256_HMAC) {
+        *maxsize = 32;
+        return CKR_OK;
+    }
+
+    if (key_type == CKK_SHA384_HMAC) {
+        *maxsize = 48;
+        return CKR_OK;
+    }
+
+    if (key_type == CKK_SHA512_HMAC) {
+        *maxsize = 64;
+        return CKR_OK;
+    }
+
     LOGE("Unknown signing key type, got: 0x%lx", key_type);
 
     return CKR_GENERAL_ERROR;

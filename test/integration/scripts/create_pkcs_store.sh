@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: BSD-2-Clause
 #!/usr/bin/env bash
 
+set -e
+
 if [ -z "$T" ]; then
     export T="$(cd "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
@@ -150,10 +152,9 @@ for i in `seq 0 1`; do
 done;
 echo "Added EC Keys"
 
-echo "Adding 1 x509 Certificate under token \"label\""
-
-# verify the token and all the objects
-tpm2_ptool verify --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+echo "Adding 1 HMAC:SHA256 key under token \"label\""
+tpm2_ptool addkey --algorithm=hmac:sha256 --label="label" --key-label="hmac0" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+echo "Added HMAC Key"
 
 export OPENSSL_CONF="$TEST_FIXTURES/ossl.cnf"
 
