@@ -1,6 +1,7 @@
 # Changelog
 
 ### next
+  * Support passwordless login for tokens, ie not setting CKF_LOGIN_REQUIRED.
   * Fixed compilation issues with GCC11.
   * Fixed erros on releases due to newer compilers from failing by only adding `-Werror` for non-release builds.
   * Fixed error message when the DB is too new in tpm2_ptool.
