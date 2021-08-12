@@ -13,6 +13,7 @@
 #include "mutex.h"
 #include "pkcs11.h"
 #include "session.h"
+#include "utils.h"
 
 #ifndef VERSION
   #warning "VERSION Not known at compile time, not embedding..."
@@ -27,47 +28,6 @@ static const CK_UTF8CHAR LIBRARY_MANUFACTURER[] = "tpm2-software.github.io";
            .minor = CRYPTOKI_VERSION_MINOR \
          }
 
-static void parse_lib_version(CK_BYTE *major, CK_BYTE *minor) {
-
-    char buf[] = PACKAGE_VERSION;
-
-    char *minor_str = "0";
-    const char *major_str = &buf[0];
-
-    char *split = strchr(buf, '.');
-    if (split) {
-        split[0] = '\0';
-        minor_str = &split[1];
-    }
-
-    if (!major_str[0] || !minor_str[0]) {
-        *major = *minor = 0;
-        return;
-    }
-
-    char *endptr = NULL;
-    unsigned long val;
-    errno = 0;
-    val = strtoul(major_str, &endptr, 10);
-    if (errno != 0 || endptr[0] || val > UINT8_MAX) {
-        LOGW("Could not strtoul(%s): %s", major_str, strerror(errno));
-        *major = *minor = 0;
-        return;
-    }
-
-    *major = val;
-
-    endptr = NULL;
-    val = strtoul(minor_str, &endptr, 10);
-    if (errno != 0 || endptr[0] || val > UINT8_MAX) {
-        LOGW("Could not strtoul(%s): %s", minor_str, strerror(errno));
-        *major = *minor = 0;
-        return;
-    }
-
-    *minor = val;
-}
-
 CK_RV general_get_info(CK_INFO *info) {
     check_pointer(info);
 
@@ -81,7 +41,7 @@ CK_RV general_get_info(CK_INFO *info) {
         str_padded_copy(_info_.manufacturerID, LIBRARY_MANUFACTURER);
         str_padded_copy(_info_.libraryDescription, LIBRARY_DESCRIPTION);
 
-        parse_lib_version(&_info_.libraryVersion.major,
+        parse_lib_version(PACKAGE_VERSION, &_info_.libraryVersion.major,
                 &_info_.libraryVersion.minor);
 
         _info = &_info_;

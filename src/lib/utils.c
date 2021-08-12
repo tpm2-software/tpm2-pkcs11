@@ -499,3 +499,69 @@ CK_RV remove_pkcs7_pad(CK_BYTE_PTR in, CK_ULONG inlen,
 
     return CKR_OK;
 }
+
+void parse_lib_version(const char *userbuf, CK_BYTE *major, CK_BYTE *minor) {
+
+    if (!userbuf || !userbuf[0]) {
+        *major = *minor = 0;
+        return;
+    }
+
+    bool is_release = strchr(userbuf, '-') == NULL;
+    if (!is_release) {
+        *major = *minor = 0;
+        return;
+    }
+
+    /* don't modify the caller */
+    char *buf = strdup(userbuf);
+    if (!buf) {
+        LOGE("oom");
+        *major = *minor = 0;
+        return;
+    }
+
+    char *minor_str = "0";
+    const char *major_str = &buf[0];
+
+
+    char *split = strchr(buf, '.');
+    if (split) {
+        split[0] = '\0';
+        minor_str = &split[1];
+        split = strchr(minor_str, '.');
+        if (split) {
+            split[0]='\0';
+        }
+    }
+
+    if (!major_str[0] || !minor_str[0]) {
+        *major = *minor = 0;
+        goto out;
+    }
+
+    char *endptr = NULL;
+    unsigned long val;
+    errno = 0;
+    val = strtoul(major_str, &endptr, 10);
+    if (errno != 0 || endptr[0] || val > UINT8_MAX) {
+        LOGW("Could not strtoul(%s): %s", major_str, strerror(errno));
+        *major = *minor = 0;
+        goto out;
+    }
+
+    *major = val;
+
+    endptr = NULL;
+    val = strtoul(minor_str, &endptr, 10);
+    if (errno != 0 || endptr[0] || val > UINT8_MAX) {
+        LOGW("Could not strtoul(%s): %s", minor_str, strerror(errno));
+        *major = *minor = 0;
+        goto out;
+    }
+
+    *minor = val;
+
+out:
+    free(buf);
+}

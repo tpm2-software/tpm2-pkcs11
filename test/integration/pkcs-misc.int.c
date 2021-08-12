@@ -113,45 +113,6 @@ static void test_get_slot_list(void **state) {
     assert_true(tinfo.flags & CKF_TOKEN_INITIALIZED);
 }
 
-static void parse_lib_version(CK_BYTE *major, CK_BYTE *minor) {
-
-    char buf[] = PACKAGE_VERSION;
-
-    char *minor_str = "0";
-    const char *major_str = &buf[0];
-
-    char *split = strchr(buf, '.');
-    if (split) {
-        split[0] = '\0';
-        minor_str = split + 1;
-    }
-
-    if (!major_str[0] || !minor_str[0]) {
-        *major = *minor = 0;
-        return;
-    }
-
-    char *endptr = NULL;
-    unsigned long val;
-    errno = 0;
-    val = strtoul(major_str, &endptr, 10);
-    if (errno != 0 || endptr[0] || val > UINT8_MAX) {
-        *major = *minor = 0;
-        return;
-    }
-
-    *major = val;
-
-    endptr = NULL;
-    val = strtoul(minor_str, &endptr, 10);
-    if (errno != 0 || endptr[0] || val > UINT8_MAX) {
-        *major = *minor = 0;
-        return;
-    }
-
-    *minor = val;
-}
-
 static void test_get_info(void **state) {
 
     UNUSED(state);
@@ -173,7 +134,7 @@ static void test_get_info(void **state) {
 
     CK_BYTE major;
     CK_BYTE minor;
-    parse_lib_version(&major, &minor);
+    parse_lib_version(PACKAGE_VERSION, &major, &minor);
     assert_int_equal(info.libraryVersion.major, major);
     assert_int_equal(info.libraryVersion.minor, minor);
 }

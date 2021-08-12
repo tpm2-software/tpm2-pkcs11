@@ -122,6 +122,25 @@ CK_RV remove_pkcs7_pad(CK_BYTE_PTR in, CK_ULONG inlen,
 CK_RV apply_pkcs7_pad(const CK_BYTE_PTR in, CK_ULONG inlen,
         CK_BYTE_PTR out, CK_ULONG_PTR outlen);
 
+/**
+ * Given a git describe string returns a major and minor package version or 0's for both
+ * if its a development build. The patch level is ignored.
+ *
+ * Example strings and returns:
+ * "1" --> (1, 0)
+ * "1.1" --> (1, 1)
+ * "1.2.1" --> (1, 2)
+ * "1.6.0-42-gb462a23778ea-dirty: --> (0, 0)
+ *
+ * @param buf
+ *  The string to parse.
+ * @param major
+ *  The major version of the library.
+ * @param minor
+ *  The minor version of the library.
+ */
+void parse_lib_version(const char *buf, CK_BYTE *major, CK_BYTE *minor);
+
 /*
  * Work around bugs in clang not including the builtins, and when asan is enabled
  * ending up in a nightmare of having both the ASAN and BUILTINS defined and linked
