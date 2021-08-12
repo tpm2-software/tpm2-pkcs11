@@ -3,6 +3,8 @@
 #ifndef TEST_INTEGRATION_TEST_H_
 #define TEST_INTEGRATION_TEST_H_
 
+#include "config.h"
+
 /* Set up ALL the headers needed so tests can just use #include "test.h" */
 #include <errno.h>
 #include <stdarg.h>
