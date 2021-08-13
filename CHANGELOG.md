@@ -17,6 +17,7 @@
   * Added tpm2\_ptool support for ECC key size 192.
   * Added support passwordless login for tokens, ie not setting CKF_LOGIN_REQUIRED.
   * Fixed Running integration tests when Java version has the `-ea`, like on Debian 11 and OpenJDK 17.
+  * Added support for HMAC keys using tpm2\_ptool addkey and the C_Sign and C_Verify interfaces.
 
 ### 1.6.0 - 2021-05-03
   * Spelling and grammar fixes throughout the project.
