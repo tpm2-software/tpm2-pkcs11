@@ -222,5 +222,16 @@ tpm2_readpublic -c "$tempdir/ecc-key.ctx" -f pem -o "$tempdir/ecc-key.pem"
 
 openssl dgst -sha1 -verify "$tempdir/ecc-key.pem" -signature "$tempdir/sig" "$tempdir/data"
 
+# Add an HMAC SHA1 key and test it. We use SHA1 do to limited support in pkcs11-tool not supporting SHA256+
+tpm2_create -C "$tempdir/primary.ctx" -Ghmac:sha1 -u "$tempdir/key-hmac.pub" -r "$tempdir/key-hmac.priv"
+
+tpm2_ptool link --label=eccdefault --userpin=myuserpin --id=987654321 --key-label=tpm2toolhmackey \
+    --path=$TPM2_PKCS11_STORE "$tempdir/key-ecc.priv" "$tempdir/key-ecc.pub"
+
+
+# Well, pkcs11-tool is broken, it requires all sign operations to be conducted with a CKO_PRIVATE_KEY and HMAC keys
+# are CKO_SECRET_KEY.
+# tpm2_pkcs11-tool --token-label=label --login --pin=myuserpin --sign --id='393837363534333231' --input-file=data.msg \
+# -mechanism=SHA-1-HMAC --output-file=data.sig
 
 exit 0
