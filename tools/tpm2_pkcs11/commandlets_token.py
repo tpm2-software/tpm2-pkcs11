@@ -177,8 +177,8 @@ class VerifyCommand(Command):
                     tobjauth = wrapper.unwrap(encauth).decode()
 
                 verify_output['objects'].append({
-                    'id: ' : tobj['id'],
-                    'auth: ' : tobjauth,
+                    'id' : tobj['id'],
+                    'auth' : tobjauth,
                     'encauth' : encauth
                 })
 
