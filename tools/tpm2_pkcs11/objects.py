@@ -287,15 +287,23 @@ class PKCS11SecretKey(PKCS11Key):
 
     def __init__(self, objtype, attrs, auth=None, tpm_priv=None, tpm_pub=None):
 
-        def _get_def(_a):
-            return attrs[CKA_ENCRYPT] if _a in attrs else False if objtype == CKK_GENERIC_SECRET else True
+        # If a caller doesn't specify the attribute it matters what kind of key it is. HMAC
+        # keys don't decrypt/encrypt they verify/sign, where as AES keys do the former.
+        def _get_encdec(_a, value, defvalue):
+            if _a in attrs:
+                return attrs[_a]
+
+            if objtype in [ CKK_SHA_1_HMAC, CKK_SHA256_HMAC, CKK_SHA384_HMAC, CKK_SHA512_HMAC ]:
+                return value;
+
+            return defvalue
 
         add = {
             CKA_SENSITIVE: True,
-            CKA_ENCRYPT: _get_def(CKA_ENCRYPT),
-            CKA_DECRYPT: _get_def(CKA_DECRYPT),
-            CKA_SIGN: attrs[CKA_SIGN] if CKA_SIGN in attrs else attrs[CKA_ENCRYPT],
-            CKA_VERIFY: attrs[CKA_DECRYPT] if CKA_DECRYPT in attrs else attrs[CKA_VERIFY],
+            CKA_ENCRYPT: _get_encdec(CKA_ENCRYPT, False, True),
+            CKA_DECRYPT: _get_encdec(CKA_DECRYPT, False, True),
+            CKA_SIGN: _get_encdec(CKA_SIGN, True, False),
+            CKA_VERIFY: _get_encdec(CKA_VERIFY, True, False),
             CKA_WRAP: False,
             CKA_UNWRAP: False,
             CKA_EXTRACTABLE: attrs[CKA_EXTRACTABLE],
@@ -473,7 +481,7 @@ def PKCS11ObjectFactory(public_yaml_data, tpm, auth, init_pubattrs, init_privatt
 
         privattrs[CKA_KEY_GEN_MECHANISM] = metadata[hashalg]['mechs'][0]
         privattrs[CKA_SIGN] = 'sign' in tpmattrs
-        privattrs[CKA_VERIFY] = 'decrypt' in tpmattrs
+        privattrs[CKA_VERIFY] = True
         privattrs[CKA_EXTRACTABLE] = not ('fixedtpm' in tpmattrs and 'fixedparent' in tpmattrs)
         privattrs[CKA_LOCAL] = 'sensitivedataorigin' in tpmattrs
         privattrs[CKA_ALWAYS_SENSITIVE] = not privattrs[CKA_EXTRACTABLE]
