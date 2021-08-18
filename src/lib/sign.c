@@ -336,7 +336,7 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
     twist digest_buf = NULL;
 
     size_t expected_sig_len = 0;
-    rv = tobject_get_max_buf_size(tobj, &expected_sig_len);
+    rv = tobject_get_min_buf_size(tobj, &opdata->mech, &expected_sig_len);
     if (rv != CKR_OK) {
         return rv;
     }

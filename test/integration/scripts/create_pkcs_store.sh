@@ -208,6 +208,10 @@ tpm2_ptool import --privkey="$TPM2_PKCS11_STORE/id_ec_nopass" --key-label="impor
 tpm2_ptool addkey --algorithm=rsa2048 --label="empty-pin" --key-label="rsa_key" --id='rsa_key' --path=$TPM2_PKCS11_STORE
 tpm2_ptool addkey --algorithm=ecc256 --label="empty-pin" --key-label="ecc_key" --id='ecc_key' --path=$TPM2_PKCS11_STORE
 
+# Import an HMAC key under "label" so its easy to get at in C code test
+dd if=/dev/urandom of="$TPM2_PKCS11_STORE/hmac.key" bs=32 count=1
+tpm2_ptool import --algorithm="hmac" --privkey="$TPM2_PKCS11_STORE/hmac.key" --key-label="imported_hmac_key" --label="label" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+
 # verify the token and all the objects
 echo "Adding 1 x509 Certificate under token \"label\""
 tpm2_ptool verify --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM2_PKCS11_STORE

@@ -83,9 +83,10 @@ CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech) {
     return CKR_MECHANISM_INVALID;
 }
 
-CK_RV tobject_get_max_buf_size(tobject *tobj, size_t *maxsize) {
+CK_RV tobject_get_min_buf_size(tobject *tobj, CK_MECHANISM_PTR mech, size_t *maxsize) {
 
     assert(tobj);
+    assert(mech);
 
     CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_KEY_TYPE);
     if (!a) {
@@ -191,9 +192,32 @@ CK_RV tobject_get_max_buf_size(tobject *tobj, size_t *maxsize) {
         return CKR_OK;
     }
 
+    /* Best guess on buffer size for CKK_GENERIC_SECRET */
     if (key_type == CKK_SHA512_HMAC) {
         *maxsize = 64;
         return CKR_OK;
+    }
+
+    if (key_type == CKK_GENERIC_SECRET) {
+
+        switch (mech->mechanism) {
+            case CKM_SHA_1_HMAC:
+                *maxsize = 20;
+                return CKR_OK;
+            case CKM_SHA256_HMAC:
+                *maxsize = 32;
+                return CKR_OK;
+            case CKM_SHA384_HMAC:
+                *maxsize = 48;
+                return CKR_OK;
+            case CKM_SHA512_HMAC:
+                *maxsize = 64;
+                return CKR_OK;
+            default:
+                LOGE("Cannot handle CKK_GENERIC_SECRET Mechanism: 0x%x",
+                        mech->mechanism);
+                return CKR_MECHANISM_INVALID;
+        }
     }
 
     LOGE("Unknown signing key type, got: 0x%lx", key_type);
