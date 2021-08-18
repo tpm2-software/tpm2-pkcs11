@@ -96,7 +96,8 @@ class NewKeyCommandBase(Command):
 
     @staticmethod
     def new_key_save(alg, keylabel, tid, label, privblob, pubblob,
-                     tertiarypubdata, encobjauth, db, tpm2, extra_privattrs=None, extra_pubattrs=None):
+                     tertiarypubdata, encobjauth, db, tpm2, extra_privattrs=None, extra_pubattrs=None,
+                     override_keylen=None):
         token = db.gettoken(label)
 
         #
@@ -129,7 +130,8 @@ class NewKeyCommandBase(Command):
         if initial_pubattrs and extra_pubattrs:
             initial_pubattrs.update(extra_pubattrs)
 
-        objects = PKCS11ObjectFactory(y, tpm2, encobjauth, initial_pubattrs, initial_privattrs, tpm_pub=pubblob, tpm_priv=privblob)
+        objects = PKCS11ObjectFactory(y, tpm2, encobjauth, initial_pubattrs, initial_privattrs,
+                      tpm_pub=pubblob, tpm_priv=privblob, override_keylen=override_keylen)
 
         # Store private to database
         db.addtertiary(token['id'], objects['private'])
@@ -200,9 +202,12 @@ class NewKeyCommandBase(Command):
                 always_auth = args['attr_always_authenticate']
                 priv_attrs = {CKA_ALWAYS_AUTHENTICATE : always_auth}
 
+                override_keylen = getattr(self, '_override_keylen', None)
+
                 return NewKeyCommandBase.new_key_save(
                     alg, key_label, tid, label, tertiarypriv, tertiarypub,
-                    tertiarypubdata, encobjauth, db, tpm2, extra_privattrs=priv_attrs)
+                    tertiarypubdata, encobjauth, db, tpm2, extra_privattrs=priv_attrs,
+                    override_keylen=override_keylen)
 
 
 @commandlet("import")
@@ -222,7 +227,7 @@ class ImportCommand(NewKeyCommandBase):
         group_parser.add_argument(
             '--algorithm',
             help='The type of the key.\n',
-            choices=['rsa', 'ecc'],
+            choices=['rsa', 'ecc', 'hmac'],
             required=False)
         group_parser.add_argument(
             '--passin',
@@ -236,6 +241,10 @@ class ImportCommand(NewKeyCommandBase):
 
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.importkey(
             pobj_handle, pobj['objauth'], objauth, privkey=privkey, alg=alg, passin=passin)
+
+        # We have no way of knowing the keylength of an hmac key
+        if alg == 'hmac':
+            self._override_keylen = os.path.getsize(privkey)
 
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 

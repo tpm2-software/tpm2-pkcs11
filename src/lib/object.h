@@ -89,7 +89,7 @@ CK_RV object_set_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
 
 CK_ATTRIBUTE_PTR tobject_get_attribute_full(tobject *tobj, CK_ATTRIBUTE_PTR attr);
 
-CK_RV tobject_get_max_buf_size(tobject *tobj, size_t *maxsize);
+CK_RV tobject_get_min_buf_size(tobject *tobj, CK_MECHANISM_PTR mech, size_t *maxsize);
 
 CK_RV object_mech_is_supported(tobject *tobj, CK_MECHANISM_PTR mech);
 

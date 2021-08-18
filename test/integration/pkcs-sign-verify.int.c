@@ -1342,6 +1342,147 @@ static void test_sign_verify_CKM_SHA256_HMAC(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
+static void test_sign_verify_CKM_SHA_1_HMAC(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    user_login(session);
+
+    CK_OBJECT_CLASS key_class = CKO_SECRET_KEY;
+    CK_KEY_TYPE key_type = CKK_GENERIC_SECRET;
+    CK_ATTRIBUTE tmpl[] = {
+        { CKA_CLASS, &key_class, sizeof(key_class)  },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+    };
+
+       /* FIND A generic key for HMAC */
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_MECHANISM mech = { .mechanism = CKM_SHA_1_HMAC };
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    const char *msg = "Hello World This is my message to HMAC";
+    CK_BYTE sig[20] = { 0 };
+    CK_ULONG sig_len = sizeof(sig);
+    rv = C_Sign(session, (CK_BYTE_PTR)msg, (CK_ULONG)strlen(msg), sig, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(sig_len, 20);
+
+    rv = C_VerifyInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Verify(session, (CK_BYTE_PTR)msg, (CK_ULONG)strlen(msg), sig, sig_len);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_Logout(session);
+    assert_int_equal(rv, CKR_OK);
+}
+
+static void test_sign_verify_CKM_SHA384_HMAC(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    user_login(session);
+
+    CK_OBJECT_CLASS key_class = CKO_SECRET_KEY;
+    CK_KEY_TYPE key_type = CKK_GENERIC_SECRET;
+    CK_ATTRIBUTE tmpl[] = {
+        { CKA_CLASS, &key_class, sizeof(key_class)  },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+    };
+
+       /* FIND A generic key for HMAC */
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_MECHANISM mech = { .mechanism = CKM_SHA384_HMAC };
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    const char *msg = "Hello World This is my message to HMAC";
+    CK_BYTE sig[48] = { 0 };
+    CK_ULONG sig_len = sizeof(sig);
+    rv = C_Sign(session, (CK_BYTE_PTR)msg, (CK_ULONG)strlen(msg), sig, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(sig_len, 48);
+
+    rv = C_VerifyInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Verify(session, (CK_BYTE_PTR)msg, (CK_ULONG)strlen(msg), sig, sig_len);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_Logout(session);
+    assert_int_equal(rv, CKR_OK);
+}
+
+static void test_sign_verify_CKM_SHA512_HMAC(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    user_login(session);
+
+    CK_OBJECT_CLASS key_class = CKO_SECRET_KEY;
+    CK_KEY_TYPE key_type = CKK_GENERIC_SECRET;
+    CK_ATTRIBUTE tmpl[] = {
+        { CKA_CLASS, &key_class, sizeof(key_class)  },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+    };
+
+       /* FIND A generic key for HMAC */
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_MECHANISM mech = { .mechanism = CKM_SHA512_HMAC };
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    const char *msg = "Hello World This is my message to HMAC";
+    CK_BYTE sig[64] = { 0 };
+    CK_ULONG sig_len = sizeof(sig);
+    rv = C_Sign(session, (CK_BYTE_PTR)msg, (CK_ULONG)strlen(msg), sig, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(sig_len, 64);
+
+    rv = C_VerifyInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Verify(session, (CK_BYTE_PTR)msg, (CK_ULONG)strlen(msg), sig, sig_len);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_Logout(session);
+    assert_int_equal(rv, CKR_OK);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
@@ -1378,6 +1519,12 @@ int main() {
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_ECDSA,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_cert_no_good,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_verify_CKM_SHA_1_HMAC,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_verify_CKM_SHA384_HMAC,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_verify_CKM_SHA512_HMAC,
             test_setup, test_teardown),
     };
 

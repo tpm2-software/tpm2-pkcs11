@@ -356,10 +356,43 @@ class PKCS11HMACKey(PKCS11SecretKey):
         super(PKCS11HMACKey, self).__init__(ckk_keytype, attrs, auth, tpm_priv, tpm_pub)
 
     def genmechs(self, tpm):
-        if CKA_ALLOWED_MECHANISMS not in self:
-            raise RuntimeError('Expected CKA_ALLOWED_MECHANISMS to be already populated')
 
-def PKCS11ObjectFactory(public_yaml_data, tpm, auth, init_pubattrs, init_privattrs, tpm_pub, tpm_priv):
+        ckk_to_ckm = {
+            CKK_SHA_1_HMAC : CKM_SHA_1_HMAC,
+            CKK_SHA256_HMAC : CKM_SHA256_HMAC,
+            CKK_SHA384_HMAC : CKM_SHA384_HMAC,
+            CKK_SHA512_HMAC : CKM_SHA512_HMAC
+        }
+
+        mechs = []
+        key_type = self[CKA_KEY_TYPE]
+        if key_type  == CKK_GENERIC_SECRET:
+            capdata = tpm.getcap('algorithms')
+            y = yaml.safe_load(capdata)
+
+            if 'sha1' in y:
+                mechs.append(CKM_SHA_1_HMAC)
+
+            if 'sha256' in y:
+                mechs.append(CKM_SHA256_HMAC)
+
+            if 'sha384' in y:
+                mechs.append(CKM_SHA384_HMAC)
+
+            if 'sha512' in y:
+                mechs.append(CKM_SHA512_HMAC)
+        elif key_type in ckk_to_ckm:
+            mechs.append(ckk_to_ckm[key_type])
+        else:
+            raise RuntimeError(f'Cannot handle HMAC Key of CKA_KEY_TYPE: {key_type:#x}')
+
+        if len(mechs) == 0:
+            raise RuntimeError("Expected at least one supported mechanism, got none")
+
+        self.update({CKA_ALLOWED_MECHANISMS: mechs})
+
+def PKCS11ObjectFactory(public_yaml_data, tpm, auth, init_pubattrs, init_privattrs,
+        tpm_pub, tpm_priv, override_keylen=None):
 
     objtype = public_yaml_data['type']['value']
     tpmattrs=public_yaml_data['attributes']['value'].split('|')
@@ -458,38 +491,42 @@ def PKCS11ObjectFactory(public_yaml_data, tpm, auth, init_pubattrs, init_privatt
     elif objtype == 'keyedhash':
 
         alg = public_yaml_data['algorithm']['value']
+        # YAML converts the TPM2_ALG_NULL string of "null" to None, so we need to check against
+        # raw to see if it is TPM2_ALG_NULL. If it is, we just igore it, as we can use any
+        # supported HASH alg.
         if alg != 'hmac':
-            raise RuntimeError('Cannot handle algorithm: {}'.format(alg))
+            if public_yaml_data['algorithm']['raw'] == 0x10:
+                hashalg = 'null'
+            else:
+                raise RuntimeError('Cannot handle algorithm: {}'.format(alg))
+        else:
+            hashalg = public_yaml_data['hash-alg']['value']
 
-        hashalg = public_yaml_data['hash-alg']['value']
-
-        # Their is no metadata for genmechs to reliably determine what the allowed mechanisms are,
+        # Their is no PKCS11 metadata for genmechs to reliably determine what the allowed mechanisms are,
         # since inferring keytype from bytes is a best guess, set up the mechanisms now
         # since it's not TPM dependent. The allowed mechs are intentionally a list for future expansion.
         # The keygen mechanism should always go first in the list
         metadata = {
-            'sha1'   : { 'keybytes' : 20, 'mechs' :  (CKM_SHA_1_HMAC,), 'keytype' : CKK_SHA_1_HMAC},
-            'sha256' : { 'keybytes' : 32, 'mechs' :  (CKM_SHA256_HMAC,), 'keytype' : CKK_SHA256_HMAC},
-            'sha384' : { 'keybytes' : 48, 'mechs' :  (CKM_SHA384_HMAC,), 'keytype' : CKK_SHA384_HMAC},
-            'sha512' : { 'keybytes' : 64, 'mechs' :  (CKM_SHA512_HMAC,), 'keytype' : CKK_SHA512_HMAC},
+            'sha1'   : { 'keybytes' : 20, 'keytype' : CKK_SHA_1_HMAC     },
+            'sha256' : { 'keybytes' : 32, 'keytype' : CKK_SHA256_HMAC    },
+            'sha384' : { 'keybytes' : 48, 'keytype' : CKK_SHA384_HMAC    },
+            'sha512' : { 'keybytes' : 64, 'keytype' : CKK_SHA512_HMAC    },
+            'null'   : { 'keybytes' : override_keylen, 'keytype' : CKK_GENERIC_SECRET }
         }
 
         if hashalg not in metadata:
             raise RuntimeError('Cannot handle hash algorithm: {}'.format(hashalg))
 
         privattrs[CKA_VALUE_LEN] = metadata[hashalg]['keybytes']
-
-        privattrs[CKA_KEY_GEN_MECHANISM] = metadata[hashalg]['mechs'][0]
         privattrs[CKA_SIGN] = 'sign' in tpmattrs
         privattrs[CKA_VERIFY] = True
         privattrs[CKA_EXTRACTABLE] = not ('fixedtpm' in tpmattrs and 'fixedparent' in tpmattrs)
         privattrs[CKA_LOCAL] = 'sensitivedataorigin' in tpmattrs
         privattrs[CKA_ALWAYS_SENSITIVE] = not privattrs[CKA_EXTRACTABLE]
         privattrs[CKA_NEVER_EXTRACTABLE] = not privattrs[CKA_EXTRACTABLE]
+        privattrs[CKA_KEY_GEN_MECHANISM] = CKM_GENERIC_SECRET_KEY_GEN
 
         privkey = PKCS11HMACKey(metadata[hashalg]['keytype'], privattrs, auth, tpm_pub=tpm_pub, tpm_priv=tpm_priv)
-
-        privkey.update({CKA_ALLOWED_MECHANISMS: metadata[hashalg]['mechs']})
 
     else:
         raise RuntimeError("Cannot handle keytype: {}".format(public_yaml_data['type']))
