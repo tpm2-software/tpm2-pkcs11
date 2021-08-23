@@ -6,7 +6,7 @@ function get_deps() {
 	# The list order is important and thus we can't use the keys of the dictionary as order is not preserved.
 	local github_deps=("tpm2-tss" "tpm2-abrmd" "tpm2-tools" "tpm2-tss-engine")
 	declare -A local config_flags=( ["tpm2-tss"]="--disable-doxygen-doc --enable-debug" ["tpm2-abrmd"]="--enable-debug" ["tpm2-tools"]="--disable-hardening --enable-debug" ["tpm2-tss-engine"]="--enable-tctienvvar")
-	declare -A local versions=( ["tpm2-tss"]="3.0.0" ["tpm2-abrmd"]="2.3.3" ["tpm2-tools"]="4.2" ["tpm2-tss-engine"]="v1.1.0")
+	declare -A local versions=( ["tpm2-tss"]="3.0.0" ["tpm2-abrmd"]="2.3.3" ["tpm2-tools"]="master" ["tpm2-tss-engine"]="v1.1.0")
 
 	echo "pwd starting: `pwd`"
 	pushd "$1"
