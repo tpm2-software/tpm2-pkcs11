@@ -1465,6 +1465,41 @@ static void test_sign_verify_CKM_SHA256_HMAC_large(void **state) {
 
     rv = C_Verify(session, (CK_BYTE_PTR)msg, msg_len, sig, sig_len);
     assert_int_equal(rv, CKR_OK);
+
+    /* Try 5.2 style returns */
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_SignUpdate(session, (CK_BYTE_PTR)msg, msg_len);
+    assert_int_equal(rv, CKR_OK);
+
+    sig_len = 0;
+    rv = C_SignFinal(session, NULL, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(sig_len, 32);
+
+    rv = C_SignFinal(session, sig, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(sig_len, 32);
+
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    sig_len = 0;
+    rv = C_Sign(session, (CK_BYTE_PTR)msg, msg_len, NULL, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(sig_len, 32);
+
+    rv = C_Sign(session, (CK_BYTE_PTR)msg, msg_len, sig, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(sig_len, 32);
+
+    rv = C_VerifyInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Verify(session, (CK_BYTE_PTR)msg, msg_len, sig, sig_len);
+    assert_int_equal(rv, CKR_OK);
+
     rv = C_Logout(session);
     assert_int_equal(rv, CKR_OK);
 }
