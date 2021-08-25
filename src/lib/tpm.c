@@ -12,6 +12,7 @@
 
 #include <openssl/asn1.h>
 #include <openssl/bn.h>
+#include <openssl/crypto.h>
 #include <openssl/ec.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
@@ -1193,6 +1194,68 @@ static CK_RV ecc_fixup_halg(TPMT_SIG_SCHEME *sig, CK_ULONG datalen) {
     return CKR_OK;
 }
 
+static CK_RV tpm_hmac(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    tobject *tobj = opdata->tobj;
+    assert(tobj);
+
+    tpm_ctx *tctx = opdata->ctx;
+    assert(tctx);
+
+    twist auth = tobj->unsealed_auth;
+    TPMI_DH_OBJECT handle = tobj->tpm_handle;
+
+    ESYS_TR session = tctx->hmac_session;
+
+    TPMI_ALG_HASH halg = opdata->hmac.sig.details.hmac.hashAlg;
+
+    TPM2B_MAX_BUFFER buffer;
+    if (sizeof(buffer.buffer) < datalen) {
+        return CKR_DATA_LEN_RANGE;
+    }
+    memcpy(buffer.buffer, data, datalen);
+    buffer.size = datalen;
+
+    bool result = set_esys_auth(opdata->ctx->esys_ctx, handle, auth);
+    if (!result) {
+        return CKR_GENERAL_ERROR;
+    }
+
+    TPM2B_DIGEST *hmac = NULL;
+
+    TSS2_RC rval = Esys_HMAC(tctx->esys_ctx,
+            handle,
+            session,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            &buffer,
+            halg,
+            &hmac);
+    if (rval != TPM2_RC_SUCCESS) {
+        LOGE("Esys_Sign: %s", Tss2_RC_Decode(rval));
+        return CKR_GENERAL_ERROR;
+    }
+
+    *siglen = hmac->size;
+
+    if (sig && *siglen < hmac->size) {
+        rv = CKR_BUFFER_TOO_SMALL;
+        goto out;
+    }
+
+    if (sig) {
+        memcpy(sig, hmac->buffer, hmac->size);
+    }
+
+    rv = CKR_OK;
+
+out:
+    Esys_Free(hmac);
+    return rv;
+}
+
 CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
     assert(opdata);
 
@@ -1215,8 +1278,7 @@ CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_
             scheme = &opdata->ecc.sig;
             break;
         case CKK_GENERIC_SECRET:
-            scheme = &opdata->hmac.sig;
-            break;
+            return tpm_hmac(opdata, data, datalen, sig, siglen);
         default:
             LOGE("Unknown opdata op_type selector for sign, got: 0x%x", opdata->op_type);
             return CKR_GENERAL_ERROR;
@@ -1274,84 +1336,28 @@ CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_
     return rv;
 }
 
-static CK_RV init_sig_from_mech(TPMT_SIG_SCHEME *scheme, CK_BYTE_PTR sig, CK_ULONG siglen, TPMT_SIGNATURE *tpmsig) {
-
-    tpmsig->sigAlg = scheme->scheme;
-    tpmsig->signature.any.hashAlg = scheme->details.any.hashAlg;
-
-    if (tpmsig->sigAlg != TPM2_ALG_HMAC) {
-        LOGE("Cannot convert signature format, expected TPM2_ALG_HMAC, got 0x%x", tpmsig->sigAlg);
-        return CKR_GENERAL_ERROR;
-    }
-
-    /* Just populate the biggest buffer in the union */
-    if (siglen > sizeof(tpmsig->signature.hmac.digest.sha512)) {
-        LOGE("Expected HMAC signature to be less than %zu, got %lu",
-                sizeof(tpmsig->signature.hmac.digest.sha512), siglen);
-        return CKR_BUFFER_TOO_SMALL;
-    }
-
-    memcpy(tpmsig->signature.hmac.digest.sha512, sig, siglen);
-
-    return CKR_OK;
-}
-
 CK_RV tpm_verify(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG siglen) {
     assert(opdata);
-
-    tobject *tobj = opdata->tobj;
-    assert(tobj);
-
-    tpm_ctx *tctx = opdata->ctx;
-    assert(tctx);
-
-    TPMI_DH_OBJECT handle = tobj->tpm_handle;
-    ESYS_CONTEXT *ectx = tctx->esys_ctx;
 
     /*
      * Only HMAC should be going the way of verify to the TPM, asym ciphers should use SW for both ease of
      * integration with certificate objects but performance as well.
      */
     assert(opdata->op_type == CKK_GENERIC_SECRET);
-    TPMT_SIG_SCHEME *scheme = &opdata->hmac.sig;
 
-    // Copy the data into the digest block
-    TPM2B_DIGEST msgdigest;
-    if (sizeof(msgdigest.buffer) < datalen) {
-        return CKR_DATA_LEN_RANGE;
-    }
-    memcpy(msgdigest.buffer, data, datalen);
-    msgdigest.size = datalen;
+    CK_BYTE cmp_sig[sizeof(((TPM2B_MAX_BUFFER *)NULL)->buffer)];
+    CK_ULONG cmp_sig_len = sizeof(cmp_sig);
 
-    /*
-     * TODO this would be a good candidate to move into the init
-     */
-    TPMT_SIGNATURE tpmsig;
-    CK_RV rv = init_sig_from_mech(scheme, sig, siglen, &tpmsig);
+    CK_RV rv = tpm_hmac(opdata, data, datalen, cmp_sig, &cmp_sig_len);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    TPMT_TK_VERIFIED *validation = NULL;
-    TSS2_RC rval = Esys_VerifySignature(
-            ectx,
-            handle,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            &msgdigest,
-            &tpmsig,
-            &validation);
-    if (rval != TPM2_RC_SUCCESS) {
-        if (rval != TPM2_RC_SIGNATURE) {
-            LOGE("Esys_VerifySignature: %s", Tss2_RC_Decode(rval));
-            return CKR_GENERAL_ERROR;
-        }
+    if (cmp_sig_len != siglen) {
         return CKR_SIGNATURE_INVALID;
     }
 
-    Esys_Free(validation);
-    return CKR_OK;
+    return CRYPTO_memcmp(sig, cmp_sig, cmp_sig_len) == 0 ? CKR_OK : CKR_SIGNATURE_INVALID;
 }
 
 CK_RV tpm_readpub(tpm_ctx *ctx,
