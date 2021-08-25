@@ -107,6 +107,7 @@ static CK_RV rsa_pss_hash_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list
 static CK_RV ecc_keygen_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
 static CK_RV ecdsa_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
 static CK_RV hash_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
+static CK_RV hmac_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
 static CK_RV rsa_pkcs_synthesizer(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs,
         CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen);
@@ -190,10 +191,10 @@ static const mdetail_entry _g_mechs_templ[] = {
     { .type = CKM_SHA512, .flags = mf_is_digester|mf_aes, .validator = hash_validator, .get_digester = sha512_get_digester },
 
     /* hmac */
-    { .type = CKM_SHA_1_HMAC,  .flags = mf_sign|mf_verify|mf_hmac, .validator = hash_validator, .get_halg = sha1_get_halg, .get_digester = sha1_get_digester, .get_tpm_opdata = tpm_hmac_sha1_get_opdata },
-    { .type = CKM_SHA256_HMAC, .flags = mf_sign|mf_verify|mf_hmac, .validator = hash_validator, .get_halg = sha256_get_halg, .get_digester = sha256_get_digester, .get_tpm_opdata = tpm_hmac_sha256_get_opdata },
-    { .type = CKM_SHA384_HMAC, .flags = mf_sign|mf_verify|mf_hmac, .validator = hash_validator, .get_halg = sha384_get_halg, .get_digester = sha384_get_digester, .get_tpm_opdata = tpm_hmac_sha384_get_opdata },
-    { .type = CKM_SHA512_HMAC, .flags = mf_sign|mf_verify|mf_hmac, .validator = hash_validator, .get_halg = sha512_get_halg, .get_digester = sha512_get_digester, .get_tpm_opdata = tpm_hmac_sha512_get_opdata },
+    { .type = CKM_SHA_1_HMAC,  .flags = mf_sign|mf_verify|mf_hmac, .validator = hmac_validator, .get_tpm_opdata = tpm_hmac_sha1_get_opdata   },
+    { .type = CKM_SHA256_HMAC, .flags = mf_sign|mf_verify|mf_hmac, .validator = hmac_validator, .get_tpm_opdata = tpm_hmac_sha256_get_opdata },
+    { .type = CKM_SHA384_HMAC, .flags = mf_sign|mf_verify|mf_hmac, .validator = hmac_validator, .get_tpm_opdata = tpm_hmac_sha384_get_opdata },
+    { .type = CKM_SHA512_HMAC, .flags = mf_sign|mf_verify|mf_hmac, .validator = hmac_validator, .get_tpm_opdata = tpm_hmac_sha512_get_opdata },
 };
 
 const rsa_detail _g_rsa_keysizes_templ [] = {
@@ -453,8 +454,36 @@ CK_RV hash_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
     }
 
     /* all known hashing digests are supported in software */
-
     return CKR_OK;
+}
+
+CK_RV hmac_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
+    UNUSED(attrs);
+    UNUSED(m);
+
+    /* The non general HMAC routines don't take params */
+    if (mech->pParameter || mech->ulParameterLen) {
+        return CKR_MECHANISM_PARAM_INVALID;
+    }
+
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(attrs, CKA_ALLOWED_MECHANISMS);
+    if (!a) {
+        LOGE("Expected CKA_ALLOWED_MECHANISMS");
+        return CKR_GENERAL_ERROR;
+    }
+
+    /* Is the mechanism in the list of allowed mechs? */
+    bool supported = false;
+    CK_ULONG i;
+    for (i=0; i < _L(a); i++) {
+        CK_MECHANISM_TYPE t = _P(a)[i];
+        if (t == mech->mechanism) {
+            supported = true;
+            break;
+        }
+    }
+
+    return supported ? CKR_OK : CKR_MECHANISM_INVALID;
 }
 
 CK_RV rsa_pkcs_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
