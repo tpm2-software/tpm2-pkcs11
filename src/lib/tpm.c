@@ -16,6 +16,7 @@
 #include <openssl/ec.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
+#include <openssl/rand.h>
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 
@@ -1194,7 +1195,7 @@ static CK_RV ecc_fixup_halg(TPMT_SIG_SCHEME *sig, CK_ULONG datalen) {
     return CKR_OK;
 }
 
-static CK_RV tpm_hmac(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+static CK_RV tpm_hmac_large(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -1211,17 +1212,139 @@ static CK_RV tpm_hmac(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, C
 
     TPMI_ALG_HASH halg = opdata->hmac.sig.details.hmac.hashAlg;
 
-    TPM2B_MAX_BUFFER buffer;
-    if (sizeof(buffer.buffer) < datalen) {
-        return CKR_DATA_LEN_RANGE;
+    bool result = set_esys_auth(opdata->ctx->esys_ctx, handle, auth);
+    if (!result) {
+        return CKR_GENERAL_ERROR;
     }
-    memcpy(buffer.buffer, data, datalen);
-    buffer.size = datalen;
+
+    TPM2B_AUTH seq_auth = {
+            .size = 32
+    };
+
+    int rc = RAND_bytes(seq_auth.buffer, seq_auth.size);
+    if (rc != 1) {
+        LOGE("Could not generate random sequence auth value for HMAC");
+        return CKR_GENERAL_ERROR;
+    }
+
+    ESYS_TR seq_handle = ESYS_TR_NONE;
+
+    TSS2_RC rval = Esys_HMAC_Start(tctx->esys_ctx,
+            handle,
+            session,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE,
+            &seq_auth,
+            halg,
+            &seq_handle);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_HMAC_Start: %s", Tss2_RC_Decode(rval));
+        return CKR_GENERAL_ERROR;
+    }
+
+    TPM2B_MAX_BUFFER buffer = { 0 };
+
+    CK_ULONG bytes_remaining = datalen;
+    while (bytes_remaining > sizeof(buffer.buffer)) {
+
+        off_t offset = datalen - bytes_remaining;
+        memcpy(buffer.buffer, &data[offset], sizeof(buffer.buffer));
+        buffer.size = sizeof(buffer.buffer);
+
+        rval = Esys_SequenceUpdate(tctx->esys_ctx,
+                seq_handle,
+                session,
+                ESYS_TR_NONE,
+                ESYS_TR_NONE,
+                &buffer);
+        if (rval != TSS2_RC_SUCCESS) {
+            LOGE("Esys_SequenceUpdate: %s", Tss2_RC_Decode(rval));
+            /* XXX what to do with a sequence handle? */
+            return CKR_GENERAL_ERROR;
+        }
+
+        bytes_remaining -= sizeof(buffer.buffer);
+    }
+
+    assert(bytes_remaining <= sizeof(buffer.buffer));
+
+    off_t offset = datalen - bytes_remaining;
+    memcpy(buffer.buffer, &data[offset], bytes_remaining);
+    buffer.size = bytes_remaining;
+
+    TPM2B_DIGEST *hmac = NULL;
+    TPMT_TK_HASHCHECK *ticket = NULL;
+
+    rval = Esys_SequenceComplete(tctx->esys_ctx,
+        seq_handle,
+        session,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &buffer,
+        ESYS_TR_RH_NULL,
+        &hmac,
+        &ticket
+        );
+    if (rval != TSS2_RC_SUCCESS) {
+        /* XXX what to do with a sequence handle? */
+        LOGE("Esys_SequenceComplete: %s", Tss2_RC_Decode(rval));
+        return CKR_GENERAL_ERROR;
+    }
+
+    Esys_Free(ticket);
+
+    *siglen = hmac->size;
+
+    if (sig && *siglen < hmac->size) {
+        rv = CKR_BUFFER_TOO_SMALL;
+        goto out;
+    }
+
+    if (sig) {
+        memcpy(sig, hmac->buffer, hmac->size);
+    }
+
+    rv = CKR_OK;
+
+out:
+    Esys_Free(hmac);
+
+    return rv;
+}
+
+static CK_RV tpm_hmac(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    TPM2B_MAX_BUFFER buffer = { 0 };
+    if (sizeof(buffer.buffer) < datalen) {
+        /* doesn't fit in a oneshot call, do it in a multiple call */
+        return tpm_hmac_large(opdata, data, datalen, sig, siglen);
+    }
+
+    /* one shot call */
+    tobject *tobj = opdata->tobj;
+    assert(tobj);
+
+    tpm_ctx *tctx = opdata->ctx;
+    assert(tctx);
+
+    twist auth = tobj->unsealed_auth;
+    TPMI_DH_OBJECT handle = tobj->tpm_handle;
+
+    ESYS_TR session = tctx->hmac_session;
+
+    TPMI_ALG_HASH halg = opdata->hmac.sig.details.hmac.hashAlg;
 
     bool result = set_esys_auth(opdata->ctx->esys_ctx, handle, auth);
     if (!result) {
         return CKR_GENERAL_ERROR;
     }
+
+    /* size checked in entry to determine if one shot or not */
+    memcpy(buffer.buffer, data, datalen);
+    buffer.size = datalen;
+
 
     TPM2B_DIGEST *hmac = NULL;
 

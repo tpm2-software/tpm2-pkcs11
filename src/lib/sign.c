@@ -563,32 +563,30 @@ CK_RV verify_final (session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG signature_
     tobject *tobj = session_ctx_opdata_get_tobject(ctx);
     assert(tobj);
 
-    // TODO mode to buffer size
-    CK_BYTE hash[1024];
-    CK_ULONG hash_len = sizeof(hash);
+    CK_ULONG data_len = 0;
+    CK_BYTE_PTR data = NULL;
 
+    /* buffer has to stay in scope for assignment to data pointer */
+    CK_BYTE _buffer[1024];
     if (opdata->do_hash) {
-        rv = digest_final_op(ctx, opdata->digest_opdata, hash, &hash_len);
+        // TODO mode to buffer size
+        CK_ULONG _buffer_len = sizeof(_buffer);
+        rv = digest_final_op(ctx, opdata->digest_opdata, _buffer, &_buffer_len);
         if (rv != CKR_OK) {
             goto out;
         }
+        data_len = _buffer_len;
+        data = _buffer;
     } else {
-        size_t datalen = twist_len(opdata->buffer);
-        if (datalen > hash_len) {
-            LOGE("Internal buffer too small, got: %zu expected less than %zu",
-                    datalen, hash_len);
-            rv = CKR_GENERAL_ERROR;
-            goto out;
-        }
-        hash_len = datalen;
-        memcpy(hash, opdata->buffer, datalen);
+        data_len = twist_len(opdata->buffer);
+        data = (const CK_BYTE_PTR)opdata->buffer;
     }
 
     if (opdata->pkey) {
         rv = ssl_util_sig_verify(opdata->pkey, opdata->padding, opdata->md,
-            hash, hash_len, signature, signature_len);
+            data, data_len, signature, signature_len);
     } else {
-        rv = tpm_verify(opdata->crypto_opdata->cryptopdata.tpm_opdata, hash, hash_len, signature, signature_len);
+        rv = tpm_verify(opdata->crypto_opdata->cryptopdata.tpm_opdata, data, data_len, signature, signature_len);
     }
 
 out:

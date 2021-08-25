@@ -24,6 +24,7 @@ endif
 EXTRA_DIST += \
     $(integration_scripts) \
     test/integration/test.h \
+    test/integration/largebin.h \
     test/integration/fixtures
 
 ### Integration Tests ###
