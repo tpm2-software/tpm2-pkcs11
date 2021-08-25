@@ -1331,7 +1331,7 @@ CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_
 
     CK_RV rv = sig_flatten(signature, scheme, sig, siglen);
 
-    free(signature);
+    Esys_Free(signature);
 
     return rv;
 }
