@@ -7,6 +7,7 @@
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 
+#include "largebin.h"
 #include "test.h"
 
 struct test_info {
@@ -1417,6 +1418,126 @@ static void test_sign_verify_CKM_SHA256_HMAC_imported(void **state) {
     assert_memory_equal(result, sig, sig_len);
 }
 
+static void test_sign_verify_CKM_SHA256_HMAC_large(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    user_login(session);
+
+    CK_BYTE label[] = "hmac0";
+
+    CK_OBJECT_CLASS key_class = CKO_SECRET_KEY;
+    CK_KEY_TYPE key_type = CKK_SHA256_HMAC;
+    CK_ATTRIBUTE tmpl[] = {
+        { CKA_CLASS, &key_class, sizeof(key_class)  },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+        { CKA_LABEL, &label, sizeof(label) - 1 },
+    };
+
+       /* FIND A generic key for HMAC */
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_MECHANISM mech = { .mechanism = CKM_SHA256_HMAC };
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    const CK_BYTE_PTR msg = _large_rand_bin;
+    CK_ULONG msg_len = sizeof(_large_rand_bin);
+    CK_BYTE sig[32] = { 0 };
+    CK_ULONG sig_len = sizeof(sig);
+    rv = C_Sign(session, (CK_BYTE_PTR)msg, msg_len, sig, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(sig_len, 32);
+
+    rv = C_VerifyInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_Verify(session, (CK_BYTE_PTR)msg, msg_len, sig, sig_len);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_Logout(session);
+    assert_int_equal(rv, CKR_OK);
+}
+
+static void test_sign_verify_CKM_SHA256_HMAC_imported_large(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    user_login(session);
+
+    CK_BYTE label[] = "imported_hmac_key";
+
+    CK_OBJECT_CLASS key_class = CKO_SECRET_KEY;
+    CK_KEY_TYPE key_type = CKK_GENERIC_SECRET;
+    CK_ATTRIBUTE tmpl[] = {
+        { CKA_CLASS, &key_class, sizeof(key_class)  },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+        { CKA_LABEL, &label, sizeof(label) - 1 },
+    };
+
+       /* FIND A generic key for HMAC */
+    CK_RV rv = C_FindObjectsInit(session, tmpl, ARRAY_LEN(tmpl));
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG count;
+    CK_OBJECT_HANDLE objhandles[1];
+    rv = C_FindObjects(session, objhandles, ARRAY_LEN(objhandles), &count);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(count, 1);
+
+    rv = C_FindObjectsFinal(session);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_MECHANISM mech = { .mechanism = CKM_SHA256_HMAC };
+    rv = C_SignInit(session, &mech, objhandles[0]);
+    assert_int_equal(rv, CKR_OK);
+
+    const CK_BYTE_PTR msg = _large_rand_bin;
+    CK_ULONG msg_len = sizeof(_large_rand_bin);
+    CK_BYTE sig[32] = { 0 };
+    CK_ULONG sig_len = sizeof(sig);
+    rv = C_Sign(session, (CK_BYTE_PTR)msg, msg_len, sig, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(sig_len, 32);
+
+    rv = C_Logout(session);
+    assert_int_equal(rv, CKR_OK);
+
+    /*
+     * verify with OpenSSL. We do this here instead of in a script because sign via command line tools
+     * like pkcs11-tool is not supported at the moment. However support was added here:
+     *   - https://github.com/OpenSC/OpenSC/pull/2385
+     *
+     * This HMAC key is static in the fixtures folder.
+     */
+    unsigned char hmac_key[] = {
+        0x30, 0x33, 0x33, 0x36, 0x61, 0x61, 0x37, 0x39,
+        0x34, 0x35, 0x61, 0x33, 0x63, 0x61, 0x64, 0x65,
+        0x63, 0x33, 0x63, 0x62, 0x64, 0x63, 0x36, 0x65,
+        0x37, 0x39, 0x30, 0x34, 0x33, 0x62, 0x35, 0x62
+    };
+
+    unsigned char result[32];
+    unsigned int resultlen = sizeof(result);
+    unsigned char *r = HMAC(EVP_sha256(), hmac_key, sizeof(hmac_key),
+            msg, msg_len, result, &resultlen);
+    assert_non_null(r);
+
+    assert_int_equal(resultlen, sig_len);
+    assert_memory_equal(result, sig, sig_len);
+}
+
 static void test_sign_verify_CKM_SHA_1_HMAC(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -1564,6 +1685,10 @@ int main() {
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_SHA256_HMAC,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_SHA256_HMAC_imported,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_verify_CKM_SHA256_HMAC_large,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_verify_CKM_SHA256_HMAC_imported_large,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_RSA_PKCS_PSS,
             test_setup, test_teardown),
