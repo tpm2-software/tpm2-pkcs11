@@ -39,7 +39,7 @@
 #define TPM2_PKCS11_STORE_DIR "/etc/tpm2_pkcs11"
 #endif
 
-#define DB_VERSION 6
+#define DB_VERSION 7
 
 #define goto_oom(x, l) if (!x) { LOGE("oom"); goto l; }
 #define goto_error(x, l) if (x) { goto l; }
@@ -2001,6 +2001,136 @@ error:
     return rv;
 }
 
+static CK_RV handle_EC_AES_drop_0_allowed_mechs(tobject *tobj) {
+
+    CK_OBJECT_CLASS cka_class = attr_list_get_CKA_CLASS(tobj->attrs, CK_OBJECT_CLASS_BAD);
+    if (cka_class != CKO_PRIVATE_KEY && cka_class != CKO_SECRET_KEY) {
+        return CKR_VENDOR_SKIP;
+    }
+
+    CK_KEY_TYPE cka_key_type = attr_list_get_CKA_KEY_TYPE(tobj->attrs, CKA_KEY_TYPE_BAD);
+    if (cka_key_type != CKK_EC && cka_key_type != CKK_AES) {
+        return CKR_VENDOR_SKIP;
+    }
+
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_ALLOWED_MECHANISMS);
+
+    /*
+     * The new array will be at most the same size as the old array as theirs nothing
+     * to filer out.
+     */
+    CK_ULONG mech_num = a ? (a->ulValueLen/sizeof(CK_MECHANISM_TYPE)) : 0;
+
+    CK_MECHANISM_TYPE *new_mechs = calloc(mech_num, sizeof(CK_MECHANISM_TYPE));
+    if (!new_mechs) {
+        return CKR_HOST_MEMORY;
+    }
+
+    /* copy the old mechanism into the list and drop 0 mechanisms */
+    CK_ULONG i;
+    CK_ULONG pos = 0;
+    for (i=0; i < mech_num; i++) {
+        assert(a && a->pValue && a->ulValueLen);
+        CK_MECHANISM_TYPE old_mech = ((CK_MECHANISM_TYPE_PTR)(a->pValue))[i];
+        if (old_mech == 0) {
+            /*
+             * don't add the ones were adding, just to make the add below
+             * unconditional. This is an unlikely case as someone would have
+             * had to twiddle their object config by hand.
+             */
+            continue;
+        }
+
+        new_mechs[pos++] = old_mech;
+    }
+
+    CK_ULONG total_bytes = 0;
+    safe_mul(total_bytes, pos, sizeof(CK_MECHANISM_TYPE));
+
+    CK_ATTRIBUTE updated_attr = {
+        .type = CKA_ALLOWED_MECHANISMS,
+        .ulValueLen = total_bytes,
+        .pValue = new_mechs
+    };
+
+    /*
+     * if the object had CKA_ALLOWED_MECHANISMS we UPDATE the entry,
+     * else we just add it to the list
+     */
+    CK_RV rv = a ? attr_list_update_entry(tobj->attrs, &updated_attr) :
+            attr_list_append_entry(&tobj->attrs, &updated_attr);
+    if (rv != CKR_OK) {
+        SAFE_FREE(new_mechs);
+        return rv;
+    }
+
+    return CKR_OK;
+}
+
+static CK_RV dbup_handler_from_6_to_7(sqlite3 *updb) {
+
+    /*
+     * Between version 3 and 4 of the DB the following changes need to be made:
+     *
+     * Table tobjects:
+     *
+     * The YAML attributes need to include CKM_AES_CBC_PAD and CKM_AES_CTR in the CKM_ALLOWED_MECHANISMS list.
+     */
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+    sqlite3_stmt *stmt = NULL;
+
+    int rc = sqlite3_prepare_v2(updb, "SELECT * from tobjects", -1, &stmt, 0);
+    if (rc != SQLITE_OK) {
+        LOGE("Failed to fetch data: %s", sqlite3_errmsg(updb));
+        goto error;
+    }
+
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_DONE) {
+        goto out;
+    } else if (rc != SQLITE_ROW) {
+        LOGE("Failed to step: %s", sqlite3_errmsg(updb));
+        goto error;
+    }
+
+    while (rc == SQLITE_ROW) {
+
+        tobject *tobj = db_tobject_new(stmt);
+        if (!tobj) {
+            LOGE("Could not process tobjects for upgrade");
+            goto error;
+        }
+
+        rv = handle_EC_AES_drop_0_allowed_mechs(tobj);
+        if (rv != CKR_VENDOR_SKIP) {
+            /* actual error */
+            tobject_free(tobj);
+            goto error;
+        }
+
+        /* persist the changes in the update db */
+        rv = _db_update_tobject_attrs(updb, tobj->id, tobj->attrs);
+        tobject_free(tobj);
+        if (rv != CKR_OK) {
+            goto error;
+        }
+
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_ROW && rc != SQLITE_DONE) {
+            LOGE("Failed to fetch data: %s\n", sqlite3_errmsg(updb));
+            goto error;
+        }
+    }
+
+out:
+    rv = CKR_OK;
+
+error:
+    sqlite3_finalize(stmt);
+    return rv;
+}
+
 static CK_RV db_backup(sqlite3 *db, const char *dbpath, sqlite3 **updb, char **copypath) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -2074,7 +2204,8 @@ static CK_RV db_update(sqlite3 **xdb, const char *dbpath, unsigned old_version, 
             dbup_handler_from_2_to_3,
             dbup_handler_from_3_to_4,
             dbup_handler_from_4_to_5,
-            dbup_handler_from_5_to_6
+            dbup_handler_from_5_to_6,
+            dbup_handler_from_6_to_7
     };
 
     /*

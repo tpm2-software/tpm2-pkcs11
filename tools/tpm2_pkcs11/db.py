@@ -22,7 +22,7 @@ from .pkcs11t import (
     CKM_ECDSA_SHA512
 )
 
-VERSION = 6
+VERSION = 7
 
 #
 # With Db() as db:
@@ -487,6 +487,40 @@ class Db(object):
                         continue
 
                     attrs[CKA_ALLOWED_MECHANISMS] = list(allowed_mechs | algs_to_add)
+                    Db._updatetertiary(dbbakcon, t['id'], attrs)
+
+    def _update_on_7(self, dbbakcon):
+        '''
+        Between version 6 and 7 of the DB the following changes need to be made:
+
+        Table tobjects:
+
+        Filter out possible 0 mechanisms from CKM_ALLOWED_MECHANISMS list due to
+        previous bugs in db update code.
+        '''
+
+        c = dbbakcon.cursor()
+
+        c.execute('SELECT * from tobjects')
+        tobjs = c.fetchall()
+
+        for t in tobjs:
+            attrs = yaml.safe_load(io.StringIO(t['attrs']))
+
+            # Fix the duplicate add of CBC_PAD from version 4 -> 5 upgrade and
+            # replace one with CBC_CTR
+            if CKA_KEY_TYPE not in attrs:
+                continue
+
+            cka_class = attrs[CKA_CLASS]
+            cka_key_type = attrs[CKA_KEY_TYPE]
+            if cka_class in [ CKO_SECRET_KEY, CKO_PRIVATE_KEY ] and \
+                cka_key_type in [ CKK_AES, CKK_EC ] and \
+                0 in attrs[CKA_ALLOWED_MECHANISMS]:
+                    deduped_attrs = set(attrs[CKA_ALLOWED_MECHANISMS])
+                    # we checked that 0 was in attrs.
+                    deduped_attrs.remove(0)
+                    attrs[CKA_ALLOWED_MECHANISMS] = list(deduped_attrs)
                     Db._updatetertiary(dbbakcon, t['id'], attrs)
 
     def update_db(self, old_version, new_version=VERSION):
