@@ -68,6 +68,8 @@
         } \
     } while (0);
 
+#define CKR_VENDOR_SKIP (CKR_VENDOR_DEFINED | 0x01)
+
 static struct {
     sqlite3 *db;
 } global;
@@ -1692,6 +1694,80 @@ error:
     return rv;
 }
 
+/*
+ * A bug in the python code added CBC_PAD twice and missed CTR mode, filter out the CBC_PAD
+ * and CTR mode and add them both back in properly, ie one of each in CKA_ALLOWED_MECHANISMS.
+ */
+static CK_RV handle_AES_add_cbc_ctr_modes(tobject *tobj) {
+
+    CK_OBJECT_CLASS cka_class = attr_list_get_CKA_CLASS(tobj->attrs, CK_OBJECT_CLASS_BAD);
+    if (cka_class != CKO_SECRET_KEY) {
+        return CKR_VENDOR_SKIP;
+    }
+
+    CK_KEY_TYPE cka_key_type = attr_list_get_CKA_KEY_TYPE(tobj->attrs, CKA_KEY_TYPE_BAD);
+    if (cka_key_type != CKK_AES) {
+        return CKR_VENDOR_SKIP;
+    }
+
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_ALLOWED_MECHANISMS);
+
+    CK_ULONG mech_num = a ? (a->ulValueLen/sizeof(CK_MECHANISM_TYPE)) : 0;
+    /* plus two: one for CBC_PAD one for CTR modes */
+    safe_adde(mech_num, 2);
+
+    CK_MECHANISM_TYPE *new_mechs = calloc(mech_num, sizeof(CK_MECHANISM_TYPE));
+    if (!new_mechs) {
+        return CKR_HOST_MEMORY;
+    }
+
+    /* copy the old mechanism into the list and add CBC_PAD and CTR */
+    CK_ULONG i;
+    CK_ULONG pos = 0;
+    for (i=0; i < mech_num; i++) {
+        assert(a && a->pValue && a->ulValueLen);
+        CK_MECHANISM_TYPE old_mech = ((CK_MECHANISM_TYPE_PTR)(a->pValue))[i];
+        if (old_mech == CKM_AES_CBC_PAD ||
+                old_mech == CKM_AES_CTR) {
+            /*
+             * don't add the ones were adding, just to make the add below
+             * unconditional. This is an unlikely case as someone would have
+             * had to twiddle their object config by hand.
+             */
+            continue;
+        }
+
+        new_mechs[pos++] = old_mech;
+    }
+
+
+    /* append the missing mechanisms */
+    new_mechs[pos++] = CKM_AES_CBC_PAD;
+    new_mechs[pos++] = CKM_AES_CTR;
+
+    CK_ULONG total_bytes = 0;
+    safe_mul(total_bytes, pos, sizeof(CK_MECHANISM_TYPE));
+
+    CK_ATTRIBUTE updated_attr = {
+        .type = CKA_ALLOWED_MECHANISMS,
+        .ulValueLen = total_bytes,
+        .pValue = new_mechs
+    };
+
+    /*
+     * if the object had CKA_ALLOWED_MECHANISMS we UPDATE the entry,
+     * else we just add it to the list
+     */
+    CK_RV rv = a ? attr_list_update_entry(tobj->attrs, &updated_attr) :
+            attr_list_append_entry(&tobj->attrs, &updated_attr);
+    if (rv != CKR_OK) {
+        SAFE_FREE(new_mechs);
+        return rv;
+    }
+
+    return CKR_OK;
+}
+
 static CK_RV dbup_handler_from_4_to_5(sqlite3 *updb) {
 
     /*
@@ -1729,69 +1805,18 @@ static CK_RV dbup_handler_from_4_to_5(sqlite3 *updb) {
             goto error;
         }
 
-        CK_OBJECT_CLASS cka_class = attr_list_get_CKA_CLASS(tobj->attrs, CK_OBJECT_CLASS_BAD);
-        if (cka_class != CKO_SECRET_KEY) {
-            goto next;
-        }
-
-        CK_KEY_TYPE cka_key_type = attr_list_get_CKA_KEY_TYPE(tobj->attrs, CKA_KEY_TYPE_BAD);
-        if (cka_key_type != CKK_AES) {
-            goto next;
-        }
-
-        CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_ALLOWED_MECHANISMS);
-
-        CK_ULONG mech_num = a ? (a->ulValueLen/sizeof(CK_MECHANISM_TYPE)) : 0;
-        /* plus two: one for CBC_PAD one for CTR modes */
-        safe_adde(mech_num, 2);
-
-        CK_ULONG total_bytes = 0;
-        safe_mul(total_bytes, mech_num, sizeof(CK_MECHANISM_TYPE));
-
-        new_mechs = calloc(mech_num, sizeof(CK_MECHANISM_TYPE));
-        if (!new_mechs) {
-            tobject_free(tobj);
-            rv = CKR_HOST_MEMORY;
-            goto error;
-        }
-
-        /* copy the old mechanism into the list and add CBC_PAD and CTR */
-        CK_ULONG i;
-        for (i=0; i < mech_num - 1; i++) {
-            assert(a && a->pValue && a->ulValueLen);
-            CK_MECHANISM_TYPE old_mech = ((CK_MECHANISM_TYPE_PTR)(a->pValue))[i];
-            if (old_mech == CKM_AES_CBC_PAD ||
-                    old_mech == CKM_AES_CTR) {
-                /*
-                 * don't add the ones were adding, just to make the add below
-                 * unconditional. This is an unlikely case as someone would have
-                 * had to twiddle their object config by hand.
-                 */
-                continue;
-            }
-
-            new_mechs[i] = old_mech;
-        }
-
-
-        /* append the missing mechanisms */
-        new_mechs[mech_num - 2] = CKM_AES_CBC_PAD;
-        new_mechs[mech_num - 1] = CKM_AES_CTR;
-
-        CK_ATTRIBUTE updated_attr = {
-            .type = CKA_ALLOWED_MECHANISMS,
-            .ulValueLen = total_bytes,
-            .pValue = new_mechs
-        };
-
         /*
-         * if the object had CKA_ALLOWED_MECHANISMS we UPDATE the entry,
-         * else we just add it to the list
+         * Due to a bug in Python side of adding AES objects, we need to run the
+         * CKA_ALLOWED_MECHANISM updates to add modes CTR and CBC on both the 4->5
+         * and 5->6 updates in the C code. Since the logic is the same for AES,
+         * we just call the routine. It was handled properly in the C code in 4->5
+         * but the Python code added CTR twice and missed CBC, so the 5->6 update
+         * gets that one.
          */
-        rv = a ? attr_list_update_entry(tobj->attrs, &updated_attr) :
-                attr_list_append_entry(&tobj->attrs, &updated_attr);
-        if (rv != CKR_OK) {
-            SAFE_FREE(new_mechs);
+        rv = handle_AES_add_cbc_ctr_modes(tobj);
+        if (rv == CKR_VENDOR_SKIP) {
+            goto next;
+        } else if (rv != CKR_OK) {
             tobject_free(tobj);
             goto error;
         }
@@ -1823,8 +1848,6 @@ error:
     return rv;
 }
 
-#define CKR_VENDOR_SKIP (CKR_VENDOR_DEFINED | 0x01)
-
 static CK_RV handle_ECDSA_5_to_6(tobject *tobj) {
 
     CK_OBJECT_CLASS cka_class = attr_list_get_CKA_CLASS(tobj->attrs, CK_OBJECT_CLASS_BAD);
@@ -1843,19 +1866,15 @@ static CK_RV handle_ECDSA_5_to_6(tobject *tobj) {
     /* plus three: SHA256 SHA384 and SHA512 */
     safe_adde(mech_num, 3);
 
-    CK_ULONG total_bytes = 0;
-    safe_mul(total_bytes, mech_num, sizeof(CK_MECHANISM_TYPE));
-
     CK_MECHANISM_TYPE *new_mechs = calloc(mech_num, sizeof(CK_MECHANISM_TYPE));
     if (!new_mechs) {
-        tobject_free(tobj);
         return CKR_HOST_MEMORY;
     }
 
     /* copy the old mechanism into the list and add CBC_PAD and CTR */
     CK_ULONG i;
     CK_ULONG pos = 0;
-    for (i=0; i < mech_num - 1; i++) {
+    for (i=0; i < mech_num; i++) {
         assert(a && a->pValue && a->ulValueLen);
         CK_MECHANISM_TYPE old_mech = ((CK_MECHANISM_TYPE_PTR)(a->pValue))[i];
         if (old_mech == CKM_ECDSA_SHA256 ||
@@ -1873,83 +1892,12 @@ static CK_RV handle_ECDSA_5_to_6(tobject *tobj) {
     }
 
     /* append the missing mechanisms */
-    new_mechs[mech_num - 3] = CKM_ECDSA_SHA256;
-    new_mechs[mech_num - 2] = CKM_ECDSA_SHA384;
-    new_mechs[mech_num - 1] = CKM_ECDSA_SHA512;
-
-    CK_ATTRIBUTE updated_attr = {
-        .type = CKA_ALLOWED_MECHANISMS,
-        .ulValueLen = total_bytes,
-        .pValue = new_mechs
-    };
-
-    /*
-     * if the object had CKA_ALLOWED_MECHANISMS we UPDATE the entry,
-     * else we just add it to the list
-     */
-    CK_RV rv = a ? attr_list_update_entry(tobj->attrs, &updated_attr) :
-            attr_list_append_entry(&tobj->attrs, &updated_attr);
-    if (rv != CKR_OK) {
-        SAFE_FREE(new_mechs);
-        return rv;
-    }
-
-    return CKR_OK;
-}
-
-/*
- * A bug in the python code added CBC_PAD twice and missed CTR mode, filter out the CBC_PAD
- * and CTR mode and add them both back in properly, ie one of each in CKA_ALLOWED_MECHANISMS.
- */
-static CK_RV handle_AES_5_to_6(tobject *tobj) {
-
-    CK_OBJECT_CLASS cka_class = attr_list_get_CKA_CLASS(tobj->attrs, CK_OBJECT_CLASS_BAD);
-    if (cka_class != CKO_SECRET_KEY) {
-        return CKR_VENDOR_SKIP;
-    }
-
-    CK_KEY_TYPE cka_key_type = attr_list_get_CKA_KEY_TYPE(tobj->attrs, CKA_KEY_TYPE_BAD);
-    if (cka_key_type != CKK_AES) {
-        return CKR_VENDOR_SKIP;
-    }
-
-    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_ALLOWED_MECHANISMS);
-
-    CK_ULONG mech_num = a ? (a->ulValueLen/sizeof(CK_MECHANISM_TYPE)) : 0;
-    /* plus two: one for CBC_PAD one for CTR modes */
-    safe_adde(mech_num, 2);
+    new_mechs[pos++] = CKM_ECDSA_SHA256;
+    new_mechs[pos++] = CKM_ECDSA_SHA384;
+    new_mechs[pos++] = CKM_ECDSA_SHA512;
 
     CK_ULONG total_bytes = 0;
-    safe_mul(total_bytes, mech_num, sizeof(CK_MECHANISM_TYPE));
-
-    CK_MECHANISM_TYPE *new_mechs = calloc(mech_num, sizeof(CK_MECHANISM_TYPE));
-    if (!new_mechs) {
-        tobject_free(tobj);
-        return CKR_HOST_MEMORY;
-    }
-
-    /* copy the old mechanism into the list and add CBC_PAD and CTR */
-    CK_ULONG i;
-    for (i=0; i < mech_num - 1; i++) {
-        assert(a && a->pValue && a->ulValueLen);
-        CK_MECHANISM_TYPE old_mech = ((CK_MECHANISM_TYPE_PTR)(a->pValue))[i];
-        if (old_mech == CKM_AES_CBC_PAD ||
-                old_mech == CKM_AES_CTR) {
-            /*
-             * don't add the ones were adding, just to make the add below
-             * unconditional. This is an unlikely case as someone would have
-             * had to twiddle their object config by hand.
-             */
-            continue;
-        }
-
-        new_mechs[i] = old_mech;
-    }
-
-
-    /* append the missing mechanisms */
-    new_mechs[mech_num - 2] = CKM_AES_CBC_PAD;
-    new_mechs[mech_num - 1] = CKM_AES_CTR;
+    safe_mul(total_bytes, pos, sizeof(CK_MECHANISM_TYPE));
 
     CK_ATTRIBUTE updated_attr = {
         .type = CKA_ALLOWED_MECHANISMS,
@@ -1969,7 +1917,6 @@ static CK_RV handle_AES_5_to_6(tobject *tobj) {
     }
 
     return CKR_OK;
-
 }
 
 static CK_RV dbup_handler_from_5_to_6(sqlite3 *updb) {
@@ -2017,7 +1964,7 @@ static CK_RV dbup_handler_from_5_to_6(sqlite3 *updb) {
             goto error;
         }
 
-        rv = handle_AES_5_to_6(tobj);
+        rv = handle_AES_add_cbc_ctr_modes(tobj);
         if (rv == CKR_OK) {
             goto handled;
         } else if (rv == CKR_VENDOR_SKIP) {
