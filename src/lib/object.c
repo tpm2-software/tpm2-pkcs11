@@ -214,7 +214,7 @@ CK_RV tobject_get_min_buf_size(tobject *tobj, CK_MECHANISM_PTR mech, size_t *max
                 *maxsize = 64;
                 return CKR_OK;
             default:
-                LOGE("Cannot handle CKK_GENERIC_SECRET Mechanism: 0x%x",
+                LOGE("Cannot handle CKK_GENERIC_SECRET Mechanism: 0x%lx",
                         mech->mechanism);
                 return CKR_MECHANISM_INVALID;
         }
