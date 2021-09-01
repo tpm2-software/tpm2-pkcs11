@@ -752,7 +752,7 @@ CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
     for (unsigned int i=0; i < ARRAY_LEN(TPM2_MANUFACTURER_MAP); i++){
         if (!strncasecmp((char *)info->manufacturerID, TPM2_MANUFACTURER_MAP[i][0], 4)) {
             str_padded_copy(info->manufacturerID,
-                            (unsigned char *)TPM2_MANUFACTURER_MAP[i][1]);
+                            TPM2_MANUFACTURER_MAP[i][1]);
         }
     }
 
