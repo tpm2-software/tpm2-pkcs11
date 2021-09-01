@@ -1403,7 +1403,7 @@ CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_
         case CKK_GENERIC_SECRET:
             return tpm_hmac(opdata, data, datalen, sig, siglen);
         default:
-            LOGE("Unknown opdata op_type selector for sign, got: 0x%x", opdata->op_type);
+            LOGE("Unknown opdata op_type selector for sign, got: 0x%lx", opdata->op_type);
             return CKR_GENERAL_ERROR;
     }
 
