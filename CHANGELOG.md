@@ -1,7 +1,7 @@
 # Changelog
 
 ### next
-  * DB Schema Change from 5 to 6.
+  * DB Schema Change from 5 to 7.
     - **Backup your DB before upgrading**
   * Fixed compilation issues with GCC11.
   * Fixed erros on releases due to newer compilers from failing by only adding `-Werror` for non-release builds.
@@ -15,10 +15,17 @@
   * Fixed a bug in the Python code DB upgrade path from 4 to 5 where it didn't add AES mode CTR to
     CKA\_ALLOWED\_MECHANISMS.
   * Added tpm2\_ptool support for ECC key size 192.
-  * Added support passwordless login for tokens, ie not setting CKF_LOGIN_REQUIRED.
+  * Added support passwordless login for tokens, ie not setting CKF\_LOGIN\_REQUIRED.
   * Fixed Running integration tests when Java version has the `-ea`, like on Debian 11 and OpenJDK 17.
-  * Added support for HMAC keys using tpm2\_ptool addkey and the C_Sign and C_Verify interfaces.
+  * Added support for HMAC keys using tpm2\_ptool and the C\_Sign and C\_Verify interfaces.
+    The following interfaces in ptool have support:
+      - addkey: previous working versions of tpm2-tools will support this.
+      - link: previous working versions of tpm2-tools will support this.
+      - import: requires tpm2-tools 5.2+ for support.
   * Fixed leaking of temp file descriptors in tpm2\_ptool.
+  * Fixed wrong free in tpm code, should use Esys\_Free.
+  * Fixed a space formatting issue in tpm2\_ptool verify.
+  * Fixed leaked file descriptor in tpm2\_ptool.
 
 ### 1.6.0 - 2021-05-03
   * Spelling and grammar fixes throughout the project.
