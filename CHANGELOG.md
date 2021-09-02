@@ -1,6 +1,6 @@
 # Changelog
 
-### next
+### 1.7.0-rc0 - 2021-09-02
   * DB Schema Change from 5 to 7.
     - **Backup your DB before upgrading**
   * Fixed compilation issues with GCC11.
