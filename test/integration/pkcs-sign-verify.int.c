@@ -3,12 +3,20 @@
 #include <openssl/bn.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
-#include <openssl/hmac.h>
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 
 #include "largebin.h"
 #include "test.h"
+/*
+* This HMAC key is static in the fixtures folder.
+*/
+static const unsigned char hmac_key[] = {
+   0x30, 0x33, 0x33, 0x36, 0x61, 0x61, 0x37, 0x39,
+   0x34, 0x35, 0x61, 0x33, 0x63, 0x61, 0x64, 0x65,
+   0x63, 0x33, 0x63, 0x62, 0x64, 0x63, 0x36, 0x65,
+   0x37, 0x39, 0x30, 0x34, 0x33, 0x62, 0x35, 0x62
+};
 
 struct test_info {
     CK_SESSION_HANDLE handle;
@@ -1349,6 +1357,35 @@ static void test_sign_verify_CKM_SHA256_HMAC(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
+static void ossl_verify_hmac_sig(const unsigned char *hmac_key, size_t hmac_key_len,
+        const EVP_MD *md,
+        const CK_BYTE_PTR msg, CK_ULONG msg_len,
+        CK_BYTE_PTR sig, CK_ULONG sig_len) {
+    EVP_PKEY *ekey = EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, NULL, hmac_key,
+                                   hmac_key_len);
+    assert_non_null(ekey);
+
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    assert_non_null(mdctx);
+
+    int rc = EVP_DigestSignInit(mdctx, NULL, md, NULL, ekey);
+    assert_int_equal(rc, 1);
+
+    rc = EVP_DigestSignUpdate(mdctx, msg, msg_len);
+    assert_int_equal(rc, 1);
+
+    unsigned char sig2[32] = { 0 };
+    size_t sig2_len = sizeof(sig2);
+    rc = EVP_DigestSignFinal(mdctx, sig2, &sig2_len);
+    assert_int_equal(rc, 1);
+
+    EVP_MD_CTX_free(mdctx);
+    EVP_PKEY_free(ekey);
+
+    assert_int_equal(sig2_len, sig_len);
+    assert_memory_equal(sig2, sig, sig2_len);
+}
+
 static void test_sign_verify_CKM_SHA256_HMAC_imported(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -1398,24 +1435,12 @@ static void test_sign_verify_CKM_SHA256_HMAC_imported(void **state) {
      * verify with OpenSSL. We do this here instead of in a script because sign via command line tools
      * like pkcs11-tool is not supported at the moment. However support was added here:
      *   - https://github.com/OpenSC/OpenSC/pull/2385
-     *
-     * This HMAC key is static in the fixtures folder.
      */
-    unsigned char hmac_key[] = {
-        0x30, 0x33, 0x33, 0x36, 0x61, 0x61, 0x37, 0x39,
-        0x34, 0x35, 0x61, 0x33, 0x63, 0x61, 0x64, 0x65,
-        0x63, 0x33, 0x63, 0x62, 0x64, 0x63, 0x36, 0x65,
-        0x37, 0x39, 0x30, 0x34, 0x33, 0x62, 0x35, 0x62
-    };
 
-    unsigned char result[32];
-    unsigned int resultlen = sizeof(result);
-    unsigned char *r = HMAC(EVP_sha256(), hmac_key, sizeof(hmac_key),
-            msg, msg_len, result, &resultlen);
-    assert_non_null(r);
-
-    assert_int_equal(resultlen, sig_len);
-    assert_memory_equal(result, sig, sig_len);
+    ossl_verify_hmac_sig(hmac_key, sizeof(hmac_key),
+        EVP_sha256(),
+        msg, msg_len,
+        sig, sig_len);
 }
 
 static void test_sign_verify_CKM_SHA256_HMAC_large(void **state) {
@@ -1549,28 +1574,10 @@ static void test_sign_verify_CKM_SHA256_HMAC_imported_large(void **state) {
     rv = C_Logout(session);
     assert_int_equal(rv, CKR_OK);
 
-    /*
-     * verify with OpenSSL. We do this here instead of in a script because sign via command line tools
-     * like pkcs11-tool is not supported at the moment. However support was added here:
-     *   - https://github.com/OpenSC/OpenSC/pull/2385
-     *
-     * This HMAC key is static in the fixtures folder.
-     */
-    unsigned char hmac_key[] = {
-        0x30, 0x33, 0x33, 0x36, 0x61, 0x61, 0x37, 0x39,
-        0x34, 0x35, 0x61, 0x33, 0x63, 0x61, 0x64, 0x65,
-        0x63, 0x33, 0x63, 0x62, 0x64, 0x63, 0x36, 0x65,
-        0x37, 0x39, 0x30, 0x34, 0x33, 0x62, 0x35, 0x62
-    };
-
-    unsigned char result[32];
-    unsigned int resultlen = sizeof(result);
-    unsigned char *r = HMAC(EVP_sha256(), hmac_key, sizeof(hmac_key),
-            msg, msg_len, result, &resultlen);
-    assert_non_null(r);
-
-    assert_int_equal(resultlen, sig_len);
-    assert_memory_equal(result, sig, sig_len);
+    ossl_verify_hmac_sig(hmac_key, sizeof(hmac_key),
+        EVP_sha256(),
+        msg, msg_len,
+        sig, sig_len);
 }
 
 static void test_sign_verify_CKM_SHA_1_HMAC(void **state) {
