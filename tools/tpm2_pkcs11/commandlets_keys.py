@@ -227,7 +227,9 @@ class ImportCommand(NewKeyCommandBase):
         group_parser.add_argument(
             '--algorithm',
             help='The type of the key.\n',
-            choices=['rsa', 'ecc', 'hmac'],
+            choices=['rsa', 'ecc',
+                     'hmac', # Generic hmac, actuall imported as keyedhash scheme null with proper attrs.
+                     'hmac:sha1', 'hmac:sha256', 'hmac:sha384', 'hmac:sha512' ],
             required=False)
         group_parser.add_argument(
             '--passin',
@@ -239,11 +241,18 @@ class ImportCommand(NewKeyCommandBase):
 
         pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
 
+        # A plain HMAC key is just a keyedhash object with userwithauth and sign set.
+        # Seal objects don't have sign (ie default tpm2_import -G keyedhash behavior.
+        objattrs=None
+        if alg == 'hmac':
+            objattrs = 'userwithauth|sign|decrypt'
+            alg = 'keyedhash'
+
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.importkey(
-            pobj_handle, pobj['objauth'], objauth, privkey=privkey, alg=alg, passin=passin)
+            pobj_handle, pobj['objauth'], objauth, privkey=privkey, alg=alg, passin=passin, objattrs=objattrs)
 
         # We have no way of knowing the keylength of an hmac key
-        if alg == 'hmac':
+        if alg and alg.startswith('hmac') or alg == 'keyedhash':
             self._override_keylen = os.path.getsize(privkey)
 
         return (tertiarypriv, tertiarypub, tertiarypubdata)
