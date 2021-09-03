@@ -15,6 +15,7 @@
 #include "object.h"
 #include "pkcs11.h"
 #include "session_ctx.h"
+#include "ssl_util.h"
 #include "token.h"
 #include "utils.h"
 
@@ -121,7 +122,7 @@ CK_RV tobject_get_min_buf_size(tobject *tobj, CK_MECHANISM_PTR mech, size_t *max
         }
 
         int nid = 0;
-        CK_RV rv = ec_params_to_nid(a, &nid);
+        CK_RV rv = ssl_util_params_to_nid(a, &nid);
         if (rv != CKR_OK) {
             return rv;
         }

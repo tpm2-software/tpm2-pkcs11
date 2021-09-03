@@ -1061,70 +1061,13 @@ static void test_double_sign_final_call_for_size_SHA512(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
-static CK_ATTRIBUTE_PTR get_attr(CK_ATTRIBUTE_TYPE type, CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_len) {
-
-    CK_ULONG i;
-    for (i=0; i < attr_len; i++) {
-        CK_ATTRIBUTE_PTR a = &attrs[i];
-        if (a->type == type) {
-            return a;
-        }
-    }
-
-    return NULL;
-}
-
-#if (OPENSSL_VERSION_NUMBER < 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)) || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x20700000L) /* OpenSSL 1.1.0 */
-#define LIB_TPM2_OPENSSL_OPENSSL_PRE11
-#endif
-
-RSA *template_to_rsa_pub_key(CK_ATTRIBUTE_PTR attrs, CK_ULONG attr_len) {
-
-    RSA *ssl_rsa_key = NULL;
-    BIGNUM *e = NULL, *n = NULL;
-
-    /* get the exponent */
-    CK_ATTRIBUTE_PTR a = get_attr(CKA_PUBLIC_EXPONENT, attrs, attr_len);
-    assert_non_null(a);
-
-    e = BN_bin2bn((void*)a->pValue, a->ulValueLen, NULL);
-    assert_non_null(e);
-
-    /* get the modulus */
-    a = get_attr(CKA_MODULUS, attrs, attr_len);
-    assert_non_null(a);
-
-    n = BN_bin2bn(a->pValue, a->ulValueLen,
-                  NULL);
-    assert_non_null(n);
-
-    ssl_rsa_key = RSA_new();
-    assert_non_null(ssl_rsa_key);
-
-#if defined(LIB_TPM2_OPENSSL_OPENSSL_PRE11)
-    ssl_rsa_key->e = e;
-    ssl_rsa_key->n = n;
-#else
-    int rc = RSA_set0_key(ssl_rsa_key, n, e, NULL);
-    assert_int_equal(rc, 1);
-#endif
-
-    return ssl_rsa_key;
-}
-
-static void verify(RSA *pub, CK_BYTE_PTR msg, CK_ULONG msg_len, CK_BYTE_PTR sig, CK_ULONG sig_len) {
-
-    EVP_PKEY *pkey = EVP_PKEY_new();
-    assert_non_null(pkey);
-
-    int rc = EVP_PKEY_set1_RSA(pkey, pub);
-    assert_int_equal(rc, 1);
+static void verify(EVP_PKEY *pkey, CK_BYTE_PTR msg, CK_ULONG msg_len, CK_BYTE_PTR sig, CK_ULONG sig_len) {
 
     EVP_MD_CTX *ctx = EVP_MD_CTX_create();
     const EVP_MD* md = EVP_get_digestbyname("SHA256");
     assert_non_null(md);
 
-    rc = EVP_DigestInit_ex(ctx, md, NULL);
+    int rc = EVP_DigestInit_ex(ctx, md, NULL);
     assert_int_equal(rc, 1);
 
     rc = EVP_DigestVerifyInit(ctx, NULL, md, NULL, pkey);
@@ -1136,7 +1079,6 @@ static void verify(RSA *pub, CK_BYTE_PTR msg, CK_ULONG msg_len, CK_BYTE_PTR sig,
     rc = EVP_DigestVerifyFinal(ctx, sig, sig_len);
     assert_int_equal(rc, 1);
 
-    EVP_PKEY_free(pkey);
     EVP_MD_CTX_destroy(ctx);
 }
 
@@ -1170,20 +1112,38 @@ static void test_sign_verify_public(void **state) {
     assert_int_equal(siglen, 256);
 
     /* build an OSSL RSA key from parts */
-    CK_BYTE _tmp_bufs[2][1024];
+    CK_BYTE _tmp_bufs[3][1024];
     CK_ATTRIBUTE attrs[] = {
-        { .type = CKA_PUBLIC_EXPONENT, .ulValueLen = sizeof(_tmp_bufs[0]), .pValue = &_tmp_bufs[0] },
-        { .type = CKA_MODULUS,         .ulValueLen = sizeof(_tmp_bufs[1]), .pValue = &_tmp_bufs[1] },
+        { .type = CKA_KEY_TYPE,        .ulValueLen = sizeof(_tmp_bufs[0]), .pValue = &_tmp_bufs[0] },
+        { .type = CKA_PUBLIC_EXPONENT, .ulValueLen = sizeof(_tmp_bufs[0]), .pValue = &_tmp_bufs[1] },
+        { .type = CKA_MODULUS,         .ulValueLen = sizeof(_tmp_bufs[1]), .pValue = &_tmp_bufs[2] },
     };
 
     rv = C_GetAttributeValue(session, pub_handle, attrs, ARRAY_LEN(attrs));
     assert_int_equal(rv, CKR_OK);
 
-    RSA *r = template_to_rsa_pub_key(attrs, ARRAY_LEN(attrs));
-    assert_non_null(r);
+    CK_KEY_TYPE key_type = CKA_KEY_TYPE_BAD;
+    rv = attr_CK_KEY_TYPE(&attrs[0], &key_type);
+    assert_int_equal(rv, CKR_OK);
 
-    verify(r, msg, sizeof(msg) - 1, sig, siglen);
-    RSA_free(r);
+    EVP_PKEY *pkey = NULL;
+    attr_list *l = attr_list_new();
+
+    bool res = attr_list_add_int(l, CKA_KEY_TYPE, key_type);
+    assert_true(res);
+
+    res = attr_list_add_buf(l, attrs[1].type, attrs[1].pValue, attrs[1].ulValueLen);
+    assert_true(res);
+
+    res = attr_list_add_buf(l, attrs[2].type, attrs[2].pValue, attrs[2].ulValueLen);
+    assert_true(res);
+
+    rv = ssl_util_attrs_to_evp(l, &pkey);
+    assert_int_equal(rv, CKR_OK);
+    attr_list_free(l);
+
+    verify(pkey, msg, sizeof(msg) - 1, sig, siglen);
+    EVP_PKEY_free(pkey);
 }
 
 static void test_sign_verify_context_specific_good(void **state) {

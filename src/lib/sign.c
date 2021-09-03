@@ -74,7 +74,7 @@ static sign_opdata *sign_opdata_new(mdetail *mdtl, CK_MECHANISM_PTR mechanism, t
     }
 
     EVP_PKEY *pkey = NULL;
-    rv = ssl_util_tobject_to_evp(&pkey, tobj);
+    rv = ssl_util_attrs_to_evp(tobj->attrs, &pkey);
     if (rv != CKR_OK) {
         return NULL;
     }

@@ -3,6 +3,7 @@
 #include "config.h"
 #include "backend_esysdb.h"
 #include "db.h"
+#include "ssl_util.h"
 #include "tpm.h"
 
 CK_RV backend_esysdb_init(void) {
@@ -308,7 +309,7 @@ CK_RV backend_esysdb_token_unseal_wrapping_key(token *tok, bool user, twist tpin
     }
 
     twist sealsalt = user ? sealobj->userauthsalt : sealobj->soauthsalt;
-    twist sealobjauth = utils_hash_pass(tpin, sealsalt);
+    twist sealobjauth = ssl_util_hash_pass(tpin, sealsalt);
     if (!sealobjauth) {
         rv = CKR_HOST_MEMORY;
         goto error;
@@ -372,7 +373,7 @@ CK_RV backend_esysdb_token_changeauth(token *tok, bool user, twist toldpin, twis
      */
     twist oldsalt = !user ? tok->esysdb.sealobject.soauthsalt : tok->esysdb.sealobject.userauthsalt;
 
-    twist oldauth = utils_hash_pass(toldpin, oldsalt);
+    twist oldauth = ssl_util_hash_pass(toldpin, oldsalt);
     if (!oldauth) {
         goto out;
     }

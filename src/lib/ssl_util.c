@@ -10,6 +10,7 @@
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 
+#include "attrs.h"
 #include "log.h"
 #include "pkcs11.h"
 #include "ssl_util.h"
@@ -19,194 +20,291 @@
 #include <openssl/evperr.h>
 #endif
 
-#if defined(LIB_TPM2_OPENSSL_OPENSSL_PRE11)
-
-/*
- * Pre openssl 1.1 doesn't have EC_POINT_point2buf, so use EC_POINT_point2oct to
- * create an API compatible version of it.
- */
-size_t EC_POINT_point2buf(const EC_GROUP *group, const EC_POINT *point,
-                          point_conversion_form_t form,
-                          unsigned char **pbuf, BN_CTX *ctx) {
-
-    /* Get the required buffer length */
-    size_t len = EC_POINT_point2oct(group, point, form, NULL, 0, NULL);
-    if (!len) {
-        return 0;
-    }
-
-    /* allocate it */
-    unsigned char *buf = OPENSSL_malloc(len);
-    if (!buf) {
-        return 0;
-    }
-
-    /* convert it */
-    len = EC_POINT_point2oct(group, point, form, buf, len, ctx);
-    if (!len) {
-        OPENSSL_free(buf);
-        return 0;
-    }
-
-    *pbuf = buf;
-    return len;
-}
-
-size_t OBJ_length(const ASN1_OBJECT *obj) {
-
-    if (!obj) {
-        return 0;
-    }
-
-    return obj->length;
-}
-
-const unsigned char *OBJ_get0_data(const ASN1_OBJECT *obj) {
-
-    if (!obj) {
-        return NULL;
-    }
-
-    return obj->data;
-}
-
-const unsigned char *ASN1_STRING_get0_data(const ASN1_STRING *x) {
-    return ASN1_STRING_data((ASN1_STRING *)x);
-}
-
-int RSA_set0_key(RSA *r, BIGNUM *n, BIGNUM *e, BIGNUM *d) {
-
-    if ((r->n == NULL && n == NULL) || (r->e == NULL && e == NULL)) {
-        return 0;
-    }
-
-    if (n != NULL) {
-        BN_free(r->n);
-        r->n = n;
-    }
-
-    if (e != NULL) {
-        BN_free(r->e);
-        r->e = e;
-    }
-
-    if (d != NULL) {
-        BN_free(r->d);
-        r->d = d;
-    }
-
-    return 1;
-}
-
-int ECDSA_SIG_set0(ECDSA_SIG *sig, BIGNUM *r, BIGNUM *s) {
-
-    if (!r || !s) {
-        return 0;
-    }
-
-    BN_free(sig->r);
-    BN_free(sig->s);
-
-    sig->r = r;
-    sig->s = s;
-
-    return 1;
-}
-
-EC_KEY *EVP_PKEY_get0_EC_KEY(EVP_PKEY *pkey) {
-    if (pkey->type != EVP_PKEY_EC) {
-        return NULL;
-    }
-
-    return pkey->pkey.ec;
-}
+#if defined(LIB_TPM2_OPENSSL_OPENSSL_POST300)
+#include <openssl/core_names.h>
 #endif
 
-static CK_RV convert_pubkey_RSA(RSA **outkey, attr_list *attrs) {
+/*
+ * TODO Port these routines
+ * Deprecated function block to port
+ *
+ * There are no padding routine replacements in OSSL 3.0.
+ *   - per Matt Caswell (maintainer) on mailing list.
+ * Signature verification can likely be done with EVP Verify interface.
+ */
+#if defined(LIB_TPM2_OPENSSL_OPENSSL_POST300)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 
-    RSA *rsa = NULL;
-    BIGNUM *e = NULL, *n = NULL;
+CK_RV ssl_util_add_PKCS1_PSS(EVP_PKEY *pkey,
+        const CK_BYTE_PTR inbuf, const EVP_MD *md,
+        CK_BYTE_PTR outbuf) {
 
-    CK_ATTRIBUTE_PTR exp = attr_get_attribute_by_type(attrs, CKA_PUBLIC_EXPONENT);
-    if (!exp) {
-        LOGE("RSA Object must have attribute CKA_PUBLIC_EXPONENT");
-        return CKR_GENERAL_ERROR;
-    }
-
-    CK_ATTRIBUTE_PTR mod = attr_get_attribute_by_type(attrs, CKA_MODULUS);
-    if (!mod) {
-        LOGE("RSA Object must have attribute CKA_MODULUS");
-        return CKR_GENERAL_ERROR;
-    }
-
-    rsa = RSA_new();
+    RSA *rsa = (RSA *)EVP_PKEY_get0_RSA(pkey);
     if (!rsa) {
-        SSL_UTIL_LOGE("Failed to allocate OpenSSL RSA structure");
-        goto error;
+        return CKR_GENERAL_ERROR;
     }
 
-    e = BN_bin2bn(exp->pValue, exp->ulValueLen, NULL);
-    if (!e) {
-        SSL_UTIL_LOGE("Failed to convert exponent to SSL internal format");
-        goto error;
-    }
+    int rc = RSA_padding_add_PKCS1_PSS(rsa, outbuf,
+        inbuf, md, -1);
 
-    n = BN_bin2bn(mod->pValue, mod->ulValueLen, NULL);
-    if (!n) {
-        SSL_UTIL_LOGE("Failed to convert modulus to SSL internal format");
-        goto error;
-    }
-
-    if (!RSA_set0_key(rsa, n, e, NULL)) {
-        SSL_UTIL_LOGE("Failed to set RSA modulus and exponent components");
-        RSA_free(rsa);
-        BN_free(e);
-        BN_free(n);
-        goto error;
-    }
-
-    *outkey = rsa;
-
-    return CKR_OK;
-
-error:
-    RSA_free(rsa);
-    if (e) {
-        BN_free(e);
-    }
-    if (n) {
-        BN_free(n);
-    }
-
-    return CKR_GENERAL_ERROR;
+    return rc == 1 ? CKR_OK : CKR_GENERAL_ERROR;
 }
 
-static CK_RV convert_pubkey_ECC(EC_KEY **outkey, attr_list *attrs) {
+CK_RV ssl_util_add_PKCS1_TYPE_1(const CK_BYTE_PTR inbuf, CK_ULONG inlen,
+        CK_BYTE_PTR outbuf, CK_ULONG outbuflen) {
 
-    EC_KEY *key = EC_KEY_new();
-    if (!key) {
+    return RSA_padding_add_PKCS1_type_1(outbuf, outbuflen,
+            inbuf, inlen) == 1 ? CKR_OK : CKR_GENERAL_ERROR;
+}
+
+CK_RV ssl_util_check_PKCS1_TYPE_2(const CK_BYTE_PTR inbuf, CK_ULONG inlen, CK_ULONG rsa_len,
+        CK_BYTE_PTR outbuf, CK_ULONG_PTR outbuflen) {
+
+    int rc = RSA_padding_check_PKCS1_type_2(outbuf, *outbuflen,
+               inbuf, inlen, rsa_len);
+    if (rc < 0) {
+        return CKR_GENERAL_ERROR;
+    }
+
+    /* cannot be negative due to check above */
+    *outbuflen = rc;
+    return CKR_OK;
+}
+
+#if defined(LIB_TPM2_OPENSSL_OPENSSL_POST300)
+#pragma GCC diagnostic pop
+#endif
+
+#if defined(LIB_TPM2_OPENSSL_OPENSSL_POST300)
+#include <openssl/core_names.h>
+#include <openssl/param_build.h>
+static CK_RV get_RSA_evp_pubkey(CK_ATTRIBUTE_PTR e_attr, CK_ATTRIBUTE_PTR n_attr, EVP_PKEY **out_pkey) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    OSSL_PARAM *params = NULL;
+    OSSL_PARAM_BLD *bld = NULL;
+    EVP_PKEY_CTX *evp_ctx = NULL;
+
+    BIGNUM *e = BN_bin2bn(e_attr->pValue, e_attr->ulValueLen, NULL);
+    if (!e) {
+        SSL_UTIL_LOGE("BN_bin2bn for e");
+        return rv;
+    }
+
+    BIGNUM *n = BN_bin2bn(n_attr->pValue, n_attr->ulValueLen, NULL);
+    if (!n) {
+        SSL_UTIL_LOGE("BN_bin2bn for n");
+        goto out;
+    }
+
+    bld = OSSL_PARAM_BLD_new();
+    if (!bld) {
+    	SSL_UTIL_LOGE("OSSL_PARAM_BLD_new");
+    	goto out;
+    }
+
+    if (OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_RSA_E, e) != 1) {
+    	SSL_UTIL_LOGE("OSSL_PARAM_BLD_push_BN(OSSL_PKEY_PARAM_RSA_E)");
+    	goto out;
+    }
+
+    if (OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_RSA_N, n) != 1) {
+    	SSL_UTIL_LOGE("OSSL_PARAM_BLD_push_BN(OSSL_PKEY_PARAM_RSA_N)");
+    	goto out;
+    }
+
+    params = OSSL_PARAM_BLD_to_param(bld);
+    if (!params) {
+        SSL_UTIL_LOGE("OSSL_PARAM_BLD_to_param");
+        goto out;
+    }
+
+    /* convert params to EVP key */
+    evp_ctx = EVP_PKEY_CTX_new_from_name(NULL, "RSA", NULL);
+    if (!evp_ctx) {
+        SSL_UTIL_LOGE("EVP_PKEY_CTX_new_id");
+        goto out;
+    }
+
+    int rc = EVP_PKEY_fromdata_init(evp_ctx);
+    if (rc != 1) {
+        SSL_UTIL_LOGE("EVP_PKEY_fromdata_init");
+        goto out;
+    }
+
+    rc = EVP_PKEY_fromdata(evp_ctx, out_pkey, EVP_PKEY_PUBLIC_KEY, params);
+    if (rc != 1) {
+        SSL_UTIL_LOGE("EVP_PKEY_fromdata");
+        EVP_PKEY_CTX_free(evp_ctx);
+        goto out;
+    }
+
+    rv = CKR_OK;
+
+out:
+	EVP_PKEY_CTX_free(evp_ctx);
+	BN_free(n);
+	BN_free(e);
+	OSSL_PARAM_BLD_free(bld);
+	OSSL_PARAM_free(params);
+
+	return rv;
+}
+
+static CK_RV get_EC_evp_pubkey(CK_ATTRIBUTE_PTR ecparams, CK_ATTRIBUTE_PTR ecpoint, EVP_PKEY **out_pkey) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    EVP_PKEY_CTX *evp_ctx = NULL;
+    OSSL_PARAM *params = NULL;
+    OSSL_PARAM_BLD *bld = NULL;
+
+    /*
+     * The simplest way I have found to deal with this is to convert the ASN1 object in
+     * the ecparams attribute (was done previously with d2i_ECParameters) is to a nid and
+     * then take the int nid and convert it to a friendly name like prime256v1.
+     * EVP_PKEY_fromdata can handle group by name.
+     *
+     * Per the spec this is "DER-encoding of an ANSI X9.62 Parameters value".
+     */
+    int curve_id = 0;
+    CK_RV rc = ssl_util_params_to_nid(ecparams, &curve_id);
+    if (rc != CKR_OK) {
+        LOGE("Could not get nid from params");
+        return rc;
+    }
+
+    /* Per the spec CKA_EC_POINT attribute is the "DER-encoding of ANSI X9.62 ECPoint value Q */
+    const unsigned char *x = ecpoint->pValue;
+    ASN1_OCTET_STRING *os = d2i_ASN1_OCTET_STRING(NULL, &x, ecpoint->ulValueLen);
+    if (!os) {
+        SSL_UTIL_LOGE("d2i_ASN1_OCTET_STRING: %s");
+        return rv;
+    }
+
+    bld = OSSL_PARAM_BLD_new();
+    if (!bld) {
+    	SSL_UTIL_LOGE("OSSL_PARAM_BLD_new");
+    	goto out;
+    }
+
+    if (OSSL_PARAM_BLD_push_utf8_string(bld, OSSL_PKEY_PARAM_GROUP_NAME,
+    		(char *)OBJ_nid2sn(curve_id), 0) != 1) {
+    	SSL_UTIL_LOGE("OSSL_PARAM_BLD_push_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME)");
+    	goto out;
+    }
+
+    if (OSSL_PARAM_BLD_push_octet_string(bld, OSSL_PKEY_PARAM_PUB_KEY,
+    		os->data, os->length) != 1) {
+    	SSL_UTIL_LOGE("OSSL_PARAM_BLD_push_octet_string(OSSL_PKEY_PARAM_PUB_KEY)");
+    	goto out;
+    }
+
+    params = OSSL_PARAM_BLD_to_param(bld);
+    if (!params) {
+        SSL_UTIL_LOGE("OSSL_PARAM_BLD_to_param");
+        goto out;
+    }
+
+    /* convert params to EVP key */
+    evp_ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, NULL);
+    if (!evp_ctx) {
+        SSL_UTIL_LOGE("EVP_PKEY_CTX_new_id");
+        goto out;
+    }
+
+    int ossl_rc = EVP_PKEY_fromdata_init(evp_ctx);
+    if (ossl_rc != 1) {
+        SSL_UTIL_LOGE("EVP_PKEY_fromdata_init: %s");
+        goto out;
+    }
+
+    ossl_rc = EVP_PKEY_fromdata(evp_ctx, out_pkey, EVP_PKEY_PUBLIC_KEY, params);
+    if (ossl_rc != 1) {
+        SSL_UTIL_LOGE("EVP_PKEY_fromdata");
+        goto out;
+    }
+
+out:
+	OPENSSL_free(os);
+	OSSL_PARAM_BLD_free(bld);
+	OSSL_PARAM_free(params);
+	EVP_PKEY_CTX_free(evp_ctx);
+
+    return CKR_OK;
+}
+
+#else
+
+static CK_RV get_RSA_evp_pubkey(CK_ATTRIBUTE_PTR e_attr, CK_ATTRIBUTE_PTR n_attr, EVP_PKEY **out_pkey) {
+
+    BIGNUM *e = BN_bin2bn(e_attr->pValue, e_attr->ulValueLen, NULL);
+    if (!e) {
+        LOGE("Could not convert exponent to bignum");
+        return CKR_GENERAL_ERROR;
+    }
+
+    BIGNUM *n = BN_bin2bn(n_attr->pValue, n_attr->ulValueLen, NULL);
+    if (!n) {
+        LOGE("Could not convert modulus to bignum");
+        BN_free(e);
+        return CKR_GENERAL_ERROR;
+    }
+
+    RSA *rsa = RSA_new();
+    if (!rsa) {
         LOGE("oom");
         return CKR_HOST_MEMORY;
     }
 
-    CK_ATTRIBUTE_PTR ecparams = attr_get_attribute_by_type(attrs, CKA_EC_PARAMS);
-    if (!ecparams) {
-        LOGE("ECC Key must have attribute CKA_EC_PARAMS");
+    int rc = RSA_set0_key(rsa, n, e, NULL);
+    if (!rc) {
+        LOGE("Could not set modulus and exponent to OSSL RSA key");
+        BN_free(n);
+        BN_free(e);
+        RSA_free(rsa);
         return CKR_GENERAL_ERROR;
     }
 
-    CK_ATTRIBUTE_PTR ecpoint = attr_get_attribute_by_type(attrs, CKA_EC_POINT);
-    if (!ecpoint) {
-        LOGE("ECC Key must have attribute CKA_EC_POINT");
+    /* assigned to RSA key */
+    n = e = NULL;
+
+    EVP_PKEY *pkey = EVP_PKEY_new();
+    if (!pkey) {
+        SSL_UTIL_LOGE("EVP_PKEY_new");
+        RSA_free(rsa);
         return CKR_GENERAL_ERROR;
+    }
+
+    rc = EVP_PKEY_assign_RSA(pkey, rsa);
+    if (rc != 1) {
+        RSA_free(rsa);
+        EVP_PKEY_free(pkey);
+        return CKR_GENERAL_ERROR;
+    }
+
+    *out_pkey = pkey;
+
+    return CKR_OK;
+}
+
+static CK_RV get_EC_evp_pubkey(CK_ATTRIBUTE_PTR ecparams, CK_ATTRIBUTE_PTR ecpoint, EVP_PKEY **out_pkey) {
+
+    EC_KEY *ecc = EC_KEY_new();
+    if (!ecc) {
+        LOGE("oom");
+        return CKR_HOST_MEMORY;
     }
 
     /* set params */
     const unsigned char *x = ecparams->pValue;
-    EC_KEY *k = d2i_ECParameters(&key, &x, ecparams->ulValueLen);
+    EC_KEY *k = d2i_ECParameters(&ecc, &x, ecparams->ulValueLen);
     if (!k) {
         SSL_UTIL_LOGE("Could not update key with EC Parameters");
-        EC_KEY_free(key);
+        EC_KEY_free(ecc);
         return CKR_GENERAL_ERROR;
     }
 
@@ -215,22 +313,38 @@ static CK_RV convert_pubkey_ECC(EC_KEY **outkey, attr_list *attrs) {
     ASN1_OCTET_STRING *os = d2i_ASN1_OCTET_STRING(NULL, &x, ecpoint->ulValueLen);
     if (os) {
         x = os->data;
-        k = o2i_ECPublicKey(&key, &x, os->length);
+        k = o2i_ECPublicKey(&ecc, &x, os->length);
         ASN1_STRING_free(os);
         if (!k) {
             SSL_UTIL_LOGE("Could not update key with EC Points");
-            EC_KEY_free(key);
+            EC_KEY_free(ecc);
             return CKR_GENERAL_ERROR;
         }
     }
 
-    *outkey = key;
+    EVP_PKEY *pkey = EVP_PKEY_new();
+    if (!pkey) {
+        SSL_UTIL_LOGE("EVP_PKEY_new");
+        EC_KEY_free(ecc);
+        return CKR_GENERAL_ERROR;
+    }
+
+    int rc = EVP_PKEY_assign_EC_KEY(pkey, ecc);
+    if (!rc) {
+        SSL_UTIL_LOGE("Could not set pkey with ec key");
+        EC_KEY_free(ecc);
+        EVP_PKEY_free(pkey);
+        return CKR_GENERAL_ERROR;
+    }
+
+    *out_pkey = pkey;
     return CKR_OK;
 }
+#endif
 
-CK_RV ssl_util_tobject_to_evp(EVP_PKEY **outpkey, tobject *obj) {
+CK_RV ssl_util_attrs_to_evp(attr_list *attrs, EVP_PKEY **outpkey) {
 
-    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(obj->attrs, CKA_KEY_TYPE);
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(attrs, CKA_KEY_TYPE);
     if (!a) {
         LOGE("Expected object to have attribute CKA_KEY_TYPE");
         return CKR_KEY_TYPE_INCONSISTENT;
@@ -253,44 +367,52 @@ CK_RV ssl_util_tobject_to_evp(EVP_PKEY **outpkey, tobject *obj) {
            return CKR_OK;
     }
 
-    EVP_PKEY *pkey = EVP_PKEY_new();
-    if (!pkey) {
-        LOGE("oom");
-        return CKR_HOST_MEMORY;
-    }
+    EVP_PKEY *pkey = NULL;
 
     if (key_type == CKK_EC) {
-        EC_KEY *e = NULL;
-        rv = convert_pubkey_ECC(&e, obj->attrs);
+
+        CK_ATTRIBUTE_PTR ecparams = attr_get_attribute_by_type(attrs, CKA_EC_PARAMS);
+        if (!ecparams) {
+            LOGE("ECC Key must have attribute CKA_EC_PARAMS");
+            return CKR_GENERAL_ERROR;
+        }
+
+        CK_ATTRIBUTE_PTR ecpoint = attr_get_attribute_by_type(attrs, CKA_EC_POINT);
+        if (!ecpoint) {
+            LOGE("ECC Key must have attribute CKA_EC_POINT");
+            return CKR_GENERAL_ERROR;
+        }
+
+        rv = get_EC_evp_pubkey(ecparams, ecpoint, &pkey);
         if (rv != CKR_OK) {
             return rv;
         }
-        int rc = EVP_PKEY_assign_EC_KEY(pkey, e);
-        if (!rc) {
-            SSL_UTIL_LOGE("Could not set pkey with ec key");
-            EC_KEY_free(e);
-            EVP_PKEY_free(pkey);
-            return CKR_GENERAL_ERROR;
-        }
+
     } else if (key_type == CKK_RSA) {
-        RSA *r = NULL;
-        rv = convert_pubkey_RSA(&r, obj->attrs);
+
+        CK_ATTRIBUTE_PTR exp = attr_get_attribute_by_type(attrs, CKA_PUBLIC_EXPONENT);
+        if (!exp) {
+            LOGE("RSA Object must have attribute CKA_PUBLIC_EXPONENT");
+            return CKR_GENERAL_ERROR;
+        }
+
+        CK_ATTRIBUTE_PTR mod = attr_get_attribute_by_type(attrs, CKA_MODULUS);
+        if (!mod) {
+            LOGE("RSA Object must have attribute CKA_MODULUS");
+            return CKR_GENERAL_ERROR;
+        }
+
+        rv = get_RSA_evp_pubkey(exp, mod, &pkey);
         if (rv != CKR_OK) {
             return rv;
         }
-        int rc = EVP_PKEY_assign_RSA(pkey, r);
-        if (!rc) {
-            SSL_UTIL_LOGE("Could not set pkey with rsa key");
-            RSA_free(r);
-            EVP_PKEY_free(pkey);
-            return CKR_GENERAL_ERROR;
-        }
+
     } else {
         LOGE("Invalid CKA_KEY_TYPE, got: %lu", key_type);
-        EVP_PKEY_free(pkey);
         return CKR_KEY_TYPE_INCONSISTENT;
     }
 
+    assert(pkey);
     *outpkey = pkey;
 
     return CKR_OK;
@@ -406,10 +528,12 @@ CK_RV ssl_util_setup_evp_pkey_ctx(EVP_PKEY *pkey,
         }
     }
 
-    rc = EVP_PKEY_CTX_set_signature_md(pkey_ctx, md);
-    if (!rc) {
-        SSL_UTIL_LOGE("EVP_PKEY_CTX_set_signature_md failed");
-        goto error;
+    if (md) {
+        rc = EVP_PKEY_CTX_set_signature_md(pkey_ctx, md);
+        if (!rc) {
+            SSL_UTIL_LOGE("EVP_PKEY_CTX_set_signature_md failed");
+            goto error;
+        }
     }
 
     *outpkey_ctx = pkey_ctx;
@@ -421,21 +545,12 @@ error:
     return CKR_GENERAL_ERROR;
 }
 
-static CK_RV do_sig_verify_rsa(EVP_PKEY *pkey,
-        int padding, const EVP_MD *md,
-        CK_BYTE_PTR digest, CK_ULONG digest_len,
-        CK_BYTE_PTR signature, CK_ULONG signature_len) {
+static CK_RV sig_verify(EVP_PKEY_CTX *ctx,
+        const unsigned char *sig, size_t siglen,
+        const unsigned char *tbs, size_t tbslen) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
-
-    EVP_PKEY_CTX *pkey_ctx = NULL;
-    rv = ssl_util_setup_evp_pkey_ctx(pkey, padding, md,
-            EVP_PKEY_verify_init, &pkey_ctx);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    int rc = EVP_PKEY_verify(pkey_ctx, signature, signature_len, digest, digest_len);
+    int rc = EVP_PKEY_verify(ctx, sig, siglen, tbs, tbslen);
     if (rc < 0) {
         SSL_UTIL_LOGE("EVP_PKEY_verify failed");
     } else if (rc == 1) {
@@ -444,11 +559,11 @@ static CK_RV do_sig_verify_rsa(EVP_PKEY *pkey,
         rv = CKR_SIGNATURE_INVALID;
     }
 
-    EVP_PKEY_CTX_free(pkey_ctx);
     return rv;
 }
 
-static CK_RV create_ecdsa_sig(CK_BYTE_PTR sig, CK_ULONG siglen, ECDSA_SIG **outsig) {
+static CK_RV create_ecdsa_sig(CK_BYTE_PTR sig, CK_ULONG siglen,
+        unsigned char  **outbuf, size_t *outlen) {
 
     if (siglen & 1) {
         LOGE("Expected ECDSA signature length to be even, got : %lu",
@@ -487,20 +602,47 @@ static CK_RV create_ecdsa_sig(CK_BYTE_PTR sig, CK_ULONG siglen, ECDSA_SIG **outs
         return CKR_GENERAL_ERROR;
     }
 
-    *outsig = ossl_sig;
+    int sig_len =i2d_ECDSA_SIG(ossl_sig, NULL);
+    if (sig_len <= 0) {
+        if (rc < 0) {
+            SSL_UTIL_LOGE("ECDSA_do_verify failed");
+        } else {
+            LOGE("Expected length to be greater than 0");
+        }
+        ECDSA_SIG_free(ossl_sig);
+        return CKR_GENERAL_ERROR;
+    }
+
+    unsigned char *buf = calloc(1, sig_len);
+    if (!buf) {
+        LOGE("oom");
+        ECDSA_SIG_free(ossl_sig);
+        return CKR_HOST_MEMORY;
+    }
+
+    unsigned char *p = buf;
+    int sig_len2 = i2d_ECDSA_SIG(ossl_sig, &p);
+    if (sig_len2 < 0) {
+        SSL_UTIL_LOGE("ECDSA_do_verify failed");
+        ECDSA_SIG_free(ossl_sig);
+        free(buf);
+        return CKR_GENERAL_ERROR;
+    }
+
+    assert(sig_len == sig_len2);
+
+    ECDSA_SIG_free(ossl_sig);
+
+    *outbuf = buf;
+    *outlen = sig_len;
 
     return CKR_OK;
 }
 
 static CK_RV do_sig_verify_ec(EVP_PKEY *pkey,
+        const EVP_MD *md,
         CK_BYTE_PTR digest, CK_ULONG digest_len,
         CK_BYTE_PTR signature, CK_ULONG signature_len) {
-
-    EC_KEY *eckey = EVP_PKEY_get0_EC_KEY(pkey);
-    if (!eckey) {
-        LOGE("Expected EC Key");
-        return CKR_GENERAL_ERROR;
-    }
 
     /*
      * OpenSSL expects ASN1 framed signatures, PKCS11 does flat
@@ -509,21 +651,47 @@ static CK_RV do_sig_verify_ec(EVP_PKEY *pkey,
      *   https://github.com/tpm2-software/tpm2-pkcs11/issues/277
      * For details.
      */
-    ECDSA_SIG *ossl_sig = NULL;
-    CK_RV rv = create_ecdsa_sig(signature, signature_len, &ossl_sig);
+    unsigned char *buf = NULL;
+    size_t buflen = 0;
+    CK_RV rv = create_ecdsa_sig(signature, signature_len, &buf, &buflen);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    int rc = ECDSA_do_verify(digest, digest_len, ossl_sig, eckey);
-    if (rc < 0) {
-        ECDSA_SIG_free(ossl_sig);
-        SSL_UTIL_LOGE("ECDSA_do_verify failed");
-        return CKR_GENERAL_ERROR;
+    EVP_PKEY_CTX *pkey_ctx = NULL;
+    rv = ssl_util_setup_evp_pkey_ctx(pkey, 0, md,
+            EVP_PKEY_verify_init, &pkey_ctx);
+    if (rv != CKR_OK) {
+        free(buf);
+        return rv;
     }
-    ECDSA_SIG_free(ossl_sig);
 
-    return rc == 1 ? CKR_OK : CKR_SIGNATURE_INVALID;
+    rv = sig_verify(pkey_ctx, buf, buflen, digest, digest_len);
+
+    EVP_PKEY_CTX_free(pkey_ctx);
+    free(buf);
+
+    return rv;
+}
+
+static CK_RV do_sig_verify_rsa(EVP_PKEY *pkey,
+        int padding, const EVP_MD *md,
+        CK_BYTE_PTR digest, CK_ULONG digest_len,
+        CK_BYTE_PTR signature, CK_ULONG signature_len) {
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    EVP_PKEY_CTX *pkey_ctx = NULL;
+    rv = ssl_util_setup_evp_pkey_ctx(pkey, padding, md,
+            EVP_PKEY_verify_init, &pkey_ctx);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    rv = sig_verify(pkey_ctx, signature, signature_len, digest, digest_len);
+
+    EVP_PKEY_CTX_free(pkey_ctx);
+    return rv;
 }
 
 CK_RV ssl_util_sig_verify(EVP_PKEY *pkey,
@@ -538,7 +706,7 @@ CK_RV ssl_util_sig_verify(EVP_PKEY *pkey,
                 digest, digest_len,
                 signature, signature_len);
     case EVP_PKEY_EC:
-        return do_sig_verify_ec(pkey, digest, digest_len,
+        return do_sig_verify_ec(pkey, md, digest, digest_len,
                 signature, signature_len);
     default:
         LOGE("Unknown PKEY type, got: %d", type);
@@ -576,4 +744,66 @@ CK_RV ssl_util_verify_recover(EVP_PKEY *pkey,
 
     EVP_PKEY_CTX_free(pkey_ctx);
     return rv;
+}
+
+twist ssl_util_hash_pass(const twist pin, const twist salt) {
+
+
+    twist out = NULL;
+    unsigned char md[SHA256_DIGEST_LENGTH];
+
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    if (!ctx) {
+        SSL_UTIL_LOGE("EVP_MD_CTX_new");
+        return NULL;
+    }
+
+    int rc = EVP_DigestInit(ctx, EVP_sha256());
+    if (rc != 1) {
+        SSL_UTIL_LOGE("EVP_DigestInit");
+        goto error;
+    }
+
+    rc = EVP_DigestUpdate(ctx, pin, twist_len(pin));
+    if (rc != 1) {
+        SSL_UTIL_LOGE("EVP_DigestUpdate");
+        goto error;
+    }
+
+    rc = EVP_DigestUpdate(ctx, salt, twist_len(salt));
+    if (rc != 1) {
+        SSL_UTIL_LOGE("EVP_DigestUpdate");
+        goto error;
+    }
+
+    unsigned int len = sizeof(md);
+    rc = EVP_DigestFinal(ctx, md, &len);
+    if (rc != 1) {
+        SSL_UTIL_LOGE("EVP_DigestFinal");
+        goto error;
+    }
+
+    /* truncate the password to 32 characters */
+    out = twist_hex_new((char *)md, sizeof(md)/2);
+
+error:
+    EVP_MD_CTX_free(ctx);
+
+    return out;
+}
+
+CK_RV ssl_util_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid) {
+
+    const unsigned char *p = ecparams->pValue;
+
+    ASN1_OBJECT *a = d2i_ASN1_OBJECT(NULL, &p, ecparams->ulValueLen);
+    if (!a) {
+        LOGE("Unknown CKA_EC_PARAMS value");
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    *nid = OBJ_obj2nid(a);
+    ASN1_OBJECT_free(a);
+
+    return CKR_OK;
 }

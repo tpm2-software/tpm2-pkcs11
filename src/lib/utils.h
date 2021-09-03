@@ -45,8 +45,6 @@ static inline void _str_padded_copy(CK_UTF8CHAR_PTR dst, size_t dst_len, const C
     memcpy(dst, src, src_len);
 }
 
-twist utils_hash_pass(const twist pin, const twist salt);
-
 twist aes256_gcm_decrypt(const twist key, const twist objauth);
 
 twist aes256_gcm_encrypt(twist keybin, twist plaintextbin);
@@ -75,17 +73,6 @@ static inline CK_RV utils_new_random_object_auth(twist *newauthhex) {
 
 CK_RV utils_ctx_unwrap_objauth(twist wrappingkey, twist objauth, twist *unwrapped_auth);
 CK_RV utils_ctx_wrap_objauth(twist wrappingkey, twist objauth, twist *wrapped_auth);
-
-/**
- * Given an attribute of CKA_EC_PARAMS returns the nid value.
- * @param ecparams
- *  The DER X9.62 parameters value
- * @param nid
- *  The nid to set
- * @return
- *  CKR_OK on success.
- */
-CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid);
 
 /**
  * Removes a PKCS7 padding on a 16 byte block.
