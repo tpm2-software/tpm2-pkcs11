@@ -55,7 +55,7 @@ PKG_CHECK_EXISTS([tss2-esys >= 3.0],
 # require sqlite3 and libcrypto
 PKG_CHECK_MODULES([SQLITE3],     [sqlite3])
 PKG_CHECK_MODULES([YAML],        [yaml-0.1])
-PKG_CHECK_MODULES([CRYPTO],      [libcrypto >= 1.0.2g])
+PKG_CHECK_MODULES([CRYPTO],      [libcrypto >= 1.1.0])
 
 # check for pthread
 AX_PTHREAD([],[AC_MSG_ERROR([Cannot find pthread])])
