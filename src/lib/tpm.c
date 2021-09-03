@@ -3092,7 +3092,7 @@ static CK_RV handle_ecparams(CK_ATTRIBUTE_PTR attr, void *udata) {
     tpm_key_data *keydat = (tpm_key_data *)udata;
 
     int nid = 0;
-    CK_RV rv = ec_params_to_nid(attr, &nid);
+    CK_RV rv = ssl_util_params_to_nid(attr, &nid);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -3444,7 +3444,7 @@ static EC_POINT *tpm_pub_to_ossl_pub(EC_GROUP *group, TPM2B_PUBLIC *key) {
         goto out;
     }
 
-    int rc = EC_POINT_set_affine_coordinates_GFp(group,
+    int rc = EC_POINT_set_affine_coordinates(group,
             pub_key_point_tmp,
             bn_x,
             bn_y,
@@ -4572,7 +4572,7 @@ CK_RV tpm_get_pss_sig_state(tpm_ctx *tctx, tobject *tobj,
         goto out;
     }
 
-    rv = ssl_util_tobject_to_evp(&pkey, tobj);
+    rv = ssl_util_attrs_to_evp(tobj->attrs, &pkey);
     if (rv != CKR_OK) {
         goto out;
     }

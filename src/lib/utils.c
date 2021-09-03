@@ -7,6 +7,7 @@
 #include <openssl/sha.h>
 
 #include "log.h"
+#include "ssl_util.h"
 #include "token.h"
 #include "utils.h"
 
@@ -45,7 +46,7 @@ CK_RV utils_setup_new_object_auth(twist newpin, twist *newauthhex, twist *newsal
         pin_to_use = newpin;
     }
 
-    *newauthhex = utils_hash_pass(pin_to_use, salt_to_use);
+    *newauthhex = ssl_util_hash_pass(pin_to_use, salt_to_use);
     if (!*newauthhex) {
         goto out;
     }
@@ -328,22 +329,6 @@ out:
 
 }
 
-twist utils_hash_pass(const twist pin, const twist salt) {
-
-
-    unsigned char md[SHA256_DIGEST_LENGTH];
-
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
-
-    SHA256_Update(&sha256, pin, twist_len(pin));
-    SHA256_Update(&sha256, salt, twist_len(salt));
-    SHA256_Final(md, &sha256);
-
-    /* truncate the password to 32 characters */
-    return twist_hex_new((char *)md, sizeof(md)/2);
-}
-
 size_t utils_get_halg_size(CK_MECHANISM_TYPE mttype) {
 
     switch(mttype) {
@@ -443,22 +428,6 @@ CK_RV utils_ctx_wrap_objauth(twist wrappingkey, twist data, twist *wrapped_auth)
     }
 
     *wrapped_auth = wrapped;
-
-    return CKR_OK;
-}
-
-CK_RV ec_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid) {
-
-    const unsigned char *p = ecparams->pValue;
-
-    ASN1_OBJECT *a = d2i_ASN1_OBJECT(NULL, &p, ecparams->ulValueLen);
-    if (!a) {
-        LOGE("Unknown CKA_EC_PARAMS value");
-        return CKR_ATTRIBUTE_VALUE_INVALID;
-    }
-
-    *nid = OBJ_obj2nid(a);
-    ASN1_OBJECT_free(a);
 
     return CKR_OK;
 }

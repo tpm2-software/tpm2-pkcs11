@@ -11,6 +11,7 @@
 #include "backend_fapi.h"
 #include "emitter.h"
 #include "parser.h"
+#include "ssl_util.h"
 #include "utils.h"
 
 #ifdef HAVE_FAPI
@@ -793,7 +794,7 @@ CK_RV backend_fapi_token_unseal_wrapping_key(token *tok, bool user, twist tpin) 
     }
 
     twist sealsalt = user ? tok->fapi.userauthsalt : tok->fapi.soauthsalt;
-    twist sealobjauth = utils_hash_pass(tpin, sealsalt);
+    twist sealobjauth = ssl_util_hash_pass(tpin, sealsalt);
     if (!sealobjauth) {
         rv = CKR_HOST_MEMORY;
         goto error;
@@ -889,7 +890,7 @@ CK_RV backend_fapi_token_changeauth(token *tok, bool user, twist toldpin, twist 
     }
     rv = CKR_GENERAL_ERROR;
 
-    oldauth = utils_hash_pass(toldpin, user ? tok->fapi.userauthsalt : tok->fapi.soauthsalt);
+    oldauth = ssl_util_hash_pass(toldpin, user ? tok->fapi.userauthsalt : tok->fapi.soauthsalt);
     if (!oldauth) {
         goto out;
     }
