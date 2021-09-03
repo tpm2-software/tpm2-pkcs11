@@ -693,7 +693,7 @@ CK_RV ecc_keygen_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) 
     }
 
     int nid = 0;
-    CK_RV rv = ec_params_to_nid(a, &nid);
+    CK_RV rv = ssl_util_params_to_nid(a, &nid);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -857,11 +857,11 @@ CK_RV rsa_pkcs_synthesizer(mdetail *mdtl,
     }
 
     /* Apply the PKCS1.5 padding */
-    int rc = RSA_padding_add_PKCS1_type_1(outbuf, padded_len,
-            inbuf, inlen);
-    if (!rc) {
+    CK_RV rv = ssl_util_add_PKCS1_TYPE_1(inbuf, inlen,
+            outbuf, padded_len);
+    if (rv != CKR_OK) {
         LOGE("Applying RSA padding failed");
-        return CKR_GENERAL_ERROR;
+        return rv;
     }
 
     *outlen = padded_len;
@@ -893,22 +893,21 @@ CK_RV rsa_pkcs_unsynthesizer(mdetail *mdtl,
     size_t key_bytes = *keybits / 8;
 
     unsigned char buf[4096];
-    int rc = RSA_padding_check_PKCS1_type_2(buf, sizeof(buf),
-                                       inbuf, inlen,
-                                       key_bytes);
-    if (rc < 0) {
+    CK_ULONG buflen = sizeof(buf);
+    CK_RV rv = ssl_util_check_PKCS1_TYPE_2(inbuf, inlen, key_bytes,
+            buf, &buflen);
+    if (rv != CKR_OK) {
         LOGE("Could not recover CKM_RSA_PKCS Padding");
-        return CKR_GENERAL_ERROR;
+        return rv;
     }
 
-    /* cannot be < 0 because of check above */
-    if (!outbuf || (unsigned)rc > *outlen) {
-        *outlen = rc;
+    if (!outbuf || buflen > *outlen) {
+        *outlen = buflen;
         return outbuf ? CKR_BUFFER_TOO_SMALL : CKR_OK;
     }
 
-    *outlen = rc;
-    memcpy(outbuf, buf, rc);
+    *outlen = buflen;
+    memcpy(outbuf, buf, buflen);
 
     return CKR_OK;
 }
@@ -944,50 +943,21 @@ CK_RV rsa_pss_synthesizer(mdetail *mdtl,
         return CKR_GENERAL_ERROR;
     }
 
-    CK_ATTRIBUTE_PTR exp_attr = attr_get_attribute_by_type(attrs, CKA_PUBLIC_EXPONENT);
-    if (!exp_attr) {
-        LOGE("Signing key has no CKA_PUBLIC_EXPONENT");
-        return CKR_GENERAL_ERROR;
-    }
-
     if (modulus_attr->ulValueLen > *outlen) {
         LOGE("Output buffer is too small, got: %lu, required at least %lu",
                 *outlen, modulus_attr->ulValueLen);
         return CKR_GENERAL_ERROR;
     }
 
-    BIGNUM *e = BN_bin2bn(exp_attr->pValue, exp_attr->ulValueLen, NULL);
-    if (!e) {
-        LOGE("Could not convert exponent to bignum");
-        return CKR_GENERAL_ERROR;
+    EVP_PKEY *pkey = NULL;
+    rv = ssl_util_attrs_to_evp(attrs, &pkey);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
-    BIGNUM *n = BN_bin2bn(modulus_attr->pValue, modulus_attr->ulValueLen, NULL);
-    if (!n) {
-        LOGE("Could not convert modulus to bignum");
-        BN_free(e);
-        return CKR_GENERAL_ERROR;
-    }
-
-    RSA *rsa = RSA_new();
-    if (!rsa) {
-        LOGE("oom");
-        return CKR_HOST_MEMORY;
-    }
-
-    int rc = RSA_set0_key(rsa, n, e, NULL);
-    if (!rc) {
-        LOGE("Could not set modulus and exponent to OSSL RSA key");
-        BN_free(n);
-        BN_free(e);
-        RSA_free(rsa);
-        return CKR_GENERAL_ERROR;
-    }
-
-    rc = RSA_padding_add_PKCS1_PSS(rsa, outbuf,
-            inbuf, md, -1);
-    RSA_free(rsa);
-    if (!rc) {
+    rv = ssl_util_add_PKCS1_PSS(pkey, inbuf, md, outbuf);
+    EVP_PKEY_free(pkey);
+    if (rv != CKR_OK) {
         LOGE("Applying RSA padding failed");
         return CKR_GENERAL_ERROR;
     }

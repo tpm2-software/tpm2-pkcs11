@@ -59,7 +59,7 @@ void encrypt_op_data_free(encrypt_op_data **opdata) {
 CK_RV sw_encrypt_data_init(mdetail *mdtl, CK_MECHANISM *mechanism, tobject *tobj, sw_encrypt_data **enc_data) {
 
     EVP_PKEY *pkey = NULL;
-    CK_RV rv = ssl_util_tobject_to_evp(&pkey, tobj);
+    CK_RV rv = ssl_util_attrs_to_evp(tobj->attrs, &pkey);
     if (rv != CKR_OK) {
         return rv;
     }
