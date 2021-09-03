@@ -15,50 +15,17 @@
 #include "log.h"
 #include "twist.h"
 
-#if (OPENSSL_VERSION_NUMBER < 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)) || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x20700000L) /* OpenSSL 1.1.0 */
-#define LIB_TPM2_OPENSSL_OPENSSL_PRE11
-/* LibreSSL does not appear to have evperr.h, so their is no need to define this otherwise */
-#elif (OPENSSL_VERSION_NUMBER >= 0x1010100fL) /* OpenSSL 1.1.1 */
+#if (OPENSSL_VERSION_NUMBER >= 0x1010100fL) /* OpenSSL 1.1.1 */
 #define LIB_TPM2_OPENSSL_OPENSSL_POST111 0x1010100f
+#endif
+
+#if defined(LIB_TPM2_OPENSSL_OPENSSL_POST111)
+#include <openssl/evperr.h>
 #endif
 
 #if (OPENSSL_VERSION_NUMBER >= 0x30000000) /* OpenSSL 3.0.0 */
 #define LIB_TPM2_OPENSSL_OPENSSL_POST300 0x1010100f
 #endif
-
-/* OpenSSL Backwards Compat APIs */
-#if defined(LIB_TPM2_OPENSSL_OPENSSL_PRE11)
-#include <string.h>
-size_t EC_POINT_point2buf(const EC_GROUP *group, const EC_POINT *point,
-                          point_conversion_form_t form,
-                          unsigned char **pbuf, BN_CTX *ctx);
-
-const unsigned char *ASN1_STRING_get0_data(const ASN1_STRING *x);
-
-int RSA_set0_key(RSA *r, BIGNUM *n, BIGNUM *e, BIGNUM *d);
-
-int ECDSA_SIG_set0(ECDSA_SIG *sig, BIGNUM *r, BIGNUM *s);
-
-EC_KEY *EVP_PKEY_get0_EC_KEY(EVP_PKEY *pkey);
-
-static inline void *OPENSSL_memdup(const void *dup, size_t l) {
-
-    void *p = OPENSSL_malloc(l);
-    if (!p) {
-        return NULL;
-    }
-
-    memcpy(p, dup, l);
-    return p;
-}
-
-#endif
-
-#ifndef RSA_PSS_SALTLEN_DIGEST
-#define RSA_PSS_SALTLEN_DIGEST -1
-#endif
-
-/* Utility APIs */
 
 #define SSL_UTIL_LOGE(m) LOGE("%s: %s", m, ERR_error_string(ERR_get_error(), NULL));
 
