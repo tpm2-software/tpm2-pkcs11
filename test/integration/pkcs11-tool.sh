@@ -82,6 +82,19 @@ pkcs11_tool --slot=1 -l --pin=myuserpin --write-object="$TPM2_PKCS11_STORE/cert.
     --type=cert --id=01 --label=device-cert
 echo "Certificate wrote"
 
+echo "Importing RSA pubkey"
+openssl genrsa -out "$TPM2_PKCS11_STORE/key-rsa-priv.pem" 2048
+openssl rsa -in "$TPM2_PKCS11_STORE/key-rsa-priv.pem" -pubout -out "$TPM2_PKCS11_STORE/key-rsa-pub.pem"
+pkcs11_tool --slot=1 -l --pin=myuserpin --write-object="$TPM2_PKCS11_STORE/key-rsa-pub.pem" --type=pubkey
+echo "RSA pubkey imported"
+
+echo "Trying to import RSA privkey (should fail)"
+if pkcs11_tool --slot=1 -l --pin=myuserpin --write-object="$TPM2_PKCS11_STORE/key-rsa-priv.pem" --type=privkey ; then
+    echo >&2 "Error: pkcs11_tool unexpectedly succeeded in importing a RSA private key"
+    exit 1
+fi
+echo "RSA privkey not imported"
+
 # Run the --test and ensure nothing breaks
 # Note that pkcs11-tools 0.15 have invalid OAEP params size of things like
 # mechanism->ulParameterLen: 4225.
