@@ -751,8 +751,8 @@ CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
     // otherwise 4 byte ID was already padded and will be used.
     for (unsigned int i=0; i < ARRAY_LEN(TPM2_MANUFACTURER_MAP); i++){
         if (!strncasecmp((char *)info->manufacturerID, TPM2_MANUFACTURER_MAP[i][0], 4)) {
-            str_padded_copy(info->manufacturerID,
-                            TPM2_MANUFACTURER_MAP[i][1]);
+            _str_padded_copy(info->manufacturerID, sizeof(info->manufacturerID),
+                    (const CK_UTF8CHAR_PTR)TPM2_MANUFACTURER_MAP[i][1], strlen(TPM2_MANUFACTURER_MAP[i][1]));
         }
     }
 
