@@ -40,7 +40,7 @@
 int str_to_ul(const char *val, size_t *res);
 
 #define str_padded_copy(dst, src) _str_padded_copy(dst, sizeof(dst), (const CK_UTF8CHAR_PTR)src, strnlen((const char *)src, sizeof(src)))
-static inline void _str_padded_copy(CK_UTF8CHAR_PTR dst, size_t dst_len, const CK_UTF8CHAR *src, size_t src_len) {
+static inline void _str_padded_copy(CK_UTF8CHAR_PTR dst, size_t dst_len, const CK_UTF8CHAR_PTR src, size_t src_len) {
     memset(dst, ' ', dst_len);
     memcpy(dst, src, src_len);
 }
