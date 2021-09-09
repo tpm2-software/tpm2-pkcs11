@@ -762,7 +762,8 @@ CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
     vendor[1] = ntohl(tpmProperties[TPM2_PT_VENDOR_STRING_2 - TPM2_PT_FIXED].value);
     vendor[2] = ntohl(tpmProperties[TPM2_PT_VENDOR_STRING_3 - TPM2_PT_FIXED].value);
     vendor[3] = ntohl(tpmProperties[TPM2_PT_VENDOR_STRING_4 - TPM2_PT_FIXED].value);
-    str_padded_copy(info->model, (unsigned char*) &vendor);
+    _str_padded_copy(info->model, sizeof(info->model), (unsigned char*)
+            &vendor, sizeof(vendor));
 
     return CKR_OK;
 }
