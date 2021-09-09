@@ -225,6 +225,7 @@ CK_RV backend_get_tokens(token **tok, size_t *len) {
     *len += 1;
     rv = token_min_init(t);
     if (rv != CKR_OK) {
+        token_free_list(&tmp, len);
         return rv;
     }
 
