@@ -1,10 +1,10 @@
 # Changelog
 
-### 1.7.0-rc0 - 2021-09-02
+### 1.7.0-rc1 - 2021-09-10
   * DB Schema Change from 5 to 7.
     - **Backup your DB before upgrading**
   * Fixed compilation issues with GCC11.
-  * Fixed erros on releases due to newer compilers from failing by only adding `-Werror` for non-release builds.
+  * Fixed errors on releases due to newer compilers from failing by only adding `-Werror` for non-release builds.
   * Fixed error message when the DB is too new in tpm2\_ptool.
   * Added support for tpm2\_ptool import with ssh-keygen format keys. Note: Requires cryptography >= 3.0.
   * Changed default long level from error to warning.
@@ -26,6 +26,8 @@
   * Fixed wrong free in tpm code, should use Esys\_Free.
   * Fixed a space formatting issue in tpm2\_ptool verify.
   * Fixed leaked file descriptor in tpm2\_ptool.
+  * Fixed a few suspicious sizeof usages in str\_padded\_copy
+  * Fixed a memory leak of the token list on a failure condition in initialization.
 
 ### 1.6.0 - 2021-05-03
   * Spelling and grammar fixes throughout the project.
