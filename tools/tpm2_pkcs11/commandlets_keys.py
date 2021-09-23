@@ -640,14 +640,16 @@ class LinkCommand(NewKeyCommandBase):
         ctx = tpm2.load(pobj_handle, pobjauth, privbytes, pubbytes)
         tertiarypubdata, _ = tpm2.readpublic(ctx, False)
 
+        privfd, tertiarypriv = mkstemp(prefix='', suffix='.priv', dir=d)
         try:
-            privfd, tertiarypriv = mkstemp(prefix='', suffix='.priv', dir=d)
-            pubfd, tertiarypub = mkstemp(prefix='', suffix='.pub', dir=d)
-
             os.write(privfd, privbytes)
-            os.write(pubfd, pubbytes)
         finally:
             os.close(privfd)
+
+        pubfd, tertiarypub = mkstemp(prefix='', suffix='.pub', dir=d)
+        try:
+            os.write(pubfd, pubbytes)
+        finally:
             os.close(pubfd)
 
         return (tertiarypriv, tertiarypub, tertiarypubdata)

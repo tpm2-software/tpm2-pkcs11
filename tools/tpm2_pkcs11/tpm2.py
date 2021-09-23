@@ -301,8 +301,10 @@ class Tpm2(object):
                 encryption_algorithm=enc_alg)
 
             pem_priv_fd, pem_priv_name = mkstemp(prefix='', suffix='.privpem', dir=self._tmp)
-            os.write(pem_priv_fd, pem_key)
-            os.close(pem_priv_fd)
+            try:
+                os.write(pem_priv_fd, pem_key)
+            finally:
+                os.close(pem_priv_fd)
             privkey = pem_priv_name
         elif alg is None:
             # Guess the key algorithm from the PEM header
