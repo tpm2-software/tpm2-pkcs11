@@ -139,8 +139,8 @@ tpm2_ptool addkey --algorithm=aes256 --label="label" --key-label=mykeylabel --us
 tpm2_ptool addkey --algorithm=aes256 --label="label" --userpin=myuserpin --attr-always-authenticate --path=$TPM2_PKCS11_STORE
 echo "Added AES Keys"
 
-echo "Adding 3 RSA 2048 keys under token \"label\""
-for i in `seq 0 1`; do
+echo "Adding 4 RSA 2048 keys under token \"label\""
+for i in `seq 0 2`; do
   tpm2_ptool addkey --algorithm=rsa2048 --label="label" --key-label="rsa$i" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 done;
 tpm2_ptool addkey --algorithm=rsa2048 --label="label" --userpin=myuserpin --attr-always-authenticate --path=$TPM2_PKCS11_STORE
@@ -171,7 +171,16 @@ TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
     req -new -x509 -days 365 -subj '/CN=my key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_ec1 -out "$cert.ec1"
 
 TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
-    req -new -x509 -days 365 -subj '/CN=my key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_rsa1 -out "$cert.rsa1"
+    req -new -x509 -days 365 -subj '/CN=my key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_rsa1 \
+    -config "$TEST_FIXTURES/ossl-req-ca.cnf" -extensions ca_ext -out "$cert.rsa1"
+
+# sign a certificate for rsa2 using the rsa1 key
+TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
+    req -new -subj '/CN=my sub key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_rsa2 -out "$cert.csr.rsa2"
+TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
+    x509 -req -days 365 -sha256 -in "$cert.csr.rsa2" -engine pkcs11 \
+    -CA "$cert.rsa1" -CAkeyform engine -CAkey slot_1-label_rsa1 -CAcreateserial \
+    -extfile "$TEST_FIXTURES/ossl-req-cert.cnf" -extensions cert_ext -out "$cert.rsa2"
 clear_asan
 
 #
@@ -181,8 +190,9 @@ echo "Adding EC Certificate"
 tpm2_ptool addcert --label=label --key-label=ec1 --path=$TPM2_PKCS11_STORE "$cert.ec1"
 echo "added x509 Certificate"
 
-echo "Adding RSA Certificate"
+echo "Adding RSA Certificates"
 tpm2_ptool addcert --label=label --key-label=rsa1 --path=$TPM2_PKCS11_STORE "$cert.rsa1"
+tpm2_ptool addcert --label=label --key-label=rsa2 --path=$TPM2_PKCS11_STORE "$cert.rsa2"
 echo "added x509 Certificate"
 
 # add 1 aes key under label "import-keys"

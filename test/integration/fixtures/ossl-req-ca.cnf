@@ -1,0 +1,13 @@
+# OpenSSL configuration for generating CA certificates
+[req]
+default_bits = 2048
+req_extensions = ca_ext
+distinguished_name = ca_dn
+
+[ca_dn]
+commonName = "Test CA"
+
+[ca_ext]
+keyUsage = critical,keyCertSign,cRLSign
+basicConstraints = critical,CA:true
+subjectKeyIdentifier = hash
