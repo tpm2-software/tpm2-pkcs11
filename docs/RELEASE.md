@@ -50,11 +50,11 @@ For a final release, change the version to the final release version (i.e: 3.0.5
 update the date. The commit for this change will be tagged as $version.
 
 ## Testing
-The tools code **MUST** pass the Travis CI testing and have a clean
+
+The tools code **MUST** pass the Github Actions testing and have a clean
 Coverity scan result performed on every release. The CI testing not
 only tests for valid outputs, but also runs tests uses clang's ASAN
 feature to detect memory corruption issues.
-  - BUG: Reconfigure Coverity: https://github.com/tpm2-software/tpm2-tools/issues/1727
 
 ## Release Checklist
 
@@ -62,8 +62,8 @@ The steps, in order, required to make a release.
 
 - Ensure current HEAD is pointing to the last commit in the release branch.
 
-- Ensure [Travis](https://travis-ci.org/tpm2-software/tpm2-tools) has conducted a passing build of
-  HEAD.
+- Ensure [GitHub Actions](https://github.com/tpm2-software/tpm2-pkcs11/actions)
+  has conducted a passing build of HEAD.
 
 - Update version and date information in [CHANGELOG.md](CHANGELOG.md) **and** commit.
 
@@ -90,10 +90,11 @@ The steps, in order, required to make a release.
   git push origin <tag-name>
   ```
 
-- Verify that the Travis CI build passes. **Note**: Travis will have two builds, one for the
-  push to master and one for the tag push. Both should succeed.
+- Verify that the GitHub Actions build passes.
+  **Note**: GitHub Actions will have two builds, one for the push to master and one for the tag push.
+  Both should succeed.
 
-- Create a release on [Github](https://github.com/tpm2-software/tpm2-tools/releases),
+- Create a release on [Github](https://github.com/tpm2-software/tpm2-pkcs11/releases),
   using the `<release-tag>` uploaded. If it is a release candidate, ensure you check the "pre-release"
   box on the GitHub UI. Use the [CHANGELOG.md](CHANGELOG.md) contents for
   that release as the message for the GitHub release. **Add the dist tarball and signature file
