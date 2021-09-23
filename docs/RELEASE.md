@@ -1,7 +1,8 @@
 # Release Information
 
 Releases shall be tagged following semantic version guidelines found at:
-  - http://semver.org/
+
+- <http://semver.org/>
 
 The general release process will be one of two models:
 
@@ -111,41 +112,24 @@ The steps, in order, required to make a release.
 
 - Send announcement on [mailing list](https://lists.01.org/mailman/listinfo/tpm2).
 
-
-## Historical Version Information
-
-Versions after v1.1.0 will no longer have the "v" prefix. Autoconf now sets
-the VERSION #define based on the output of git describe. See commit 2e8a07bc
-for the details.
-
-Version tags after v1.1.0 shall be signed.
-
 ## Verifying git signature
 
-Valid known public keys can be reached by
-referencing the annotated tags listed below:
+Valid known public keys can be reached via a PGP public keyring server like:
 
-- william-roberts-pub
-- javier-martinez-pub
-- joshua-lock-pub
-- idesai-pub
+- <http://keyserver.pgp.com/vkd/GetWelcomeScreen.event>
+- <https://keyserver.ubuntu.com/>
 
-or via a PGP public keyring server like:
-  - http://keyserver.pgp.com/vkd/GetWelcomeScreen.event
+**Example** for William Roberts (key [`5B482B8E3E19DA7C978E1D016DE2E9078E1F50C1`](https://keyserver.ubuntu.com/pks/lookup?search=0x5B482B8E3E19DA7C978E1D016DE2E9078E1F50C1&fingerprint=on&op=index):
 
-Import the key into your keyring:
-```
-$ git show [annotated-tag-name] | gpg --import
-```
-
-**Example**:
-```
-$ git show william-roberts-pub | gpg --import
+```bash
+curl 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x5b482b8e3e19da7c978e1d016de2e9078e1f50c1' | \
+  gpg --import
 ```
 
 Verify the release tag:
-```
-$ git tag --verify [signed-tag-name]
+
+```bash
+git tag --verify [signed-tag-name]
 ```
 
 # Local Release Configuration
@@ -157,18 +141,18 @@ Below you will find information how to configure your machine locally to conduct
 Signing keys should have these four properties going forward:
   - belong to a project maintainer.
   - be discoverable using a public GPG key server.
-  - be [associated]((https://help.github.com/articles/adding-a-new-gpg-key-to-your-github-account/))
+  - be [associated](https://help.github.com/articles/adding-a-new-gpg-key-to-your-github-account/)
     with the maintainers GitHub account.
   - be discoverable via an annotated tag within the repository itself.
 
 Ensure you have a key set up:
-```
-$ gpg --list-keys
+```bash
+gpg --list-keys
 ```
 
 If you don't generate one:
-```
-$ gpg --gen-key
+```bash
+gpg --gen-key
 ```
 
 Add that key to the gitconfig:
@@ -188,7 +172,7 @@ git push origin [your-name-here]-pub
 ```
 
 Make sure you publish your key by doing:
-  - http://keyserver.pgp.com/vkd/GetWelcomeScreen.event
+  - <http://keyserver.pgp.com/vkd/GetWelcomeScreen.event>
     - Select "Publish your key".
     - Select "Key block"
     - Copy and paste the output of `gpg --armor --export <key-id>`
