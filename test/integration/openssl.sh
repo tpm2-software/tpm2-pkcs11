@@ -134,4 +134,18 @@ openssl dgst -sha1 -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:-1 -sign
 
 rm data.sig
 
+# verify that importing certificates do not modify them
+# NB. OpenSSL never verified the signature of self-signed certificate:
+# https://github.com/openssl/openssl/blob/openssl-3.0.0/ssl/t1_lib.c#L2970
+# This is why two certificates are needed
+cert_db_id="$(yaml_get_id objlist.yaml rsa1 CKO_CERTIFICATE)"
+tpm2_ptool objmod --id="$cert_db_id" > "key.attrs.yaml"
+yaml_get_kv "key.attrs.yaml" 17 | xxd -p -r > "ca.der"
+openssl x509 -inform DER -in "ca.der" -outform PEM -out "ca.pem"
+cert_db_id="$(yaml_get_id objlist.yaml rsa2 CKO_CERTIFICATE)"
+tpm2_ptool objmod --id="$cert_db_id" > "key.attrs.yaml"
+yaml_get_kv "key.attrs.yaml" 17 | xxd -p -r > "cert.der"
+openssl x509 -inform DER -in "cert.der" -outform PEM -out "cert.pem"
+openssl verify -CAfile ca.pem cert.pem
+
 exit 0
