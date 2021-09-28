@@ -253,8 +253,6 @@ def pemcert_to_attrs(certpath):
     cert = derdecoder.decode(bercert, asn1Spec=rfc2459.Certificate())[0]
     c = cert['tbsCertificate']
 
-    # print(cert.prettyPrint())
-
     h = binascii.hexlify
     d = derencoder.encode
 
