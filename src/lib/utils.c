@@ -61,8 +61,10 @@ out:
 
     if (rv != CKR_OK) {
         twist_free(*newauthhex);
-        twist_free(*newsalthex);
-        *newsalthex = NULL;
+        if (newsalthex) {
+            twist_free(*newsalthex);
+            *newsalthex = NULL;
+        }
     }
 
     if (allocated_pin_to_use) {
