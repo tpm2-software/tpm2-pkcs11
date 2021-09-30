@@ -1,5 +1,9 @@
 # Changelog
 
+### next
+  * Fix encoding errors when importing a certificate into the pkcs11 store.
+  * Fix try/finally scope issues in tpm2\_ptool.
+
 ### 1.7.0 - 2021-09-27
   * DB Schema Change from 5 to 7.
     - **Backup your DB before upgrading**
