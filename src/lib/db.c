@@ -1724,7 +1724,7 @@ static CK_RV handle_AES_add_cbc_ctr_modes(tobject *tobj) {
     /* copy the old mechanism into the list and add CBC_PAD and CTR */
     CK_ULONG i;
     CK_ULONG pos = 0;
-    for (i=0; i < mech_num; i++) {
+    for (i=0; i < mech_num - 2; i++) {
         assert(a && a->pValue && a->ulValueLen);
         CK_MECHANISM_TYPE old_mech = ((CK_MECHANISM_TYPE_PTR)(a->pValue))[i];
         if (old_mech == CKM_AES_CBC_PAD ||
@@ -1874,7 +1874,7 @@ static CK_RV handle_ECDSA_5_to_6(tobject *tobj) {
     /* copy the old mechanism into the list and add CBC_PAD and CTR */
     CK_ULONG i;
     CK_ULONG pos = 0;
-    for (i=0; i < mech_num; i++) {
+    for (i=0; i < mech_num - 3; i++) {
         assert(a && a->pValue && a->ulValueLen);
         CK_MECHANISM_TYPE old_mech = ((CK_MECHANISM_TYPE_PTR)(a->pValue))[i];
         if (old_mech == CKM_ECDSA_SHA256 ||
