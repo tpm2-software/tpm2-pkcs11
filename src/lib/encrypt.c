@@ -365,8 +365,20 @@ CK_RV decrypt_oneshot_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK
 
     bool is_buffer_too_small = false;
     CK_ULONG tmp_len = *data_len;
+    CK_RV rv = CKR_GENERAL_ERROR;
 
-    CK_RV rv = decrypt_update_op(ctx, supplied_opdata, encrypted_data, encrypted_data_len,
+    if (!supplied_opdata) {
+        encrypt_op_data *opdata = NULL;
+        rv = session_ctx_opdata_get(ctx, operation_decrypt, &opdata);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+        if (!opdata->use_sw) {
+            tpm_opdata_reset(opdata->cryptopdata.tpm_opdata);
+        }
+    }
+
+    rv = decrypt_update_op(ctx, supplied_opdata, encrypted_data, encrypted_data_len,
             data, &tmp_len);
     if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
         return rv;
@@ -395,8 +407,20 @@ CK_RV encrypt_oneshot_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK
 
     bool is_buffer_too_small = false;
     CK_ULONG tmp_len = *encrypted_data_len;
+    CK_RV rv = CKR_GENERAL_ERROR;
 
-    CK_RV rv = encrypt_update_op (ctx, supplied_opdata, data, data_len, encrypted_data, &tmp_len);
+    if (!supplied_opdata) {
+        encrypt_op_data *opdata = NULL;
+        rv = session_ctx_opdata_get(ctx, operation_encrypt, &opdata);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+        if (!opdata->use_sw) {
+            tpm_opdata_reset(opdata->cryptopdata.tpm_opdata);
+        }
+    }
+
+    rv = encrypt_update_op (ctx, supplied_opdata, data, data_len, encrypted_data, &tmp_len);
     if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
         return rv;
     }

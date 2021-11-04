@@ -2159,6 +2159,10 @@ CK_RV tpm_hmac_sha512_get_opdata(mdetail *mdtl,
     return CKR_OK;
 }
 
+void tpm_opdata_reset(tpm_op_data *tpm_enc_data) {
+    tpm_enc_data->sym.prev.len = 0;
+}
+
 void tpm_opdata_free(tpm_op_data **opdata) {
 
     if (opdata) {
