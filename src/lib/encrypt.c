@@ -264,10 +264,11 @@ static CK_RV common_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdat
 }
 
 static CK_RV common_final_op(session_ctx *ctx, encrypt_op_data *supplied_opdata, operation op,
-        CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
+        CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len, bool is_oneshot) {
 
     check_pointer(last_part_len);
 
+    bool reset_ctx = false;
     CK_RV rv = CKR_GENERAL_ERROR;
 
     encrypt_op_data *opdata = supplied_opdata;
@@ -314,7 +315,15 @@ out:
      * We also don't want to decrement the tobject unless we're using session ctx
      * not internal routines.
      */
-    if (rv != CKR_BUFFER_TOO_SMALL && last_part && !supplied_opdata) {
+    reset_ctx = (rv == CKR_BUFFER_TOO_SMALL || !last_part);
+    if (reset_ctx) {
+        if (is_oneshot && !opdata->use_sw) {
+            tpm_opdata_reset(opdata->cryptopdata.tpm_opdata);
+        }
+        /* all is well, we reset the command context */
+        rv = CKR_OK;
+    } else if(!supplied_opdata) {
+        /* end the command context */
         tobj->is_authenticated = false;
         if (!supplied_opdata) {
             session_ctx_opdata_clear(ctx);
@@ -349,14 +358,14 @@ CK_RV decrypt_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_
     return common_update_op(ctx, supplied_opdata, operation_decrypt, part, part_len, encrypted_part, encrypted_part_len);
 }
 
-CK_RV encrypt_final_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR last_encrypted_part, CK_ULONG_PTR last_encrypted_part_len) {
+CK_RV encrypt_final_ex (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR last_encrypted_part, CK_ULONG_PTR last_encrypted_part_len, bool is_oneshot) {
 
-    return common_final_op(ctx, supplied_opdata, operation_encrypt, last_encrypted_part, last_encrypted_part_len);
+    return common_final_op(ctx, supplied_opdata, operation_encrypt, last_encrypted_part, last_encrypted_part_len, is_oneshot);
 }
 
-CK_RV decrypt_final_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len) {
+CK_RV decrypt_final_ex (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR last_part, CK_ULONG_PTR last_part_len, bool is_oneshot) {
 
-    return common_final_op(ctx, supplied_opdata, operation_decrypt, last_part, last_part_len);
+    return common_final_op(ctx, supplied_opdata, operation_decrypt, last_part, last_part_len, is_oneshot);
 }
 
 CK_RV decrypt_oneshot_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR encrypted_data, CK_ULONG encrypted_data_len, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
@@ -384,7 +393,7 @@ CK_RV decrypt_oneshot_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK
         tmp_len = *data_len - tmp_len;
     }
 
-    rv = decrypt_final_op(ctx, supplied_opdata, data, &tmp_len);
+    rv = decrypt_final_ex(ctx, supplied_opdata, data, &tmp_len, true);
     *data_len = update_len + tmp_len;
     return !is_buffer_too_small ? rv : CKR_BUFFER_TOO_SMALL;
 }
@@ -413,7 +422,7 @@ CK_RV encrypt_oneshot_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK
         tmp_len = *encrypted_data_len - tmp_len;
     }
 
-    rv = encrypt_final_op(ctx, supplied_opdata, encrypted_data, &tmp_len);
+    rv = encrypt_final_ex(ctx, supplied_opdata, encrypted_data, &tmp_len, true);
     *encrypted_data_len = update_len + tmp_len;
     return !is_buffer_too_small ? rv : CKR_BUFFER_TOO_SMALL;
 }

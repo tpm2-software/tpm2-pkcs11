@@ -49,9 +49,10 @@ static inline CK_RV encrypt_update (session_ctx *ctx, unsigned char *part, unsig
     return encrypt_update_op (ctx, NULL, part, part_len, encrypted_part, encrypted_part_len);
 }
 
-CK_RV encrypt_final_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, unsigned char *last_encrypted_part, unsigned long *last_encrypted_part_len);
+CK_RV encrypt_final_ex (session_ctx *ctx, encrypt_op_data *supplied_opdata, unsigned char *last_encrypted_part, unsigned long *last_encrypted_part_len, bool is_oneshot);
+
 static inline CK_RV encrypt_final (session_ctx *ctx, unsigned char *last_encrypted_part, unsigned long *last_encrypted_part_len) {
-    return encrypt_final_op (ctx, NULL, last_encrypted_part, last_encrypted_part_len);
+    return encrypt_final_ex (ctx, NULL, last_encrypted_part, last_encrypted_part_len, false);
 }
 
 CK_RV decrypt_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key);
@@ -64,9 +65,10 @@ static inline CK_RV decrypt_update (session_ctx *ctx, unsigned char *part, unsig
         return decrypt_update_op (ctx, NULL, part, part_len, encrypted_part, encrypted_part_len);
 }
 
-CK_RV decrypt_final_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, unsigned char *last_part, unsigned long *last_part_len);
+CK_RV decrypt_final_ex(session_ctx *ctx, encrypt_op_data *supplied_opdata, unsigned char *last_part, unsigned long *last_part_len, bool is_oneshot);
+
 static inline CK_RV decrypt_final (session_ctx *ctx,  unsigned char *last_part, unsigned long *last_part_len) {
-    return decrypt_final_op (ctx, NULL, last_part, last_part_len);
+    return decrypt_final_ex (ctx, NULL, last_part, last_part_len, false);
 }
 
 CK_RV decrypt_oneshot_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, unsigned char *encrypted_data, unsigned long encrypted_data_len, unsigned char *data, unsigned long *data_len);

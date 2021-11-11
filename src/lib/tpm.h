@@ -133,6 +133,7 @@ CK_RV tpm_hmac_sha256_get_opdata(mdetail *mdtl, tpm_ctx *tctx, CK_MECHANISM_PTR 
 CK_RV tpm_hmac_sha384_get_opdata(mdetail *mdtl, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata);
 CK_RV tpm_hmac_sha512_get_opdata(mdetail *mdtl, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **outdata);
 
+void tpm_opdata_reset(tpm_op_data *opdata);
 void tpm_opdata_free(tpm_op_data **opdata);
 
 CK_RV tpm_encrypt(crypto_op_data *opdata, CK_BYTE_PTR ptext, CK_ULONG ptextlen, CK_BYTE_PTR ctext, CK_ULONG_PTR ctextlen);
