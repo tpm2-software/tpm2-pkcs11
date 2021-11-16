@@ -18,16 +18,16 @@ For maintainers, they either must have their pull request reviewed by another
 maintainer if possible, or leave the PR open for at least 24 hours, we consider
 this the window for comments.
 
-  * All tests must pass on Travis CI for the merge to occur.
+  * All tests must pass on Github Actions CI for the merge to occur.
   * All changes must not introduce superfluous whitespace changes or whitespace errors.
   * All changes should adhere to the coding standard documented under misc.
 
 ## Testing
-The Travis CI setup uses a docker container, thus this docker container can be used
+The Github Actions setup uses a docker container, thus this docker container can be used
 to run the CI testing before submitting. The rationale for using a container versus
 Docker directly is that:
-1. Debugging build failures on Travis can be frustrating
-2. Travis doesn't have support for many distributions and versions. With a container
+1. Debugging build failures on Github Actions can be frustrating
+2. Github Actions doesn't have support for many distributions and versions. With a container
    we can trivially add additional distro testing.
 
 ### How To Run Docker Locally
