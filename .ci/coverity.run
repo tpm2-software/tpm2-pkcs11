@@ -76,7 +76,7 @@ echo "Name: $AUTHOR" >> README
 echo "Email: $AUTHOR_EMAIL" >> README
 echo "Project: tpm2-pkcs11" >> README
 echo "Build-Version: $VERSION" >> README
-echo "Description: $REPO_SLUG $REPO_BRANCH" >> README
+echo "Description: $REPO_NAME $REPO_BRANCH" >> README
 echo "Submitted-by: tpm2-pkcs11 CI" >> README
 echo "---README---"
 cat README
@@ -97,7 +97,7 @@ curl --form token="$COVERITY_SCAN_TOKEN" \
   --form project="$PROJECT" \
   --form file=@"$scan_file" \
   --form version="$VERSION" \
-  --form description="$REPO_SLUG $REPO_BRANCH" \
+  --form description="$REPO_NAME $REPO_BRANCH" \
   "https://scan.coverity.com/builds?project=$PROJECT"
 
 rm -rf tpm2-*-scan.tgz
