@@ -25,5 +25,5 @@ if [ ! -e /etc/pkcs11/modules/tpm2_pkcs11.module ]; then
 fi
 
 echo "echo changing to $DOCKER_BUILD_DIR"
-# Change to the travis build dir
+# Change to the docker build dir
 cd $DOCKER_BUILD_DIR
