@@ -127,13 +127,8 @@ CK_RV tobject_get_min_buf_size(tobject *tobj, CK_MECHANISM_PTR mech, size_t *max
         }
 
         /*
-         * Math below is based off of ECDSA signature:
-         * SEQUENCE (2 elem)
-         *  INTEGER R
-         *  INTEGER S
-         *
-         *  Integers R and S are bounded by keysize in bytes, followed by their
-         *  respective headers(2bytes) followed by the SEQUENCE header(2 bytes)
+         * The signature output from a PKCS#11 ECDSA operation is the raw R,S output
+         * which is twice the size of the keysize
          */
         unsigned keysize;
 
@@ -158,21 +153,7 @@ CK_RV tobject_get_min_buf_size(tobject *tobj, CK_MECHANISM_PTR mech, size_t *max
             return CKR_CURVE_NOT_SUPPORTED;
         }
 
-        /* R and S are INTEGER objects with a header and len byte */
-        static const unsigned INT_HDR = 2U;
-        /* R and S are combined in a SEQUENCE object with a header and len byte */
-        static const unsigned SEQ_HDR = 2U;
-        /* an R or S with a high bit set needs an extra nul byte so it's not negative (twos comp)*/
-        static const unsigned EXTRA = 1U;
-
-        unsigned tmp = 0;
-        safe_add(tmp, keysize, INT_HDR);
-        safe_adde(tmp, EXTRA);
-        safe_mule(tmp, 2);
-
-        tmp += SEQ_HDR;
-
-        *maxsize = tmp;
+        *maxsize = keysize * 2;
 
         return CKR_OK;
     }
