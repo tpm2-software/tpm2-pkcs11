@@ -423,16 +423,10 @@ static void test_sign_verify_CKM_ECDSA(void **state) {
     rv = C_Sign(session, sha256_msg_hash, sizeof(sha256_msg_hash), NULL,
             &siglen);
     assert_int_equal(rv, CKR_OK);
-    /* The signature comes back as DER encoded R + S parts of the signature.
-     * R + S is 2 times the curve size in bytes (so 64 for P256) but we're not
-     * returning that, but the DER encoded format that tools expect.
-     * Since the length of DER encoding is dependent on the encoded value
-     * (e.g. leading zero if negative), the output size is not stable.
-     * Thus calling C_Sign for size must return the maximum length of the DER
-     * encoded value, which is (2+1+keylength) * 2 + 2. So for P256 = 72
-     * the actual signature size may be smaller.
+    /* The signature comes back as R + S parts of the signature.
+     * R + S is 2 times the curve size in bytes (so 64 for P256)
      */
-    assert_int_equal(siglen, 72);
+    assert_int_equal(siglen, 64);
     CK_ULONG tmp_len = siglen;
 
     rv = C_Sign(session, sha256_msg_hash, sizeof(sha256_msg_hash), sig,
