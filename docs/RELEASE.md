@@ -1,4 +1,12 @@
 # Release Information
+This document describes the general process that maintainers must follow when making a release of the `tpm2-pkcs11` library.
+
+# Milestones
+All releases should have a milestone used to track the release. If the release version is not known, as covered in [Version Numbers](#Version Numbers),
+then an "x" may be used for the unknown number, or the generic term "next" may be used. The description field of the milestone will be used to record
+the CHANGELOG for that release. See [CHANGELOG Update](#CHANGELOG Update) for details.
+
+## Version Numbers
 
 Releases shall be tagged following semantic version guidelines found at:
 
@@ -23,32 +31,9 @@ When a release is cut, the process is the same as a Release Candidate (RC), with
 it is not marked as "pre-release" on GitHub. The release notes should include everything from the
 last release to the latest release.
 
-## Updating the CHANGELOG for release candidates and final releases
-
-When a first release candidate is cut, a new entry will be added to the CHANGELOG file. This
-entry will have the release candidate version and the date on which the release candidate was
-released. The entry will list all the changes that happened between the latest final release
-and the first release candidate.
-
-The commit that made the change will be tagged with a release version and a -rc0 suffix as an
-indication that is not a final release but a first release candidate. If after a week the -rc
-has no changes, then a final release can be made as explained above. But if changes are made,
-then a new releases candidate will be released and the -rc suffix will be incremented.
-
-For each release candidate, the changes that happened between the previous release candidate
-will be appended to the CHANGELOG entry, and both the release candidate version and the date
-of the release will be updated to reflect the latest release candidate.
-
-The commit that updated the CHANGELOG entry will be tagged as the latest release candidate.
-
-When a final version will be released, there will not be changes to append to the CHANGELOG
-entry since otherwise a new release candidate should be cut. So only the release version and
-date should be updated in the CHANGELOG.
-
-The commit that updated the CHANGELOG entry will be tagged as the final release.
-
-For a final release, change the version to the final release version (i.e: 3.0.5-rc3 -> 3.0.5) and
-update the date. The commit for this change will be tagged as $version.
+## CHANGELOG Update
+Before tagging the repository with the release version, the maintainer MUST update the CHANGELOG file with the contents from the description field
+from the corresponding release milestone and update any missing version string details in the CHANGELOG and milestone entry.
 
 ## Testing
 
