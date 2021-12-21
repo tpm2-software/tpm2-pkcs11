@@ -215,20 +215,20 @@ static const unsigned char _home_wcrobert_empty_seq_yaml[] = {
   0x20, 0x20, 0x3a, 0x20, 0x21, 0x21, 0x73, 0x65, 0x71, 0x20, 0x5b, 0x0a,
   0x20, 0x20, 0x20, 0x20, 0x21, 0x21, 0x69, 0x6e, 0x74, 0x20, 0x22, 0x34,
   0x32, 0x32, 0x36, 0x22, 0x2c, 0x0a, 0x20, 0x20, 0x5d, 0x2c, 0x0a, 0x7d,
-  0x0a, 0x22, 0x0a
+  0x0a
 };
-static const unsigned int _home_wcrobert_empty_seq_yaml_len = 1155;
+static const unsigned int _home_wcrobert_empty_seq_yaml_len = 1153;
 
 static void test_config_parser_empty_seq(void **state) {
     (void) state;
 
     attr_list *attrs = NULL;
 
-    bool res = parse_attributes_from_string(_attrs_yaml, _attrs_yaml_len,
+    bool res = parse_attributes_from_string(_home_wcrobert_empty_seq_yaml, _home_wcrobert_empty_seq_yaml_len,
             &attrs);
     assert_true(res);
     assert_non_null(attrs);
-    assert_int_equal(attr_list_get_count(attrs), 20);
+    assert_int_equal(attr_list_get_count(attrs), 32);
 
     attr_list_free(attrs);
 }
