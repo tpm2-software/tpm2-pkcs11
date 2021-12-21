@@ -95,7 +95,7 @@ test $v -ge 1
 
 echo "testdata">${tempdir}/data
 
-echo "Using key to ensure it still wotks"
+echo "Using key to ensure it still works"
 pkcs11_tool -v --sign --login --slot-index=0 --label="myrsakey" --pin myuserpin \
             --input-file ${tempdir}/data --output-file ${tempdir}/sig \
             --mechanism SHA256-RSA-PKCS

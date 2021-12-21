@@ -206,7 +206,7 @@ bool on_seq_scalar_event(yaml_event_t *e, handler_state *state, attr_list *l) {
     UNUSED(l);
 
     if (!e->data.scalar.tag) {
-        LOGE("Scalara tag is null");
+        LOGE("Scalar tag is null");
         return false;
     }
 

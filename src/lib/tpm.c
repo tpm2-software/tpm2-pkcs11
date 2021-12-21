@@ -2520,7 +2520,7 @@ static CK_RV do_buffered_encdec(tpm_op_data *tpm_enc_data,
 
         if (tpm_enc_data->mech.mechanism == CKM_AES_CTR) {
 
-            /* Detect CTR wrapping, ie CTR should never repeat iteself */
+            /* Detect CTR wrapping, ie CTR should never repeat itself */
             int rc = BN_add_word(tpm_enc_data->sym.ctr.counter, blocks);
             if (!rc) {
                 SSL_UTIL_LOGE("BN_add_word");

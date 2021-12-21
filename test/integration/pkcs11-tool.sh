@@ -136,7 +136,7 @@ else
 fi
 
 #
-# Test that the imported SSH keys are useable
+# Test that the imported SSH keys are usable
 #
 pkcs11_tool --token-label="import-keys" --login --pin=anotheruserpin --list-objects
 
@@ -158,7 +158,7 @@ size="$(stat --printf="%s" ${tempdir}/sig)"
 test "$size" -eq "64"
 
 #
-# Test that the keys with empty PIN are useable
+# Test that the keys with empty PIN are usable
 #
 pkcs11_tool --token-label="empty-pin" --list-objects
 # The Private Key Objects are enumerated without login

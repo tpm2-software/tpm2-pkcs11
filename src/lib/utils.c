@@ -494,7 +494,7 @@ CK_RV remove_pkcs7_pad(CK_BYTE_PTR in, CK_ULONG inlen,
 
     CK_BYTE pad_value = in[inlen - 1];
     if (pad_value < 1 || pad_value > 16) {
-        LOGE("Nonesensical pad value, got: %u, expected 1-16", pad_value);
+        LOGE("Nonsensical pad value, got: %u, expected 1-16", pad_value);
         return CKR_ENCRYPTED_DATA_INVALID;
     }
 

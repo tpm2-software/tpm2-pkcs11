@@ -760,7 +760,7 @@ static void test_rsa_pkcs_encrypt_decrypt_public_5_2_returns_good(void **state) 
     assert_memory_equal(plaintext2, plaintext, sizeof(plaintext));
 }
 
-static void test_aes_big_blockboundry_buffer_encrypt_decrypt_oneshot_5_2_returns(void **state) {
+static void test_aes_big_blockboundary_buffer_encrypt_decrypt_oneshot_5_2_returns(void **state) {
 
     test_info *ti = test_info_from_state(state);
 
@@ -857,7 +857,7 @@ static void test_aes_big_blockboundry_buffer_encrypt_decrypt_oneshot_5_2_returns
  * This tests that 3 blocks of plaintext encrypted and decrypted
  * via C_EncryptUpdate and C_DecryptUpdate calls work as expected.
  */
-static void test_aes_cbc_non_block_boundry_plaintext(void **state) {
+static void test_aes_cbc_non_block_boundary_plaintext(void **state) {
 
     test_info *ti = test_info_from_state(state);
 
@@ -963,7 +963,7 @@ static void test_aes_cbc_non_block_boundry_plaintext(void **state) {
     unsigned char plaintext2[sizeof(plaintext)]= { 0 };
     unsigned long plaintext2_len = sizeof(plaintext2);
 
-    /* go one past the block boundry */
+    /* go one past the block boundary */
     rv = C_DecryptUpdate (session, ciphertext, 17,
             plaintext2, &plaintext2_len);
     assert_int_equal(rv, CKR_OK);
@@ -1013,7 +1013,7 @@ static void test_aes_cbc_non_block_boundry_plaintext(void **state) {
     assert_memory_equal(plaintext, plaintext2, sizeof(plaintext2));
 }
 
-static void test_aes_cbc_non_block_boundry_plaintext_bad(void **state) {
+static void test_aes_cbc_non_block_boundary_plaintext_bad(void **state) {
 
     test_info *ti = test_info_from_state(state);
 
@@ -1309,7 +1309,7 @@ static void test_aes_cbc_pad_multiple_blocks(void **state) {
     unsigned char plaintext2[sizeof(plaintext)]= { 0 };
     unsigned long plaintext2_len = sizeof(plaintext2);
 
-    /* go one past the block boundry */
+    /* go one past the block boundary */
     rv = C_DecryptUpdate (session, ciphertext, 17,
             plaintext2, &plaintext2_len);
     assert_int_equal(rv, CKR_OK);
@@ -1496,7 +1496,7 @@ static void test_aes_cbc_pad_multiple_blocks_with_extra(void **state) {
     unsigned char plaintext2[sizeof(plaintext)]= { 0 };
     unsigned long plaintext2_len = sizeof(plaintext2);
 
-    /* go one past the block boundry */
+    /* go one past the block boundary */
     rv = C_DecryptUpdate (session, ciphertext, 17,
             plaintext2, &plaintext2_len);
     assert_int_equal(rv, CKR_OK);
@@ -1653,7 +1653,7 @@ static void test_aes_ctr_multiple_blocks(void **state) {
     unsigned char plaintext2[sizeof(plaintext)]= { 0 };
     unsigned long plaintext2_len = sizeof(plaintext2);
 
-    /* go one past the block boundry */
+    /* go one past the block boundary */
     rv = C_DecryptUpdate (session, ciphertext, 17,
             plaintext2, &plaintext2_len);
     assert_int_equal(rv, CKR_OK);
@@ -1806,15 +1806,15 @@ int main() {
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_rsa_pkcs_encrypt_decrypt_public_5_2_returns_good,
                 test_setup, test_teardown),
-        cmocka_unit_test_setup_teardown(test_aes_big_blockboundry_buffer_encrypt_decrypt_oneshot_5_2_returns,
+        cmocka_unit_test_setup_teardown(test_aes_big_blockboundary_buffer_encrypt_decrypt_oneshot_5_2_returns,
                 test_setup, test_teardown),
-        cmocka_unit_test_setup_teardown(test_aes_big_blockboundry_buffer_encrypt_decrypt_oneshot_5_2_returns,
+        cmocka_unit_test_setup_teardown(test_aes_big_blockboundary_buffer_encrypt_decrypt_oneshot_5_2_returns,
                 test_setup, test_teardown),
-        cmocka_unit_test_setup_teardown(test_aes_cbc_non_block_boundry_plaintext,
+        cmocka_unit_test_setup_teardown(test_aes_cbc_non_block_boundary_plaintext,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_aes_0_bytes,
                 test_setup, test_teardown),
-        cmocka_unit_test_setup_teardown(test_aes_cbc_non_block_boundry_plaintext_bad,
+        cmocka_unit_test_setup_teardown(test_aes_cbc_non_block_boundary_plaintext_bad,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_aes_cbc_pad_small_oneshot,
                 test_setup, test_teardown),

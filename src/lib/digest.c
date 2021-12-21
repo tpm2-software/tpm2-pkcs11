@@ -219,7 +219,7 @@ CK_RV digest_oneshot(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_B
     CK_ULONG min_len = 0;
     CK_RV rv = digest_get_min_size(ctx, NULL, &min_len);
     if (rv != CKR_OK) {
-        /* fatal error ends digest sate */
+        /* fatal error ends digest state */
         session_ctx_opdata_clear(ctx);
         return rv;
     }

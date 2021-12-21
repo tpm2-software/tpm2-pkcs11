@@ -228,7 +228,7 @@ class ImportCommand(NewKeyCommandBase):
             '--algorithm',
             help='The type of the key.\n',
             choices=['rsa', 'ecc',
-                     'hmac', # Generic hmac, actuall imported as keyedhash scheme null with proper attrs.
+                     'hmac', # Generic hmac, actually imported as keyedhash scheme null with proper attrs.
                      'hmac:sha1', 'hmac:sha256', 'hmac:sha384', 'hmac:sha512' ],
             required=False)
         group_parser.add_argument(

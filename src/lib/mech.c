@@ -1585,7 +1585,7 @@ CK_RV mech_get_info(mdetail *m, tpm_ctx *tctx,
     if (d->flags & mf_hmac) {
         /*
          * peering into TPM internals, the code seems to make the key the length
-         * of the hash alg, however, I could nto find this in the spec.
+         * of the hash alg, however, I could not find this in the spec.
          */
         size_t len = utils_get_halg_size(mech_type);
         info->ulMinKeySize = info->ulMaxKeySize = len;
