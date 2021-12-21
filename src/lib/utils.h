@@ -225,7 +225,6 @@ static bool _do_safe_arithmetic(void *r, BN_ULONG a, BN_ULONG b,
 #define _safe_mule(r, a) _do_safe_arithmetic(&r, r, a, \
         sizeof(r), BN_mul_word)
 #else
-#define set_safe_rc(x) /* NOP */
 #define _safe_add(r, a, b) __builtin_add_overflow(a, b, &r)
 #define _safe_adde(r, a)   __builtin_add_overflow(a, r, &r)
 #define _safe_mul(r, a, b) __builtin_mul_overflow(a, b, &r)
