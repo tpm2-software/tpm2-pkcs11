@@ -4,7 +4,7 @@
   * Fix encoding errors when importing a certificate into the pkcs11 store.
   * Fix try/finally scope issues in tpm2\_ptool.
   * Fix, an OOB access in db upgrade path.
-  * Fix ECDSA length calculation that was cuasing issues with Mutual TLS in Firefox and Chrome.
+  * Fix ECDSA length calculation that was causing issues with Mutual TLS in Firefox and Chrome.
 
 ### 1.7.0 - 2021-09-27
   * DB Schema Change from 5 to 7.

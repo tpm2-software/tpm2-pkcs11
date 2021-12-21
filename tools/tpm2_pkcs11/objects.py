@@ -492,7 +492,7 @@ def PKCS11ObjectFactory(public_yaml_data, tpm, auth, init_pubattrs, init_privatt
 
         alg = public_yaml_data['algorithm']['value']
         # YAML converts the TPM2_ALG_NULL string of "null" to None, so we need to check against
-        # raw to see if it is TPM2_ALG_NULL. If it is, we just igore it, as we can use any
+        # raw to see if it is TPM2_ALG_NULL. If it is, we just ignore it, as we can use any
         # supported HASH alg.
         if alg != 'hmac':
             if public_yaml_data['algorithm']['raw'] == 0x10:
