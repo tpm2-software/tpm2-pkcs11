@@ -793,6 +793,7 @@ bool tpm_getrandom(tpm_ctx *ctx, BYTE *data, size_t size) {
             &rand_bytes);
         if (rval != TSS2_RC_SUCCESS) {
             LOGE("Esys_GetRandom: %s:", Tss2_RC_Decode(rval));
+            Esys_Free(rand_bytes);
             goto out;
         }
 
@@ -800,12 +801,13 @@ bool tpm_getrandom(tpm_ctx *ctx, BYTE *data, size_t size) {
 
         offset += rand_bytes->size;
         size -= rand_bytes->size;
+        Esys_Free(rand_bytes);
+        rand_bytes = NULL;
     }
 
     result = true;
 
 out:
-    free(rand_bytes);
 
     return result;
 }
