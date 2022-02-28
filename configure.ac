@@ -40,6 +40,28 @@ PKG_CHECK_MODULES([TSS2_MU],     [tss2-mu])
 PKG_CHECK_MODULES([TSS2_TCTILDR], [tss2-tctildr])
 PKG_CHECK_MODULES([TSS2_RC], [tss2-rc])
 
+# Macro that checks for existence of a python module
+AC_DEFUN([AC_PYTHON_MODULE],
+[AC_MSG_CHECKING([for module $2 in python])
+  echo "import $2" | $1 - 2>/dev/null
+  if test $? -ne 0 ; then
+    AC_MSG_ERROR([not found])
+  else
+    AC_MSG_RESULT(found)
+  fi
+])
+
+# for tpm2_ptool to work
+AM_PATH_PYTHON([3.7],
+  [AC_SUBST([PYTHON_INTERPRETER], [$PYTHON])],
+  [AC_MSG_ERROR([Integration tests enabled but python >= 3.7 executable not found.])]
+)
+
+AC_PYTHON_MODULE([$PYTHON], [pyasn1_modules])
+AC_PYTHON_MODULE([$PYTHON], [pyasn1])
+AC_PYTHON_MODULE([$PYTHON], [cryptography])
+AC_PYTHON_MODULE([$PYTHON], [yaml])
+
 AC_DEFUN([do_esapi_manage_flags], [
   AC_DEFINE([ESAPI_MANAGE_FLAGS], [1],
     [ESAPI versions below 2.2.1 are known to require manual session flag management.])
@@ -205,17 +227,6 @@ AS_IF([test "x$enable_unit" = "xyes" -o "x$enable_integration" = "xyes" -o "x$en
 
 # END ENABLE UNIT
 
-# Macro that checks for existence of a python module
-AC_DEFUN([AC_PYTHON_MODULE],
-[AC_MSG_CHECKING([for module $2 in python])
-  echo "import $2" | $1 - 2>/dev/null
-  if test $? -ne 0 ; then
-    AC_MSG_ERROR([not found])
-  else
-    AC_MSG_RESULT(found)
-  fi
-])
-
 # START ENABLE INTEGRATION
 #
 # enable integration tests and check for simulator binary
@@ -330,11 +341,6 @@ AC_DEFUN([integration_test_checks], [
   AC_CHECK_PROG([tpm2_abrmd], [tpm2-abrmd], [yes], [no])
     AS_IF([test "x$tpm2_abrmd" != "xyes"],
       [AC_MSG_ERROR([Integration tests enabled but tpm2-abrmd executable not found.])])
-
-  AM_PATH_PYTHON([3.7],
-    [AC_SUBST([PYTHON_INTERPRETER], [$PYTHON])],
-    [AC_MSG_ERROR([Integration tests enabled but python >= 3.7 executable not found.])]
-  )
 
   AC_PYTHON_MODULE([$PYTHON], [pkcs11])
 
