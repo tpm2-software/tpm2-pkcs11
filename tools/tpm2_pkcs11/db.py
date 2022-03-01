@@ -46,9 +46,12 @@ class Db(object):
             ablob = f.read()
             return sqlite3.Binary(ablob)
 
-    def gettoken(self, label):
+    def gettoken(self, label=None, id=None):
         c = self._conn.cursor()
-        c.execute("SELECT * from tokens WHERE label=?", (label, ))
+        if label != None:
+            c.execute("SELECT * from tokens WHERE label=?", (label, ))
+        elif id != None:
+            c.execute("SELECT * from tokens WHERE id=?", (id, ))
         x = c.fetchone()
         if x is None:
             sys.exit('No token labeled "%s"' % label)
@@ -105,6 +108,12 @@ class Db(object):
         c.execute("SELECT * from tobjects WHERE id=?", (tid, ))
         x = c.fetchone()
         return x
+
+    def getpid_by_tokid(self, tokid):
+        c = self._conn.cursor()
+        c.execute("SELECT pid from tokens WHERE id=?", (tokid, ))
+        x = c.fetchone()
+        return x['pid']
 
     def rmobject(self, tid):
         c = self._conn.cursor()

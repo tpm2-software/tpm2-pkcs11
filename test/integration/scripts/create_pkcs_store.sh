@@ -156,6 +156,8 @@ echo "Adding 1 HMAC:SHA256 key under token \"label\""
 tpm2_ptool addkey --algorithm=hmac:sha256 --label="label" --key-label="hmac0" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 echo "Added HMAC Key"
 
+exit 42
+
 export OPENSSL_CONF="$TEST_FIXTURES/ossl.cnf"
 
 #

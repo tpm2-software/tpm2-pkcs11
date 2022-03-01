@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 import binascii
 import hashlib
+import io
 import os
 import argparse
 import sys
@@ -16,7 +17,17 @@ from cryptography.hazmat.primitives import hashes
 
 from pyasn1_modules import pem, rfc2459
 from pyasn1.codec.der import decoder as derdecoder, encoder as derencoder
-from pyasn1.type import namedtype, tag, univ
+
+from tpm2_pytss.ESAPI import ESAPI
+from tpm2_pytss.tsskey import TSSPrivKey
+from tpm2_pytss.constants import (
+    TPM2_RH,
+    ESYS_TR
+)
+from tpm2_pytss.types import (
+    TPM2B_PUBLIC,
+    TPM2B_PRIVATE,
+)
 
 from .pkcs11t import *  # noqa
 
@@ -364,45 +375,6 @@ def check_pss_signature(tpm2, pctx, pauth):
 
             return False
 
-class TSSPrivKey(univ.Sequence):
-    '''
-    Parse the ASN1 Sequence and provide the public and private blobs
-    ASN1_SEQUENCE(TSSPRIVKEY) = {
-    ASN1_SIMPLE(TSSPRIVKEY, type, ASN1_OBJECT),
-    ASN1_EXP_OPT(TSSPRIVKEY, emptyAuth, ASN1_BOOLEAN, 0),
-    ASN1_SIMPLE(TSSPRIVKEY, parent, ASN1_INTEGER),
-    ASN1_SIMPLE(TSSPRIVKEY, pubkey, ASN1_OCTET_STRING),
-    ASN1_SIMPLE(TSSPRIVKEY, privkey, ASN1_OCTET_STRING)
-    } ASN1_SEQUENCE_END(TSSPRIVKEY)
-    '''
-
-    componentType = namedtype.NamedTypes(
-        namedtype.NamedType('type', univ.ObjectIdentifier()),
-        namedtype.OptionalNamedType('emptyauth', univ.Boolean().subtype(
-               explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 0)
-           )),
-        namedtype.NamedType('parent', univ.Integer()),
-        namedtype.NamedType('pubkey', univ.OctetString()),
-        namedtype.NamedType('privkey', univ.OctetString())
-    )
-
-def asn1parse_tss_key(keypath):
-
-
-    tss2_startmarker='-----BEGIN TSS2 PRIVATE KEY-----'
-    tss2_endmarker='-----END TSS2 PRIVATE KEY-----'
-
-    with open(keypath, 'r') as f:
-        substrate = pem.readPemFromFile(f,
-            startMarker=tss2_startmarker, endMarker=tss2_endmarker)
-
-        if len(substrate) == 0:
-            sys.exit('Did not find key in tss key file: {}'.format(keypath))
-
-        tss2_privkey, _ = derdecoder.decode(substrate, asn1Spec=TSSPrivKey())
-
-        return tss2_privkey
-
 def create_primary(tpm2, hierarchyauth, pobjauth, template=None):
 
         details = tpm2.TEMPLATES[template]
@@ -434,3 +406,152 @@ def get_pobject(pobject, tpm2, hierarchyauth, d):
         pobj_handle = bytes_to_file(tr_handle, d)
 
     return pobj_handle
+
+
+def hierarchy_tpm_value(hierarchy):
+    
+    hierarchies = {
+        'o' : TPM2_RH.OWNER
+    }
+           
+    try:
+        return hierarchies[hierarchy]
+    except KeyError:
+        raise RuntimeError(f'Hierarchy not supported, got: f{hierarchy}')
+
+def getauth(db, obj, pin, is_sopin, hierarchyauth):
+    
+    from .tpm2 import Tpm2
+    
+    tokid = obj['tokid']
+    pid = db.getpid_by_tokid(tokid)
+    pobject = db.getprimary(pid)
+    token = db.gettoken(id=tokid)
+
+    attrs = yaml.safe_load(io.StringIO(obj['attrs']))
+    
+    with TemporaryDirectory() as d:
+        tpm2 = Tpm2(d)
+        
+        token_config = yaml.safe_load(io.StringIO(token['config']))
+        
+        if pin is None:
+            if token_config.get('empty-user-pin'):
+                pin = ''
+            else:
+                sys.exit('error: at least one of the arguments --sopin --userpin is required')
+        
+        tobjauth=""
+        pobj_handle = None
+        encauth = None
+        if CKA_TPM2_OBJAUTH_ENC in attrs:
+            encauth = binascii.unhexlify(attrs[CKA_TPM2_OBJAUTH_ENC])
+
+            pobjauth = pobject['objauth']
+
+            pobj_handle = get_pobject(pobject, tpm2, hierarchyauth, d)
+
+            sealctx, sealauth = load_sealobject(token, db, tpm2, pobj_handle, pobjauth,
+                                                      pin, is_sopin)
+
+            # get the ESYS_TR file into a state that can be used outside of the
+            # temporary directory context tied to tpm2
+            with open(pobj_handle, "rb") as f:
+                pobj_handle = f.read()
+
+            wrappingkey = tpm2.unseal(sealctx, sealauth)
+        
+            wrapper = AESAuthUnwrapper(wrappingkey)
+                
+            tobjauth=""
+            if encauth:
+                encauth=encauth.decode()
+                tobjauth = wrapper.unwrap(encauth).decode()
+        
+        
+        return (tobjauth, pobj_handle)
+
+def _dump_outputs(objauth, pobj):
+    
+    config = yaml.safe_load(io.StringIO(pobj['config']))
+    is_transient = 'esys-tr' not in config
+
+    hierarchy = str(hierarchy_tpm_value(pobj['hierarchy']))
+
+    output = {
+        'object-auth' : f'{objauth}',
+        'primary-object' : {
+            'is_transient' : is_transient,
+            'hierarchy' : hierarchy,
+            'auth'      : pobj['objauth'] 
+        }
+    }
+    
+    document = yaml.safe_dump(output, default_flow_style=False)
+    print(document)
+
+def dump_blobs(db, obj, pin, is_sopin, output_prefix):
+
+    tokid = obj['tokid']
+    pid = db.getpid_by_tokid(tokid)
+    pobj = db.getprimary(pid)
+
+    attrs = yaml.safe_load(io.StringIO(obj['attrs']))
+
+    pub_blob = TPM2B_PUBLIC.unmarshal(binascii.unhexlify(attrs[CKA_TPM2_PUB_BLOB]))[0]
+    priv_blob = TPM2B_PRIVATE.unmarshal(binascii.unhexlify(attrs[CKA_TPM2_PRIV_BLOB]))[0]
+
+    objauth = getauth(db, obj, pin, is_sopin, attrs)[0]    
+
+    with open(output_prefix+ ".priv", "wb") as f:
+        b = priv_blob.marshal()
+        f.write(b)
+
+    with open(output_prefix+ ".pub", "wb") as f:
+        b = pub_blob.marshal()
+        f.write(b)
+
+    config = yaml.safe_load(io.StringIO(pobj['config']))
+    is_transient = 'esys-tr' not in config
+    if not is_transient:
+        esys_tr = binascii.unhexlify(config['esys-tr'])
+        with open(output_prefix+ ".tr", "wb") as f:
+            f.write(esys_tr)
+
+    _dump_outputs(objauth, pobj)
+
+def dump_tsspem(db, obj, pin, is_sopin, output_prefix):
+
+    tokid = obj['tokid']
+    pid = db.getpid_by_tokid(tokid)
+    pobj = db.getprimary(pid)
+
+    attrs = yaml.safe_load(io.StringIO(obj['attrs']))
+
+    pub_blob = TPM2B_PUBLIC.unmarshal(binascii.unhexlify(attrs[CKA_TPM2_PUB_BLOB]))[0]
+    priv_blob = TPM2B_PRIVATE.unmarshal(binascii.unhexlify(attrs[CKA_TPM2_PRIV_BLOB]))[0]
+    
+    objauth, pobj_handle = getauth(db, obj, pin, is_sopin, attrs)    
+
+    with ESAPI(os.getenv('TPM2TOOLS_TCTI', None)) as e:
+        tr_handle = ESYS_TR.deserialize(e, pobj_handle)
+        
+        tpm_handle = e.tr_get_tpm_handle(tr_handle)
+
+    key = TSSPrivKey(priv_blob, pub_blob, empty_auth=len(objauth) == 0,
+                     parent=tpm_handle)
+
+    with open(output_prefix + ".pem", "wb") as f:
+        f.write(key.to_pem())
+
+    _dump_outputs(objauth, pobj)
+
+def dump_pubpem(db, obj, pin, is_sopin, output_prefix):
+    
+    attrs = yaml.safe_load(io.StringIO(obj['attrs']))
+    
+    pub_blob = TPM2B_PUBLIC.unmarshal(binascii.unhexlify(attrs[CKA_TPM2_PUB_BLOB]))[0]
+
+    with open(output_prefix + ".pem", "wb") as f:
+        f.write(pub_blob.to_pem())
+
