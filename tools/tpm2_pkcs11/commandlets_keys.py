@@ -9,6 +9,8 @@ import yaml
 
 from tempfile import mkstemp
 
+from tpm2_pytss.tsskey import TSSPrivKey
+
 # local imports
 from .command import Command
 from .command import commandlet
@@ -22,8 +24,10 @@ from .utils import rand_hex_str
 from .utils import pemcert_to_attrs
 from .utils import str2bool
 from .utils import str2bytes
-from .utils import asn1parse_tss_key
 from .utils import get_pobject
+from .utils import dump_blobs
+from .utils import dump_tsspem
+from .utils import dump_pubpem
 
 from .tpm2 import Tpm2
 
@@ -601,11 +605,13 @@ class LinkCommand(NewKeyCommandBase):
 
         keypath = keypath[0]
 
-        tss2_privkey = asn1parse_tss_key(keypath)
-        is_empty_auth = bool(tss2_privkey['emptyauth'])
-        phandle = int(tss2_privkey['parent'])
-        pubbytes = bytes(tss2_privkey['pubkey'])
-        privbytes = bytes(tss2_privkey['privkey'])
+        with open(keypath, "rb") as f:
+            keybytes = f.read()
+        tss2_privkey = TSSPrivKey.from_pem(keybytes)
+        is_empty_auth = tss2_privkey.empty_auth
+        phandle = tss2_privkey.parent
+        pubbytes = tss2_privkey.public.marshal()
+        privbytes = tss2_privkey.private.marshal()
 
         pid = pobj['id']
         pobj_config = yaml.safe_load(pobj['config'])
@@ -693,3 +699,139 @@ class LinkCommand(NewKeyCommandBase):
         objects = super(LinkCommand, self).__call__(args)
         NewKeyCommandBase.output(objects, 'link')
 
+
+@commandlet("export")
+class Export(Command):
+    '''
+    Exports an object from a token to a specified format.
+    '''
+
+    @staticmethod
+    def _handle_tpm_key(db, obj, pin, is_so_pin, hierarchyauth, format, output_prefix):
+
+        attrs = yaml.safe_load(io.StringIO(obj['attrs']))
+        cka_class = attrs[CKA_CLASS]      
+
+        if cka_class == CKO_SECRET_KEY:
+            if format == "pem":
+                raise RuntimeError(f'A format of "{format}" is not supported for CKO_SECRET_KEY objects')
+
+            dump_blobs(db, obj, pin, is_so_pin, output_prefix)
+            return
+
+        if cka_class == CKO_PRIVATE_KEY:
+            
+            if format == "tpm2":           
+                dump_blobs(db, obj, pin, is_so_pin, output_prefix)
+            else:
+                dump_tsspem(db, obj, pin, is_so_pin, output_prefix)               
+            return
+            
+        raise RuntimeError(f'Object CKA_CLASS not supported, got: "{cka_class}"')
+    
+    @staticmethod
+    def _handle_public_key(db, obj, pin, is_so_pin, hierarchyauth, format, output_prefix):
+        dump_pubpem(db, obj, pin, is_so_pin, output_prefix)
+
+    @staticmethod
+    def export(db, tid, pin, is_so_pin, hierarchyauth, format, output_prefix):
+
+        if not output_prefix:
+            output_prefix = str(tid)
+
+        obj = db.getobject(tid)
+   
+        attrs = yaml.safe_load(io.StringIO(obj['attrs']))
+        
+        cka_class = attrs[CKA_CLASS]
+
+        handler = {
+            CKO_SECRET_KEY : Export._handle_tpm_key,
+            CKO_PRIVATE_KEY : Export._handle_tpm_key,
+            CKO_PUBLIC_KEY : Export._handle_public_key,
+        }
+        
+        if cka_class not in handler:
+            raise RuntimeError(f'Object class not supported, got: "{cka_class}"')
+        
+       
+        handler[cka_class](db, obj, pin, is_so_pin, hierarchyauth, format, output_prefix)
+            
+    def generate_options(self, group_parser):
+        group_parser.add_argument(
+            '--id', help='The id of the object to add (mutually exclusive with --label and --key-label).\n',
+            type=int)
+
+        group_parser.add_argument(
+            '--label', help='The token label of the object to export. Requires --key-label\n')
+
+        group_parser.add_argument(
+            '--key-label', help='The label of the object to export. Required --label\n')
+
+        group_parser.add_argument(
+            '--format',
+            choices = [ 'auto', 'tpm2', 'pem' ],
+            default = 'auto',
+            help='The format of the object to dump.\n')
+
+        group_parser.add_argument(
+            '--hierarchy-auth',
+            help='The authorization password for the owner hierarchy when using a token with a transient primary object\n',
+            default="")
+
+        group_parser.add_argument(
+            '--output-prefix',
+            help='The output prefix. ' +
+                'tpm2 blobs are output as suffix.priv and suffix.blob, pem outputs are suffix.pem\n')
+
+        pinopts = group_parser.add_mutually_exclusive_group()
+        pinopts.add_argument('--sopin', help='The Administrator pin.\n'),
+        pinopts.add_argument('--userpin', help='The User pin.\n'),
+
+    def __call__(self, args):
+
+        object_id = args["id"]
+        object_label = args["key_label"]
+        token_label = args["label"]
+        output_prefix = args['output_prefix']
+        
+        if object_id and object_label:
+            sys.exit("Cannot specify --id with --key-label")
+
+        elif object_id and token_label:
+            sys.exit("Cannot specify --id with --label")
+
+        elif not object_id and not token_label and not object_label:
+            sys.exit("Must specify --label and --key-label or --id")
+
+        path = args['path']
+
+        is_so_pin = False
+
+        pin = None        
+        sopin = args['sopin']
+        userpin = args['userpin']
+        
+        if sopin:
+            pin = args['sopin']
+            is_so_pin = True
+        elif userpin:
+            pin = args['userpin']
+
+        with Db(path) as db:
+            
+            if not object_id:
+                token = db.gettoken(label=token_label)
+                objects = db.getobjects(token['id'])
+                for obj in objects:
+                    if AddCert.get_id_by_label(obj, object_label):
+                        object_id = obj['id']
+                        break
+            
+                if not object_id:
+                    sys.exit(f'Could not find object with label "{object_label}" in token "{token_label}"')
+
+                if not output_prefix:
+                    output_prefix = object_label
+
+            Export.export(db, object_id, pin, is_so_pin, args['hierarchy_auth'], args['format'], output_prefix)
