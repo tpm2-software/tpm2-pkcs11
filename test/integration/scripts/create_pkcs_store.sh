@@ -18,10 +18,15 @@ fi
 echo source "$T/test/integration/scripts/helpers.sh"
 source "$T/test/integration/scripts/helpers.sh"
 
+check_openssl_version
+
+export TPM2OPENSSL_TCTI="$TPM2TOOLS_TCTI"
+
 echo "SETUP SCRIPT - DBUS_SESSION_BUS_ADDRESS: $DBUS_SESSION_BUS_ADDRESS"
 echo "SETUP SCRIPT - TPM2TOOLS_TCTI: $TPM2TOOLS_TCTI"
+echo "SETUP SCRIPT - TPM2OPENSSL_TCTI: $TPM2OPENSSL_TCTI"
 echo "SETUP SCRIPT - PYTHONPATH: $PYTHONPATH"
-
+echo "SETUP SCRIPT - OSSL3_DETECTED: $OSSL3_DETECTED"
 usage_error ()
 {
     echo "$0: $*" >&1
@@ -65,23 +70,17 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-set -e
+set -ex
 
 # init
 tpm2_ptool init --primary-auth=mypobjpin --path=$TPM2_PKCS11_STORE
-
-echo one
 
 # Test the existing primary object init functionality using a raw handle
 tpm2_createprimary -p foopass -c $TPM2_PKCS11_STORE/primary.ctx -g sha256 -G rsa
 handle=`tpm2_evictcontrol -C o -c $TPM2_PKCS11_STORE/primary.ctx | grep -Po '(?<=persistent-handle: )\S+'`
 
-echo 2
-
 echo "tpm2_ptool init --primary-auth=anotherpobjpin --primary-handle=$handle --primary-auth=foopass --path=$TPM2_PKCS11_STORE"
 tpm2_ptool init --primary-auth=anotherpobjpin --primary-handle=$handle --primary-auth=foopass --path=$TPM2_PKCS11_STORE
-
-echo 3
 
 # Test the existing primary object init functionality using an esys_tr
 tpm2_createprimary -c $TPM2_PKCS11_STORE/primary.ctx -g sha256 -G rsa
@@ -156,9 +155,9 @@ echo "Adding 1 HMAC:SHA256 key under token \"label\""
 tpm2_ptool addkey --algorithm=hmac:sha256 --label="label" --key-label="hmac0" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 echo "Added HMAC Key"
 
-exit 42
-
-export OPENSSL_CONF="$TEST_FIXTURES/ossl.cnf"
+if [ "$OSSL3_DETECTED" -eq "0" ]; then
+    export OPENSSL_CONF="$TEST_FIXTURES/ossl.cnf"
+fi
 
 #
 # generate cert
@@ -169,20 +168,52 @@ cert="$TPM2_PKCS11_STORE/cert.pem"
 # asan so we have defined symbols and we don't worry about leaks (since the tools are
 # often silly and leak.
 setup_asan
-TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
-    req -new -x509 -days 365 -subj '/CN=my key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_ec1 -out "$cert.ec1"
+if [ "$OSSL3_DETECTED" -eq "1" ]; then
+    pushd $TPM2_PKCS11_STORE
+    yaml_14=$(tpm2_ptool export --id=14 --userpin=myuserpin --path=$TPM2_PKCS11_STORE)
+    yaml_6=$(tpm2_ptool export --id=6 --userpin=myuserpin --path=$TPM2_PKCS11_STORE)
+    yaml_8=$(tpm2_ptool export --id=8 --userpin=myuserpin --path=$TPM2_PKCS11_STORE)
+    popd
+    auth_14=$(echo "$yaml_14" | grep "object-auth" | cut -d' ' -f2-)
+    auth_6=$(echo "$yaml_6" | grep "object-auth" | cut -d' ' -f2-)
+    auth_8=$(echo "$yaml_8" | grep "object-auth" | cut -d' ' -f2-)
 
-TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
-    req -new -x509 -days 365 -subj '/CN=my key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_rsa1 \
-    -config "$TEST_FIXTURES/ossl-req-ca.cnf" -extensions ca_ext -out "$cert.rsa1"
+    TPM2OPENSSL_PARENT_AUTH="mypobjpin" openssl \
+        req -provider tpm2 -provider base -new -x509 -days 365 -subj '/CN=my key/' -sha256 \
+            -key "$TPM2_PKCS11_STORE/14.pem" --passin "pass:$auth_14" -out "$cert.ec1"
 
-# sign a certificate for rsa2 using the rsa1 key
-TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
-    req -new -subj '/CN=my sub key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_rsa2 -out "$cert.csr.rsa2"
-TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
-    x509 -req -days 365 -sha256 -in "$cert.csr.rsa2" -engine pkcs11 \
-    -CA "$cert.rsa1" -CAkeyform engine -CAkey slot_1-label_rsa1 -CAcreateserial \
-    -extfile "$TEST_FIXTURES/ossl-req-cert.cnf" -extensions cert_ext -out "$cert.rsa2"
+    TPM2OPENSSL_PARENT_AUTH="mypobjpin" openssl \
+        req -provider tpm2 -provider base -new -x509 -days 365 -subj '/CN=my key/' -sha256 \
+        -key "$TPM2_PKCS11_STORE/6.pem" --passin "pass:$auth_6" \
+        -config "$TEST_FIXTURES/ossl-req-ca.cnf" -extensions ca_ext -out "$cert.rsa1"
+
+	# sign a certificate for rsa2 using the rsa1 key
+	TPM2OPENSSL_PARENT_AUTH="mypobjpin" openssl \
+	    req -provider tpm2 -provider base -new -subj '/CN=my sub key/' -sha256 \
+	    -key "$TPM2_PKCS11_STORE/8.pem" --passin "pass:$auth_8" -out "$cert.csr.rsa2"
+
+	TPM2OPENSSL_PARENT_AUTH="mypobjpin" openssl \
+    	x509 -provider tpm2 -provider base -req -days 365 -sha256 -in "$cert.csr.rsa2" \
+    	-CA "$cert.rsa1" -CAkey "$TPM2_PKCS11_STORE/6.pem" --passin "pass:$auth_6"\
+    	-CAcreateserial -extfile "$TEST_FIXTURES/ossl-req-cert.cnf" -extensions cert_ext \
+    	-out "$cert.rsa2"
+
+else
+    TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
+        req -new -x509 -days 365 -subj '/CN=my key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_ec1 -out "$cert.ec1"
+
+    TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
+        req -new -x509 -days 365 -subj '/CN=my key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_rsa1 \
+        -config "$TEST_FIXTURES/ossl-req-ca.cnf" -extensions ca_ext -out "$cert.rsa1"
+
+	# sign a certificate for rsa2 using the rsa1 key
+	TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
+	    req -new -subj '/CN=my sub key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_rsa2 -out "$cert.csr.rsa2"
+	TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
+    	x509 -req -days 365 -sha256 -in "$cert.csr.rsa2" -engine pkcs11 \
+    	-CA "$cert.rsa1" -CAkeyform engine -CAkey slot_1-label_rsa1 -CAcreateserial \
+    	-extfile "$TEST_FIXTURES/ossl-req-cert.cnf" -extensions cert_ext -out "$cert.rsa2"
+fi
 clear_asan
 
 #

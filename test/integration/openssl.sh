@@ -9,6 +9,15 @@ fi
 
 source "$T/test/integration/scripts/helpers.sh"
 
+# Don't test with OSSL3, since we dont have an engine to call us through,
+# we would have to port everything over to the provider, which then doesn't
+# test tpm2-pkcs11 code anyways.
+check_openssl_version
+if [ "$OSSL3_DETECTED" -eq "1" ]; then
+    exit 77
+fi
+
+
 PIN="myuserpin"
 token_label="label"
 key_label="rsa1"

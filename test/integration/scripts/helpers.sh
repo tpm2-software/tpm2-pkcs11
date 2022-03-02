@@ -73,3 +73,15 @@ cleanup_ca()
   test -n "$CA_DIR" || return 0
   rm -rf "$CA_DIR"
 }
+
+check_openssl_version()
+{
+  # do this in an if statement so it can fail and not cause
+  # set -e (execfail) to exit the script
+  if pkg-config --exists 'libcrypto < 3'; then
+    OSSL3_DETECTED=0
+  else
+    OSSL3_DETECTED=1
+  fi
+}
+
