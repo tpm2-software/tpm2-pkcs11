@@ -9,6 +9,10 @@ fi
 
 source "$T/test/integration/scripts/helpers.sh"
 
+check_openssl_version
+
+export TPM2OPENSSL_TCTI="$TPM2TOOLS_TCTI"
+
 tempdir=$(mktemp -d)
 
 function cleanup() {
@@ -86,13 +90,16 @@ pid=$(tpm2_ptool init --primary-handle="$handle" --path=$TPM2_PKCS11_STORE | gre
 tpm2_ptool addtoken --pid="$pid" --label=linktoken --sopin=mysopin --userpin=myuserpin \
     --path=$TPM2_PKCS11_STORE
 
-# Set up the engine for the tpm2tss-genkey tool both for future and older ways of doing it
-engdir="$(pkg-config --variable=enginesdir libcrypto)"
-if [ -z "$engdir" ]; then
-  export OPENSSL_ENGINES=/usr/local/lib/engines
+if [ "$OSSL3_DETECTED" -eq "0" ]; then
+  # Set up the engine for the tpm2tss-genkey tool both for future and older ways of doing it
+  engdir="$(pkg-config --variable=enginesdir libcrypto)"
+  if [ -z "$engdir" ]; then
+    export OPENSSL_ENGINES=/usr/local/lib/engines
+  fi
+  tpm2tss_genkey -P"$handle" -a rsa -s 2048 "$tempdir/tss2-rsa-2048.pem"
+else
+  openssl genpkey -provider tpm2 -algorithm RSA -pkeyopt "parent:$handle" -pkeyopt bits:2048 -out "$tempdir/tss2-rsa-2048.pem"
 fi
-
-tpm2tss_genkey -P"$handle" -a rsa -s 2048 "$tempdir/tss2-rsa-2048.pem"
 
 # Link that key into the token
 tpm2_ptool link --label=linktoken --userpin=myuserpin --key-label=tss2rsa2048 \
@@ -108,7 +115,11 @@ pid=$(tpm2_ptool init --transient-parent="tss2-engine-key" --path=$TPM2_PKCS11_S
 tpm2_ptool addtoken --pid="$pid" --label=linktokentransient --sopin=mysopin --userpin=myuserpin \
     --path=$TPM2_PKCS11_STORE
 
-tpm2tss_genkey "$tempdir/tss2-rsa-2048-transient.pem"
+if [ "$OSSL3_DETECTED" -eq "0" ]; then
+  tpm2tss_genkey "$tempdir/tss2-rsa-2048-transient.pem"
+else
+  openssl genpkey -provider tpm2 -algorithm RSA -pkeyopt bits:2048 -out "$tempdir/tss2-rsa-2048-transient.pem"
+fi
 
 # Link that key into the token
 tpm2_ptool link --label=linktokentransient --userpin=myuserpin --key-label=tss2rsa2048transient \
@@ -127,7 +138,11 @@ pid=$(tpm2_ptool init --transient-parent="tss2-engine-key" --hierarchy-auth=newp
 tpm2_ptool addtoken --hierarchy-auth=newpass --pid="$pid" --label=linktokentransient --sopin=mysopin --userpin=myuserpin \
     --path=$TPM2_PKCS11_STORE
 
-tpm2tss_genkey -o newpass "$tempdir/tss2-rsa-2048-transient.pem"
+if [ "$OSSL3_DETECTED" -eq "0" ]; then
+  tpm2tss_genkey -o newpass "$tempdir/tss2-rsa-2048-transient.pem"
+else
+  openssl genpkey -provider tpm2 -algorithm RSA -pkeyopt "parent-auth:newpass" -pkeyopt bits:2048 -out "$tempdir/tss2-rsa-2048-transient.pem"
+fi
 
 # Link that key into the token
 tpm2_ptool link --hierarchy-auth=newpass --label=linktokentransient --userpin=myuserpin --key-label=tss2rsa2048transient \

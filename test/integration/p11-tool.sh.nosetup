@@ -16,12 +16,16 @@ if [[ "${DOCKER_IMAGE:-nodocker}" = "fedora-30" || "${DOCKER_IMAGE:-nodocker}" =
   #Even without ASAN the dlopen does not work on p11-tool/p11-kit at this moment
 fi
 
+export TPM2OPENSSL_TCTI="$TPM2TOOLS_TCTI"
+
 set -x
 
 source "$T/test/integration/scripts/helpers.sh"
 
-tempdir=$(mktemp -d)
+check_openssl_version
 
+
+tempdir=$(mktemp -d)
 function cleanup() {
 	rm -rf "$tempdir"
 }
@@ -165,7 +169,23 @@ GNUTLS_PIN=mynewuserpin \
 p11_tool --login --set-label="myrsakey" "${TOKENURL};object=myrsakey2;object-type=private"
 echo "RSA Key pair generated"
 
+#
+# FAPI cannot use tpm2_ptool required for export for the tpm2-openssl provider when
+# testing against OpenSSL 3. Ie theirs no OpenSSL to PKCS11 adapter that works with OSSL3
+#
+set +e
+trap - ERR
+grep -q "fapi" <<< "$0"
+have_fapi=$?
+trap onerror ERR
+set -e
+if [ "$OSSL3_DETECTED" -eq "1" ] && [ "$have_fapi" -eq "0" ]; then
+  echo "OpenSSL 3 and FAPI test detected, skipping the rest of the tests..."
+  exit 0
+fi
+
 echo "Testing signing via openssl"
+if [ "$OSSL3_DETECTED" -eq "0" ]; then
 osslconf="$tempdir/ossl.cnf"
 cat << EOF > "$osslconf"
 openssl_conf = openssl_init
@@ -182,7 +202,6 @@ MODULE_PATH = $modpath
 init = 0
 EOF
 export OPENSSL_CONF="$osslconf"
-
 openssl dgst -engine pkcs11 -keyform engine \
         -sha256 -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:-1 \
         -sign "$TOKENURL" -out ${tempdir}/sig -passin pass:mynewuserpin ${tempdir}/data
@@ -190,13 +209,45 @@ openssl dgst -engine pkcs11 -keyform engine \
 openssl pkeyutl -sign -engine pkcs11 -keyform engine \
         -inkey ${TOKENURL} -passin pass:mynewuserpin \
         -in ${tempdir}/data -out ${tempdir}/sig
+else #end openssl < 3.0
+
+pushd $TPM2_PKCS11_STORE
+yaml_myrsakey=$(tpm2_ptool export --label=mynewtoken --userpin=mynewuserpin --key-label=myrsakey --path=$TPM2_PKCS11_STORE)
+popd
+
+auth_myrsakey=$(echo "$yaml_myrsakey" | grep "object-auth" | cut -d' ' -f2-)
+
+openssl dgst -provider tpm2 -provider base \
+        -sha256 -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:-1 \
+        -sign "$TPM2_PKCS11_STORE/myrsakey.pem" -out ${tempdir}/sig -passin "pass:$auth_myrsakey" ${tempdir}/data
+
+openssl pkeyutl -sign -provider tpm2 -provider base -rawin -digest sha256 \
+        -inkey "$TPM2_PKCS11_STORE/myrsakey.pem" -passin "pass:$auth_myrsakey" \
+        -in ${tempdir}/data -out ${tempdir}/sig
+fi 
+
 echo "RSA Signing tested"
 
 echo "Test ECC Signing"
-ECC_KEY_URL="${TOKENURL2};object=myecckey;type=private"
-openssl dgst -engine pkcs11 -keyform engine -sha1 -sign "$ECC_KEY_URL" -out ${tempdir}/sig -passin pass:mynewuserpin ${tempdir}/data
+if [ "$OSSL3_DETECTED" -eq "0" ]; then
+
+    ECC_KEY_URL="${TOKENURL2};object=myecckey;type=private"
+    openssl dgst -engine pkcs11 -keyform engine -sha1 -sign "$ECC_KEY_URL" -out ${tempdir}/sig -passin pass:mynewuserpin ${tempdir}/data
+    openssl dgst -sha1 -verify ${tempdir}/eccpubkey.pem -signature ${tempdir}/sig ${tempdir}/data
+else # openssl 3
+
+pushd $TPM2_PKCS11_STORE
+yaml_myecckey=$(tpm2_ptool export --label=mynewtoken2 --userpin=mynewuserpin --key-label=myecckey --path=$TPM2_PKCS11_STORE)
+popd
+
+auth_myecckey=$(echo "$yaml_myecckey" | grep "object-auth" | cut -d' ' -f2-)
+
+openssl dgst -provider tpm2 -provider base \
+  -sha1 -sign "$TPM2_PKCS11_STORE/myecckey.pem" -out ${tempdir}/sig -passin "pass:$auth_myecckey" ${tempdir}/data
 
 openssl dgst -sha1 -verify ${tempdir}/eccpubkey.pem -signature ${tempdir}/sig ${tempdir}/data
+
+fi
 echo "ECC Signing tested"
 
 exit 0
