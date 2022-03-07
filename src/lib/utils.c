@@ -108,26 +108,37 @@ static twist encrypt_parts_to_twist(CK_BYTE tag[16], CK_BYTE iv[12], CK_BYTE_PTR
     }
 
     /*
-     * create a buffer with enough space for hex encoded <iv>:<tag>:<ctext>
-     * (note + 3 is for 2 : delimiters and a NULL byte.
+     * build the data structure of <iv>:<tag>:<ctext>
+     * This step gets us to <iv>:
      */
-    size_t a = twist_len(taghex);
-    size_t b = twist_len(ivhex);
-    size_t c = twist_len(ctexthex);
+    constructed = twist_append(ivhex, ":");
+    if (!constructed) {
+        LOGE("oom");
+        goto out;
+    }
+    /* ownership transfered to tmp */
+    ivhex = NULL;
 
-    size_t constructed_len = 0;
-    safe_add(constructed_len, a, b);
-    safe_adde(constructed_len, c);
-    safe_adde(constructed_len, 3);
-
-    constructed = twist_calloc(constructed_len);
+    /* <iv>:<tag> */
+    constructed = twist_append_twist(constructed, taghex);
     if (!constructed) {
         LOGE("oom");
         goto out;
     }
 
-    /* impossible to have truncation */
-    snprintf((char *)constructed, constructed_len, "%s:%s:%s", ivhex, taghex, ctexthex);
+    /* <iv>:<tag>: */
+    constructed = twist_append(constructed, ":");
+    if (!constructed) {
+        LOGE("oom");
+        goto out;
+    }
+
+    /* <iv>:<tag>:<ctext> */
+    constructed = twist_append_twist(constructed, ctexthex);
+    if (!constructed) {
+        LOGE("oom");
+        goto out;
+    }
 
 out:
     twist_free(ivhex);
