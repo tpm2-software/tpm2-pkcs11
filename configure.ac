@@ -34,8 +34,24 @@ AC_CONFIG_FILES([Makefile lib/tpm2-pkcs11.pc])
 # enable autoheader config.h file
 AC_CONFIG_HEADERS([src/lib/config.h])
 
-# test for TSS dependencies
-PKG_CHECK_MODULES([TSS2_ESYS],   [tss2-esys >= 2.0])
+# require sqlite3 and libcrypto
+PKG_CHECK_MODULES([SQLITE3],     [sqlite3])
+PKG_CHECK_MODULES([YAML],        [yaml-0.1])
+PKG_CHECK_MODULES([CRYPTO],      [libcrypto >= 1.1.0])
+
+PKG_CHECK_EXISTS([libcrypto >= 3.0], have_ossl3=yes, have_ossl3=no)
+AM_CONDITIONAL([HAVE_OSSL3],[test "x$have_ossl3" = "xyes"])
+
+#
+# With OSSL3 we need 3.2 of tpm2-tss to avoid bugs in test code
+# plus that tpm2-tss works with OSSL3.
+#
+AS_IF([test "x$have_ossl3" = "xyes"],
+    [PKG_CHECK_MODULES([TSS2_ESYS],   [tss2-esys >= 3.2])],
+    [PKG_CHECK_MODULES([TSS2_ESYS],   [tss2-esys >= 2.0])],
+)
+
+# test for non version specific TSS dependencies
 PKG_CHECK_MODULES([TSS2_MU],     [tss2-mu])
 PKG_CHECK_MODULES([TSS2_TCTILDR], [tss2-tctildr])
 PKG_CHECK_MODULES([TSS2_RC], [tss2-rc])
@@ -73,11 +89,6 @@ PKG_CHECK_EXISTS([tss2-esys < 2.2.1], [do_esapi_manage_flags])
 # ESYS >= 3.0 uses a different ABI param hierarchy in Esys_LoadExternal()
 PKG_CHECK_EXISTS([tss2-esys >= 3.0],
                  [AC_DEFINE([ESYS_3], [1], [Esys3])])
-
-# require sqlite3 and libcrypto
-PKG_CHECK_MODULES([SQLITE3],     [sqlite3])
-PKG_CHECK_MODULES([YAML],        [yaml-0.1])
-PKG_CHECK_MODULES([CRYPTO],      [libcrypto >= 1.1.0])
 
 # check for pthread
 AX_PTHREAD([],[AC_MSG_ERROR([Cannot find pthread])])
@@ -244,58 +255,68 @@ AX_PROG_JAVAC()
 AX_PROG_JAVA()
 m4_popdef([AC_MSG_ERROR])
 
-AC_CHECK_PROG([tpm2_createprimary], [tpm2_createprimary], [yes], [no])
-  AS_IF([test "x$tpm2_createprimary" != "xyes"],
-    [AC_MSG_ERROR([tpm2_ptool requires tpm2_createprimary, but executable not found.])])
-
-AC_CHECK_PROG([tpm2_create], [tpm2_create], [yes], [no])
-  AS_IF([test "x$tpm2_create" != "xyes"],
-    [AC_MSG_ERROR([tpm2_ptool requires tpm2_create, but executable not found.])])
-
-AC_CHECK_PROG([tpm2_evictcontrol], [tpm2_evictcontrol], [yes], [no])
-  AS_IF([test "x$tpm2_evictcontrol" != "xyes"],
-    [AC_MSG_ERROR([tpm2_ptool requires tpm2_evictcontrol, but executable not found.])])
-
-AC_CHECK_PROG([tpm2_readpublic], [tpm2_readpublic], [yes], [no])
-  AS_IF([test "x$tpm2_readpublic" != "xyes"],
-    [AC_MSG_ERROR([tpm2_ptool requires tpm2_readpublic, but executable not found.])])
-
-AC_CHECK_PROG([tpm2_load], [tpm2_load], [yes], [no])
-  AS_IF([test "x$tpm2_load" != "xyes"],
-    [AC_MSG_ERROR([tpm2_ptool requires tpm2_load, but executable not found.])])
-
-AC_CHECK_PROG([tpm2_loadexternal], [tpm2_loadexternal], [yes], [no])
-  AS_IF([test "x$tpm2_loadexternal" != "xyes"],
-    [AC_MSG_ERROR([tpm2_ptool requires tpm2_loadexternal, but executable not found.])])
-
-AC_CHECK_PROG([tpm2_unseal], [tpm2_unseal], [yes], [no])
-  AS_IF([test "x$tpm2_unseal" != "xyes"],
-    [AC_MSG_ERROR([tpm2_ptool requires tpm2_unseal, but executable not found.])])
-
-AC_CHECK_PROG([tpm2_encryptdecrypt], [tpm2_encryptdecrypt], [yes], [no])
-  AS_IF([test "x$tpm2_encryptdecrypt" != "xyes"],
-    [AC_MSG_ERROR([tpm2_ptool requires tpm2_encryptdecrypt, but executable not found.])])
-
-AC_CHECK_PROG([tpm2_sign], [tpm2_sign], [yes], [no])
-  AS_IF([test "x$tpm2_sign" != "xyes"],
-    [AC_MSG_ERROR([tpm2_ptool requires tpm2_sign, but executable not found.])])
-
-AC_CHECK_PROG([tpm2_getcap], [tpm2_getcap], [yes], [no])
-  AS_IF([test "x$tpm2_getcap" != "xyes"],
-    [AC_MSG_ERROR([tpm2_ptool requires tpm2_getcap, but executable not found.])])
-
-AC_CHECK_PROG([tpm2_import], [tpm2_import], [yes], [no])
-  AS_IF([test "x$tpm2_import" != "xyes"],
-    [AC_MSG_ERROR([tpm2_ptool requires tpm2_import, but executable not found.])])
-
-AC_CHECK_PROG([tpm2_changeauth], [tpm2_changeauth], [yes], [no])
-  AS_IF([test "x$tpm2_changeauth" != "xyes"],
-    [AC_MSG_ERROR([tpm2_ptool requires tpm2_changeauth, but executable not found.])])
-
 AC_DEFUN([integration_test_checks], [
 
-  PKG_CHECK_MODULES([OPENSC_PKCS11],[opensc-pkcs11],,
-    [AC_CHECK_FILE([/usr/lib/engines/engine_pkcs11.so])])
+  AC_CHECK_PROG([tpm2_createprimary], [tpm2_createprimary], [yes], [no])
+    AS_IF([test "x$tpm2_createprimary" != "xyes"],
+      [AC_MSG_ERROR([tpm2_ptool requires tpm2_createprimary, but executable not found.])])
+
+  AC_CHECK_PROG([tpm2_create], [tpm2_create], [yes], [no])
+    AS_IF([test "x$tpm2_create" != "xyes"],
+      [AC_MSG_ERROR([tpm2_ptool requires tpm2_create, but executable not found.])])
+
+  AC_CHECK_PROG([tpm2_evictcontrol], [tpm2_evictcontrol], [yes], [no])
+    AS_IF([test "x$tpm2_evictcontrol" != "xyes"],
+      [AC_MSG_ERROR([tpm2_ptool requires tpm2_evictcontrol, but executable not found.])])
+
+  AC_CHECK_PROG([tpm2_readpublic], [tpm2_readpublic], [yes], [no])
+    AS_IF([test "x$tpm2_readpublic" != "xyes"],
+      [AC_MSG_ERROR([tpm2_ptool requires tpm2_readpublic, but executable not found.])])
+
+  AC_CHECK_PROG([tpm2_load], [tpm2_load], [yes], [no])
+    AS_IF([test "x$tpm2_load" != "xyes"],
+      [AC_MSG_ERROR([tpm2_ptool requires tpm2_load, but executable not found.])])
+
+  AC_CHECK_PROG([tpm2_loadexternal], [tpm2_loadexternal], [yes], [no])
+    AS_IF([test "x$tpm2_loadexternal" != "xyes"],
+      [AC_MSG_ERROR([tpm2_ptool requires tpm2_loadexternal, but executable not found.])])
+
+  AC_CHECK_PROG([tpm2_unseal], [tpm2_unseal], [yes], [no])
+    AS_IF([test "x$tpm2_unseal" != "xyes"],
+      [AC_MSG_ERROR([tpm2_ptool requires tpm2_unseal, but executable not found.])])
+
+  AC_CHECK_PROG([tpm2_encryptdecrypt], [tpm2_encryptdecrypt], [yes], [no])
+    AS_IF([test "x$tpm2_encryptdecrypt" != "xyes"],
+      [AC_MSG_ERROR([tpm2_ptool requires tpm2_encryptdecrypt, but executable not found.])])
+
+  AC_CHECK_PROG([tpm2_sign], [tpm2_sign], [yes], [no])
+    AS_IF([test "x$tpm2_sign" != "xyes"],
+      [AC_MSG_ERROR([tpm2_ptool requires tpm2_sign, but executable not found.])])
+
+  AC_CHECK_PROG([tpm2_getcap], [tpm2_getcap], [yes], [no])
+    AS_IF([test "x$tpm2_getcap" != "xyes"],
+      [AC_MSG_ERROR([tpm2_ptool requires tpm2_getcap, but executable not found.])])
+
+  AC_CHECK_PROG([tpm2_import], [tpm2_import], [yes], [no])
+    AS_IF([test "x$tpm2_import" != "xyes"],
+      [AC_MSG_ERROR([tpm2_ptool requires tpm2_import, but executable not found.])])
+
+  AC_CHECK_PROG([tpm2_changeauth], [tpm2_changeauth], [yes], [no])
+    AS_IF([test "x$tpm2_changeauth" != "xyes"],
+      [AC_MSG_ERROR([tpm2_ptool requires tpm2_changeauth, but executable not found.])])
+
+  # set enginesdir to be either the engines dir for OSSL < 3.0 and the provider (libdir var)
+  # path and look for the shared object implementing the plugin functionality for openssl.
+  AS_IF([test "x$have_ossl3" = "xyes"],
+    [PKG_CHECK_VAR([enginesdir], [libcrypto], [libdir],, AC_MSG_ERROR([could not determine openssl provider path.]))],
+    [PKG_CHECK_VAR([enginesdir], [libcrypto], [enginesdir],, AC_MSG_ERROR([could not determine openssl engine path.]))]
+  )
+
+  AS_IF([test "x$have_ossl3" = "xyes"],
+    [AC_CHECK_FILE([$enginesdir/tpm2.so])],
+    [PKG_CHECK_MODULES([OPENSC_PKCS11],[opensc-pkcs11],,
+      [AC_CHECK_FILE([$enginesdir/engine_pkcs11.so])])
+    ])
 
   PKG_CHECK_MODULES([TSS2_TCTI_TABRMD],[tss2-tcti-tabrmd])
 
