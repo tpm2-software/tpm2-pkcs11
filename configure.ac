@@ -67,17 +67,26 @@ AC_DEFUN([AC_PYTHON_MODULE],
   fi
 ])
 
-# for tpm2_ptool to work
-AM_PATH_PYTHON([3.7],
-  [AC_SUBST([PYTHON_INTERPRETER], [$PYTHON])],
-  [AC_MSG_ERROR([Integration tests enabled but python >= 3.7 executable not found.])]
-)
+AC_ARG_ENABLE(
+  [ptool-checks],
+  [AS_HELP_STRING([--disable-ptool-checks],
+    [disable checks for ensuring tpm2_ptool works])],
+  [do_pycheck=no],
+  [do_pycheck=yes])
 
-AC_PYTHON_MODULE([$PYTHON], [pyasn1_modules])
-AC_PYTHON_MODULE([$PYTHON], [pyasn1])
-AC_PYTHON_MODULE([$PYTHON], [cryptography])
-AC_PYTHON_MODULE([$PYTHON], [yaml])
-AC_PYTHON_MODULE([$PYTHON], [tpm2_pytss])
+# for tpm2_ptool to work
+AS_IF([test "$do_pycheck" == "yes"], [
+  AM_PATH_PYTHON([3.7],
+    [AC_SUBST([PYTHON_INTERPRETER], [$PYTHON])],
+    [AC_MSG_ERROR([Integration tests enabled but python >= 3.7 executable not found.])]
+  )
+
+  AC_PYTHON_MODULE([$PYTHON], [pyasn1_modules])
+  AC_PYTHON_MODULE([$PYTHON], [pyasn1])
+  AC_PYTHON_MODULE([$PYTHON], [cryptography])
+  AC_PYTHON_MODULE([$PYTHON], [yaml])
+  AC_PYTHON_MODULE([$PYTHON], [tpm2_pytss])
+])
 
 AC_DEFUN([do_esapi_manage_flags], [
   AC_DEFINE([ESAPI_MANAGE_FLAGS], [1],
