@@ -77,6 +77,7 @@ AC_PYTHON_MODULE([$PYTHON], [pyasn1_modules])
 AC_PYTHON_MODULE([$PYTHON], [pyasn1])
 AC_PYTHON_MODULE([$PYTHON], [cryptography])
 AC_PYTHON_MODULE([$PYTHON], [yaml])
+AC_PYTHON_MODULE([$PYTHON], [tpm2_pytss])
 
 AC_DEFUN([do_esapi_manage_flags], [
   AC_DEFINE([ESAPI_MANAGE_FLAGS], [1],
