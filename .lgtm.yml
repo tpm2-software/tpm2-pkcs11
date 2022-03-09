@@ -9,6 +9,10 @@ extraction:
       - libssl-dev
       - uuid-dev
       - acl
+    configure:
+      command:
+      - ./bootstrap
+      - ./configure --disable-ptool-checks
     after_prepare:
     - cd "$LGTM_WORKSPACE"
     - mkdir installdir
