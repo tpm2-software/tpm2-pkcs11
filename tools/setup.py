@@ -36,6 +36,7 @@ setup(
         'pyyaml',
         'pyasn1',
         'pyasn1_modules',
+        'tpm2_pytss'
     ],
     tests_require=[],
     entry_points={
