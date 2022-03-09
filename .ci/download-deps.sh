@@ -33,6 +33,13 @@ function get_deps() {
 
 	done;
 
+        # install tpm2-pytss package
+	# older versions of clang cannot build the wheel, gcc is always present, use it.
+	OLD_CC="$CC"
+	CC=gcc
+	pip install 'git+https://github.com/tpm2-software/tpm2-pytss.git'
+	CC="$OLD_CC"
+
 	# leave the download location directory
 	popd
 	echo "pwd done: `pwd`"
