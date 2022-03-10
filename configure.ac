@@ -373,16 +373,13 @@ AC_DEFUN([integration_test_checks], [
     AS_IF([test "x$tpm2_abrmd" != "xyes"],
       [AC_MSG_ERROR([Integration tests enabled but tpm2-abrmd executable not found.])])
 
-  AC_PYTHON_MODULE([$PYTHON], [pkcs11])
+  AS_IF([test "x$have_ossl3" = "xno"],
+    [AC_CHECK_PROG([tpm2tss_genkey], [tpm2tss-genkey])])
 
   AS_IF([test "$have_fapi" = "1"], [
     AC_CHECK_PROG([tss2_provision], [tss2_provision], [yes], [no])
       AS_IF([test "x$tss2_provision" != "xyes"],
         [AC_MSG_ERROR([Integration tests enabled but tss2_provision executable not found.])])
-
-    AC_CHECK_PROG([tpm2tss_genkey], [tpm2tss-genkey], [yes], [no])
-      AS_IF([test "x$tpm2tss_genkey" != "xyes"],
-        [AC_MSG_ERROR([Integration tests enabled but tpm2tss-genkey executable not found.])])
   ])
 
   AS_IF([test "x$have_javac" = "xno"],
