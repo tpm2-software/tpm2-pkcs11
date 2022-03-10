@@ -70,6 +70,7 @@ if [[ "$CC" != clang* ]]; then
 fi
 
 # Make a build variant directory and change to it
+rm -rf ./build
 mkdir ./build
 pushd ./build
 
