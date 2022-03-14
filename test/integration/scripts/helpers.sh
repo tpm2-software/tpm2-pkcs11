@@ -13,6 +13,12 @@ setup_asan() {
   if [ $clang_version == "version" ]; then
     clang_version=`$CC --version | head -n 1 | cut -d\  -f 4-4 | cut -d\. -f 1-3`
   fi
+
+  # sometimes thier is an rc version
+  if grep -qi '\-+rc' <<< "$clang_version"; then
+    clang_version=$(echo "$clang_version" | cut -d'-' -f1-1)
+  fi
+
   echo "Detected clang version: $clang_version"
   minor_maj=`echo "$clang_version" | cut -d\. -f 1-2`
   maj=`echo "$clang_version" | cut -d\. -f 1-1`
