@@ -80,8 +80,8 @@ if ! p11_tool --list-tokens | grep -q "Model: SW   TPM"; then
   echo "If you are running a recent version of p11tool then you need to configure the module system-wide:"
   echo "echo \"module: $T/src/.libs/libtpm2_pkcs11.so\" >/etc/pkcs11/modules/tpm2_pkcs11.module"
 
-  if [[ "${DOCKER_IMAGE:-nodocker}" = "fedora-30" || "${DOCKER_IMAGE:-nodocker}" = "ubuntu-20.04" ]]; then
-    echo "p11-tool on fedora-30 or ubuntu-20.04 with clang is dysfunctional even without asan"
+  if [[ "${DOCKER_IMAGE:-nodocker}" = "fedora-30" || "${DOCKER_IMAGE:-nodocker}" = "ubuntu-20.04" || "${DOCKER_IMAGE:-nodocker}" = "ubuntu-22.04" ]]; then
+    echo "p11-tool on fedora-30 or ubuntu-20.04/22.04 with clang is dysfunctional even without asan"
     exit 77 #TEST SKIP
   else
     exit 99 #TEST ERROR
