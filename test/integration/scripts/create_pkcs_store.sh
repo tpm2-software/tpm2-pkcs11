@@ -164,11 +164,11 @@ fi
 #
 cert="$TPM2_PKCS11_STORE/cert.pem"
 
-# since we use the shared lib in a non-asan executable via dlopen() we need to set up
-# asan so we have defined symbols and we don't worry about leaks (since the tools are
-# often silly and leak.
-setup_asan
+# Enabling ASAN with Python seems to lead to no output, perhaps a hang?
 if [ "$OSSL3_DETECTED" -eq "1" ]; then
+
+    clear_asan
+
     pushd $TPM2_PKCS11_STORE
     yaml_14=$(tpm2_ptool export --id=14 --userpin=myuserpin --path=$TPM2_PKCS11_STORE)
     yaml_6=$(tpm2_ptool export --id=6 --userpin=myuserpin --path=$TPM2_PKCS11_STORE)
@@ -177,6 +177,8 @@ if [ "$OSSL3_DETECTED" -eq "1" ]; then
     auth_14=$(echo "$yaml_14" | grep "object-auth" | cut -d' ' -f2-)
     auth_6=$(echo "$yaml_6" | grep "object-auth" | cut -d' ' -f2-)
     auth_8=$(echo "$yaml_8" | grep "object-auth" | cut -d' ' -f2-)
+
+    setup_asan
 
     TPM2OPENSSL_PARENT_AUTH="mypobjpin" openssl \
         req -provider tpm2 -provider base -new -x509 -days 365 -subj '/CN=my key/' -sha256 \
@@ -199,6 +201,10 @@ if [ "$OSSL3_DETECTED" -eq "1" ]; then
     	-out "$cert.rsa2"
 
 else
+    # since we use the shared lib in a non-asan executable via dlopen() we need to set up
+    # asan so we have defined symbols and we don't worry about leaks (since the tools are
+    # often silly and leak.
+    setup_asan
     TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
         req -new -x509 -days 365 -subj '/CN=my key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_ec1 -out "$cert.ec1"
 
@@ -213,8 +219,8 @@ else
     	x509 -req -days 365 -sha256 -in "$cert.csr.rsa2" -engine pkcs11 \
     	-CA "$cert.rsa1" -CAkeyform engine -CAkey slot_1-label_rsa1 -CAcreateserial \
     	-extfile "$TEST_FIXTURES/ossl-req-cert.cnf" -extensions cert_ext -out "$cert.rsa2"
-fi
 clear_asan
+fi
 
 #
 # insert cert to token
