@@ -9,6 +9,9 @@ jobs:
       matrix:
         docker_image: [ ubuntu-18.04, ubuntu-20.04, fedora-30, opensuse-leap, ubuntu-22.04]
         compiler: [gcc, clang]
+        exclude:
+          - docker_image: ubuntu-22.04
+            compiler: clang
     steps:
       - name: Check out repository
         uses: actions/checkout@v2
