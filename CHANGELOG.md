@@ -1,10 +1,29 @@
 # Changelog
+All notable changes to this project will be documented in this file.
 
-### next
-  * Fix encoding errors when importing a certificate into the pkcs11 store.
-  * Fix try/finally scope issues in tpm2\_ptool.
-  * Fix, an OOB access in db upgrade path.
-  * Fix ECDSA length calculation that was causing issues with Mutual TLS in Firefox and Chrome.
+Starting with release 1.8.0, The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.8.0-rc0 ] - 2022-03-15
+### Fixed
+- Fix GetRandom Memory Leak
+- Fix some spelling mistakes
+- Fix unit test test_parser
+- Fix importing of RSA private key through pkcs11 interface should fail.
+- Fix ECDSA signature length calculation.
+- Fix memory leak of tokens.
+- Fix suspicious sizeof usage in _str_padded_copy
+- Fix encoding errors when importing a certificate into the pkcs11 store.
+- Fix try/finally scope issues in tpm2\_ptool.
+- Fix, an OOB access in db upgrade path.
+- Fix ECDSA length calculation that was causing issues with Mutual TLS in Firefox and Chrome.
+
+### Changed
+- remove unused macro set_safe_rc
+
+### Added
+- Add support for OpenSSL 3. Note that calls through engine are no longer supported on OpenSSL3.
+- Add tpm2_ptool export commandlet for exporting token keys into PEM and TPM blob format.
 
 ### 1.7.0 - 2021-09-27
   * DB Schema Change from 5 to 7.
