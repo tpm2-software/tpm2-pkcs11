@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 Starting with release 1.8.0, The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.8.0-rc0 ] - 2022-03-15
+## [1.8.0 ] - 2022-03-21
 ### Fixed
 - Fix GetRandom Memory Leak
 - Fix some spelling mistakes
