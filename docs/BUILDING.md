@@ -17,7 +17,7 @@ The project depends on:
   - [tpm2-abrmd](https://github.com/tpm2-software/tpm2-abrmd): **Requires version >= 2.1.0**
   - Linux kernel version >= 4.12 for `/dev/tpmrm[0-9]+` nodes.
     - Note that the device TCTI must be configured for this.
-7. [openssl](https://www.openssl.org/): **Requires version >= 1.0.2g**
+7. [openssl](https://www.openssl.org/): **Requires version >= 1.1.0**
 8. [autoconf-archive](https://github.com/autoconf-archive/autoconf-archive): **Tested with release v2018.03.13**
      Others may not work, some distros package versions too old. Either install or just copy the contents of the
      autoconf-archive's m4 directory to the m4 subdirectory of the tpm2-pkcs11 project. If the m4 folder is not
