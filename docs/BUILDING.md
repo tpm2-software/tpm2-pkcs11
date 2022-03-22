@@ -26,8 +26,13 @@ The project depends on:
 
 ### Optional Dependencies for tpm2_ptool
 1. [tpm2-tools](https://github.com/tpm2-software/tpm2-tools): **Requires version >= 4.0.1**
-2. [Python](https://www.python.org/): **Requires version >= 3.7**
-
+2. [Python](https://www.python.org/): **Requires version >= 3.7** and the following Python Modules:
+  - bcrypt
+  - cryptography>=3.0
+  - pyyaml
+  - pyasn1
+  - pyasn1_modules
+  - tpm2_pytss 
 ### Notes
 The tpm2-tss and tpm2-tools projects must be obtained via source. Packaged versions existing
 in known package managers are likely too old.
