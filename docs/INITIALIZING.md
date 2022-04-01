@@ -51,6 +51,12 @@ The store itself defaults to `$HOME/.tpm2_pkcs11` unless specified via the envir
 
   Their is no requirement to use the simulator and abrmd, this is all configuration dependent.
 
+**LOCKING**
+
+When the SQL database is on the disk, the lock is set within the same folder than the SQL file.
+It can lead to some issues if the lock is not released (system crash, reboot), mostly on embedded
+systems. Another folder, for instance a tmpfs one, can be enforced using the env `PKCS11_SQL_LOCK=/var/run/pkcs11_sql_locks`.
+
 ## Example Setup With tpm2_ptool
 I use the simulator and tpm2-abrmd to set all of this up, like so:
 ```sh

@@ -2324,7 +2324,26 @@ static CK_RV db_create(char *path, size_t len) {
 
 static FILE *take_lock(const char *path, char *lockpath) {
 
-    unsigned l = snprintf(lockpath, PATH_MAX, "%s%s", path, ".lock");
+    unsigned l;
+
+    char *env_lock = getenv("PKCS11_SQL_LOCK");
+
+    if (env_lock) {
+        /*
+         * lock file shall be "PKCS11_SQL_LOCK" + path + ".lock", but
+         * path's '/' will be substituted by '_'.
+         */
+        char path_alt[PATH_MAX];
+
+        strncpy(path_alt, path, PATH_MAX);
+        for (int i = 0; path_alt[i] && (i < PATH_MAX); i++) {
+            if (path_alt[i] == '/')
+                path_alt[i] = '_';
+        }
+        l = snprintf(lockpath, PATH_MAX, "%s/%s%s", env_lock, path_alt, ".lock");
+    } else {
+        l = snprintf(lockpath, PATH_MAX, "%s%s", path, ".lock");
+    }
     if (l >= PATH_MAX) {
         LOGE("Lock file path is longer than PATH_MAX");
         return NULL;
