@@ -36,7 +36,7 @@ Store the whole output from ssh-add -L in `/etc/ssh/ssh_hostkey_rsa.pub` as sshd
 Add the following to /etc/ssh/sshd_config
 ```
 HostKey /etc/ssh/ssh_hostkey_rsa.pub
-HostHostKeyAgent /tmp/hostagent.sock
+HostKeyAgent /tmp/hostagent.sock
 ```
 (Re)start sshd and run:
 ```
