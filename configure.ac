@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 AC_INIT([tpm2-pkcs11],
-  [m4_esyscmd_s([git describe --tags --always --dirty])],
+  [m4_esyscmd_s([cat ./VERSION])],
   [https://github.com/tpm2-software/tpm2-pkcs11/issues],
   [],
   [https://github.com/tpm2-software/tpm2-pkcs11])

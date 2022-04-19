@@ -101,3 +101,6 @@ test/unit/test_db
 pkcs11_fuzztest_db_take_lock_*
 
 *~
+
+#autogen VERSION file
+VERSION
