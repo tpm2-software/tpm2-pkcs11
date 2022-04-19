@@ -98,3 +98,6 @@ config.h.in
 test/unit/test_db
 
 *~
+
+#autogen VERSION file
+VERSION
