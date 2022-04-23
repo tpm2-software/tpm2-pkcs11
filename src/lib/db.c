@@ -2329,18 +2329,31 @@ static FILE *take_lock(const char *path, char *lockpath) {
     char *env_lock = getenv("PKCS11_SQL_LOCK");
 
     if (env_lock) {
+        size_t lenv_lock = strlen(env_lock);
         /*
-         * lock file shall be "PKCS11_SQL_LOCK" + path + ".lock", but
+         * lock file shall be "PKCS11_SQL_LOCK" + '/' + path + ".lock", but
          * path's '/' will be substituted by '_'.
          */
-        char path_alt[PATH_MAX];
-
-        strncpy(path_alt, path, PATH_MAX);
-        for (int i = 0; path_alt[i] && (i < PATH_MAX); i++) {
-            if (path_alt[i] == '/')
-                path_alt[i] = '_';
+        if (env_lock[lenv_lock - 1] == '/') {
+            env_lock[lenv_lock - 1] = '\0';
+            lenv_lock--;
         }
-        l = snprintf(lockpath, PATH_MAX, "%s/%s%s", env_lock, path_alt, ".lock");
+        if ((lenv_lock + 1 + strlen(path) + strlen(".lock")) >= PATH_MAX) {
+            LOGE("Lock file path would be longer than PATH_MAX");
+            return NULL;
+        }
+        strncpy(lockpath, env_lock, PATH_MAX-1);
+        strcat(lockpath, "/");
+        for (size_t i = 0; path[i] && (i < PATH_MAX) && (i < strlen(path)); i++) {
+            lockpath[lenv_lock + 1 + i] = '\0';
+            if (path[i] == '/') {
+                lockpath[lenv_lock + 1 + i] = '_';
+                continue;
+            }
+            lockpath[lenv_lock + 1 + i] = path[i];
+        }
+        strcat(lockpath, ".lock");
+        l = strlen(lockpath);
     } else {
         l = snprintf(lockpath, PATH_MAX, "%s%s", path, ".lock");
     }
