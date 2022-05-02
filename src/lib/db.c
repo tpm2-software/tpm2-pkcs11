@@ -2322,7 +2322,7 @@ static CK_RV db_create(char *path, size_t len) {
     return db_for_path(path, len, db_create_handler);
 }
 
-static FILE *take_lock(const char *path, char *lockpath) {
+DEBUG_VISIBILITY FILE *take_lock(const char *path, char *lockpath) {
 
     unsigned l;
 

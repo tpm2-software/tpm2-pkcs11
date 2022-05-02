@@ -74,6 +74,8 @@ CK_RV db_update_tobject_attrs(unsigned id, attr_list *attrs);
 
 /* Debug testing */
 #ifdef TESTING
+#include <stdio.h>
+
 #include "twist.h"
 
 int get_blob_null(sqlite3_stmt *stmt, int i, twist *blob);
@@ -90,6 +92,7 @@ int init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm);
 int __real_init_pobject(unsigned pid, pobject *pobj, tpm_ctx *tpm);
 int init_sealobjects(unsigned tokid, sealobject *sealobj);
 int __real_init_sealobjects(unsigned tokid, sealobject *sealobj);
+FILE *take_lock(const char *path, char *lockpath);
 #endif
 
 #endif /* SRC_PKCS11_LIB_DB_H_ */
