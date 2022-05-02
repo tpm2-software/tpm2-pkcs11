@@ -97,4 +97,7 @@ config.h.in
 
 test/unit/test_db
 
+# test tmpdir
+pkcs11_fuzztest_db_take_lock_*
+
 *~
