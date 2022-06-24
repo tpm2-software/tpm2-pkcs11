@@ -320,6 +320,31 @@ static bool set_esys_auth(ESYS_CONTEXT *esys_ctx, ESYS_TR handle, twist auth) {
     return true;
 }
 
+static bool set_esys_auth_string(ESYS_CONTEXT *esys_ctx, ESYS_TR handle, const char *auth) {
+
+    TPM2B_AUTH tpm_auth = TPM2B_EMPTY_INIT;
+
+    if (auth) {
+        size_t auth_len = strlen(auth);
+        if (auth_len > sizeof(tpm_auth.buffer)) {
+            LOGE("Auth value too large, got %zu expected < %zu",
+                    auth_len, sizeof(tpm_auth.buffer));
+            return false;
+        }
+
+        tpm_auth.size = auth_len;
+        memcpy(tpm_auth.buffer, auth, auth_len);
+    }
+
+    TSS2_RC rval = Esys_TR_SetAuth(esys_ctx, handle, &tpm_auth);
+    if (rval != TSS2_RC_SUCCESS) {
+        LOGE("Esys_TR_SetAuth: 0x%x:", rval);
+        return false;
+    }
+
+    return true;
+}
+
 bool tpm_session_active(tpm_ctx *ctx) {
     return (!!ctx->hmac_session);
 }
@@ -4319,7 +4344,6 @@ WEAK CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
 
     /* TODO make configurable ? */
     ESYS_TR hierarchy = ESYS_TR_RH_OWNER;
-    TPM2B_AUTH hieararchy_auth = { 0 };
 
     /*
      * Hierarchy is currently fixed to owner auth, but eventually
@@ -4331,15 +4355,9 @@ WEAK CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
      * NULL
      */
     const char *auth = getenv("TPM2_PKCS11_OWNER_AUTH");
-    if (auth && auth[0]) {
-        size_t len = strlen(auth);
-        if (len > sizeof(hieararchy_auth.buffer)) {
-            LOGE("TPM2_PKCS11_HIERARCHY_AUTH is too big. Max size is: %zu",
-                    sizeof(hieararchy_auth.buffer));
-            return CKR_GENERAL_ERROR;
-        }
-        hieararchy_auth.size = (typeof(hieararchy_auth.size))len;
-        memcpy(hieararchy_auth.buffer, auth, len);
+    bool res = set_esys_auth_string(tpm->esys_ctx, hierarchy, auth);
+    if (!res) {
+	    return CKR_GENERAL_ERROR;
     }
 
     TPM2B_DATA outside_info = { 0 };
@@ -4357,12 +4375,6 @@ WEAK CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
         memcpy(a->buffer, pobj_auth, len);
     }
 
-    TSS2_RC rval = Esys_TR_SetAuth(tpm->esys_ctx, hierarchy, &hieararchy_auth);
-    if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_TR_SetAuth: %s:", Tss2_RC_Decode(rval));
-        return CKR_GENERAL_ERROR;
-    }
-
     TPM2B_PUBLIC in_pub = { 0 };
     CK_RV rv = templ->fn(tpm, &in_pub);
     if (rv != CKR_OK) {
@@ -4376,7 +4388,7 @@ WEAK CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
     TPMT_TK_CREATION *ticket = NULL;
 
     ESYS_TR handle = ESYS_TR_NONE;
-    rval = Esys_CreatePrimary(tpm->esys_ctx,
+    TSS2_RC rval = Esys_CreatePrimary(tpm->esys_ctx,
             hierarchy,
             ESYS_TR_PASSWORD,
             ESYS_TR_NONE,
@@ -4407,7 +4419,6 @@ CK_RV tpm_create_persistent_primary(tpm_ctx *tpm, uint32_t *primary_handle, twis
 
     /* TODO make configurable ? */
     ESYS_TR hierarchy = ESYS_TR_RH_OWNER;
-    TPM2B_AUTH hieararchy_auth = { 0 };
 
     TPM2B_SENSITIVE_CREATE sens = { 0 };
 
@@ -4453,21 +4464,9 @@ CK_RV tpm_create_persistent_primary(tpm_ctx *tpm, uint32_t *primary_handle, twis
     TPML_PCR_SELECTION pcrs = { 0 };
 
     const char *auth = getenv("TPM2_PKCS11_OWNER_AUTH");
-    if (auth && auth[0]) {
-        size_t len = strlen(auth);
-        if (len > sizeof(hieararchy_auth.buffer)) {
-            LOGE("TPM2_PKCS11_HIERARCHY_AUTH is too big. Max size is: %zu",
-                    sizeof(hieararchy_auth.buffer));
-            return CKR_GENERAL_ERROR;
-        }
-        hieararchy_auth.size = (typeof(hieararchy_auth.size))len;
-        memcpy(hieararchy_auth.buffer, auth, len);
-    }
-
-    TSS2_RC rval = Esys_TR_SetAuth(tpm->esys_ctx, hierarchy, &hieararchy_auth);
-    if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_TR_SetAuth: %s:", Tss2_RC_Decode(rval));
-        return CKR_GENERAL_ERROR;
+    bool res = set_esys_auth_string(tpm->esys_ctx, hierarchy, auth);
+    if (!res) {
+	    return CKR_GENERAL_ERROR;
     }
 
     TPM2B_PUBLIC *out_pub = NULL;
@@ -4476,7 +4475,7 @@ CK_RV tpm_create_persistent_primary(tpm_ctx *tpm, uint32_t *primary_handle, twis
     TPMT_TK_CREATION *ticket = NULL;
 
     ESYS_TR handle = ESYS_TR_NONE;
-    rval = Esys_CreatePrimary(tpm->esys_ctx,
+    TSS2_RC rval = Esys_CreatePrimary(tpm->esys_ctx,
             hierarchy,
             ESYS_TR_PASSWORD,
             ESYS_TR_NONE,
