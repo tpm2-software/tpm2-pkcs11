@@ -4452,6 +4452,18 @@ CK_RV tpm_create_persistent_primary(tpm_ctx *tpm, uint32_t *primary_handle, twis
     TPM2B_DATA outside_info = { 0 };
     TPML_PCR_SELECTION pcrs = { 0 };
 
+    const char *auth = getenv("TPM2_PKCS11_OWNER_AUTH");
+    if (auth && auth[0]) {
+        size_t len = strlen(auth);
+        if (len > sizeof(hieararchy_auth.buffer)) {
+            LOGE("TPM2_PKCS11_HIERARCHY_AUTH is too big. Max size is: %zu",
+                    sizeof(hieararchy_auth.buffer));
+            return CKR_GENERAL_ERROR;
+        }
+        hieararchy_auth.size = (typeof(hieararchy_auth.size))len;
+        memcpy(hieararchy_auth.buffer, auth, len);
+    }
+
     TSS2_RC rval = Esys_TR_SetAuth(tpm->esys_ctx, hierarchy, &hieararchy_auth);
     if (rval != TSS2_RC_SUCCESS) {
         LOGE("Esys_TR_SetAuth: %s:", Tss2_RC_Decode(rval));
