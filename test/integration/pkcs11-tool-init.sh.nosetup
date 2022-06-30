@@ -48,6 +48,11 @@ echo "Found uninitialized token"
 pkcs11_tool -I
 pkcs11_tool -T
 
+# Their is no SRK so it should attempt to make an SRK, so lets test it with an owner
+# hierarchy password set to make sure that works.
+tpm2_changeauth -cowner mynewpass
+export TPM2_PKCS11_OWNER_AUTH=mynewpass
+
 echo "Initializing token"
 pkcs11_tool --slot-index=0 --init-token --label=mynewtoken --so-pin=mynewsopin
 echo "Token initialized"
