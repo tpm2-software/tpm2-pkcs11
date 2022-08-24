@@ -225,7 +225,7 @@ error:
     return rc;
 }
 
-int init_tobjects(token *tok) {
+WEAK DEBUG_VISIBILITY int init_tobjects(token *tok) {
     return __real_init_tobjects(tok);
 }
 
