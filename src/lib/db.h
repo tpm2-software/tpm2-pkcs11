@@ -72,6 +72,8 @@ CK_RV db_update_token_config(token *tok);
 
 CK_RV db_update_tobject_attrs(unsigned id, attr_list *attrs);
 
+WEAK int init_tobjects(token *tok);
+
 /* Debug testing */
 #ifdef TESTING
 #include <stdio.h>
@@ -83,7 +85,6 @@ int get_blob(sqlite3_stmt *stmt, int i, twist *blob);
 tobject *db_tobject_new(sqlite3_stmt *stmt);
 tobject *__real_db_tobject_new(sqlite3_stmt *stmt);
 int init_pobject_v3_from_stmt(sqlite3_stmt *stmt, pobject_v3 *old_pobj);
-int init_tobjects(token *tok);
 int __real_init_tobjects(token *tok);
 CK_RV convert_pobject_v3_to_v4(pobject_v3 *old_pobj, pobject_v4 *new_pobj);
 CK_RV db_add_pobject_v4(sqlite3 *updb, pobject_v4 *new_pobj);

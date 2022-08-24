@@ -637,11 +637,6 @@ CK_RV db_get_tokens(token *tok, size_t *len) {
             goto error;
         }
 
-        rc = init_tobjects(t);
-        if (rc != SQLITE_OK) {
-            goto error;
-        }
-
         /* token initialized, bump cnt */
         cnt++;
     }

@@ -226,4 +226,6 @@ CK_RV token_init(token *t, CK_BYTE_PTR pin, CK_ULONG pin_len, CK_BYTE_PTR label)
 
 void pobject_config_free(pobject_config *c);
 
+void token_delete_tobject_list(token *tok);
+
 #endif /* SRC_TOKEN_H_ */
