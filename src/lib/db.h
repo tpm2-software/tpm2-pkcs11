@@ -72,6 +72,8 @@ CK_RV db_update_token_config(token *tok);
 
 CK_RV db_update_tobject_attrs(unsigned id, attr_list *attrs);
 
+int init_tobjects(token *tok);
+
 /* Debug testing */
 #ifdef TESTING
 #include <stdio.h>
