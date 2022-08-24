@@ -225,7 +225,7 @@ error:
     return rc;
 }
 
-WEAK DEBUG_VISIBILITY int init_tobjects(token *tok) {
+int init_tobjects(token *tok) {
     return __real_init_tobjects(tok);
 }
 
@@ -633,11 +633,6 @@ CK_RV db_get_tokens(token *tok, size_t *len) {
         }
 
         rc = init_sealobjects(t->id, &t->esysdb.sealobject);
-        if (rc != SQLITE_OK) {
-            goto error;
-        }
-
-        rc = init_tobjects(t);
         if (rc != SQLITE_OK) {
             goto error;
         }

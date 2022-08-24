@@ -175,6 +175,11 @@ void session_ctx_opdata_clear(session_ctx *ctx) {
     session_ctx_opdata_set(ctx, operation_none, NULL, NULL, NULL);
 }
 
+void session_ctx_delete_tobject_list(session_ctx *ctx)
+{
+   token_delete_tobject_list(ctx->tok);
+}
+
 static bool is_user(CK_USER_TYPE user) {
     return user == CKU_USER || user == CKU_CONTEXT_SPECIFIC;
 }

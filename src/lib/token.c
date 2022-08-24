@@ -109,6 +109,19 @@ void token_free_list(token **tok_ptr, size_t *ptr_len) {
     free(t);
 }
 
+void token_delete_tobject_list(token *tok)
+{
+   if (tok->tobjects.head) {
+      list *cur = &tok->tobjects.head->l;
+      while(cur) {
+         tobject *tobj = list_entry(cur, tobject, l);
+         cur = cur->next;
+         tobject_free(tobj);
+      }
+      tok->tobjects.head = tok->tobjects.tail = NULL;
+   }
+}
+
 WEAK CK_RV token_add_tobject_last(token *tok, tobject *t) {
 
     if (!tok->tobjects.tail) {
