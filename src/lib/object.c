@@ -310,8 +310,7 @@ static CK_RV do_match_set(tobject_match_list *match_cur, tobject *tobj) {
 }
 
 CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
-    int rc;
-
+  
     // if count is 0 template is not used and all objects are requested so templ can be NULL.
     if (count > 0) {
         check_pointer(templ);
@@ -338,7 +337,7 @@ CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, CK_ULONG count)
 
     session_ctx_delete_tobject_list(ctx);
 
-    rc = init_tobjects(tok);
+    int rc = init_tobjects(tok);
     if (rc != SQLITE_OK) {
        goto out;
     }
