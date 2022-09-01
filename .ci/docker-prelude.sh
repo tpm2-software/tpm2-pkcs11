@@ -27,3 +27,5 @@ fi
 echo "echo changing to $DOCKER_BUILD_DIR"
 # Change to the docker build dir
 cd $DOCKER_BUILD_DIR
+
+git config --global --add safe.directory "$DOCKER_BUILD_DIR"
