@@ -394,7 +394,7 @@ class Db(object):
             hexblob = bytes.hex(blob)
 
             config = {
-                'persistent' : True,
+                'transient': False,
                 'esys-tr': hexblob
             }
 
