@@ -548,27 +548,33 @@ class Db(object):
                     REPLACE INTO schema (id, schema_version) VALUES (1, {version});
                 '''.format(version=new_version))
             dbbakcon.execute(sql)
-        finally:
-            # Close the connections
-            self._conn.commit()
-            self._conn.close()
-
+        except Exception as e:
+            # Close the connection to backup
             dbbakcon.commit()
             dbbakcon.close()
 
-            # move old db to ".old" suffix
-            olddbpath = self._path + ".old"
-            os.rename(self._path, olddbpath)
+            # unlink the backup
+            os.unlink(dbbakpath)
 
-            # move the backup to the normal dbpath
-            os.rename(dbbakpath, self._path)
+            raise e
 
-            # unlink the old
-            os.unlink(olddbpath)
+        # Close the connections
+        self._conn.commit()
+        self._conn.close()
 
-            # re-establish a connection
-            self._conn = sqlite3.connect(self._path)
-            self._conn.row_factory = sqlite3.Row
+        dbbakcon.commit()
+        dbbakcon.close()
+
+        # move old db to ".old" suffix
+        olddbpath = self._path + ".old"
+        os.rename(self._path, olddbpath)
+
+        # move the backup to the normal dbpath
+        os.rename(dbbakpath, self._path)
+
+        # re-establish a connection
+        self._conn = sqlite3.connect(self._path)
+        self._conn.row_factory = sqlite3.Row
 
     def _get_version(self):
         c = self._conn.cursor()
