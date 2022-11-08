@@ -22,7 +22,7 @@ The general release process will be one of two models:
     and *SHALL* be named `<major-version>.<minor-version>.X`.
 
 Release candidates will be announced on the
-[mailing list](https://lists.01.org/mailman/listinfo/tpm2). When a RC has gone 1
+[mailing list](https://lists.linuxfoundation.org/mailman/listinfo/tpm2). When a RC has gone 1
 week without new substantive changes, a release will be conducted. Substantive
 changes are generally not editorial in nature and they do not contain changes to
 the CI system. Substantive changes are changes to the man-pages, code or tests.
