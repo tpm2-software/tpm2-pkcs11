@@ -2834,10 +2834,11 @@ static TSS2_RC create_loaded(
     if (!tpm->did_check_for_createloaded) {
         /* do not free, value is cached */
         rval = tpm_supports_cc(tpm, TPM2_CC_CreateLoaded,
-        		&tpm->did_check_for_createloaded);
+        		&tpm->use_createloaded);
         if (rval != TSS2_RC_SUCCESS) {
         	return rval;
         }
+        tpm->did_check_for_createloaded = true;
     }
 
     if (out_handle && tpm->use_createloaded) {
