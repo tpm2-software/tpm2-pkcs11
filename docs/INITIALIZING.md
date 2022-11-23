@@ -220,4 +220,4 @@ Public Key Object; RSA 2048 bits
   label:      myrsakey
   Usage:      encrypt, verify
 ```
-Note: You will only see the public objects when you login.
+Note: To see private objects you need to login.
