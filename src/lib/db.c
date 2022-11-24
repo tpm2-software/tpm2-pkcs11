@@ -1219,6 +1219,36 @@ static CK_RV handle_home(char *path, size_t len, bool *skip) {
     return CKR_OK;
 }
 
+static CK_RV handle_homexdg(char *path, size_t len, bool *skip) {
+
+    *skip = false;
+
+    char *env_data = getenv("XDG_DATA_HOME");
+    if (env_data) {
+        unsigned l = snprintf(path, len, "%s/tpm2-pkcs11/%s", env_data, DB_NAME);
+        if (l >= len) {
+            LOGE("Completed DB path was over-length, got %d expected less than %lu",
+                l, len);
+            return CKR_GENERAL_ERROR;
+        }
+        return CKR_OK;
+    }
+
+    char *env_home = getenv("HOME");
+    if (env_home) {
+        unsigned l = snprintf(path, len, "%s/.local/share/tpm2-pkcs11/%s", env_home, DB_NAME);
+        if (l >= len) {
+            LOGE("Completed DB path was over-length, got %d expected less than %lu",
+                l, len);
+            return CKR_GENERAL_ERROR;
+        }
+        return CKR_OK;
+    }
+
+    *skip = true;
+    return CKR_OK;
+}
+
 static CK_RV handle_cwd(char *path, size_t len, bool *skip) {
 
     *skip = false;
@@ -1257,6 +1287,7 @@ typedef enum handler_idx handler_idx;
 enum handler_idx {
     HANDLER_IDX_ENV,
     HANDLER_IDX_STORE_DIR,
+    HANDLER_IDX_HOMEXDG,
     HANDLER_IDX_HOME,
     HANDLER_IDX_CWD,
     HANDLER_IDX_CNT,
@@ -1270,8 +1301,10 @@ static CK_RV db_for_path(char *path, size_t len, db_handler h) {
      * Search in the following order:
      * 1. ENV variable
      * 2. TPM2_PKCS11_STORE_DIR
-     * 2. $HOME/.tpm2_pkcs11
-     * 3. cwd
+     * 3a. $XDG_DATA_HOME/tpm2-pkcs11
+     * 3b. $HOME/.local/share/tpm2-pkcs11
+     * 4. $HOME/.tpm2_pkcs11
+     * 5. cwd
      */
 
     handler_idx i;
@@ -1286,6 +1319,9 @@ static CK_RV db_for_path(char *path, size_t len, db_handler h) {
             break;
         case HANDLER_IDX_STORE_DIR:
             rv = handle_path(path, len, &skip);
+            break;
+        case HANDLER_IDX_HOMEXDG:
+            rv = handle_homexdg(path, len, &skip);
             break;
         case HANDLER_IDX_HOME:
             rv = handle_home(path, len, &skip);
