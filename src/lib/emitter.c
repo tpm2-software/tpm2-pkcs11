@@ -2,6 +2,7 @@
 #include "config.h"
 #include <assert.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 #include <yaml.h>
 
@@ -82,7 +83,7 @@ WEAK char *emit_attributes_to_string(attr_list *attrs) {
 
         char strkey[64] = { 0 };
         CK_ATTRIBUTE_TYPE k = a->type;
-        snprintf(strkey, sizeof(strkey), "%lu", k);
+        snprintf(strkey, sizeof(strkey), "%"PRIu64"", k);
 
         int key = yaml_document_add_scalar(&doc, (yaml_char_t *)YAML_INT_TAG,
              (yaml_char_t *)strkey, -1, YAML_ANY_SCALAR_STYLE);
@@ -125,7 +126,7 @@ WEAK char *emit_attributes_to_string(attr_list *attrs) {
             const char *keyvalue = NULL;
             if (type == TYPE_BYTE_INT) {
                 CK_ULONG_PTR v = (CK_ULONG_PTR)a->pValue;
-                snprintf(keyvaluebuf, sizeof(keyvaluebuf), "%lu", *v);
+                snprintf(keyvaluebuf, sizeof(keyvaluebuf), "%"PRIu64"", *v);
                 keyvalue = keyvaluebuf;
             } else if (type == TYPE_BYTE_BOOL) {
                 CK_BBOOL *v = (CK_BBOOL *)a->pValue;
@@ -173,7 +174,7 @@ WEAK char *emit_attributes_to_string(attr_list *attrs) {
                 CK_ULONG v = ((CK_ULONG_PTR)a->pValue)[j];
 
                 char keyvalue[64] = { 0 };
-                snprintf(keyvalue, sizeof(keyvalue), "%lu", v);
+                snprintf(keyvalue, sizeof(keyvalue), "%"PRIu64"", v);
 
                 /* create a scalar */
                 int seqscalar = yaml_document_add_scalar(&doc, (yaml_char_t *)YAML_INT_TAG,
