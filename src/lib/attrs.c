@@ -201,6 +201,11 @@ bool attr_list_add_int(attr_list *l, CK_ATTRIBUTE_TYPE type, CK_ULONG value) {
     return _attr_list_add(l, type, sizeof(value), (CK_BYTE_PTR)&value, TYPE_BYTE_INT);
 }
 
+bool attr_list_add_int_seq(attr_list *l, CK_ATTRIBUTE_TYPE type, CK_BYTE_PTR value, CK_ULONG len) {
+
+    return _attr_list_add(l, type, len, value, TYPE_BYTE_INT_SEQ);
+}
+
 bool attr_list_add_bool(attr_list *l, CK_ATTRIBUTE_TYPE type, CK_BBOOL value) {
 
     return _attr_list_add(l, type, sizeof(value), &value, TYPE_BYTE_BOOL);
@@ -890,13 +895,13 @@ CK_RV rsa_gen_mechs(attr_list *new_pub_attrs, attr_list *new_priv_attrs) {
     };
 
     if (new_pub_attrs) {
-        bool r = attr_list_add_buf(new_pub_attrs, CKA_ALLOWED_MECHANISMS,
+        bool r = attr_list_add_int_seq(new_pub_attrs, CKA_ALLOWED_MECHANISMS,
                 (CK_BYTE_PTR)&t, sizeof(t));
         goto_error_false(r);
     }
 
     if (new_priv_attrs) {
-        bool r = attr_list_add_buf(new_priv_attrs, CKA_ALLOWED_MECHANISMS,
+        bool r = attr_list_add_int_seq(new_priv_attrs, CKA_ALLOWED_MECHANISMS,
             (CK_BYTE_PTR)&t, sizeof(t));
         goto_error_false(r);
     }
@@ -976,11 +981,11 @@ static CK_RV ecc_gen_mechs(attr_list *new_pub_attrs, attr_list *new_priv_attrs) 
         CKM_ECDSA_SHA512,
     };
 
-    bool r = attr_list_add_buf(new_pub_attrs, CKA_ALLOWED_MECHANISMS,
+    bool r = attr_list_add_int_seq(new_pub_attrs, CKA_ALLOWED_MECHANISMS,
             (CK_BYTE_PTR)&t, sizeof(t));
     goto_error_false(r);
 
-    r = attr_list_add_buf(new_priv_attrs, CKA_ALLOWED_MECHANISMS,
+    r = attr_list_add_int_seq(new_priv_attrs, CKA_ALLOWED_MECHANISMS,
             (CK_BYTE_PTR)&t, sizeof(t));
     goto_error_false(r);
 

@@ -105,6 +105,21 @@ bool attr_list_add_bool(attr_list *l, CK_ATTRIBUTE_TYPE type, CK_BBOOL value);
 bool attr_list_add_int(attr_list *l, CK_ATTRIBUTE_TYPE type, CK_ULONG value);
 
 /**
+ * Adds a CK_ULONG to the attribute list and adds type data.
+ * @param l
+ *  The list to add to.
+ * @param type
+ *  The attribute type to add.
+ * @param value
+ *  The buffer, can be NULL.
+ * @param len
+ *  The length of the buffer. 0 is treated as NULL value.
+ * @return
+ *  true on success, false otherwise.
+ */
+bool attr_list_add_int_seq(attr_list *l, CK_ATTRIBUTE_TYPE type, CK_BYTE_PTR value, CK_ULONG len);
+
+/**
  * Returns the count items in the attribute list.
  *
  * @param l
