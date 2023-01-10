@@ -32,6 +32,7 @@
 #include "tpm.h"
 #include "twist.h"
 #include "utils.h"
+#include "typed_memory.h"
 
 #include <openssl/evp.h>
 
@@ -39,7 +40,7 @@
 #define TPM2_PKCS11_STORE_DIR "/etc/tpm2_pkcs11"
 #endif
 
-#define DB_VERSION 7
+#define DB_VERSION 8
 
 #define goto_oom(x, l) if (!x) { LOGE("oom"); goto l; }
 #define goto_error(x, l) if (x) { goto l; }
@@ -2131,6 +2132,69 @@ error:
     return rv;
 }
 
+static CK_RV dbup_handler_from_7_to_8(sqlite3 *updb) {
+
+    /*
+     * Between version 7 and 8 of the DB the following changes need to be made:
+     *
+     * Table tobjects:
+     *
+     * The YAML attributes for a int sequence has to be a yaml sequence.
+     */
+
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+    sqlite3_stmt *stmt = NULL;
+
+    int rc = sqlite3_prepare_v2(updb, "SELECT * from tobjects", -1, &stmt, 0);
+    if (rc != SQLITE_OK) {
+        LOGE("Failed to fetch data: %s", sqlite3_errmsg(updb));
+        goto error;
+    }
+
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_DONE) {
+        goto out;
+    } else if (rc != SQLITE_ROW) {
+        LOGE("Failed to step: %s", sqlite3_errmsg(updb));
+        goto error;
+    }
+
+    while (rc == SQLITE_ROW) {
+        tobject *tobj = db_tobject_new(stmt);
+        if (!tobj) {
+            LOGE("Could not process tobjects for upgrade");
+            goto error;
+        }
+
+        /* for each tobject */
+        CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_ALLOWED_MECHANISMS);
+        CK_BYTE type = type_from_ptr(a->pValue, a->ulValueLen);
+        if (type != TYPE_BYTE_INT_SEQ) {
+            rv = _db_update_tobject_attrs(updb, tobj->id, tobj->attrs);
+        }
+
+        tobject_free(tobj);
+        if (rv != CKR_OK) {
+            goto error;
+        }
+
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_ROW && rc != SQLITE_DONE) {
+            LOGE("Failed to fetch data: %s\n", sqlite3_errmsg(updb));
+            goto error;
+        }
+    }
+
+out:
+    rv = CKR_OK;
+
+error:
+    sqlite3_finalize(stmt);
+    return rv;
+}
+
+
 static CK_RV db_backup(sqlite3 *db, const char *dbpath, sqlite3 **updb, char **copypath) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -2205,7 +2269,8 @@ static CK_RV db_update(sqlite3 **xdb, const char *dbpath, unsigned old_version, 
             dbup_handler_from_3_to_4,
             dbup_handler_from_4_to_5,
             dbup_handler_from_5_to_6,
-            dbup_handler_from_6_to_7
+            dbup_handler_from_6_to_7,
+            dbup_handler_from_7_to_8
     };
 
     /*
