@@ -22,7 +22,7 @@ from .pkcs11t import (
     CKM_ECDSA_SHA512
 )
 
-VERSION = 7
+VERSION = 8
 
 #
 # With Db() as db:
@@ -531,6 +531,36 @@ class Db(object):
                     deduped_attrs.remove(0)
                     attrs[CKA_ALLOWED_MECHANISMS] = list(deduped_attrs)
                     Db._updatetertiary(dbbakcon, t['id'], attrs)
+
+    def _update_on_8(self, dbbakcon):
+        '''
+        Between version 7 and 8 of the DB the following changes need to be made:
+
+        Table tobjects:
+
+        The YAML attributes for a int sequence has to be a yaml sequence.
+        '''
+        import ctypes
+        import socket
+        long_size = ctypes.sizeof(ctypes.c_ulong)
+
+        c = dbbakcon.cursor()
+
+        c.execute('SELECT * from tobjects')
+        tobjs = c.fetchall()
+
+        for t in tobjs:
+            attrs = yaml.safe_load(io.StringIO(t['attrs']))
+            for attr in attrs:
+                # The allowed mechanism attribute is a buffer of hexadecimal
+                # written as a string instead of being a sequence of int
+                if attr == CKA_ALLOWED_MECHANISMS and \
+                    isinstance(attrs[attr], str):
+                        list_hexa = [socket.ntohl(int(attrs[attr][i:i+long_size], 16)) for i in range(0, len(attrs[attr]), long_size)]
+                        list_int = [int(x,16) for x in list_hexa]
+                        attrs[attr] = list_int
+
+            Db._updatetertiary(dbbakcon, t['id'], attrs)
 
     def update_db(self, old_version, new_version=VERSION):
 
