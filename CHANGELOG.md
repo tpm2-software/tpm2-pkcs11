@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 Starting with release 1.8.0, The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0-rc0] - 2023-01-23
+### Fixed
+- Fix autoconf invocation on a release tarball not being a git repo for VERSION. VERSION file now generated and packaged as part of the release tarball from the git version information.
+- Fix TPM2_PKCS11_OWNER_AUTH not being used when a persistent SRK is needed in the C_InitToken path.
+- During an upgrade of the database to version 4, the config key 'persistent' is added instead of 'transient', causing KeyError when using the upgraded database.
+- Leave the original db on upgrade failure, a bug caused the original db to be unlinked not the upgraded db.
+- A bug prevented the use of CreateLoaded if the TPM supports the command.
+- A bug when creating keys through the PKCS11 interface (not tpm2-ptool), the attributes for `CKA_ALLOWED_MECHANISMS` were encoded as a hex string and not a sequence of ints within the YAML. Correcting this will trigger a db upgrade to 8
+
+### Added
+- Env varibale `PKCS11_SQL_LOCK` to allow setting a lock directory, eg for temprary directory so lock files do not persist across reboots.
+
 ## [1.8.0 ] - 2022-03-21
 ### Fixed
 - Fix GetRandom Memory Leak
