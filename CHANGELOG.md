@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 Starting with release 1.8.0, The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.9.0-rc0] - 2023-01-23
+## [1.9.0] - 2023-01-31
 ### Fixed
 - Fix autoconf invocation on a release tarball not being a git repo for VERSION. VERSION file now generated and packaged as part of the release tarball from the git version information.
 - Fix TPM2_PKCS11_OWNER_AUTH not being used when a persistent SRK is needed in the C_InitToken path.
