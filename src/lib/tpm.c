@@ -4637,3 +4637,46 @@ out:
     return rv;
 }
 
+CK_RV tpm_ec_ecdh1_derive(tpm_ctx *tctx, tobject *tobj, uint8_t *ecc_point,
+                          size_t ecc_point_len, uint8_t **secret,
+                          size_t *secret_len)
+{
+    TPM2B_ECC_POINT *out_point = NULL;
+    TPM2B_ECC_POINT in_point = { };
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    if (!tobj || !tctx || !ecc_point || !ecc_point_len || !secret_len) {
+        return CKR_ARGUMENTS_BAD;
+    }
+
+    rv = utils_uncompressed_ecpoint_to_tpm2b(ecc_point, &in_point, ecc_point_len);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    bool res = set_esys_auth(tctx->esys_ctx, tobj->tpm_handle, tobj->unsealed_auth);
+    if (!res) {
+        return CKR_GENERAL_ERROR;
+    }
+
+    rv = Esys_ECDH_ZGen(tctx->esys_ctx, tobj->tpm_handle, ESYS_TR_PASSWORD,
+                        ESYS_TR_NONE, ESYS_TR_NONE, &in_point, &out_point);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    *secret = calloc(1, out_point->point.x.size);
+    if (!*secret) {
+        rv = CKR_HOST_MEMORY;
+        goto out;
+    }
+
+    *secret_len = out_point->point.x.size;
+    memcpy(*secret, out_point->point.x.buffer, *secret_len);
+
+out:
+    free(out_point);
+
+    return rv;
+}
+

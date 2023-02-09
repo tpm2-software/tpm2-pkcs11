@@ -36,6 +36,7 @@ enum mechanism_flags {
     mf_aes           = 1 << 11,
     mf_force_synthetic = 1 << 12,
     mf_hmac          = 1 << 13,
+    mf_derive        = 1 << 14,
 };
 
 typedef struct mdetail_entry mdetail_entry;
@@ -106,6 +107,7 @@ static CK_RV rsa_pkcs_hash_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_lis
 static CK_RV rsa_pss_hash_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
 static CK_RV ecc_keygen_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
 static CK_RV ecdsa_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
+static CK_RV ecdh1_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
 static CK_RV hash_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
 static CK_RV hmac_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs);
 static CK_RV rsa_pkcs_synthesizer(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs,
@@ -174,6 +176,8 @@ static const mdetail_entry _g_mechs_templ[] = {
     { .type = CKM_ECDSA_SHA256,    .flags = mf_sign|mf_verify|mf_ecc, .validator = ecdsa_validator, .get_halg = sha256_get_halg, .get_digester = sha256_get_digester, .get_tpm_opdata = tpm_ec_ecdsa_sha256_get_opdata },
     { .type = CKM_ECDSA_SHA384,    .flags = mf_sign|mf_verify|mf_ecc, .validator = ecdsa_validator, .get_halg = sha384_get_halg, .get_digester = sha384_get_digester, .get_tpm_opdata = tpm_ec_ecdsa_sha384_get_opdata },
     { .type = CKM_ECDSA_SHA512,    .flags = mf_sign|mf_verify|mf_ecc, .validator = ecdsa_validator, .get_halg = sha512_get_halg, .get_digester = sha512_get_digester, .get_tpm_opdata = tpm_ec_ecdsa_sha512_get_opdata },
+
+    { .type = CKM_ECDH1_DERIVE,    .flags = mf_derive | mf_ecc, .validator = ecdh1_validator },
 
     /* AES */
     { .type = CKM_AES_KEY_GEN, .flags = mf_is_keygen|mf_aes },
@@ -717,6 +721,20 @@ CK_RV ecdsa_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
 
     /* this does not require an argument */
     if (mech->pParameter || mech->ulParameterLen) {
+        return CKR_MECHANISM_PARAM_INVALID;
+    }
+
+    return CKR_OK;
+}
+
+CK_RV ecdh1_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs)
+{
+    UNUSED(attrs);
+    UNUSED(m);
+
+    CK_ECDH1_DERIVE_PARAMS *params = mech->pParameter;
+
+    if (!params || !mech->ulParameterLen) {
         return CKR_MECHANISM_PARAM_INVALID;
     }
 

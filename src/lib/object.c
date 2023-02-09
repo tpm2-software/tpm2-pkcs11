@@ -1084,6 +1084,31 @@ out:
     return rv;
 }
 
+static CK_RV handle_secret_object(CK_ATTRIBUTE_PTR templ, CK_ULONG count, attr_list **new_attrs)
+{
+    CK_RV rv = CKR_OK;
+    /*
+     * Create a new typed attr list
+     */
+    attr_list *tmp_attrs = NULL;
+    bool res = attr_typify(templ, count, &tmp_attrs);
+    if (!res) {
+        return CKR_GENERAL_ERROR;
+    }
+    assert(tmp_attrs);
+
+    /* Set any defaults and do error checking */
+    rv = attr_common_add_storage(&tmp_attrs);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    /* transfer ownership to caller */
+    *new_attrs = tmp_attrs;
+    tmp_attrs = NULL;
+
+    return rv;
+}
 
 CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OBJECT_HANDLE *object) {
     assert(ctx);
@@ -1166,6 +1191,8 @@ CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OB
         rv = handle_data_object(tok, templ, count, &new_attrs);
     } else if (clazz == CKO_CERTIFICATE) {
         rv = handle_cert_object(templ, count, &new_attrs);
+    } else if (clazz == CKO_SECRET_KEY) {
+        rv = handle_secret_object(templ, count, &new_attrs);
     } else {
         LOGE("Can only create RSA Public key objects or"
                 " data objects, CKA_CLASS(%lu), CKA_KEY_TYPE(%lu)",
