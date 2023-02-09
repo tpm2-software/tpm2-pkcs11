@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <tss2/tss2_tpm2_types.h>
+
 #include "config.h"
 #include "log.h"
 #include "pkcs11.h"
@@ -127,6 +129,21 @@ CK_RV apply_pkcs7_pad(const CK_BYTE_PTR in, CK_ULONG inlen,
  *  The minor version of the library.
  */
 void parse_lib_version(const char *buf, CK_BYTE *major, CK_BYTE *minor);
+
+/**
+*
+* Given an uncompressed ECC point in DER (0x04||x||y) populate a TPM2B_ECC_POINT
+* @param from
+*  ECC point in uncompressed DER format (0x04||x||y)
+* @param to
+*  Pointer to the TPM2B_ECC_POINT to populate
+* @param len
+*  Length of the ECC point in uncompressed DER format
+* @return CK_RV
+*   CKR_ARGUMENTS_BAD if the uncompressed ECC point is invalid
+*   CKR_OK on success
+*/
+CK_RV utils_uncompressed_ecpoint_to_tpm2b(uint8_t* from, TPM2B_ECC_POINT* to, size_t len);
 
 /*
  * Work around bugs in clang not including the builtins, and when asan is enabled

@@ -7,6 +7,7 @@
 
 #include "pkcs11.h"
 
+#include "derive.h"
 #include "digest.h"
 #include "encrypt.h"
 #include "key.h"
@@ -630,7 +631,7 @@ CK_RV C_UnwrapKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT
 }
 
 CK_RV C_DeriveKey (CK_SESSION_HANDLE session, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE base_key, CK_ATTRIBUTE *templ, CK_ULONG attribute_count, CK_OBJECT_HANDLE *key) {
-    TOKEN_UNSUPPORTED;
+    TOKEN_WITH_LOCK_BY_SESSION_USER_RO(derive, session, mechanism, base_key, templ, attribute_count, key);
 }
 
 CK_RV C_SeedRandom (CK_SESSION_HANDLE session, CK_BYTE_PTR seed, CK_ULONG seed_len) {

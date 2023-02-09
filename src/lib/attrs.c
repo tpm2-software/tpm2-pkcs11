@@ -979,6 +979,7 @@ static CK_RV ecc_gen_mechs(attr_list *new_pub_attrs, attr_list *new_priv_attrs) 
         CKM_ECDSA_SHA256,
         CKM_ECDSA_SHA384,
         CKM_ECDSA_SHA512,
+        CKM_ECDH1_DERIVE,
     };
 
     bool r = attr_list_add_int_seq(new_pub_attrs, CKA_ALLOWED_MECHANISMS,

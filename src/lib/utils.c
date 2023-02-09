@@ -555,3 +555,61 @@ void parse_lib_version(const char *userbuf, CK_BYTE *major, CK_BYTE *minor) {
 out:
     free(buf);
 }
+
+CK_RV utils_uncompressed_ecpoint_to_tpm2b(uint8_t* from, TPM2B_ECC_POINT* to, size_t len) {
+
+    const size_t ecc_key_sizes[] = { 24, 28, 32, 48, 64, 66 };
+    size_t tpm2b_size = 0;
+    size_t i = 0;
+
+    /*
+     * Uncompressed EC_POINT is DER OCTET STRING of "04||x||y"
+     * (discard the 0x04 and adjust the length)
+     */
+    if (!from || !to || !len || len < 49 || len > 133) {
+        return CKR_ARGUMENTS_BAD;
+    }
+
+    if (*from++ != 0x04) {
+        return CKR_ARGUMENTS_BAD;
+    }
+
+    /* Remove the 0x04 tag from the length */
+    len = len - 1;
+
+    tpm2b_size = len / 2;
+    for (i = 0; i < ARRAY_LEN(ecc_key_sizes); i++) {
+        if (tpm2b_size == ecc_key_sizes[i]) {
+            break;
+        }
+    }
+
+    if (i >= ARRAY_LEN(ecc_key_sizes)) {
+        return CKR_ARGUMENTS_BAD;
+    }
+
+    /* Key has the expected length */
+    if (tpm2b_size > sizeof(to->point.x.buffer)) {
+        LOGW("TPM2B_ECC_POINT buffer too small, truncate possible padding");
+        memcpy(to->point.x.buffer, from, sizeof(to->point.x.buffer));
+        to->point.x.size = sizeof(to->point.x.buffer);
+    } else {
+        memcpy(to->point.x.buffer, from, tpm2b_size);
+        to->point.x.size = tpm2b_size;
+    }
+
+    from = from + tpm2b_size;
+
+    if (tpm2b_size > sizeof(to->point.y.buffer)) {
+        LOGW("TPM2B_ECC_POINT buffer too small, truncate possible padding");
+        memcpy(to->point.y.buffer, from, sizeof(to->point.y.buffer));
+        to->point.y.size = sizeof(to->point.y.buffer);
+    } else {
+        memcpy(to->point.y.buffer, from, tpm2b_size);
+        to->point.y.size = tpm2b_size;
+    }
+
+    to->size = to->point.y.size + to->point.x.size;
+
+    return CKR_OK;
+}
