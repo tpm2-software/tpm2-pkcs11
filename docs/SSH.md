@@ -19,7 +19,7 @@ works.
 Start by reading the document on initialization [here](INITIALIZING.md). Only brief commands
 will be provided here, so a basic understanding of the initialization process is paramount.
 
-We start by creating a tpm2-pkcs11 *store* and set up an RSA2048 key that SSH can used.
+We start by creating a tpm2-pkcs11 *store* and set up an RSA2048 key that SSH can use.
 **Note**: Most SSH configurations allow RSA2048 keys to be used, but this can be turned off
   in the config, but this is quite rare.
 
@@ -78,7 +78,7 @@ and `sudo make install` method.
 
 # Step 6 - Logging In via SSH
 
-To log in, one used the `ssh` client application and specifies the path to the PKCS11 library via the `-I` option. It will prompt for the user PIN, which
+To log in, one uses the `ssh` client application and specifies the path to the PKCS11 library via the `-I` option. It will prompt for the user PIN, which
 in the example is set to `myuserpin`.
 
 ```bash
