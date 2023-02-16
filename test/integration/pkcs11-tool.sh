@@ -73,6 +73,39 @@ echo "Deleting pubkey"
 pkcs11_tool --slot=1 --pin=myuserpin --login --delete-object --type=pubkey --label=myecckey
 echo "Pubkey deleted"
 
+# test ECHD1 derive
+echo "Test ECDH1-DERIVE"
+echo "Create EC keys"
+tmp=$TPM2_PKCS11_STORE
+pkcs11_tool --slot=1 --keypairgen --login --pin myuserpin \
+            --key-type EC:prime256v1 --id 01 --label key1
+
+pkcs11_tool --slot=1 --keypairgen --login --pin myuserpin \
+            --key-type EC:prime256v1 --id 02 --label key2
+
+echo "Read public components"
+if pkcs11_tool --read-object --login --pin myuserpin --type pubkey -id 01 -o {tmp}/key1_pub.der ; then
+    pkcs11_tool --read-object --login --pin myuserpin --type pubkey --id 02 -o {tmp}/key2_pub.der
+
+    echo "Derive secrets"
+    pkcs11_tool  --derive -m ECDH1-DERIVE --id 01 --label key1 \
+                 --login --pin myuserpin \
+                 --input-file {tmp}/key2_pub.der \
+                 --output-file {tmp}/shared_secret_1
+
+    pkcs11_tool  --derive -m ECDH1-DERIVE --id 02 --label key2 \
+                 --login --pin myuserpin \
+                 --input-file {tmp}/key1_pub.der \
+                 --output-file {tmp}/shared_secret_2
+
+    echo "Validate output"
+    diff {tmp}/shared_secret_2 {tmp}/shared_secret_1 > /dev/null 2>&1
+    test "$?" -eq "0"
+else
+    echo "pkcs11-tool can't read EC key public components"
+    echo "Skipp ECDH1-1 derive test"
+fi
+
 # Verify we can add a certificate, since this is a setup a test, the store should contain a cert to use.
 echo "Writing certificate"
 # Not all versions of pkcs11-tool handle PEM to DER conversions, 0.15 doesn't, 0.19 does. So always
