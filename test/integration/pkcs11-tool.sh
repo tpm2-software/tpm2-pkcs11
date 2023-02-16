@@ -38,7 +38,7 @@ echo "Found privkey"
 
 # test pin change
 echo "Attempting pin change"
-pkcs11-tool --module "$modpath" --slot=1 --login --pin myuserpin --change-pin --new-pin mynewpin
+pkcs11_tool --slot=1 --login --pin myuserpin --change-pin --new-pin mynewpin
 echo "Pin changed"
 
 # change userpin from sopin
