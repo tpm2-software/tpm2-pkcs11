@@ -557,8 +557,7 @@ class Db(object):
                 if attr == CKA_ALLOWED_MECHANISMS and \
                     isinstance(attrs[attr], str):
                         list_hexa = [socket.ntohl(int(attrs[attr][i:i+long_size], 16)) for i in range(0, len(attrs[attr]), long_size)]
-                        list_int = [int(x,16) for x in list_hexa]
-                        attrs[attr] = list_int
+                        attrs[attr] = list_hexa
 
             Db._updatetertiary(dbbakcon, t['id'], attrs)
 
