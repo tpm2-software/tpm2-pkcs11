@@ -2394,7 +2394,7 @@ DEBUG_VISIBILITY int get_lock_path(const char *path, char *lockpath) {
     size_t lenv_lock = 0;
     char *env_lock = getenv("PKCS11_SQL_LOCK");
 
-    if (env_lock && (lenv_lock = strlen(env_lock) > 0)) {
+    if (env_lock && ((lenv_lock = strlen(env_lock)) > 0)) {
         /*
          * lock file shall be "PKCS11_SQL_LOCK" + '/' + path + ".lock", but
          * path's '/' will be substituted by '_'.
