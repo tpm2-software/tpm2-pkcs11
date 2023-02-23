@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 
 #include <errno.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -2838,6 +2839,47 @@ static void test_db_add_token_sqlite3_step_2_fail(void **state) {
     assert_int_equal(rv, CKR_GENERAL_ERROR);
 }
 
+static void test_db_get_lock_path(void **state) {
+    UNUSED(state);
+
+    const char *db_path = "/etc/tpm2_pkcs11/tpm2_pkcs11.sqlite3";
+    char lock_path[PATH_MAX];
+
+    memset(lock_path, 0, sizeof lock_path);
+    unsetenv("PKCS11_SQL_LOCK");
+    assert_int_equal(get_lock_path(db_path, lock_path), SQLITE_OK);
+    assert_string_equal(lock_path, "/etc/tpm2_pkcs11/tpm2_pkcs11.sqlite3.lock");
+
+    memset(lock_path, 0, sizeof lock_path);
+    setenv("PKCS11_SQL_LOCK", "", 1);
+    assert_int_equal(get_lock_path(db_path, lock_path), SQLITE_OK);
+    assert_string_equal(lock_path, "/etc/tpm2_pkcs11/tpm2_pkcs11.sqlite3.lock");
+
+    memset(lock_path, 0, sizeof lock_path);
+    setenv("PKCS11_SQL_LOCK", "/tmp", 1);
+    assert_int_equal(get_lock_path(db_path, lock_path), SQLITE_OK);
+    assert_string_equal(lock_path, "/tmp/_etc_tpm2_pkcs11_tpm2_pkcs11.sqlite3.lock");
+
+    memset(lock_path, 0, sizeof lock_path);
+    setenv("PKCS11_SQL_LOCK", "/tmp/", 1);
+    assert_int_equal(get_lock_path(db_path, lock_path), SQLITE_OK);
+    assert_string_equal(lock_path, "/tmp/_etc_tpm2_pkcs11_tpm2_pkcs11.sqlite3.lock");
+
+    char long_path[PATH_MAX];
+    memset(long_path, 'l', sizeof long_path);
+    long_path[PATH_MAX - 1] = '\0';
+
+    memset(lock_path, 0, sizeof lock_path);
+    setenv("PKCS11_SQL_LOCK", long_path, 1);
+    assert_int_equal(get_lock_path(db_path, lock_path), SQLITE_ERROR);
+
+    memset(lock_path, 0, sizeof lock_path);
+    unsetenv("PKCS11_SQL_LOCK");
+    assert_int_equal(get_lock_path(long_path, lock_path), SQLITE_ERROR);
+
+    unsetenv("PKCS11_SQL_LOCK");
+}
+
 int main(int argc, char* argv[]) {
     (void) argc;
     (void) argv;
@@ -2950,7 +2992,8 @@ int main(int argc, char* argv[]) {
         cmocka_unit_test(test_db_add_token_sqlite3_bind_text_3_fail),
         cmocka_unit_test(test_db_add_token_sqlite3_bind_blob_1_fail),
         cmocka_unit_test(test_db_add_token_sqlite3_bind_blob_2_fail),
-        cmocka_unit_test(test_db_add_token_sqlite3_step_2_fail)
+        cmocka_unit_test(test_db_add_token_sqlite3_step_2_fail),
+        cmocka_unit_test(test_db_get_lock_path),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
