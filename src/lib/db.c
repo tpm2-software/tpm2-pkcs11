@@ -2387,7 +2387,7 @@ static CK_RV db_create(char *path, size_t len) {
     return db_for_path(path, len, db_create_handler);
 }
 
-DEBUG_VISIBILITY FILE *take_lock(const char *path, char *lockpath) {
+DEBUG_VISIBILITY int get_lock_path(const char *path, char *lockpath) {
 
     unsigned l;
 
@@ -2405,7 +2405,7 @@ DEBUG_VISIBILITY FILE *take_lock(const char *path, char *lockpath) {
         }
         if ((lenv_lock + 1 + strlen(path) + strlen(".lock")) >= PATH_MAX) {
             LOGE("Lock file path would be longer than PATH_MAX");
-            return NULL;
+            return SQLITE_ERROR;
         }
         strncpy(lockpath, env_lock, PATH_MAX-1);
         strcat(lockpath, "/");
@@ -2424,6 +2424,15 @@ DEBUG_VISIBILITY FILE *take_lock(const char *path, char *lockpath) {
     }
     if (l >= PATH_MAX) {
         LOGE("Lock file path is longer than PATH_MAX");
+        return SQLITE_ERROR;
+    }
+
+    return SQLITE_OK;
+}
+
+DEBUG_VISIBILITY FILE *take_lock(const char *path, char *lockpath) {
+
+    if (get_lock_path(path, lockpath) != SQLITE_OK) {
         return NULL;
     }
 
