@@ -57,6 +57,10 @@ endif # HAVE_LD_VERSION_SCRIPT
 src_libtpm2_pkcs11_la_LIBADD = $(AM_LDFLAGS)
 src_libtpm2_pkcs11_la_SOURCES = $(LIB_PKCS11_SRC) $(LIB_PKCS11_INTERNAL_LIB_SRC)
 
+if HAVE_PREFIX
+  # Use standard install location when using --prefix
+  lib_LTLIBRARIES = $(libtpm2_pkcs11)
+else
 if HAVE_P11KIT
   # Use P11 kit library module install location
   p11libdir=$(P11_MODULE_PATH)
@@ -68,6 +72,7 @@ if HAVE_P11KIT
 else
   # Use standard install location when P11Kit is not found
   lib_LTLIBRARIES = $(libtpm2_pkcs11)
+endif
 endif
 
 AM_DISTCHECK_CONFIGURE_FLAGS = --with-p11kitconfigdir='$$(datarootdir)/p11kitconfigdir' --with-p11kitmoduledir='$$(libdir)'
