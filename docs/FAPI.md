@@ -11,7 +11,7 @@ code was implemented using the Enhanced System API (ESAPI) and for on disk stora
 ## Build Time
 
 At the time the package is built, it will detect tss2-fapi library and automatically configure it's inclusion into the tpm2-pkcs11 library. One can *explicitly* configure this
-with `--with-fapi=yes|no`.
+with `--enable-fapi=yes|no`.
 
 ## Run Time
 
