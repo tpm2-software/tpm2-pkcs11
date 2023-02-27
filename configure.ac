@@ -485,6 +485,10 @@ AS_IF([test "x$have_p11kit" = "xyes"], [
 
 AM_CONDITIONAL([HAVE_P11KIT], [test "x$have_p11kit" = "xyes"])
 
+# check for --prefix and set flag HAVE_PREFIX if found
+#   do not change install location if --prefix is given and with P11_KIT found
+AM_CONDITIONAL([HAVE_PREFIX], [test ! -z "$(prefix)"])
+
 # END P11 CONFIG
 
 AC_C_BIGENDIAN()
