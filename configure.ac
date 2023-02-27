@@ -114,11 +114,11 @@ AC_ARG_ENABLE(
 AS_IF([test "x$esapi_sf" = "xyes"],
        [do_esapi_manage_flags])
 
-AC_ARG_ENABLE(
+AC_ARG_WITH(
   [fapi],
   [AS_HELP_STRING([--with-fapi],
     [enable or disable the fapi backend. Default is "auto" to autodetect])],
-    [enable_fapi=$enableval],
+    [enable_fapi=$withval],
     [enable_fapi=auto])
 
 AC_DEFUN([do_fapi_configure], [
