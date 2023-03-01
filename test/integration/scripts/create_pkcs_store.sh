@@ -181,21 +181,21 @@ if [ "$OSSL3_DETECTED" -eq "1" ]; then
     setup_asan
 
     TPM2OPENSSL_PARENT_AUTH="mypobjpin" openssl \
-        req -provider tpm2 -provider base -new -x509 -days 365 -subj '/CN=my key/' -sha256 \
+        req -provider tpm2 -provider default -new -x509 -days 365 -subj '/CN=my key/' -sha256 \
             -key "$TPM2_PKCS11_STORE/14.pem" --passin "pass:$auth_14" -out "$cert.ec1"
 
     TPM2OPENSSL_PARENT_AUTH="mypobjpin" openssl \
-        req -provider tpm2 -provider base -new -x509 -days 365 -subj '/CN=my key/' -sha256 \
+        req -provider tpm2 -provider default -new -x509 -days 365 -subj '/CN=my key/' -sha256 \
         -key "$TPM2_PKCS11_STORE/6.pem" --passin "pass:$auth_6" \
         -config "$TEST_FIXTURES/ossl-req-ca.cnf" -extensions ca_ext -out "$cert.rsa1"
 
 	# sign a certificate for rsa2 using the rsa1 key
 	TPM2OPENSSL_PARENT_AUTH="mypobjpin" openssl \
-	    req -provider tpm2 -provider base -new -subj '/CN=my sub key/' -sha256 \
+	    req -provider tpm2 -provider default -new -subj '/CN=my sub key/' -sha256 \
 	    -key "$TPM2_PKCS11_STORE/8.pem" --passin "pass:$auth_8" -out "$cert.csr.rsa2"
 
 	TPM2OPENSSL_PARENT_AUTH="mypobjpin" openssl \
-    	x509 -provider tpm2 -provider base -req -days 365 -sha256 -in "$cert.csr.rsa2" \
+        x509 -provider tpm2 -provider default -req -days 365 -sha256 -in "$cert.csr.rsa2" \
     	-CA "$cert.rsa1" -CAkey "$TPM2_PKCS11_STORE/6.pem" --passin "pass:$auth_6"\
     	-CAcreateserial -extfile "$TEST_FIXTURES/ossl-req-cert.cnf" -extensions cert_ext \
     	-out "$cert.rsa2"
