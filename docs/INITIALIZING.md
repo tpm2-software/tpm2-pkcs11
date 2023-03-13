@@ -119,7 +119,7 @@ private:
   CKA_ID: '62663630653733656336316363386535'
 ```
 
-This command can be run N times to create N objects within a token. Tokens can have an arbitrary number of tokens. The tool
+This command can be run N times to create N objects within a token. Tokens can have an arbitrary number of objects. The tool
 outputs to *stdout* the objects CKA_ID hex encoded.
 
 **Note**: To view all the types of objects one can create run command:
