@@ -59,6 +59,9 @@ class NewKeyCommandBase(Command):
             '--hierarchy-auth',
             help='The hierarchyauth, required for transient pobjects.\n',
             default='')
+        group_parser.add_argument(
+            '--policy',
+            help='Policy to apply on using the key (in JSON format).\n')
         pinopts = group_parser.add_mutually_exclusive_group()
         pinopts.add_argument('--sopin', help='The Administrator pin.\n'),
         pinopts.add_argument('--userpin', help='The User pin.\n'),
@@ -174,6 +177,7 @@ class NewKeyCommandBase(Command):
                 key_label = args['key_label']
                 tid = args['id']
                 hierarchyauth = args['hierarchy_auth']
+                policy = args['policy']
                 passin = args['passin'] if 'passin' in args else None
 
                 privkey = None
@@ -206,6 +210,9 @@ class NewKeyCommandBase(Command):
                 # handle options that can add additional attributes
                 always_auth = args['attr_always_authenticate']
                 priv_attrs = {CKA_ALWAYS_AUTHENTICATE : always_auth}
+                if policy is not None:
+                    validate_policy(policy)
+                    priv_attrs[CKA_TPM2_POLICY_JSON] = binascii.hexlify(policy.encode()).decode()
 
                 override_keylen = getattr(self, '_override_keylen', None)
 
