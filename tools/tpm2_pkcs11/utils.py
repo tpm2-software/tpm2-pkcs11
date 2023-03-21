@@ -2,6 +2,7 @@
 import binascii
 import hashlib
 import io
+import json
 import os
 import argparse
 import sys
@@ -555,3 +556,9 @@ def dump_pubpem(db, obj, pin, is_sopin, output_prefix):
     with open(output_prefix + ".pem", "wb") as f:
         f.write(pub_blob.to_pem())
 
+def validate_policy(policy):
+    try:
+        # discarding result as this is just a JSON sanity check
+        json.loads(policy)
+    except json.JSONDecodeError:
+        sys.exit('Object policy must be a valid JSON')
