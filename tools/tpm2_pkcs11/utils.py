@@ -2,6 +2,7 @@
 import binascii
 import hashlib
 import io
+import json
 import os
 import argparse
 import sys
@@ -564,3 +565,9 @@ def get_serialized_tr(tpm2_handle):
         
         return hex_string
     
+def validate_policy(policy):
+    try:
+        # discarding result as this is just a JSON sanity check
+        json.loads(policy)
+    except json.JSONDecodeError:
+        sys.exit('Object policy must be a valid JSON')
