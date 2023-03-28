@@ -9,6 +9,11 @@
 #include <openssl/evp.h>
  #include <openssl/rsa.h>
 
+#ifdef HAVE_POLICY
+#include <tss2/tss2_policy.h>
+#include <tss2/tss2_rc.h>
+#endif
+
 #include "attrs.h"
 #include "backend.h"
 #include "checks.h"
@@ -149,6 +154,42 @@ static CK_RV update_pss_sig_state(token *tok, tobject *tobj) {
     return rv;
 }
 
+static CK_RV policy_is_satisfied(tpm_ctx *tctx, tobject *tobj, uint32_t handle) {
+
+    CK_ATTRIBUTE_PTR policy_attr = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_POLICY_JSON);
+    if (!policy_attr) {
+        /* nonexistent policy is always satisfied */
+        return CKR_OK;
+    }
+
+#ifndef HAVE_POLICY
+    UNUSED(tctx);
+    UNUSED(handle);
+    /* the policy is considered to be satisfied, but will warn about it */
+    LOGW("Found a policy, but support for enforcing it wasn't compiled in");
+    return CKR_OK;
+#else
+    TSS2_RC rc;
+
+    TSS2_POLICY_CTX *policy_ctx = NULL;
+    rc = Tss2_PolicyInit(policy_attr->pValue, TPM2_ALG_SHA256, &policy_ctx);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Tss2_PolicyInit: %s:", Tss2_RC_Decode(rc));
+        return CKR_GENERAL_ERROR;
+    }
+
+    CK_RV rv = tpm2_execute_policy(tctx, policy_ctx, handle);
+    if (rv != CKR_OK) {
+        LOGE("Could not execute policy.");
+        Tss2_PolicyFinalize(&policy_ctx);
+        return CKR_GENERAL_ERROR;
+    }
+
+    Tss2_PolicyFinalize(&policy_ctx);
+    return CKR_OK;
+#endif
+}
+
 static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key) {
 
     check_pointer(mechanism);
@@ -209,6 +250,13 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
     if (rv != CKR_OK) {
         LOGE("Could not determine if algorithm is HMAC or not");
         return rv;
+    }
+
+    if (op == operation_sign) {
+        rv = policy_is_satisfied(tok->tctx, tobj, tok->pobject.handle);
+        if (rv != CKR_OK) {
+            return rv;
+        }
     }
 
     tpm_op_data *tpm_opdata = NULL;
