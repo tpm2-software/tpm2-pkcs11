@@ -24,6 +24,9 @@
 #include <tss2/tss2_mu.h>
 #include <tss2/tss2_rc.h>
 #include <tss2/tss2_tctildr.h>
+#ifdef HAVE_POLICY
+#include <tss2/tss2_policy.h>
+#endif
 
 #include "attrs.h"
 #include "checks.h"
@@ -4007,6 +4010,52 @@ out:
 
     return rv;
 }
+
+#ifdef HAVE_POLICY
+CK_RV tpm2_execute_policy(tpm_ctx *ctx, TSS2_POLICY_CTX *policy_ctx, uint32_t handle)
+{
+
+    check_pointer(ctx);
+    check_pointer(policy_ctx);
+    check_num(handle);
+
+    TPMT_SYM_DEF symmetric = {
+        .algorithm = TPM2_ALG_AES,
+        .keyBits = { .aes = 128 },
+        .mode = { .aes = TPM2_ALG_CFB }
+    };
+
+    TSS2_RC rc;
+
+    /* XXX should we cache the session or running multiple policies is unlikely? */
+    ESYS_TR policy_session = ESYS_TR_NONE;
+    rc = Esys_StartAuthSession(ctx->esys_ctx,
+            handle,
+            handle,
+            ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+            NULL,
+            TPM2_SE_POLICY, &symmetric, TPM2_ALG_SHA256,
+            &policy_session);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Esys_StartAuthSession: %s", Tss2_RC_Decode(rc));
+        return CKR_GENERAL_ERROR;
+    }
+
+    TSS2_RC result = Tss2_PolicyExecute(policy_ctx, ctx->esys_ctx, policy_session);
+    if (result != TSS2_RC_SUCCESS) {
+        LOGE("Tss2_PolicyExecute: %s:", Tss2_RC_Decode(result));
+        /* continue and stop the session */
+    }
+
+    rc = Esys_FlushContext(ctx->esys_ctx, policy_session);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Esys_FlushContext: %s", Tss2_RC_Decode(rc));
+        return CKR_GENERAL_ERROR;
+    }
+
+    return result;
+}
+#endif
 
 void tpm_init(void) {
     /* pass nothing to do */
