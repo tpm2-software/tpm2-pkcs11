@@ -7,7 +7,7 @@
 #include <openssl/ec.h>
 #include <openssl/ecdsa.h>
 #include <openssl/evp.h>
- #include <openssl/rsa.h>
+#include <openssl/rsa.h>
 
 #ifdef HAVE_POLICY
 #include <tss2/tss2_policy.h>
