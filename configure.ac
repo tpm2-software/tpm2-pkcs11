@@ -56,6 +56,29 @@ PKG_CHECK_MODULES([TSS2_MU],     [tss2-mu])
 PKG_CHECK_MODULES([TSS2_TCTILDR], [tss2-tctildr])
 PKG_CHECK_MODULES([TSS2_RC], [tss2-rc])
 
+AC_ARG_WITH(
+  [policy],
+  [AS_HELP_STRING([--with-policy],
+    [enable or disable policy support. Default is "auto" to autodetect])],
+    [enable_policy=$withval],
+    [enable_policy=auto])
+
+AC_DEFUN([do_policy_configure], [
+  # tss2-policy was added in tpm2-tss v4.0
+  AS_IF([test "x$enable_policy" = "xauto"],
+      [ PKG_CHECK_MODULES([TSS2_POLICY], [tss2-policy], [have_policy=1], [have_policy=0]) ],
+      [ PKG_CHECK_MODULES([TSS2_POLICY], [tss2-policy], [have_policy=1]) ]
+  )
+])
+
+AS_IF([test "x$enable_policy" != "xno"],
+    [do_policy_configure])
+
+AS_IF([test "$have_policy" = "1"], [
+    AC_DEFINE([HAVE_POLICY], [1], [Should respect policies and libpolicy is found.])
+    AC_SUBST(TSS2_POLICY_DEP, [tss2-policy])
+])
+
 # Macro that checks for existence of a python module
 AC_DEFUN([AC_PYTHON_MODULE],
 [AC_MSG_CHECKING([for module $2 in python])
