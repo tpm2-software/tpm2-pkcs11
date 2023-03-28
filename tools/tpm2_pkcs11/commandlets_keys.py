@@ -828,7 +828,7 @@ class Export(Command):
             
     def generate_options(self, group_parser):
         group_parser.add_argument(
-            '--id', help='The id of the object to add (mutually exclusive with --label and --key-label).\n',
+            '--id', help='The id of the object to export (mutually exclusive with --label and --key-label).\n',
             type=int)
 
         group_parser.add_argument(
