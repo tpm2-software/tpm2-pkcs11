@@ -540,7 +540,7 @@ and submitting patches upstream!])
 # Rather than nesting these and making them ugly just use a counter.
 AX_CHECK_COMPILE_FLAG([-fdata-sections], [strip=y])
 AX_CHECK_COMPILE_FLAG([-ffunction-sections], [strip="y$strip"])
-AX_CHECK_LINK_FLAG([[-Wl,--gc-sections]], [strip+="y$strip"])
+AX_CHECK_LINK_FLAG([[-Wl,--gc-sections]], [strip="y$strip"])
 
 AS_IF([test x"$strip" = xyyy], [
   EXTRA_CFLAGS="$EXTRA_CFLAGS -fdata-sections -ffunction-sections"
