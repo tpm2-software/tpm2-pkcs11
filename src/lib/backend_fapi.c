@@ -666,7 +666,7 @@ CK_RV backend_fapi_update_tobject_attrs(token *t, tobject *tobj, attr_list *attr
     memcpy(&newappdata[0], &appdata[0], tobj_start);
     sprintf((char*)&newappdata[tobj_start], "%08x:%s", tobj->id, attrs);
     memcpy(&newappdata[tobj_start + 9 + strlen(attrs) + 1],
-           &appdata[tobj_start + tobj_len],
+           &appdata[tobj_start + tobj_len + 1],
            appdata_len - tobj_start - tobj_len - 1);
     newappdata[newappdata_len - 1] = '\0';
 
