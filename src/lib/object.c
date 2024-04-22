@@ -1123,12 +1123,14 @@ CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OB
     /*
      * Currently we only support RW user session state objects.
      */
-    if (state != CKS_RW_USER_FUNCTIONS) {
-        if (state == CKS_RW_SO_FUNCTIONS) {
-            return CKR_USER_NOT_LOGGED_IN;
-        } else {
-            return CKR_SESSION_READ_ONLY;
-        }
+    switch(state) {
+    case CKS_RW_USER_FUNCTIONS:
+        break;
+    case CKS_RW_PUBLIC_SESSION:
+    case CKS_RW_SO_FUNCTIONS:
+        return CKR_USER_NOT_LOGGED_IN;
+    default:
+        return CKR_SESSION_READ_ONLY;
     }
 
     /*
