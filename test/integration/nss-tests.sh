@@ -29,6 +29,12 @@ expect {
     sleep 1; send -- "anotheruserpin\r"; exp_continue
   } "Password or Pin *esys-tr*:" {
     sleep 1; send -- "userpin3\r"; exp_continue
+  } "Is this a CA certificate*" {
+    sleep 1; send -- "y\r"; exp_continue
+  } "Enter the path length constraint, enter to skip*" {
+    sleep 1; send -- "\r"; exp_continue
+  } "Is this a critical extension*" {
+    sleep 1; send -- "y\r"; exp_continue
   } eof
 }
 catch wait result
@@ -110,5 +116,49 @@ pinentry certutil -V -d . -n import-keys:smimetest -u S
 
 echo "Testing if S/MIME certificate in NSS DB is valid for mail reception"
 pinentry certutil -V -d . -n import-keys:smimetest -u R
+
+echo "Generating a noise file for seeding purposes"
+dd if=/dev/random of=noise.bin bs=32 count=1
+
+# A non-fatal error in the log is caused by the current tpm2-pkcs11
+# implementation not supporting the vendor-defined object class CKO_NSS_TRUST.
+echo "Create a self-signed certificate and its associated keypair on a TPM2 token using NSS tools"
+pinentry certutil -S -d . -h import-keys -n "tpm2-ca" \
+  -s "C=US,ST=Radius,L=Somewhere,O=Example Inc.,CN=TPM2 CA" \
+  -x -t "C,C,C" -2 -7 tpm2-ca@example.org \
+  --keyUsage certSigning,crlSigning,critical \
+  --nsCertType objectSigningCA,critical \
+  -z noise.bin
+
+echo "Testing tpm2-ca certificate lookup in NSS DB via label"
+pinentry certutil -L -d . -n import-keys:tpm2-ca
+
+echo "Testing tpm2-ca certificate lookup in NSS DB via mail address"
+pinentry certutil -L -d . -h import-keys --email tpm2-ca@example.org
+
+echo "Creating a CSR and its associated keypair on a TPM2 token"
+pinentry certutil -R -d . -h import-keys -k rsa -g 2048 \
+  -s "C=US,ST=Radius,L=Somewhere,O=Example Inc.,CN=TPM2 Client" \
+  -7 tpm2-client@example.org \
+  -z noise.bin -a -o tpm2-client.csr.pem
+
+echo "Converting the CSR to DER format"
+openssl req -in tpm2-client.csr.pem -outform DER -out tpm2-client.csr.der
+
+echo "Signing TPM2 Client certificate with tpm2-ca"
+pinentry certutil -C -d . -c "import-keys:tpm2-ca" \
+   -v 12 -w -1 -7 tpm2-client@example.org \
+   --keyUsage digitalSignature,keyEncipherment,critical \
+   -i tpm2-client.csr.der -o tpm2-client.crt.der
+
+# The same non-fatal error related to CKO_NSS_TRUST will be seen here.
+echo "Importing TPM2 Client certificate to TPM2 token"
+pinentry certutil -A -d . -h import-keys -n tpm2-client -t ",," -i tpm2-client.crt.der
+
+echo "Testing TPM2 Client certificate lookup in NSS DB via label"
+pinentry certutil -L -d . -n import-keys:tpm2-client
+
+echo "Testing TPM2 Client certificate lookup in NSS DB via mail address"
+pinentry certutil -L -d . -h import-keys --email tpm2-client@example.org
 
 exit 0
