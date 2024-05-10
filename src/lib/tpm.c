@@ -4408,6 +4408,11 @@ WEAK CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
         return CKR_GENERAL_ERROR;
     }
 
+    Esys_Free(data);
+    Esys_Free(hash);
+    Esys_Free(ticket);
+    Esys_Free(out_pub);
+
     *primary_handle = handle;
 
     return CKR_OK;
