@@ -827,10 +827,16 @@ CK_RV tobject_set_auth(tobject *tobj, twist authbin, twist wrappedauthhex) {
     return r ? CKR_OK : CKR_GENERAL_ERROR;
 }
 
-void tobject_set_handle(tobject *tobj, uint32_t handle) {
+void tobject_set_esys_tr(tobject *tobj, uint32_t esys_tr) {
     assert(tobj);
 
-    tobj->tpm_handle = handle;
+    tobj->tpm_esys_tr = esys_tr;
+}
+
+void tobject_set_persistent_handle(tobject *tobj, uint32_t handle) {
+    assert(tobj);
+
+    tobj->tpm_persistent_handle = handle;
 }
 
 void tobject_set_id(tobject *tobj, unsigned id) {
@@ -1297,6 +1303,16 @@ CK_RV object_init_from_attrs(tobject *tobj) {
             LOGE("oom");
             goto error;
         }
+    }
+
+    a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_PERSISTENT_HANDLE);
+    if (a && a->pValue && a->ulValueLen) {
+        CK_ULONG handle = 0;
+        if (attr_CK_ULONG(a, &handle) != CKR_OK) {
+            LOGE("Failed to read the tpm persistent handle");
+            goto error;
+        }
+        tobj->tpm_persistent_handle = (uint32_t)handle;
     }
 
     return CKR_OK;

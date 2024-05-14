@@ -1,0 +1,449 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: BSD-2-Clause
+#
+# Copyright (c) 2024 Infineon Technologies AG
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE
+
+set -xe
+
+if [ -z "$T" ]; then
+    export T="$(cd "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
+
+source "$T/test/integration/scripts/helpers.sh"
+
+check_openssl_version
+
+export TPM2OPENSSL_TCTI="$TPM2TOOLS_TCTI"
+
+tempdir=$(mktemp -d)
+
+function cleanup() {
+    rm -rf "$tempdir"
+}
+trap cleanup EXIT
+
+onerror() {
+  echo "$BASH_COMMAND on line ${BASH_LINENO[0]} failed: $?"
+  exit 1
+}
+trap onerror ERR
+
+setup_asan
+
+key_import -h
+
+if [ -z "$modpath" ]; then
+  modpath="$PWD/src/.libs/libtpm2_pkcs11.so"
+fi
+
+echo "modpath=$modpath"
+
+pkcs11_tool() {
+    pkcs11-tool --module "$modpath" "$@"
+    return $?
+}
+
+# ====================================================================
+# FUNCTION: create_key
+# DESCRIPTION: Provision ordinary TPM keys with/without parent auth,
+#              with/without key auth
+# PARAMETERS:
+#   $1 - algo
+#   $2 - parent context
+#   $3 - parent auth
+#   $4 - key name
+#   $5 - persistent handle
+#   $6 - key auth
+# ====================================================================
+create_key() {
+    if [ -z "$3" ]; then
+        if [ -z "$6" ]; then
+            tpm2_create -C $2 -g sha256 -G $1 \
+                -u ${tempdir}/${4}.pub -r ${tempdir}/${4}.priv
+        else
+            tpm2_create -C $2 -p $6 -g sha256 -G $1 \
+                -u ${tempdir}/${4}.pub -r ${tempdir}/${4}.priv
+        fi
+        tpm2_load -C $2 -u ${tempdir}/${4}.pub -r ${tempdir}/${4}.priv \
+            -c ${tempdir}/${4}.ctx
+    else
+        if [ -z "$6" ]; then
+            tpm2_create -C $2 -P $3 -g sha256 -G $1 \
+                -u ${tempdir}/${4}.pub -r ${tempdir}/${4}.priv
+        else
+            tpm2_create -C $2 -P $3 -p $6 -g sha256 -G $1 \
+                -u ${tempdir}/${4}.pub -r ${tempdir}/${4}.priv
+        fi
+        tpm2_load -C $2 -P $3 -u ${tempdir}/${4}.pub -r ${tempdir}/${4}.priv \
+            -c ${tempdir}/${4}.ctx
+    fi
+    tpm2_evictcontrol -C o -c ${tempdir}/${4}.ctx $5
+    tpm2_readpublic -c $5
+}
+
+# ====================================================================
+# FUNCTION: rsakey_tests
+# DESCRIPTION: A helper function for testing RSA key.
+# PARAMETERS:
+#   $1 - slot index
+#   $2 - key label
+# ====================================================================
+rsakey_tests() {
+    rm -f ${tempdir}/rsa.pub.pem ${tempdir}/rsa.pub.der
+
+    # The value of id is the hex representation of the ASCII text of the label
+    id=$(echo -n $2 | xxd -p)
+
+    # Read the public component
+    pkcs11_tool --slot-index $1 --login --pin myuserpin --id $id --type pubkey \
+        --read-object --output-file ${tempdir}/rsa.pub.der
+    openssl rsa -inform DER -outform PEM -in ${tempdir}/rsa.pub.der -pubin \
+        -out ${tempdir}/rsa.pub.pem
+    cat ${tempdir}/rsa.pub.pem
+
+    # Create a file with random data
+    pkcs11_tool --slot-index $1 --generate-random 32 --output-file ${tempdir}/data.plain
+
+    # Perform RSA encryption and decryption
+    openssl rsautl -encrypt -inkey ${tempdir}/rsa.pub.pem -in ${tempdir}/data.plain \
+        -pubin -out ${tempdir}/data.cipher
+    pkcs11_tool --slot-index $1 --login --pin myuserpin --id $id --decrypt \
+        --mechanism RSA-PKCS --input-file ${tempdir}/data.cipher \
+        --output-file ${tempdir}/data.decipher
+    diff ${tempdir}/data.plain ${tempdir}/data.decipher
+
+    # Perform sign and verification
+    pkcs11_tool --slot-index $1 --id $id --login --pin myuserpin --sign \
+        --mechanism SHA256-RSA-PKCS --input-file ${tempdir}/data.plain \
+        --output-file ${tempdir}/data.rsa.sig
+    openssl dgst -sha256 -verify ${tempdir}/rsa.pub.pem \
+        -signature ${tempdir}/data.rsa.sig ${tempdir}/data.plain
+}
+
+# ====================================================================
+# FUNCTION: eckey_tests
+# DESCRIPTION: A helper function for testing EC key.
+# PARAMETERS:
+#   $1 - slot index
+#   $2 - key label
+# ====================================================================
+eckey_tests() {
+    rm -f ${tempdir}/ec.pub.pem ${tempdir}/ec.pub.der
+
+    # The value of id is the hex representation of the ASCII text of the label
+    id=$(echo -n $2 | xxd -p)
+
+    # Read the public component
+    pkcs11_tool --slot-index $1 --login --pin myuserpin --id $id --type pubkey \
+        --read-object --output-file ${tempdir}/ec.pub.der
+    openssl ec -inform DER -outform PEM -in ${tempdir}/ec.pub.der -pubin \
+        -out ${tempdir}/ec.pub.pem
+    cat ${tempdir}/ec.pub.pem
+
+    # Create a file with random data
+    pkcs11_tool --slot-index $1 --generate-random 32 --output-file ${tempdir}/data.plain
+
+    # Perform sign and verification
+    pkcs11_tool --slot-index $1 --id $id --login --pin myuserpin --sign \
+        --mechanism ECDSA-SHA1 --signature-format openssl \
+        --input-file ${tempdir}/data.plain --output-file ${tempdir}/data.ec.sig
+    openssl dgst -sha1 -verify ${tempdir}/ec.pub.pem \
+        -signature ${tempdir}/data.ec.sig ${tempdir}/data.plain
+}
+
+export TPM2_PKCS11_STORE="$tempdir"
+
+echo "TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
+
+echo "testdata">${tempdir}/data
+
+echo "Should have uninitialized token"
+pkcs11_tool -T | grep -q uninitialized
+echo "Found uninitialized token"
+
+# pkcs11_tool slot index starts from 0
+pkcs11tool_slot_index=0
+
+# tpm2_pkcs11 slot index starts from 1
+tpm2pkcs11_slot_index=1
+
+######################
+# Provision keys (primary key without auth value)
+#####################
+
+echo "Provision keys (primary key without auth value) starts here"
+
+# Check if TPM2_PKCS11_BACKEND is set to fapi
+if [ "$TPM2_PKCS11_BACKEND" != "fapi" ]; then
+    tpm2_clear -c p
+    tpm2_createprimary -G ecc -c ${tempdir}/primarynoauth.ctx
+    tpm2_evictcontrol -c ${tempdir}/primarynoauth.ctx 0x81000001
+fi
+
+# Create an RSA key with no auth value
+create_key rsa 0x81000001 "" primnoauth_rsakeynoauth 0x81000002 ""
+
+# Create an RSA key with auth value
+create_key rsa 0x81000001 "" primnoauth_rsakeywithauth 0x81000003 rsakeyauth123
+
+# Create an ECC key with no auth value
+create_key ecc 0x81000001 "" primnoauth_eckeynoauth 0x81000004 ""
+
+# Create an ECC key with auth value
+create_key ecc 0x81000001 "" primnoauth_eckeywithauth 0x81000005 eckeyauth123
+
+########
+# Tests (primary key without auth value)
+########
+
+echo "Testing (primary key without auth value) starts here"
+
+# Initialize the token in the first slot
+pkcs11_tool --slot-index $pkcs11tool_slot_index --init-token --label tpm2-token-primary-no-auth --so-pin mysopin
+pkcs11_tool --slot-index $pkcs11tool_slot_index --login --login-type="so" --init-pin --so-pin mysopin --pin myuserpin
+
+pkcs11_tool --list-token-slots
+pkcs11_tool --list-token-slots | grep "Slot 0 (0x1): tpm2-token-primary-no-auth"
+pkcs11_tool --list-token-slots | grep -Pz "Slot 1 \(0x2\): \n  token state:   uninitialized"
+
+# Import keys using their persistent handles
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --persistent-handle 0x81000002 \
+    --key-label rsakeynoauth-persist
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --persistent-handle 0x81000003 --key-auth rsakeyauth123 \
+    --key-label rsakeywithauth-persist
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --persistent-handle 0x81000004 \
+    --key-label eckeynoauth-persist
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --persistent-handle 0x81000005 --key-auth eckeyauth123 \
+    --key-label eckeywithauth-persist
+
+# Import keys using their object files
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --parent-persistent-handle 0x81000001 \
+    --public ${tempdir}/primnoauth_rsakeynoauth.pub \
+    --private ${tempdir}/primnoauth_rsakeynoauth.priv \
+    --key-label rsakeynoauth-objects
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --parent-persistent-handle 0x81000001 \
+    --public ${tempdir}/primnoauth_rsakeywithauth.pub \
+    --private ${tempdir}/primnoauth_rsakeywithauth.priv \
+    --key-auth rsakeyauth123 \
+    --key-label rsakeywithauth-objects
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --parent-persistent-handle 0x81000001 \
+    --public ${tempdir}/primnoauth_eckeynoauth.pub \
+    --private ${tempdir}/primnoauth_eckeynoauth.priv \
+    --key-label eckeynoauth-objects
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --parent-persistent-handle 0x81000001 \
+    --public ${tempdir}/primnoauth_eckeywithauth.pub \
+    --private ${tempdir}/primnoauth_eckeywithauth.priv \
+    --key-auth eckeyauth123 \
+    --key-label eckeywithauth-objects
+
+pkcs11_tool --slot-index $pkcs11tool_slot_index --list-objects --login --pin myuserpin
+
+# Iterate through all the imported keys:
+rsakey_tests $pkcs11tool_slot_index rsakeynoauth-persist
+rsakey_tests $pkcs11tool_slot_index rsakeywithauth-persist
+eckey_tests $pkcs11tool_slot_index eckeynoauth-persist
+eckey_tests $pkcs11tool_slot_index eckeywithauth-persist
+rsakey_tests $pkcs11tool_slot_index rsakeynoauth-objects
+rsakey_tests $pkcs11tool_slot_index rsakeywithauth-objects
+eckey_tests $pkcs11tool_slot_index eckeynoauth-objects
+eckey_tests $pkcs11tool_slot_index eckeywithauth-objects
+
+##################
+# Negative testing
+##################
+
+echo "Negative testing starts here"
+
+set +e
+
+key_import bad 2> ${tempdir}/error.log && exit 1
+cat ${tempdir}/error.log | grep "Missing inputs" || exit 1
+
+key_import -bad 2> ${tempdir}/error.log && exit 1
+cat ${tempdir}/error.log | grep "invalid option" || exit 1
+
+key_import --bad 2> ${tempdir}/error.log && exit 1
+cat ${tempdir}/error.log | grep "unrecognized option" || exit 1
+
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --persistent-handle 0x81000002 \
+    --key-label rsakeynoauth-persist 2> ${tempdir}/error.log && exit 1
+cat ${tempdir}/error.log | grep "Missing inputs" || exit 1
+
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --persistent-handle 0x81000002 2> ${tempdir}/error.log && exit 1
+cat ${tempdir}/error.log | grep "Missing inputs" || exit 1
+
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --persistent-handle 0x81000002 2> ${tempdir}/error.log && exit 1
+cat ${tempdir}/error.log | grep "Missing inputs" || exit 1
+
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --persistent-handle 0xbad \
+    --key-label rsakeynoauth-persist 2> ${tempdir}/error.log && exit 1
+cat ${tempdir}/error.log | grep "Expecting an 8-character long hexadecimal" || exit 1
+
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --parent-persistent-handle 0x81000001 \
+    --public ${tempdir}/bad.pub \
+    --private ${tempdir}/primnoauth_rsakeynoauth.priv \
+    --key-label rsakeynoauth-objects 2> ${tempdir}/error.log && exit 1
+cat ${tempdir}/error.log | grep "Could not open the file \"${tempdir}/bad.pub\"" || exit 1
+
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --parent-persistent-handle 0x81000001 \
+    --public ${tempdir}/primnoauth_rsakeynoauth.pub \
+    --private ${tempdir}/bad.priv \
+    --key-label rsakeynoauth-objects 2> ${tempdir}/error.log && exit 1
+cat ${tempdir}/error.log | grep "Could not open the file \"${tempdir}/bad.priv\"" || exit 1
+
+set -e
+
+# Check if TPM2_PKCS11_BACKEND is set to fapi
+if [ "$TPM2_PKCS11_BACKEND" == "fapi" ]; then
+    exit 0
+fi
+
+###################
+# Provision keys (primary key with auth value)
+###################
+
+echo "Provision keys (primary key with auth value) starts here"
+
+tpm2_createprimary -G ecc -c ${tempdir}/primarywithauth.ctx -p parentauth123
+tpm2_evictcontrol -c ${tempdir}/primarywithauth.ctx 0x81000011
+
+# Create an RSA key with no auth value
+create_key rsa 0x81000011 parentauth123 primwithauth_rsakeynoauth 0x81000012 ""
+
+# Create an RSA key with auth value
+create_key rsa 0x81000011 parentauth123 primwithauth_rsakeywithauth 0x81000013 rsakeyauth123
+
+# Create an ECC key with no auth value
+create_key ecc 0x81000011 parentauth123 primwithauth_eckeynoauth 0x81000014 ""
+
+# Create an ECC key with auth value
+create_key ecc 0x81000011 parentauth123 primwithauth_eckeywithauth 0x81000015 eckeyauth123
+
+########
+# Tests (primary key with auth value)
+########
+
+echo "Testing (primary key with auth value) starts here"
+
+pkcs11tool_slot_index=$(expr $pkcs11tool_slot_index + 1)
+tpm2pkcs11_slot_index=$(expr $tpm2pkcs11_slot_index + 1)
+
+# Initialize the token in the second slot
+pid=$(tpm2_ptool init --primary-handle 0x81000011 --primary-auth parentauth123 \
+    --path $TPM2_PKCS11_STORE | grep id | sed 's/id: //')
+tpm2_ptool addtoken --pid $pid --sopin mysopin --userpin myuserpin \
+    --label tpm2-token-primary-with-auth --path $TPM2_PKCS11_STORE
+
+pkcs11_tool --list-token-slots
+pkcs11_tool --list-token-slots | grep "Slot 0 (0x1): tpm2-token-primary-no-auth"
+pkcs11_tool --list-token-slots | grep "Slot 1 (0x2): tpm2-token-primary-with-auth"
+pkcs11_tool --list-token-slots | grep -Pz "Slot 2 \(0x3\): \n  token state:   uninitialized"
+
+# Import keys using their persistent handles
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --persistent-handle 0x81000012 \
+    --key-label rsakeynoauth-persist
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --persistent-handle 0x81000013 --key-auth rsakeyauth123 \
+    --key-label rsakeywithauth-persist
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --persistent-handle 0x81000014 \
+    --key-label eckeynoauth-persist
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --persistent-handle 0x81000015 --key-auth eckeyauth123 \
+    --key-label eckeywithauth-persist
+
+# Import keys using their object files
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --parent-persistent-handle 0x81000011 \
+    --parent-auth parentauth123 \
+    --public ${tempdir}/primwithauth_rsakeynoauth.pub \
+    --private ${tempdir}/primwithauth_rsakeynoauth.priv \
+    --key-label rsakeynoauth-objects
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --parent-persistent-handle 0x81000011 \
+    --parent-auth parentauth123 \
+    --public ${tempdir}/primwithauth_rsakeywithauth.pub \
+    --private ${tempdir}/primwithauth_rsakeywithauth.priv \
+    --key-auth rsakeyauth123 \
+    --key-label rsakeywithauth-objects
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --parent-persistent-handle 0x81000011 \
+    --parent-auth parentauth123 \
+    --public ${tempdir}/primwithauth_eckeynoauth.pub \
+    --private ${tempdir}/primwithauth_eckeynoauth.priv \
+    --key-label eckeynoauth-objects
+key_import --slot-id $tpm2pkcs11_slot_index --user-pin myuserpin \
+    --tcti "$TPM2TOOLS_TCTI" \
+    --parent-persistent-handle 0x81000011 \
+    --parent-auth parentauth123 \
+    --public ${tempdir}/primwithauth_eckeywithauth.pub \
+    --private ${tempdir}/primwithauth_eckeywithauth.priv \
+    --key-auth eckeyauth123 \
+    --key-label eckeywithauth-objects
+
+pkcs11_tool --slot-index $pkcs11tool_slot_index --list-objects --login --pin myuserpin
+
+# Iterate through all the imported keys:
+rsakey_tests $pkcs11tool_slot_index rsakeynoauth-persist
+rsakey_tests $pkcs11tool_slot_index rsakeywithauth-persist
+eckey_tests $pkcs11tool_slot_index eckeynoauth-persist
+eckey_tests $pkcs11tool_slot_index eckeywithauth-persist
+rsakey_tests $pkcs11tool_slot_index rsakeynoauth-objects
+rsakey_tests $pkcs11tool_slot_index rsakeywithauth-objects
+eckey_tests $pkcs11tool_slot_index eckeynoauth-objects
+eckey_tests $pkcs11tool_slot_index eckeywithauth-objects
+
+exit 0
