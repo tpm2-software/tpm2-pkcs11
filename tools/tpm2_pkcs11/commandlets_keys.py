@@ -28,6 +28,7 @@ from .utils import get_pobject
 from .utils import dump_blobs
 from .utils import dump_tsspem
 from .utils import dump_pubpem
+from .utils import validate_policy
 
 from .tpm2 import Tpm2
 
@@ -58,6 +59,9 @@ class NewKeyCommandBase(Command):
             '--hierarchy-auth',
             help='The hierarchyauth, required for transient pobjects.\n',
             default='')
+        group_parser.add_argument(
+            '--policy',
+            help='Policy to apply on using the key (in JSON format).\n')
         pinopts = group_parser.add_mutually_exclusive_group()
         pinopts.add_argument('--sopin', help='The Administrator pin.\n'),
         pinopts.add_argument('--userpin', help='The User pin.\n'),
@@ -173,6 +177,7 @@ class NewKeyCommandBase(Command):
                 key_label = args['key_label']
                 tid = args['id']
                 hierarchyauth = args['hierarchy_auth']
+                policy = args['policy']
                 passin = args['passin'] if 'passin' in args else None
 
                 privkey = None
@@ -205,6 +210,9 @@ class NewKeyCommandBase(Command):
                 # handle options that can add additional attributes
                 always_auth = args['attr_always_authenticate']
                 priv_attrs = {CKA_ALWAYS_AUTHENTICATE : always_auth}
+                if policy is not None:
+                    validate_policy(policy)
+                    priv_attrs[CKA_TPM2_POLICY_JSON] = binascii.hexlify(policy.encode()).decode()
 
                 override_keylen = getattr(self, '_override_keylen', None)
 
@@ -551,6 +559,67 @@ class ObjDel(Command):
 
         ObjDel.delete(path, args['id'])
 
+@commandlet("objpol")
+class ObjPol(Command):
+    '''
+    Gets/sets/removes object's policy.
+    '''
+
+    @classmethod
+    def objpol(cls, path, tid, policy, delete):
+
+        with Db(path) as db:
+            obj = db.getobject(tid)
+            if obj is None:
+                sys.exit('Not found, object with id: {}'.format(tid))
+        s = obj['attrs']
+        obj_attrs = yaml.safe_load(s)
+
+        # print policy when neither --policy nor --delete is specified
+        if policy is None and not delete:
+            if CKA_TPM2_POLICY_JSON not in obj_attrs:
+                sys.exit('The object has no policy set')
+
+            x = obj_attrs[CKA_TPM2_POLICY_JSON]
+            print(binascii.unhexlify(x).decode())
+            sys.exit()
+
+        if delete:
+            # remove the policy even if it's wasn't yet set
+            obj_attrs.pop(CKA_TPM2_POLICY_JSON, None)
+        else:
+            # set policy if --policy is a well-formed JSON
+            validate_policy(policy)
+            obj_attrs[CKA_TPM2_POLICY_JSON] = binascii.hexlify(policy.encode()).decode()
+
+        with Db(path) as db:
+            db.updatetertiary(obj['id'], obj_attrs)
+
+    # adhere to an interface
+    def generate_options(self, group_parser):
+
+        group_parser.add_argument(
+            '--id',
+            help='The id of the object to use.\n', required=True)
+        group_parser.add_argument(
+            '--policy',
+            help='New policy value as JSON.\n')
+        group_parser.add_argument(
+            '--delete',
+            action='store_true',
+            help='Removes policy if the object has it.\n')
+
+    def __call__(self, args):
+
+        path = args['path']
+        policy = args['policy']
+        delete = args['delete']
+
+        if policy and delete:
+            sys.exit("Cannot specify --policy with --delete")
+
+        ObjPol.objpol(path, args['id'], policy, delete)
+
 @commandlet("link")
 class LinkCommand(NewKeyCommandBase):
     '''
@@ -759,7 +828,7 @@ class Export(Command):
             
     def generate_options(self, group_parser):
         group_parser.add_argument(
-            '--id', help='The id of the object to add (mutually exclusive with --label and --key-label).\n',
+            '--id', help='The id of the object to export (mutually exclusive with --label and --key-label).\n',
             type=int)
 
         group_parser.add_argument(
