@@ -977,7 +977,8 @@ out:
 
 CK_RV backend_fapi_init(void) {
 
-	return CKR_OK;
+	LOGV("FAPI not enabled, failing init");
+	return CKR_FUNCTION_NOT_SUPPORTED;
 }
 
 CK_RV backend_fapi_destroy(void) {

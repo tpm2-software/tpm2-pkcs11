@@ -53,7 +53,9 @@ CK_RV backend_init(void) {
             LOGE(msg);
             return rv;
         }
-        LOGW(msg);
+        if (rv != CKR_FUNCTION_NOT_SUPPORTED) {
+            LOGW(msg);
+        }
     } else {
         fapi_init = true;
     }

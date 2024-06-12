@@ -11,7 +11,7 @@ code was implemented using the Enhanced System API (ESAPI) and for on disk stora
 ## Build Time
 
 At the time the package is built, it will detect tss2-fapi library and automatically configure it's inclusion into the tpm2-pkcs11 library. One can *explicitly* configure this
-with `--with-fapi=yes|no`.
+with `--enable-fapi=yes|no`.
 
 ## Run Time
 
@@ -23,8 +23,8 @@ You can take a few actions if you run into this issue:
 1. Ignore them, and optionally disable FAPI error logging:
     - `export TSS2_LOG=fapi+NONE`
 
-2. Reconfigure the package with `--with-fapi=no`:
-    - `./configure --with-fapi=no`
+2. Reconfigure the package with `--enable-fapi=no`:
+    - `./configure --enable-fapi=no`
 
 3. Provision FAPI using `tss2_provision`. See the tpm2-tools project for more information:
     - <https://github.com/tpm2-software/tpm2-tools/blob/master/man/tss2_provision.1.md>

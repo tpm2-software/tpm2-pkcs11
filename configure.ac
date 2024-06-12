@@ -116,7 +116,7 @@ AS_IF([test "x$esapi_sf" = "xyes"],
 
 AC_ARG_WITH(
   [fapi],
-  [AS_HELP_STRING([--with-fapi],
+  [AS_HELP_STRING([--enable-fapi],
     [enable or disable the fapi backend. Default is "auto" to autodetect])],
     [enable_fapi=$withval],
     [enable_fapi=auto])
