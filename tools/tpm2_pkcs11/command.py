@@ -13,7 +13,7 @@ class commandlet(object):
         if "TPM2_PKCS11_STORE" in os.environ:
             store = os.environ.get("TPM2_PKCS11_STORE")
             try:
-                os.mkdir(store, 0o770);
+                os.mkdir(store, 0o770)
             except FileExistsError:
                 return store
             except Exception:
@@ -22,23 +22,38 @@ class commandlet(object):
             # Exists, use it
             return store
 
-        # is their a system store and can I access it?
+        # is there a system store and can I access it?
         store = "/etc/tpm2_pkcs11"
         if os.path.exists(store) and os.access(store, os.W_OK):
             return store
 
         # look for a store in home
         if "HOME" in os.environ:
-            store = os.path.join(os.environ.get("HOME"), ".tpm2_pkcs11")
-            try:
-                os.mkdir(store, 0o770);
-            except FileExistsError:
+            if "XDG_DATA_HOME" in os.environ:
+                data_dir = os.environ["XDG_DATA_HOME"]
+            else:
+                data_dir = os.path.join(os.environ["HOME"], ".local/share")
+
+            stores = [
+                os.path.join(data_dir, "tpm2-pkcs11"),
+                os.path.join(os.environ["HOME"], ".tpm2_pkcs11"),
+            ]
+
+            # Try to find existing store
+            for store in stores:
+                if os.path.exists(store):
+                    return store
+
+            # If neither path exists, try to create one
+            for store in stores:
+                try:
+                    os.mkdir(store, 0o770)
+                except FileExistsError:
+                    return store
+                except Exception:
+                    continue
+                # Exists, use it
                 return store
-            except Exception:
-                # Keep trying
-                pass
-            # Exists, use it
-            return store
 
         # nothing else available, use cwd
         return os.getcwd()
