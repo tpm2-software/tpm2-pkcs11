@@ -84,22 +84,22 @@ pkcs11_tool --slot=1 --keypairgen --login --pin myuserpin \
             --key-type EC:prime256v1 --id 02 --label key2
 
 echo "Read public components"
-if pkcs11_tool --read-object --login --pin myuserpin --type pubkey -id 01 -o {tmp}/key1_pub.der ; then
-    pkcs11_tool --read-object --login --pin myuserpin --type pubkey --id 02 -o {tmp}/key2_pub.der
+if pkcs11_tool --read-object --login --pin myuserpin --type pubkey --id 01 -o ${tmp}/key1_pub.der ; then
+    pkcs11_tool --read-object --login --pin myuserpin --type pubkey --id 02 -o ${tmp}/key2_pub.der
 
     echo "Derive secrets"
     pkcs11_tool  --derive -m ECDH1-DERIVE --id 01 --label key1 \
                  --login --pin myuserpin \
-                 --input-file {tmp}/key2_pub.der \
-                 --output-file {tmp}/shared_secret_1
+                 --input-file ${tmp}/key2_pub.der \
+                 --output-file ${tmp}/shared_secret_1
 
     pkcs11_tool  --derive -m ECDH1-DERIVE --id 02 --label key2 \
                  --login --pin myuserpin \
-                 --input-file {tmp}/key1_pub.der \
-                 --output-file {tmp}/shared_secret_2
+                 --input-file ${tmp}/key1_pub.der \
+                 --output-file ${tmp}/shared_secret_2
 
     echo "Validate output"
-    diff {tmp}/shared_secret_2 {tmp}/shared_secret_1 > /dev/null 2>&1
+    diff ${tmp}/shared_secret_2 ${tmp}/shared_secret_1 > /dev/null 2>&1
     test "$?" -eq "0"
 else
     echo "pkcs11-tool can't read EC key public components"
