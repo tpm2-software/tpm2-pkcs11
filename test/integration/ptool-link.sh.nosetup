@@ -80,8 +80,8 @@ echo "TPM2_PKCS11_TCTI=$TPM2_PKCS11_TCTI"
 export TPM2_PKCS11_TCTI
 
 # Create a primary key at "$handle"
-tpm2_createprimary -c primary.ctx
-handle=$(tpm2_evictcontrol -c primary.ctx | grep persistent-handle | cut -d' ' -f2-2)
+tpm2_createprimary -c ${tempdir}/primary.ctx
+handle=$(tpm2_evictcontrol -c ${tempdir}/primary.ctx | grep persistent-handle | cut -d' ' -f2-2)
 
 # Create a primary object in the store referencing it
 pid=$(tpm2_ptool init --primary-handle="$handle" --path=$TPM2_PKCS11_STORE | grep id | cut -d' ' -f2-2)
