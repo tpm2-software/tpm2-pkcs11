@@ -2169,9 +2169,14 @@ static CK_RV dbup_handler_from_7_to_8(sqlite3 *updb) {
 
         /* for each tobject */
         CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_ALLOWED_MECHANISMS);
-        CK_BYTE type = type_from_ptr(a->pValue, a->ulValueLen);
-        if (type != TYPE_BYTE_INT_SEQ) {
-            rv = _db_update_tobject_attrs(updb, tobj->id, tobj->attrs);
+
+        if (a) {
+            CK_BYTE type = type_from_ptr(a->pValue, a->ulValueLen);
+            if (type != TYPE_BYTE_INT_SEQ) {
+                rv = _db_update_tobject_attrs(updb, tobj->id, tobj->attrs);
+            }
+        } else {
+            rv = CKR_OK;
         }
 
         tobject_free(tobj);
