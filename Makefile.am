@@ -30,6 +30,7 @@ include src_vars.mk
 EXTRA_DIST = \
     LICENSE \
     docs \
+    test/fake-tpm \
     test/integration/scripts \
     misc/p11-kit \
     tools \
