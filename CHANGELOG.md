@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 Starting with release 1.8.0, The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1-rc0] - 2024-09-09
+
+### Fixed:
+- configure:
+  - Change mistaken `+=` to `=`.
+  - use user supplied `--prefix` even when p11kit is detected.
+- Remove warning about unable to find FAPI when it's is not-compiled in and not chosen as the beckend.
+- Fix memory leaks in `tpm_create_transient_primary_from_template`.
+- Fix `NULL` pointer dereference in `db.c` on uses of `CKA_ALLOWED_MECHANISMS`.
+- Fix offset miscalculation in FAPI backend that was corrupting data.
+- Support `CKM_ECDH1_DERIVE` via `C_DeriveKey`.
+- Fix usages of `tpm2-ptool` for its wrapped `tpm2_ptool` in tests.
+- Fix failing db upgrades on double conversion to int.
+- Fix db lock file due to missing parenthesis and order of operations.
+- documentation:
+  - Fix use of objects where tokens was meant.
+
+## Changed
+- `--enable-fapi` to `--with-fapi`. Note this is not a major version bump as its internal to builders only. However `--enable-fapi` left in place for backwards compat.
+
 ## [1.9.0] - 2023-01-31
 ### Fixed
 - Fix autoconf invocation on a release tarball not being a git repo for VERSION. VERSION file now generated and packaged as part of the release tarball from the git version information.
