@@ -199,56 +199,7 @@ CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
 
 CK_RV tpm_get_pss_sig_state(tpm_ctx *tctx, tobject *tobj, bool *pss_sigs_good);
 
-/**
- * Retrieve the associated ESYS_TR from the given TPM2_HANDLE.
- *
- * @param ctx
- *  The TPM API context.
- * @param persistent_handle
- *  The TPM persistent handle (TPM2_HANDLE).
- * @param esys_tr
- *  An optional output (can be NULL).
- *  The associated ESYS_TR is returned here.
- * @param esys_tr_pub
- *  An optional output (can be NULL).
- *  A new key is created with only the public component from the
- *  persistent handle. The associated ESYS_TR is returned here.
- * @return
- *  CKR_OK on success; otherwise, an error code.
- */
-CK_RV tpm_get_esys_tr(
-        tpm_ctx *ctx,
-        uint32_t persistent_handle,
-        uint32_t *esys_tr,
-        uint32_t *esys_tr_pub);
-
 bool tpm_get_name(tpm_ctx *ctx, uint32_t handle, twist *name);
-
-/**
- * Populate the CK_ATTRIBUTE list based on the given TPM key
- *
- * @param ctx
- *  The TPM API context.
- * @param esys_tr
- *  The TPM key ESYS_TR.
- * @param mechanism
- *  The mechanism.
- * @param pub_attrs
- *  The public key's CK_ATTRIBUTE list is returned here.
- * @param priv_attrs
- *  The private key's CK_ATTRIBUTE list is returned here.
- * @param obj_data
- *  The struct tpm_object_data is returned here.
- * @return
- *  CKR_OK on success; otherwise, an error code.
- */
-CK_RV tpm_parse_key_to_attrs(
-        tpm_ctx *tpm,
-        uint32_t esys_tr,
-        CK_MECHANISM_PTR mechanism,
-        attr_list *pub_attrs,
-        attr_list *priv_attrs,
-        tpm_object_data *obj_data);
 
 void tpm_init(void);
 

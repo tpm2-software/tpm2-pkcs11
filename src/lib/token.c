@@ -631,40 +631,18 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
      * The object may already be loaded by the TPM or may just be
      * a public key object not-resident in the TPM.
      */
-    if (tobj->tpm_esys_tr || (!tobj->pub && !tobj->tpm_persistent_handle)) {
+    if (tobj->tpm_handle || !tobj->pub) {
         *loaded_tobj = tobj;
         return CKR_OK;
     }
 
-    if (tobj->tpm_persistent_handle && v != CKO_SECRET_KEY) {
-        if (v == CKO_PRIVATE_KEY) {
-            rv = tpm_get_esys_tr(
-                    tpm,
-                    tobj->tpm_persistent_handle,
-                    &tobj->tpm_esys_tr,
-                    NULL);
-            if (rv != CKR_OK) {
-                return rv;
-            }
-        } else {
-            rv = tpm_get_esys_tr(
-                    tpm,
-                    tobj->tpm_persistent_handle,
-                    NULL,
-                    &tobj->tpm_esys_tr);
-            if (rv != CKR_OK) {
-                return rv;
-            }
-        }
-    } else {
-        rv = tpm_loadobj(
-                tpm,
-                tok->pobject.handle, tok->pobject.objauth,
-                tobj->pub, tobj->priv,
-                &tobj->tpm_esys_tr);
-        if (rv != CKR_OK) {
-            return rv;
-        }
+    rv = tpm_loadobj(
+            tpm,
+            tok->pobject.handle, tok->pobject.objauth,
+            tobj->pub, tobj->priv,
+            &tobj->tpm_handle);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     rv = utils_ctx_unwrap_objauth(tok->wrappingkey, tobj->objauth,
