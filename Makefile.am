@@ -78,16 +78,6 @@ endif
 
 AM_DISTCHECK_CONFIGURE_FLAGS = --with-p11kitconfigdir='$$(datarootdir)/p11kitconfigdir' --with-p11kitmoduledir='$$(libdir)'
 
-# The key_import tool
-bin_PROGRAMS = tools/key_import/key_import
-if ENABLE_ASAN
-  tools_key_import_key_import_LDFLAGS = $(AM_LDFLAGS) -shared-libasan
-else
-  tools_key_import_key_import_LDFLAGS = $(AM_LDFLAGS)
-endif
-tools_key_import_key_import_LDADD = $(libtpm2_pkcs11)
-tools_key_import_key_import_SOURCES = tools/key_import/import.c
-
 #
 # Due to limitations in how cmocka works, we build a separate library here so we
 # can have a PKCS11 shared object with undefined calls into the rest of the lib
@@ -129,8 +119,8 @@ AM_TESTS_ENVIRONMENT = \
     PYTHON_INTERPRETER=@PYTHON_INTERPRETER@ \
     TEST_FUNC_LIB=$(srcdir)/test/integration/scripts/int-test-funcs.sh \
     TEST_FIXTURES=$(abs_top_srcdir)/test/integration/fixtures \
-    PATH=$(abs_top_srcdir)/tools/tpm2_ptool:$(abs_builddir)/tools/key_import:./src:$(PATH) \
-    PYTHONPATH=$(abs_top_srcdir)/tools/tpm2_ptool:$(PYTHONPATH) \
+    PATH=$(abs_top_srcdir)/tools:./src:$(PATH) \
+    PYTHONPATH=$(abs_top_srcdir)/tools:$(PYTHONPATH) \
     TPM2_PKCS11_MODULE=$(abs_builddir)/src/.libs/libtpm2_pkcs11.so \
     TEST_JAVA_ROOT=$(JAVAROOT) \
     PACKAGE_URL=$(PACKAGE_URL) \

@@ -317,21 +317,11 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
                 attr_pfree_cleanse(a);
             }
 
-            /*
-             * Do not perform tpm_flushcontext when:
-             *   - tpm_esys_tr is 0, or
-             *   - the object is private and the associated key in the TPM is persistent.
-             *
-             * If the object is public and the associated key in the TPM is persistent,
-             * tpm_flushcontext is still necessary because, during the initialization of the object,
-             * a transient TPM key with only the public component is created from the persistent key.
-             */
-            if (tobj->tpm_esys_tr &&
-                    !(cka_private && tobj->tpm_persistent_handle)) {
-                bool result = tpm_flushcontext(tpm, tobj->tpm_esys_tr);
+            if (tobj->tpm_handle) {
+                bool result = tpm_flushcontext(tpm, tobj->tpm_handle);
                 assert(result);
                 UNUSED(result);
-                tobj->tpm_esys_tr = 0;
+                tobj->tpm_handle = 0;
 
                 /* Clear the unwrapped auth value for tertiary objects */
                 twist_free(tobj->unsealed_auth);

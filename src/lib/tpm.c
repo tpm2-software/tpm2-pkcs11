@@ -1234,7 +1234,7 @@ static CK_RV tpm_hmac_large(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG data
     assert(tctx);
 
     twist auth = tobj->unsealed_auth;
-    TPMI_DH_OBJECT handle = tobj->tpm_esys_tr;
+    TPMI_DH_OBJECT handle = tobj->tpm_handle;
 
     ESYS_TR session = tctx->hmac_session;
 
@@ -1358,7 +1358,7 @@ static CK_RV tpm_hmac(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, C
     assert(tctx);
 
     twist auth = tobj->unsealed_auth;
-    TPMI_DH_OBJECT handle = tobj->tpm_esys_tr;
+    TPMI_DH_OBJECT handle = tobj->tpm_handle;
 
     ESYS_TR session = tctx->hmac_session;
 
@@ -1417,7 +1417,7 @@ CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_
     assert(tctx);
 
     twist auth = tobj->unsealed_auth;
-    TPMI_DH_OBJECT handle = tobj->tpm_esys_tr;
+    TPMI_DH_OBJECT handle = tobj->tpm_handle;
     ESYS_CONTEXT *ectx = tctx->esys_ctx;
     ESYS_TR session = tctx->hmac_session;
     TPMT_SIG_SCHEME *scheme = NULL;
@@ -1614,7 +1614,7 @@ CK_RV tpm_rsa_oaep_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, 
      * TPM is hardcoded to MGF1 + <name alg> in the TPM, make sure what is requested is supported
      */
     CK_RSA_PKCS_MGF_TYPE supported_mgf;
-    CK_RV rv = get_oaep_mgf1_alg(tctx, tobj->tpm_esys_tr, &supported_mgf);
+    CK_RV rv = get_oaep_mgf1_alg(tctx, tobj->tpm_handle, &supported_mgf);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -2231,7 +2231,7 @@ CK_RV tpm_rsa_decrypt(tpm_op_data *tpm_enc_data,
     memcpy(tpm_ctext.buffer, ctext, ctextlen);
 
     twist auth = tpm_enc_data->tobj->unsealed_auth;
-    ESYS_TR handle = tpm_enc_data->tobj->tpm_esys_tr;
+    ESYS_TR handle = tpm_enc_data->tobj->tpm_handle;
     bool result = set_esys_auth(ctx->esys_ctx, handle, auth);
     if (!result) {
         return CKR_GENERAL_ERROR;
@@ -2492,7 +2492,7 @@ static CK_RV do_buffered_encdec(tpm_op_data *tpm_enc_data,
     TPM2B_IV *iv = &tpm_enc_data->sym.iv;
 
     twist auth = tpm_enc_data->tobj->unsealed_auth;
-    ESYS_TR handle = tpm_enc_data->tobj->tpm_esys_tr;
+    ESYS_TR handle = tpm_enc_data->tobj->tpm_handle;
 
     /* final calls don't have input data, they just exhaust the internal buffer if present */
     bool is_final = !in;
@@ -4577,7 +4577,7 @@ CK_RV tpm_get_pss_sig_state(tpm_ctx *tctx, tobject *tobj,
             .digest = { 0 }
     };
 
-    bool res = set_esys_auth(tctx->esys_ctx, tobj->tpm_esys_tr,
+    bool res = set_esys_auth(tctx->esys_ctx, tobj->tpm_handle,
             tobj->unsealed_auth);
     if (!res) {
         return CKR_GENERAL_ERROR;
@@ -4585,7 +4585,7 @@ CK_RV tpm_get_pss_sig_state(tpm_ctx *tctx, tobject *tobj,
 
     TSS2_RC rval = Esys_Sign(
             tctx->esys_ctx,
-            tobj->tpm_esys_tr,
+            tobj->tpm_handle,
             ESYS_TR_PASSWORD,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
@@ -4659,12 +4659,12 @@ CK_RV tpm_ec_ecdh1_derive(tpm_ctx *tctx, tobject *tobj, uint8_t *ecc_point,
         return rv;
     }
 
-    bool res = set_esys_auth(tctx->esys_ctx, tobj->tpm_esys_tr, tobj->unsealed_auth);
+    bool res = set_esys_auth(tctx->esys_ctx, tobj->tpm_handle, tobj->unsealed_auth);
     if (!res) {
         return CKR_GENERAL_ERROR;
     }
 
-    rv = Esys_ECDH_ZGen(tctx->esys_ctx, tobj->tpm_esys_tr, ESYS_TR_PASSWORD,
+    rv = Esys_ECDH_ZGen(tctx->esys_ctx, tobj->tpm_handle, ESYS_TR_PASSWORD,
                         ESYS_TR_NONE, ESYS_TR_NONE, &in_point, &out_point);
     if (rv != CKR_OK) {
         return rv;
@@ -4685,159 +4685,3 @@ out:
     return rv;
 }
 
-CK_RV tpm_get_esys_tr(
-        tpm_ctx *ctx,
-        uint32_t persistent_handle,
-        uint32_t *esys_tr,
-        uint32_t *esys_tr_pub)
-{
-    ESYS_TR tr;
-    TPM2B_PUBLIC *public = NULL;
-
-    TSS2_RC rval;
-    CK_RV rv = CKR_OK;
-
-    rval = Esys_TR_FromTPMPublic(
-            ctx->esys_ctx,
-            persistent_handle,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE,
-            &tr);
-    if (rval != TSS2_RC_SUCCESS) {
-        LOGE("Esys_TR_FromTPMPublic: %s:", Tss2_RC_Decode(rval));
-        rv = CKR_GENERAL_ERROR;
-        goto exit;
-    }
-
-    if (esys_tr_pub) {
-        if ((rv = tpm_readpub(ctx, tr, &public, NULL, NULL))) {
-            goto exit_flush;
-        }
-
-        if (!tpm_loadexternal(ctx, public, esys_tr_pub)) {
-            rv = CKR_GENERAL_ERROR;
-            goto exit_flush;
-        }
-    }
-
-    if (esys_tr) {
-        *esys_tr = tr;
-        goto exit;
-    }
-
-exit_flush:
-    if (!tpm_flushcontext(ctx, tr)) {
-        rv = CKR_GENERAL_ERROR;
-    }
-exit:
-    free(public);
-    return rv;
-}
-
-CK_RV tpm_parse_key_to_attrs(
-        tpm_ctx *ctx,
-        uint32_t esys_tr,
-        CK_MECHANISM_PTR mechanism,
-        attr_list *pub_attrs,
-        attr_list *priv_attrs,
-        tpm_object_data *obj_data)
-{
-
-    CK_RV rv = CKR_GENERAL_ERROR;
-    TPM2B_PUBLIC *public = NULL;
-
-    assert(pub_attrs);
-    assert(priv_attrs);
-    assert(obj_data);
-
-    rv = sanity_check_mech(mechanism);
-    if (rv != CKR_OK) {
-        goto exit;
-    }
-
-    if ((rv = tpm_readpub(ctx, esys_tr, &public, NULL, NULL))) {
-        goto exit;
-    }
-
-    /* Check if the TPM key type is consistent with the PKCS11 mechanism */
-    switch(mechanism->mechanism) {
-    case CKM_RSA_PKCS_KEY_PAIR_GEN:
-        if (public->publicArea.type != TPM2_ALG_RSA) {
-            LOGE("Mismatch in the given TPM key type with the mechanism");
-            rv = CKR_MECHANISM_INVALID;
-            goto exit;
-        }
-        break;
-
-    case CKM_EC_KEY_PAIR_GEN:
-        if (public->publicArea.type != TPM2_ALG_ECC) {
-            LOGE("Mismatch in the given TPM key type with the mechanism");
-            rv = CKR_MECHANISM_INVALID;
-            goto exit;
-        }
-        break;
-    }
-
-    /* Initialize the attribute list */
-
-    obj_data->attrs = attr_list_new();
-    if (!obj_data->attrs) {
-        LOGE("oom");
-        rv = CKR_HOST_MEMORY;
-        goto exit;
-    }
-
-    /* Populate key type-specific attributes for pub & priv */
-
-    switch(mechanism->mechanism) {
-    case CKM_RSA_PKCS_KEY_PAIR_GEN:
-        rv = tpm_object_data_populate_rsa(public, obj_data);
-        if (rv != CKR_OK) {
-            goto exit_attr_list_free;
-        }
-        break;
-
-    case CKM_EC_KEY_PAIR_GEN:
-        rv = tpm_object_data_populate_ecc(public, obj_data);
-        if (rv != CKR_OK) {
-            goto exit_attr_list_free;
-        }
-        break;
-    }
-
-    /* Populate non-key-type-specific attributes for pub & priv */
-
-    TPMA_OBJECT objattrs = public->publicArea.objectAttributes;
-
-    CK_BBOOL extractable = !!!(objattrs & (TPMA_OBJECT_FIXEDTPM|TPMA_OBJECT_FIXEDPARENT));
-    CK_BBOOL sensitive = !extractable;
-    CK_BBOOL never_extractable = !extractable;
-    CK_BBOOL local = !!(objattrs & TPMA_OBJECT_SENSITIVEDATAORIGIN);
-    CK_BBOOL decrypt = !!(objattrs & TPMA_OBJECT_DECRYPT);
-    CK_BBOOL sign = !!(objattrs & TPMA_OBJECT_SIGN_ENCRYPT);
-
-    if (!attr_list_add_bool(obj_data->attrs, CKA_EXTRACTABLE, extractable) ||
-        !attr_list_add_bool(obj_data->attrs, CKA_ALWAYS_SENSITIVE, sensitive) ||
-        !attr_list_add_bool(obj_data->attrs, CKA_NEVER_EXTRACTABLE, never_extractable) ||
-        !attr_list_add_bool(obj_data->attrs, CKA_LOCAL, local) ||
-        !attr_list_add_bool(obj_data->attrs, CKA_DECRYPT, decrypt) ||
-        !attr_list_add_bool(obj_data->attrs, CKA_VERIFY, decrypt) || /* decrypt and verify are the same */
-        !attr_list_add_bool(obj_data->attrs, CKA_SIGN, sign) ||
-        !attr_list_add_bool(obj_data->attrs, CKA_ENCRYPT, sign)) { /* sign and encrypt are same */
-        rv = CKR_HOST_MEMORY;
-        goto exit_attr_list_free;
-    }
-
-    /* Other public/private specific attributes are covered by attr_add_missing_attrs() */
-
-    (void) pub_attrs;
-    (void) priv_attrs;
-
-    goto exit;
-exit_attr_list_free:
-    attr_list_free(obj_data->attrs);
-exit:
-    free(public);
-    return rv;
-}
