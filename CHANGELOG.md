@@ -5,8 +5,7 @@ Starting with release 1.8.0, The format is based on [Keep a Changelog](https://k
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.9.1-rc0] - 2024-09-09
-
-### Fixed:
+### Fixed
 - configure:
   - Change mistaken `+=` to `=`.
   - use user supplied `--prefix` even when p11kit is detected.
@@ -21,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - documentation:
   - Fix use of objects where tokens was meant.
 
-## Changed
+### Changed
 - `--enable-fapi` to `--with-fapi`. Note this is not a major version bump as its internal to builders only. However `--enable-fapi` left in place for backwards compat.
 
 ## [1.9.0] - 2023-01-31
