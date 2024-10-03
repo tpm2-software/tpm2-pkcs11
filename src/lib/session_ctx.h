@@ -220,4 +220,6 @@ CK_RV session_ctx_get_info(session_ctx *ctx, CK_SESSION_INFO *info);
  */
 CK_RV session_ctx_tobject_authenticated(session_ctx *ctx);
 
+void session_ctx_delete_tobject_list(session_ctx *ctx);
+
 #endif /* SRC_PKCS11_SESSION_CTX_H_ */
