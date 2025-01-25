@@ -130,7 +130,7 @@ And review the enumerated options allowed for `--algorithm`.
 
 ## Example Setup With pkcs11-tool
 
-We start the simulator and tpm2-abrmd as shown [here](#Example Setup With tpm2_ptool).
+We start the simulator and tpm2-abrmd as shown [here](#example-setup-with-tpm2_ptool).
 I add an alias in my `~/.bashrc` file so that way pkcs11-tool is setup and running the tpm2-pkcs11 library.
 The alias is:
 ```bash
