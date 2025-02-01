@@ -10,7 +10,7 @@ from .command import Command
 from .command import commandlet
 
 from .db import Db
-from .utils import bytes_to_file
+from .utils import get_pobject
 from .utils import TemporaryDirectory
 from .utils import query_yes_no
 from .utils import create_primary
@@ -153,7 +153,7 @@ class InitCommand(Command):
 
                 except Exception as e:
                     if shall_evict and pobj_ctx != None:
-                        tpm2.evictcontrol(hierarchyauth, pobj_ctx)
+                        tpm2.evictcontrol_remove(hierarchyauth, pobj_ctx)
 
                     traceback.print_exc(file=sys.stdout)
                     sys.exit(e)
@@ -173,7 +173,7 @@ class DestroyCommand(Command):
         group_parser.add_argument(
             '--hierarchy-auth',
             default="",
-            help="The primary object id to remove.\n")
+            help='The authorization password for adding a primary object to the hierarchy.\n')
 
     def __call__(self, args):
         path = args['path']
@@ -199,10 +199,10 @@ class DestroyCommand(Command):
             with TemporaryDirectory() as d:
                 tpm2 = Tpm2(d)
 
-                tr_file = bytes_to_file(pobj['handle'], d)
+                pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
 
                 db.rmprimary(pid)
-                tpm2.evictcontrol(hierarchyauth, tr_file)
+                tpm2.evictcontrol_remove(hierarchyauth, pobj_handle)
 
 @commandlet("dbup")
 class DbUp(Command):

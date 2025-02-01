@@ -106,6 +106,25 @@ class Tpm2(object):
                                stderr)
         return tr_file
 
+    def evictcontrol_remove(self, hierarchyauth, ctx, handle=None):
+
+        # Only provide persistent handle when removing 
+        # persistent objects
+        cmd = ['tpm2_evictcontrol', '-c', str(ctx)]
+
+        if hierarchyauth and len(hierarchyauth) > 0:
+            cmd.extend(['-P', hierarchyauth])
+
+        if handle:
+            cmd.append(str(handle))
+
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
+        stdout, stderr = p.communicate()
+        if (p.wait()):
+            raise RuntimeError("Could not execute tpm2_evictcontrol: %s" %
+                               stderr)
+        return stdout
+
     def readpublic(self, handle, get_tr_file=True):
 
         tr_file = os.path.join(self._tmp, "primary.handle")
