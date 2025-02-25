@@ -250,8 +250,8 @@ CK_RV key_gen (
     }
 
     /* set the tpm object handles */
-    tobject_set_handle(new_private_tobj, objdata.privhandle);
-    tobject_set_handle(new_public_tobj, objdata.pubhandle);
+    tobject_set_esys_tr(new_private_tobj, objdata.privhandle);
+    tobject_set_esys_tr(new_public_tobj, objdata.pubhandle);
 
     new_public_tobj->attrs = pubkey_templ_w_types;
     new_private_tobj->attrs = privkey_templ_w_types;
