@@ -317,7 +317,8 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
                 attr_pfree_cleanse(a);
             }
 
-            if (tobj->tpm_handle) {
+            /* Do not perform tpm_flushcontext when tpm_handle is 0 or the key is persistent. */
+            if (tobj->tpm_handle && !tobj->tpm_serialized_tr) {
                 bool result = tpm_flushcontext(tpm, tobj->tpm_handle);
                 assert(result);
                 UNUSED(result);

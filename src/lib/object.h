@@ -39,6 +39,7 @@ struct tobject {
     twist unsealed_auth; /** unwrapped auth value */
 
     uint32_t tpm_handle;     /** loaded tpm handle */
+    twist tpm_serialized_tr; /** serialized ESYS_TR **/
 
     bool is_authenticated; /** true if a context specific login has authenticated use of the object */
 };

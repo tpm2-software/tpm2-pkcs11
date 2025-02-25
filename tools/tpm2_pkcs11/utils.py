@@ -555,3 +555,12 @@ def dump_pubpem(db, obj, pin, is_sopin, output_prefix):
     with open(output_prefix + ".pem", "wb") as f:
         f.write(pub_blob.to_pem())
 
+def get_serialized_tr(tpm2_handle):
+
+    with ESAPI(os.getenv('TPM2TOOLS_TCTI', None)) as e:
+        esys_tr = e.tr_from_tpmpublic(tpm2_handle)
+        serialized_buffer = e.tr_serialize(esys_tr)
+        hex_string = binascii.hexlify(serialized_buffer).decode()
+        
+        return hex_string
+    

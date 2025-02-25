@@ -47,6 +47,7 @@ void tobject_free(tobject *tobj) {
 
     twist_free(tobj->priv);
     twist_free(tobj->pub);
+    twist_free(tobj->tpm_serialized_tr);
 
     /* cleanse the PLAINTEXT objauth so it goes away */
     if (tobj->unsealed_auth) {
@@ -1294,6 +1295,15 @@ CK_RV object_init_from_attrs(tobject *tobj) {
 
         tobj->priv = twistbin_new(a->pValue, a->ulValueLen);
         if (!tobj->priv) {
+            LOGE("oom");
+            goto error;
+        }
+    }
+
+    a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_SERIALIZED_TR);
+    if (a && a->pValue && a->ulValueLen) {
+        tobj->tpm_serialized_tr = twistbin_new(a->pValue, a->ulValueLen);
+        if (!tobj->tpm_serialized_tr) {
             LOGE("oom");
             goto error;
         }

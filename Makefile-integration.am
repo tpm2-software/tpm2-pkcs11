@@ -10,6 +10,7 @@ integration_scripts = \
     test/integration/pkcs11-javarunner.sh.java \
     test/integration/nss-tests.sh \
     test/integration/ptool-link.sh.nosetup \
+    test/integration/ptool-link-persistent.sh.nosetup \
     test/integration/python-pkcs11.sh
 
 # Note that -fapi.sh.fapi is symlinked to .sh.nosetup

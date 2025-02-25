@@ -16,7 +16,7 @@ class PKCS11Object(dict):
 
         attrs[CKA_CLASS] = objclass
 
-        if auth is not None and tpm_priv:
+        if auth is not None and (tpm_priv or self.force_objauth_enc(attrs)):
             # hexencode the ENC obj auth string because str are hex encoded
             attrs[CKA_TPM2_OBJAUTH_ENC] = binascii.hexlify(str2bytes(auth)).decode()
 
@@ -45,6 +45,9 @@ class PKCS11Object(dict):
 
     def genmechs(self, tpm2):
         raise NotImplementedError()
+
+    def force_objauth_enc(self, attrs):
+        return False
 
 class PKCS11StorageObject(PKCS11Object):
 
@@ -248,6 +251,9 @@ class PKCS11PrivateKey(PKCS11Key):
         attrs.update(add)
 
         super(PKCS11PrivateKey, self).__init__(CKO_PRIVATE_KEY, objtype, attrs, auth, tpm_priv, tpm_pub)
+
+    def force_objauth_enc(self, attrs):
+        return CKA_TPM2_SERIALIZED_TR in attrs
 
 class PKCS11RSAPrivateKey(PKCS11PrivateKey):
 
