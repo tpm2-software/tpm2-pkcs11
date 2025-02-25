@@ -1,0 +1,360 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: BSD-2-Clause
+
+set -xe
+
+if [ -z "$T" ]; then
+    export T="$(cd "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
+
+source "$T/test/integration/scripts/helpers.sh"
+
+check_openssl_version
+
+export TPM2OPENSSL_TCTI="$TPM2TOOLS_TCTI"
+
+tempdir=$(mktemp -d)
+
+function cleanup() {
+	rm -rf "$tempdir"
+}
+trap cleanup EXIT
+
+onerror() {
+  echo "$BASH_COMMAND on line ${BASH_LINENO[0]} failed: $?"
+  exit 1
+}
+trap onerror ERR
+
+setup_asan
+
+if [ -z "$modpath" ]; then
+  modpath="$PWD/src/.libs/libtpm2_pkcs11.so"
+fi
+
+echo "modpath=$modpath"
+
+pkcs11_tool() {
+  pkcs11-tool --module "$modpath" "$@"
+  return $?
+}
+
+rsa_verify() {
+  local token_label="$1"
+  local id="$2"
+
+  echo "testdata">${tempdir}/data
+
+  echo "Testing RSA signature"
+
+  pkcs11_tool --sign --login --token-label "${token_label}" --id "${id}" \
+              --pin myuserpin --input-file ${tempdir}/data \
+              --output-file ${tempdir}/sig --mechanism SHA256-RSA-PKCS
+
+  pkcs11_tool --read-object --token-label "${token_label}" --id "${id}" \
+              --type pubkey --output-file "${tempdir}/${id}.der" \
+    || exit 77
+  #This fails on old pkcs11-tool versions, thus exit-skip here
+
+  openssl dgst -verify "${tempdir}/${id}.der" -keyform DER \
+               -signature ${tempdir}/sig -sha256 \
+               -sigopt rsa_padding_mode:pkcs1 \
+               ${tempdir}/data
+  echo "RSA signature tested"
+}
+
+ecc_verify() {
+  local token_label="$1"
+  local id="$2"
+
+  echo "testdata">${tempdir}/data
+
+  echo "Testing ECDSA signature"
+  pkcs11_tool --sign --token-label ${token_label} --login --id "${id}" \
+              --pin myuserpin --input-file ${tempdir}/data \
+              --output-file ${tempdir}/sig --mechanism ECDSA-SHA1 \
+              --signature-format=openssl
+
+  pkcs11_tool --read-object --token-label "${token_label}" --id "${id}" \
+              --type pubkey --output-file "${tempdir}/${id}.der" \
+    || exit 77
+  #This fails on old pkcs11-tool versions, thus exit-skip here
+
+  openssl dgst -verify "$tempdir/${id}.der" -keyform DER \
+               -signature "$tempdir/sig" -sha1 "$tempdir/data"
+
+  echo "ECDSA signature tested"
+}
+
+verify_label() {
+  local token_label="$1"
+  local id="$2"
+  local label="$3"
+
+  echo "Testing key label"
+
+  privkey=$(pkcs11_tool --token-label ${token_label} --login --pin myuserpin \
+                        --list-objects --type privkey --id "$id")
+  echo "$privkey" | grep -E "label:\s+$label" || exit 99
+
+  pubkey=$(pkcs11_tool --token-label ${token_label} --login --pin myuserpin \
+                       --list-objects --type pubkey --id "$id")
+  echo "$pubkey" | grep -E "label:\s+$label" || exit 99
+
+  echo "Key label tested"
+}
+
+
+export TPM2_PKCS11_STORE="$tempdir"
+
+echo "TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
+
+echo "TPM2_PKCS11_TCTI=$TPM2_PKCS11_TCTI"
+export TPM2_PKCS11_TCTI
+
+#
+# Test with transient parent
+#
+
+tpm2_clear
+
+tpm2_createprimary -c "$tempdir/primary.ctx"
+
+# Create token
+pid=$(tpm2_ptool init --transient-parent="tpm2-tools-default" \
+                      --path=$TPM2_PKCS11_STORE | grep id | cut -d' ' -f2-2)
+tpm2_ptool addtoken --pid="$pid" --label=testpersistent --sopin=mysopin \
+                    --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+
+
+# Test RSA key without auth
+tpm2_create -C "$tempdir/primary.ctx" -u "$tempdir/rsa_no_auth.pub" \
+            -r "$tempdir/rsa_no_auth.priv"
+tpm2_load -C "$tempdir/primary.ctx" -u "$tempdir/rsa_no_auth.pub" \
+          -r "$tempdir/rsa_no_auth.priv" -c "$tempdir/rsa_no_auth.ctx"
+handle=$(tpm2_evictcontrol -C o -c "$tempdir/rsa_no_auth.ctx" \
+           | grep persistent-handle | cut -d' ' -f2-2)
+
+tpm2_ptool link --label testpersistent --userpin myuserpin --id 0001 \
+                --key-label rsa_no_auth --path $TPM2_PKCS11_STORE "$handle"
+
+rsa_verify "testpersistent" "30303031"
+verify_label "testpersistent" "30303031" "rsa_no_auth"
+
+
+# Test RSA key with auth
+tpm2_create -C "$tempdir/primary.ctx" -u "$tempdir/rsa_auth.pub" \
+            -r "$tempdir/rsa_auth.priv" -p "mykeyauth"
+tpm2_load -C "$tempdir/primary.ctx" -u "$tempdir/rsa_auth.pub" \
+          -r "$tempdir/rsa_auth.priv" -c "$tempdir/rsa_auth.ctx"
+handle=$(tpm2_evictcontrol -C o -c "$tempdir/rsa_auth.ctx" \
+           | grep persistent-handle | cut -d' ' -f2-2)
+
+tpm2_ptool link --label testpersistent --userpin myuserpin --id 0002 \
+                --key-label rsa_auth --path $TPM2_PKCS11_STORE \
+                --auth="mykeyauth" "$handle"
+
+rsa_verify "testpersistent" "30303032"
+verify_label "testpersistent" "30303032" "rsa_auth"
+
+
+# Test ECC key without auth
+tpm2_create -C "$tempdir/primary.ctx" -Gecc -u "$tempdir/ecc_no_auth.pub" \
+            -r "$tempdir/ecc_no_auth.priv"
+tpm2_load -C "$tempdir/primary.ctx" -u "$tempdir/ecc_no_auth.pub" \
+          -r "$tempdir/ecc_no_auth.priv" -c "$tempdir/ecc_no_auth.ctx"
+handle=$(tpm2_evictcontrol -C o -c "$tempdir/ecc_no_auth.ctx" \
+           | grep persistent-handle | cut -d' ' -f2-2)
+
+tpm2_ptool link --label testpersistent --userpin myuserpin --id 0003 \
+                --key-label ecc_no_auth --path $TPM2_PKCS11_STORE "$handle"
+
+ecc_verify "testpersistent" "30303033"
+verify_label "testpersistent" "30303033" "ecc_no_auth"
+
+
+# Test ECC key without auth
+tpm2_create -C "$tempdir/primary.ctx" -Gecc -u "$tempdir/ecc_auth.pub" \
+            -r "$tempdir/ecc_auth.priv" -p "mykeyauth"
+tpm2_load -C "$tempdir/primary.ctx" -u "$tempdir/ecc_auth.pub" \
+          -r "$tempdir/ecc_auth.priv" -c "$tempdir/ecc_auth.ctx"
+handle=$(tpm2_evictcontrol -C o -c "$tempdir/ecc_auth.ctx" \
+           | grep persistent-handle | cut -d' ' -f2-2)
+
+tpm2_ptool link --label testpersistent --userpin myuserpin --id 0004 \
+                --key-label ecc_auth --path $TPM2_PKCS11_STORE \
+                --auth "mykeyauth" "$handle"
+
+ecc_verify "testpersistent" "30303034"
+verify_label "testpersistent" "30303034" "ecc_auth"
+
+
+rm -rf "$tempdir"/*
+
+#
+# Test with persistent primary
+#
+
+tpm2_clear
+
+tpm2_createprimary -c "$tempdir/primary.ctx"
+primary_handle=$(tpm2_evictcontrol -c $"$tempdir/primary.ctx" \
+                  | grep persistent-handle | cut -d' ' -f2-2)
+
+# Create token
+pid=$(tpm2_ptool init --primary-handle="$primary_handle" \
+                      --path=$TPM2_PKCS11_STORE | grep id | cut -d' ' -f2-2)
+tpm2_ptool addtoken --pid="$pid" --label=testpersistent --sopin=mysopin \
+                    --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+
+
+# Test RSA key without auth
+tpm2_create -C "$primary_handle" -u "$tempdir/rsa_no_auth.pub" \
+            -r "$tempdir/rsa_no_auth.priv"
+tpm2_load -C "$primary_handle" -u "$tempdir/rsa_no_auth.pub" \
+          -r "$tempdir/rsa_no_auth.priv" -c "$tempdir/rsa_no_auth.ctx"
+handle=$(tpm2_evictcontrol -C o -c "$tempdir/rsa_no_auth.ctx" \
+           | grep persistent-handle | cut -d' ' -f2-2)
+
+tpm2_ptool link --label testpersistent --userpin myuserpin --id 0001 \
+                --key-label rsa_no_auth --path $TPM2_PKCS11_STORE "$handle"
+
+rsa_verify "testpersistent" "30303031"
+verify_label "testpersistent" "30303031" "rsa_no_auth"
+
+
+# Test RSA key with auth
+tpm2_create -C "$primary_handle" -u "$tempdir/rsa_auth.pub" \
+            -r "$tempdir/rsa_auth.priv" -p "mykeyauth"
+tpm2_load -C "$primary_handle" -u "$tempdir/rsa_auth.pub" \
+          -r "$tempdir/rsa_auth.priv" -c "$tempdir/rsa_auth.ctx"
+handle=$(tpm2_evictcontrol -C o -c "$tempdir/rsa_auth.ctx" \
+           | grep persistent-handle | cut -d' ' -f2-2)
+
+tpm2_ptool link --label testpersistent --userpin myuserpin --id 0002 \
+                --key-label rsa_auth --path $TPM2_PKCS11_STORE \
+                --auth="mykeyauth" "$handle"
+
+rsa_verify "testpersistent" "30303032"
+verify_label "testpersistent" "30303032" "rsa_auth"
+
+
+# Test ECC key without auth
+tpm2_create -C "$primary_handle" -Gecc -u "$tempdir/ecc_no_auth.pub" \
+            -r "$tempdir/ecc_no_auth.priv"
+tpm2_load -C "$primary_handle" -u "$tempdir/ecc_no_auth.pub" \
+          -r "$tempdir/ecc_no_auth.priv" -c "$tempdir/ecc_no_auth.ctx"
+handle=$(tpm2_evictcontrol -C o -c "$tempdir/ecc_no_auth.ctx" \
+           | grep persistent-handle | cut -d' ' -f2-2)
+
+tpm2_ptool link --label testpersistent --userpin myuserpin --id 0003 \
+                --key-label ecc_no_auth --path $TPM2_PKCS11_STORE "$handle"
+
+ecc_verify "testpersistent" "30303033"
+verify_label "testpersistent" "30303033" "ecc_no_auth"
+
+
+# Test ECC key without auth
+tpm2_create -C "$primary_handle" -Gecc -u "$tempdir/ecc_auth.pub" \
+            -r "$tempdir/ecc_auth.priv" -p "mykeyauth"
+tpm2_load -C "$primary_handle" -u "$tempdir/ecc_auth.pub" \
+          -r "$tempdir/ecc_auth.priv" -c "$tempdir/ecc_auth.ctx"
+handle=$(tpm2_evictcontrol -C o -c "$tempdir/ecc_auth.ctx" \
+           | grep persistent-handle | cut -d' ' -f2-2)
+
+tpm2_ptool link --label testpersistent --userpin myuserpin --id 0004 \
+                --key-label ecc_auth --path $TPM2_PKCS11_STORE \
+                --auth "mykeyauth" "$handle"
+
+ecc_verify "testpersistent" "30303034"
+verify_label "testpersistent" "30303034" "ecc_auth"
+
+
+rm -rf "$tempdir"/*
+
+#
+# Test with persistent primary deviating from key primary
+#
+
+tpm2_clear
+
+tpm2_createprimary -c "$tempdir/token-primary.ctx"
+token_primary_handle=$(tpm2_evictcontrol -c $"$tempdir/token-primary.ctx" \
+                         | grep persistent-handle | cut -d' ' -f2-2)
+
+# Create token
+pid=$(tpm2_ptool init --primary-handle="$token_primary_handle" \
+                      --path=$TPM2_PKCS11_STORE | grep id | cut -d' ' -f2-2)
+tpm2_ptool addtoken --pid="$pid" --label=testpersistent --sopin=mysopin \
+                    --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+
+# Create key primary
+
+tpm2_createprimary -c "$tempdir/primary.ctx"
+primary_handle=$(tpm2_evictcontrol -c $"$tempdir/primary.ctx" \
+                   | grep persistent-handle | cut -d' ' -f2-2)
+
+
+# Test RSA key without auth
+tpm2_create -C "$primary_handle" -u "$tempdir/rsa_no_auth.pub" \
+            -r "$tempdir/rsa_no_auth.priv"
+tpm2_load -C "$primary_handle" -u "$tempdir/rsa_no_auth.pub" \
+          -r "$tempdir/rsa_no_auth.priv" -c "$tempdir/rsa_no_auth.ctx"
+handle=$(tpm2_evictcontrol -C o -c "$tempdir/rsa_no_auth.ctx" \
+           | grep persistent-handle | cut -d' ' -f2-2)
+
+tpm2_ptool link --label testpersistent --userpin myuserpin --id 0001 \
+                --key-label rsa_no_auth --path $TPM2_PKCS11_STORE "$handle"
+
+rsa_verify "testpersistent" "30303031"
+verify_label "testpersistent" "30303031" "rsa_no_auth"
+
+
+# Test RSA key with auth
+tpm2_create -C "$primary_handle" -u "$tempdir/rsa_auth.pub" \
+            -r "$tempdir/rsa_auth.priv" -p "mykeyauth"
+tpm2_load -C "$primary_handle" -u "$tempdir/rsa_auth.pub" \
+          -r "$tempdir/rsa_auth.priv" -c "$tempdir/rsa_auth.ctx"
+handle=$(tpm2_evictcontrol -C o -c "$tempdir/rsa_auth.ctx" \
+           | grep persistent-handle | cut -d' ' -f2-2)
+
+tpm2_ptool link --label testpersistent --userpin myuserpin --id 0002 \
+                --key-label rsa_auth --path $TPM2_PKCS11_STORE \
+                --auth="mykeyauth" "$handle"
+
+rsa_verify "testpersistent" "30303032"
+verify_label "testpersistent" "30303032" "rsa_auth"
+
+
+# Test ECC key without auth
+tpm2_create -C "$primary_handle" -Gecc -u "$tempdir/ecc_no_auth.pub" \
+            -r "$tempdir/ecc_no_auth.priv"
+tpm2_load -C "$primary_handle" -u "$tempdir/ecc_no_auth.pub" \
+          -r "$tempdir/ecc_no_auth.priv" -c "$tempdir/ecc_no_auth.ctx"
+handle=$(tpm2_evictcontrol -C o -c "$tempdir/ecc_no_auth.ctx" \
+           | grep persistent-handle | cut -d' ' -f2-2)
+
+tpm2_ptool link --label testpersistent --userpin myuserpin --id 0003 \
+                --key-label ecc_no_auth --path $TPM2_PKCS11_STORE "$handle"
+
+ecc_verify "testpersistent" "30303033"
+verify_label "testpersistent" "30303033" "ecc_no_auth"
+
+
+# Test ECC key without auth
+tpm2_create -C "$primary_handle" -Gecc -u "$tempdir/ecc_auth.pub" \
+            -r "$tempdir/ecc_auth.priv" -p "mykeyauth"
+tpm2_load -C "$primary_handle" -u "$tempdir/ecc_auth.pub" \
+          -r "$tempdir/ecc_auth.priv" -c "$tempdir/ecc_auth.ctx"
+handle=$(tpm2_evictcontrol -C o -c "$tempdir/ecc_auth.ctx" \
+           | grep persistent-handle | cut -d' ' -f2-2)
+
+tpm2_ptool link --label testpersistent --userpin myuserpin --id 0004 \
+                --key-label ecc_auth --path $TPM2_PKCS11_STORE \
+                --auth "mykeyauth" "$handle"
+
+ecc_verify "testpersistent" "30303034"
+verify_label "testpersistent" "30303034" "ecc_auth"
+
+
+exit 0

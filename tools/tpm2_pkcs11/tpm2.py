@@ -125,7 +125,7 @@ class Tpm2(object):
                                stderr)
         return stdout
 
-    def readpublic(self, handle, get_tr_file=True):
+    def readpublic(self, handle, get_tr_file=True, pub_blob_path=None):
 
         tr_file = os.path.join(self._tmp, "primary.handle")
 
@@ -133,6 +133,9 @@ class Tpm2(object):
 
         if get_tr_file:
             cmd.extend(['-t', tr_file])
+
+        if pub_blob_path != None:
+            cmd.extend(['-o', pub_blob_path])
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, env=os.environ)
         stdout, stderr = p.communicate()

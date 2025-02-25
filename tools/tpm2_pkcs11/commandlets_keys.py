@@ -28,6 +28,7 @@ from .utils import get_pobject
 from .utils import dump_blobs
 from .utils import dump_tsspem
 from .utils import dump_pubpem
+from .utils import get_serialized_tr
 
 from .tpm2 import Tpm2
 
@@ -97,6 +98,9 @@ class NewKeyCommandBase(Command):
         encobjauth = wrapper.wrap(str2bytes(objauth))
 
         return (encobjauth, objauth)
+
+    def get_extra_privattrs(self, privkey):
+        return {}
 
     @staticmethod
     def new_key_save(alg, keylabel, tid, label, privblob, pubblob,
@@ -205,7 +209,7 @@ class NewKeyCommandBase(Command):
                 # handle options that can add additional attributes
                 always_auth = args['attr_always_authenticate']
                 priv_attrs = {CKA_ALWAYS_AUTHENTICATE : always_auth}
-
+                priv_attrs.update(self.get_extra_privattrs(privkey))
                 override_keylen = getattr(self, '_override_keylen', None)
 
                 return NewKeyCommandBase.new_key_save(
@@ -563,7 +567,7 @@ class LinkCommand(NewKeyCommandBase):
         super(LinkCommand, self).generate_options(group_parser)
         group_parser.add_argument('privkey',
             nargs='*',
-            help='Path of the key to be linked.\n')
+            help='Path of the key to be linked or persistent handle.\n')
         group_parser.add_argument(
             '--auth',
             default='',
@@ -680,6 +684,15 @@ class LinkCommand(NewKeyCommandBase):
 
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 
+    def create_from_persistent_handle(self, tpm2, handle, d):
+
+        pubfd, tertiarypub = mkstemp(prefix='', suffix='.pub', dir=d)
+        os.close(pubfd)
+        tertiarypriv = None
+        tertiarypubdata, _ = tpm2.readpublic(handle, False, pub_blob_path=tertiarypub)
+
+        return (tertiarypriv, tertiarypub, tertiarypubdata)
+
     # Links a new key
     def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, keypaths, passin, d):
 
@@ -687,12 +700,31 @@ class LinkCommand(NewKeyCommandBase):
             sys.exit("Keypath must be specified")
 
         if len(keypaths) == 1:
-            return self.create_from_tss_key(pobj, objauth, hierarchyauth, tpm2, alg, keypaths, d)
+            if LinkCommand.is_persistent_handle(keypaths[0]):
+                return self.create_from_persistent_handle(tpm2, keypaths[0], d)
+            else:
+                return self.create_from_tss_key(pobj, objauth, hierarchyauth, tpm2, alg, keypaths, d)
 
         if len(keypaths) == 2:
             return self.create_from_key_blobs(pobj, objauth, hierarchyauth, tpm2, alg, keypaths, d)
 
-        sys.exit("Expected one or two keyblobs, got: {}".format(len(keypaths)))
+        sys.exit("Expected one persistent handle or one or two keyblobs, got: {}".format(len(keypaths)))
+
+    def get_extra_privattrs(self, keypaths):
+        if len(keypaths) == 1 and LinkCommand.is_persistent_handle(keypaths[0]):
+            handle = int(keypaths[0], 16)
+            serialized_tr = get_serialized_tr(handle)
+            extra_attrs = { CKA_TPM2_SERIALIZED_TR: serialized_tr }
+            return extra_attrs
+        else:
+            return {}
+
+    def is_persistent_handle(str):
+        try:
+            handle = int(str, 16)
+        except:
+            return False
+        return handle >> Tpm2.TPM2_HR_SHIFT == Tpm2.TPM2_HT_PERSISTENT
 
     def __call__(self, args):
         self._auth = args['auth'] if 'auth' in args else None

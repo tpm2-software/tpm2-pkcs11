@@ -142,3 +142,40 @@ tpm2_ptool link --label=mytoken --userpin=myuserpin --key-label="link-key" key.p
 ```
 
 From there, one can use that key as they would in other tutorials.
+
+## Linking a persistent TPM2 key
+
+A persistent TPM2 key can also be used in a token. Because the key is persistent
+in the TPM, it is implicitly trusted by any other object in the TPM. Therefore,
+any persistent key can be linked regardless of its parent key.
+
+```bash
+#
+# Note: below we create/use a store in ~/tmp, however one can use a store wherever they would like.
+#
+
+# Create the primary key
+tpm2_createprimary -c token_primary.ctx
+
+# Persist the primary key at handle 0x81000001
+tpm2_evictcontrol -c token_primary.ctx 0x81000001
+
+# Create the tpm2-tools key under the primary key
+tpm2_create -C 0x81000001 -u key.pub -r key.priv
+
+# Persist tpm2-tools key at handle 0x81000012
+tpm2_load -C 0x81000001 -u key.pub -r key.priv -c key.ctx
+tpm2_evictcontrol -c key.ctx 0x81000012
+
+# Create a store using the token's primary
+pid="$(tpm2_ptool init --primary-handle=0x81000001 --path=~/tmp | grep id | cut -d' ' -f 2-2)"
+
+# Create a token associated with the primary object
+# Note: in production set userpin and sopin to other values.
+tpm2_ptool addtoken --pid=$pid --sopin=mysopin --userpin=myuserpin --label=mytoken --path=~/tmp
+
+# Link the key
+tpm2_ptool link --label=mytoken --userpin=myuserpin --key-label="persistent-key" --path=~/tmp 0x81000012
+```
+
+From there, one can use that key as they would in other tutorials.
