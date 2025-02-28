@@ -38,7 +38,6 @@ setup(
         'pyasn1_modules',
         'tpm2_pytss'
     ],
-    tests_require=[],
     entry_points={
         'console_scripts': ['tpm2_ptool = tpm2_pkcs11.tpm2_ptool:main'],
     }, )
