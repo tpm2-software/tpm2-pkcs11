@@ -7,6 +7,9 @@
 #include <stdint.h>
 
 #include <tss2/tss2_esys.h>
+#ifdef HAVE_POLICY
+#include <tss2/tss2_policy.h>
+#endif
 
 #include "attrs.h"
 #include "debug.h"
@@ -188,6 +191,11 @@ CK_RV tpm2_generate_key(
         tpm_object_data *objdata);
 
 CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULONG_PTR count);
+
+/* the function can't be defined without the library because of TSS2_POLICY_CTX type */
+#ifdef HAVE_POLICY
+CK_RV tpm2_execute_policy(tpm_ctx *ctx, TSS2_POLICY_CTX *policy_ctx, uint32_t handle);
+#endif
 
 CK_RV tpm_get_existing_primary(tpm_ctx *tpm, uint32_t *primary_handle, twist *primary_blob);
 
