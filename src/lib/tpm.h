@@ -199,6 +199,29 @@ CK_RV tpm_create_transient_primary_from_template(tpm_ctx *tpm,
 
 CK_RV tpm_get_pss_sig_state(tpm_ctx *tctx, tobject *tobj, bool *pss_sigs_good);
 
+/**
+ * Retrieve the associated ESYS_TR from the given TPM2_HANDLE.
+ *
+ * @param ctx
+ *  The TPM API context.
+ * @param persistent_handle
+ *  The TPM persistent handle (TPM2_HANDLE).
+ * @param esys_tr
+ *  An optional output (can be NULL).
+ *  The associated ESYS_TR is returned here.
+ * @param esys_tr_pub
+ *  An optional output (can be NULL).
+ *  A new key is created with only the public component from the
+ *  persistent handle. The associated ESYS_TR is returned here.
+ * @return
+ *  CKR_OK on success; otherwise, an error code.
+ */
+CK_RV tpm_get_esys_tr(
+        tpm_ctx *ctx,
+        uint32_t persistent_handle,
+        uint32_t *esys_tr,
+        uint32_t *esys_tr_pub);
+
 bool tpm_get_name(tpm_ctx *ctx, uint32_t handle, twist *name);
 
 void tpm_init(void);
