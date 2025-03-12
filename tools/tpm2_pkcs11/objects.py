@@ -164,6 +164,7 @@ class PKCS11RSAPublicKey(PKCS11PublicKey):
             CKM_RSA_X_509,
             CKM_RSA_PKCS_OAEP,
             CKM_RSA_PKCS,
+            CKM_SHA1_RSA_PKCS,
             CKM_SHA256_RSA_PKCS,
             # Internally we can synthesize CKM_SHAXXX_RSA_PKCS
             # so just add them
