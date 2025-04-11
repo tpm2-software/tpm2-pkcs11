@@ -318,11 +318,11 @@ CK_RV session_ctx_logout(session_ctx *ctx) {
             }
 
             /* Do not perform tpm_flushcontext when tpm_handle is 0 or the key is persistent. */
-            if (tobj->tpm_handle && !tobj->tpm_serialized_tr) {
-                bool result = tpm_flushcontext(tpm, tobj->tpm_handle);
+            if (tobj->tpm_esys_tr && !tobj->tpm_serialized_tr) {
+                bool result = tpm_flushcontext(tpm, tobj->tpm_esys_tr);
                 assert(result);
                 UNUSED(result);
-                tobj->tpm_handle = 0;
+                tobj->tpm_esys_tr = 0;
 
                 /* Clear the unwrapped auth value for tertiary objects */
                 twist_free(tobj->unsealed_auth);

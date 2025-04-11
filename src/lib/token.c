@@ -631,7 +631,7 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
      * The object may already be loaded by the TPM or may just be
      * a public key object not-resident in the TPM.
      */
-    if (tobj->tpm_handle || !tobj->pub) {
+    if (tobj->tpm_esys_tr || !tobj->pub) {
         *loaded_tobj = tobj;
         return CKR_OK;
     }
@@ -640,7 +640,7 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
         bool ret = tpm_deserialize_handle(
                       tpm,
                       tobj->tpm_serialized_tr,
-                      &tobj->tpm_handle);
+                      &tobj->tpm_esys_tr);
         if (!ret) {
             return CKR_GENERAL_ERROR;
         }
@@ -649,7 +649,7 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
                 tpm,
                 tok->pobject.handle, tok->pobject.objauth,
                 tobj->pub, tobj->priv,
-                &tobj->tpm_handle);
+                &tobj->tpm_esys_tr);
         if (rv != CKR_OK) {
             return rv;
         }
