@@ -38,7 +38,7 @@ struct tobject {
 
     twist unsealed_auth; /** unwrapped auth value */
 
-    uint32_t tpm_handle;     /** loaded tpm handle */
+    uint32_t tpm_esys_tr;     /** loaded ESYS_TR */
     twist tpm_serialized_tr; /** serialized ESYS_TR **/
 
     bool is_authenticated; /** true if a context specific login has authenticated use of the object */
@@ -74,7 +74,7 @@ CK_RV tobject_set_blob_data(tobject *tobj, twist pub, twist priv);
  */
 CK_RV tobject_set_auth(tobject *tobj, twist authbin, twist wrappedauthhex);
 
-void tobject_set_handle(tobject *tobj, uint32_t handle);
+void tobject_set_esys_tr(tobject *tobj, uint32_t esys_tr);
 void tobject_set_id(tobject *tobj, unsigned id);
 void tobject_free(tobject *tobj);
 

@@ -1234,7 +1234,7 @@ static CK_RV tpm_hmac_large(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG data
     assert(tctx);
 
     twist auth = tobj->unsealed_auth;
-    TPMI_DH_OBJECT handle = tobj->tpm_handle;
+    TPMI_DH_OBJECT handle = tobj->tpm_esys_tr;
 
     ESYS_TR session = tctx->hmac_session;
 
@@ -1358,7 +1358,7 @@ static CK_RV tpm_hmac(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, C
     assert(tctx);
 
     twist auth = tobj->unsealed_auth;
-    TPMI_DH_OBJECT handle = tobj->tpm_handle;
+    TPMI_DH_OBJECT handle = tobj->tpm_esys_tr;
 
     ESYS_TR session = tctx->hmac_session;
 
@@ -1417,7 +1417,7 @@ CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_
     assert(tctx);
 
     twist auth = tobj->unsealed_auth;
-    TPMI_DH_OBJECT handle = tobj->tpm_handle;
+    TPMI_DH_OBJECT handle = tobj->tpm_esys_tr;
     ESYS_CONTEXT *ectx = tctx->esys_ctx;
     ESYS_TR session = tctx->hmac_session;
     TPMT_SIG_SCHEME *scheme = NULL;
@@ -1614,7 +1614,7 @@ CK_RV tpm_rsa_oaep_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, 
      * TPM is hardcoded to MGF1 + <name alg> in the TPM, make sure what is requested is supported
      */
     CK_RSA_PKCS_MGF_TYPE supported_mgf;
-    CK_RV rv = get_oaep_mgf1_alg(tctx, tobj->tpm_handle, &supported_mgf);
+    CK_RV rv = get_oaep_mgf1_alg(tctx, tobj->tpm_esys_tr, &supported_mgf);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -2231,7 +2231,7 @@ CK_RV tpm_rsa_decrypt(tpm_op_data *tpm_enc_data,
     memcpy(tpm_ctext.buffer, ctext, ctextlen);
 
     twist auth = tpm_enc_data->tobj->unsealed_auth;
-    ESYS_TR handle = tpm_enc_data->tobj->tpm_handle;
+    ESYS_TR handle = tpm_enc_data->tobj->tpm_esys_tr;
     bool result = set_esys_auth(ctx->esys_ctx, handle, auth);
     if (!result) {
         return CKR_GENERAL_ERROR;
@@ -2492,7 +2492,7 @@ static CK_RV do_buffered_encdec(tpm_op_data *tpm_enc_data,
     TPM2B_IV *iv = &tpm_enc_data->sym.iv;
 
     twist auth = tpm_enc_data->tobj->unsealed_auth;
-    ESYS_TR handle = tpm_enc_data->tobj->tpm_handle;
+    ESYS_TR handle = tpm_enc_data->tobj->tpm_esys_tr;
 
     /* final calls don't have input data, they just exhaust the internal buffer if present */
     bool is_final = !in;
@@ -4577,7 +4577,7 @@ CK_RV tpm_get_pss_sig_state(tpm_ctx *tctx, tobject *tobj,
             .digest = { 0 }
     };
 
-    bool res = set_esys_auth(tctx->esys_ctx, tobj->tpm_handle,
+    bool res = set_esys_auth(tctx->esys_ctx, tobj->tpm_esys_tr,
             tobj->unsealed_auth);
     if (!res) {
         return CKR_GENERAL_ERROR;
@@ -4585,7 +4585,7 @@ CK_RV tpm_get_pss_sig_state(tpm_ctx *tctx, tobject *tobj,
 
     TSS2_RC rval = Esys_Sign(
             tctx->esys_ctx,
-            tobj->tpm_handle,
+            tobj->tpm_esys_tr,
             ESYS_TR_PASSWORD,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
@@ -4659,12 +4659,12 @@ CK_RV tpm_ec_ecdh1_derive(tpm_ctx *tctx, tobject *tobj, uint8_t *ecc_point,
         return rv;
     }
 
-    bool res = set_esys_auth(tctx->esys_ctx, tobj->tpm_handle, tobj->unsealed_auth);
+    bool res = set_esys_auth(tctx->esys_ctx, tobj->tpm_esys_tr, tobj->unsealed_auth);
     if (!res) {
         return CKR_GENERAL_ERROR;
     }
 
-    rv = Esys_ECDH_ZGen(tctx->esys_ctx, tobj->tpm_handle, ESYS_TR_PASSWORD,
+    rv = Esys_ECDH_ZGen(tctx->esys_ctx, tobj->tpm_esys_tr, ESYS_TR_PASSWORD,
                         ESYS_TR_NONE, ESYS_TR_NONE, &in_point, &out_point);
     if (rv != CKR_OK) {
         return rv;

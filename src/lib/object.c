@@ -828,10 +828,10 @@ CK_RV tobject_set_auth(tobject *tobj, twist authbin, twist wrappedauthhex) {
     return r ? CKR_OK : CKR_GENERAL_ERROR;
 }
 
-void tobject_set_handle(tobject *tobj, uint32_t handle) {
+void tobject_set_esys_tr(tobject *tobj, uint32_t esys_tr) {
     assert(tobj);
 
-    tobj->tpm_handle = handle;
+    tobj->tpm_esys_tr = esys_tr;
 }
 
 void tobject_set_id(tobject *tobj, unsigned id) {
