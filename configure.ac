@@ -81,11 +81,11 @@ AS_IF([test "$do_pycheck" == "yes"], [
     [AC_MSG_ERROR([Integration tests enabled but python >= 3.7 executable not found.])]
   )
 
-  AC_PYTHON_MODULE([$PYTHON], [pyasn1_modules])
-  AC_PYTHON_MODULE([$PYTHON], [pyasn1])
-  AC_PYTHON_MODULE([$PYTHON], [cryptography])
-  AC_PYTHON_MODULE([$PYTHON], [yaml])
-  AC_PYTHON_MODULE([$PYTHON], [tpm2_pytss])
+  AX_PYTHON_MODULE([pyasn1_modules], [fatal], [$PYTHON])
+  AX_PYTHON_MODULE([pyasn1], [fatal], [$PYTHON])
+  AX_PYTHON_MODULE([cryptography], [fatal], [$PYTHON])
+  AX_PYTHON_MODULE([yaml], [fatal], [$PYTHON])
+  AX_PYTHON_MODULE([tpm2_pytss], [fatal], $[PYTHON])
 ])
 
 AC_DEFUN([do_esapi_manage_flags], [
