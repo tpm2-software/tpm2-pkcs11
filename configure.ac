@@ -260,7 +260,9 @@ AC_ARG_ENABLE(
 
 # Test for Java compiler and interpreter without throwing fatal errors (since
 # these macros are defined using AC_DEFUN they cannot be called conditionally)
-m4_pushdef([AC_MSG_ERROR], [have_javac=no])
+# Test for javac by checking JAVAC variable since have_javac is not quite stable
+# across versions of ax_prog_javac.m4 that provides AX_PROG_JAVAC
+m4_pushdef([AC_MSG_ERROR], [true])
 AX_PROG_JAVAC()
 AX_PROG_JAVA()
 m4_popdef([AC_MSG_ERROR])
@@ -382,7 +384,7 @@ AC_DEFUN([integration_test_checks], [
         [AC_MSG_ERROR([Integration tests enabled but tss2_provision executable not found.])])
   ])
 
-  AS_IF([test "x$have_javac" = "xno"],
+  AS_IF([test -z "$JAVAC"],
     [AC_MSG_ERROR([Integration tests enabled but no Java compiler was found])])
   AX_CHECK_CLASS([org.junit.Assert], ,
     [AC_MSG_ERROR([Integration tests enabled but JUnit not found, try setting CLASSPATH])])
