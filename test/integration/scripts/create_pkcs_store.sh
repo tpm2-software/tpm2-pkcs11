@@ -261,7 +261,7 @@ tpm2_ptool addkey --algorithm=ecc256 --label="empty-pin" --key-label="ecc_key" -
 tpm2_ptool import --algorithm="hmac" --privkey="$TEST_FIXTURES/hmac.hex.key" --key-label="imported_hmac_key" --label="label" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 
 # verify the token and all the objects
-echo "Adding 1 x509 Certificate under token \"label\""
+echo "Verifying the token \"label\""
 tpm2_ptool verify --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 
 echo "RUN COMMAND BELOW BEFORE make check"
