@@ -59,6 +59,7 @@ function p11_tool() {
     p11tool -d 9999 $@
 }
 
+export OLD_HOME=${HOME}
 export HOME=${tempdir}
 mkdir -p $HOME/.config/pkcs11/modules
 echo "module: $modpath" >$HOME/.config/pkcs11/modules/tpm2-pkcs11.module
@@ -215,7 +216,7 @@ pushd $TPM2_PKCS11_STORE
 
 clear_asan
 
-yaml_myrsakey=$(tpm2_ptool export --label=mynewtoken --userpin=mynewuserpin --key-label=myrsakey --path=$TPM2_PKCS11_STORE)
+yaml_myrsakey=$(HOME=${OLD_HOME} tpm2_ptool export --label=mynewtoken --userpin=mynewuserpin --key-label=myrsakey --path=$TPM2_PKCS11_STORE)
 popd
 
 auth_myrsakey=$(echo "$yaml_myrsakey" | grep "object-auth" | cut -d' ' -f2-)
@@ -245,7 +246,7 @@ pushd $TPM2_PKCS11_STORE
 
 clear_asan
 
-yaml_myecckey=$(tpm2_ptool export --label=mynewtoken2 --userpin=mynewuserpin --key-label=myecckey --path=$TPM2_PKCS11_STORE)
+yaml_myecckey=$(HOME=${OLD_HOME} tpm2_ptool export --label=mynewtoken2 --userpin=mynewuserpin --key-label=myecckey --path=$TPM2_PKCS11_STORE)
 popd
 
 auth_myecckey=$(echo "$yaml_myecckey" | grep "object-auth" | cut -d' ' -f2-)
