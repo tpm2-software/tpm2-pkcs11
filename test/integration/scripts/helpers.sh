@@ -31,6 +31,9 @@ setup_asan() {
   if [ ! -f "$p" ]; then
     p="/usr/lib64/clang/$clang_version/lib/linux/libclang_rt.asan-$(arch).so"
   fi
+  if [ ! -f "$p" ]; then
+    p="/usr/lib64/clang/$maj/lib/linux/libclang_rt.asan-$(arch).so"
+  fi
 
   if [ ! -f "$p" ]; then
     echo "Couldn't find libasan.so"
