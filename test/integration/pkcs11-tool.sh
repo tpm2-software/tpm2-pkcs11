@@ -23,7 +23,7 @@ pkcs11_tool() {
 }
 
 echo "Finding cert"
-id=$(pkcs11_tool --label label --list-objects --type cert | grep 'ID:' | head -n 1 | cut -d':' -f2- | sed s/' '//g)
+id=$(pkcs11_tool --token-label label --list-objects --type cert | grep 'ID:' | head -n 1 | cut -d':' -f2- | sed s/' '//g)
 echo "Found cert: $id"
 
 # a public key with a cert label should exist
