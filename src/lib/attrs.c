@@ -677,6 +677,42 @@ error:
     return rv;
 }
 
+static CK_RV rsa_gen_mechs(attr_list *new_pub_attrs, attr_list *new_priv_attrs) {
+
+    /* XXX These are hardcoded for now */
+    CK_MECHANISM_TYPE t[] = {
+        CKM_RSA_X_509,
+        CKM_RSA_PKCS_OAEP,
+        CKM_RSA_PKCS,
+        CKM_SHA1_RSA_PKCS,
+        CKM_SHA256_RSA_PKCS,
+        CKM_SHA384_RSA_PKCS,
+        CKM_SHA512_RSA_PKCS,
+        CKM_RSA_PKCS_PSS,
+        CKM_SHA1_RSA_PKCS_PSS,
+        CKM_SHA256_RSA_PKCS_PSS,
+        CKM_SHA384_RSA_PKCS_PSS,
+        CKM_SHA512_RSA_PKCS_PSS,
+    };
+
+    if (new_pub_attrs) {
+        bool r = attr_list_add_int_seq(new_pub_attrs, CKA_ALLOWED_MECHANISMS,
+                (CK_BYTE_PTR)&t, sizeof(t));
+        goto_error_false(r);
+    }
+
+    if (new_priv_attrs) {
+        bool r = attr_list_add_int_seq(new_priv_attrs, CKA_ALLOWED_MECHANISMS,
+            (CK_BYTE_PTR)&t, sizeof(t));
+        goto_error_false(r);
+    }
+
+    return CKR_OK;
+
+error:
+    return CKR_GENERAL_ERROR;
+}
+
 CK_RV attr_common_add_RSA_publickey(attr_list **public_attrs) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -700,6 +736,13 @@ CK_RV attr_common_add_RSA_publickey(attr_list **public_attrs) {
         safe_mul(modulus_bits, a->ulValueLen, 8);
         bool r = attr_list_add_int(new_attrs, CKA_MODULUS_BITS, modulus_bits);
         goto_error_false(r);
+    }
+
+    /* populate CKA_ALLOWED_MECHANISMS */
+    rv = rsa_gen_mechs(*public_attrs, NULL);
+    if (rv != CKR_OK) {
+        LOGE("Could not add RSA public mechanisms");
+        goto error;
     }
 
     *public_attrs = attr_list_append_attrs(*public_attrs, &new_attrs);
@@ -875,42 +918,6 @@ static CK_RV attr_common_add_EC_privatekey(attr_list **private_attrs) {
     }
 
     return attr_common_add_privatekey(private_attrs);
-}
-
-CK_RV rsa_gen_mechs(attr_list *new_pub_attrs, attr_list *new_priv_attrs) {
-
-    /* XXX These are hardcoded for now */
-    CK_MECHANISM_TYPE t[] = {
-        CKM_RSA_X_509,
-        CKM_RSA_PKCS_OAEP,
-        CKM_RSA_PKCS,
-        CKM_SHA1_RSA_PKCS,
-        CKM_SHA256_RSA_PKCS,
-        CKM_SHA384_RSA_PKCS,
-        CKM_SHA512_RSA_PKCS,
-        CKM_RSA_PKCS_PSS,
-        CKM_SHA1_RSA_PKCS_PSS,
-        CKM_SHA256_RSA_PKCS_PSS,
-        CKM_SHA384_RSA_PKCS_PSS,
-        CKM_SHA512_RSA_PKCS_PSS,
-    };
-
-    if (new_pub_attrs) {
-        bool r = attr_list_add_int_seq(new_pub_attrs, CKA_ALLOWED_MECHANISMS,
-                (CK_BYTE_PTR)&t, sizeof(t));
-        goto_error_false(r);
-    }
-
-    if (new_priv_attrs) {
-        bool r = attr_list_add_int_seq(new_priv_attrs, CKA_ALLOWED_MECHANISMS,
-            (CK_BYTE_PTR)&t, sizeof(t));
-        goto_error_false(r);
-    }
-
-    return CKR_OK;
-
-error:
-    return CKR_GENERAL_ERROR;
 }
 
 /*
