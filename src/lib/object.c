@@ -984,13 +984,6 @@ static CK_RV handle_rsa_public(CK_ATTRIBUTE_PTR templ, CK_ULONG count, attr_list
         }
     }
 
-    /* populate CKA_ALLOWED_MECHANISMS */
-    rv = rsa_gen_mechs(tmp_attrs, NULL);
-    if (rv != CKR_OK) {
-        LOGE("Could not add RSA public mechanisms");
-        goto out;
-    }
-
     /* populate missing RSA public key attributes */
     rv = attr_common_add_RSA_publickey(&tmp_attrs);
     if (rv != CKR_OK) {
