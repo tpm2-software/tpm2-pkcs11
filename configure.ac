@@ -86,6 +86,7 @@ AS_IF([test "$do_pycheck" == "yes"], [
   AX_PYTHON_MODULE([cryptography], [fatal], [$PYTHON])
   AX_PYTHON_MODULE([yaml], [fatal], [$PYTHON])
   AX_PYTHON_MODULE([tpm2_pytss], [fatal], $[PYTHON])
+  AX_PYTHON_MODULE([pkcs11], [fatal], $[PYTHON])
 ])
 
 AC_DEFUN([do_esapi_manage_flags], [
