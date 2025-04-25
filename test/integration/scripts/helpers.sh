@@ -7,41 +7,55 @@ setup_asan() {
   fi
 
   # To get line numbers set up the asan symbolizer
-  clang_version=`$CC --version | head -n 1 | cut -d\  -f 3-3 | cut -d\. -f 1-3 | cut -d- -f 1-1`
+  clang_version=$("$CC" --version | head -n 1 | cut -d' ' -f 3 | cut -d'.' -f 1-3 | cut -d'-' -f 1 )
   # Sometimes the version string has an Ubuntu on the front of it and the field
   # location changes
-  if [ $clang_version == "version" ]; then
-    clang_version=`$CC --version | head -n 1 | cut -d\  -f 4-4 | cut -d\. -f 1-3`
+  if [ "$clang_version" == "version" ]; then
+    clang_version=$("$CC" --version | head -n 1 | cut -d' ' -f 4 | cut -d'.' -f 1-3 )
   fi
 
-  # sometimes thier is an rc version
+  # Sometimes there is an rc version
   if grep -qi '\-+rc' <<< "$clang_version"; then
-    clang_version=$(echo "$clang_version" | cut -d'-' -f1-1)
+    clang_version=$( echo "$clang_version" | cut -d'-' -f 1 )
   fi
 
   echo "Detected clang version: $clang_version"
-  minor_maj=`echo "$clang_version" | cut -d\. -f 1-2`
-  maj=`echo "$clang_version" | cut -d\. -f 1-1`
+  minor_maj=$(echo "$clang_version" | cut -d'.' -f 1-2 )
+  maj=$(echo "$clang_version" | cut -d'.' -f 1 )
 
-  p="/usr/lib/llvm-$minor_maj/lib/clang/$clang_version/lib/linux/libclang_rt.asan-$(arch).so"
-  echo "Looking for libasan to LD_PRELOAD at: $p"
-  if [ ! -f "$p" ]; then
-    p="/usr/lib/llvm-$maj/lib/clang/$clang_version/lib/linux/libclang_rt.asan-$(arch).so"
-  fi
-  if [ ! -f "$p" ]; then
-    p="/usr/lib64/clang/$clang_version/lib/linux/libclang_rt.asan-$(arch).so"
-  fi
-  if [ ! -f "$p" ]; then
-    p="/usr/lib64/clang/$maj/lib/linux/libclang_rt.asan-$(arch).so"
+  resource_dir="$(${CC} --print-resource-dir)"
+  search_dir="${resource_dir}/lib"
+
+  # Find the ASan runtime by first looking into the resource directory
+  found=$(find "${search_dir}" -name "libclang_rt.asan*.so" 2>/dev/null | head -n 1)
+
+  # If not found in resource dir, try some common fallback locations
+  if [ -z "${found}" ]; then
+    possible_dirs=(
+      "/usr/lib/llvm-${minor_maj}/lib/clang/${clang_version}"
+      "/usr/lib/llvm-${maj}/lib/clang"
+      "/usr/lib/clang/${clang_version}/lib"
+      "/usr/lib64/clang/${clang_version}/lib"
+      "/usr/lib/llvm*/lib/clang"
+      "/usr/local/lib/clang"
+    )
+
+    for dir in "${possible_dirs[@]}"; do
+      found=$(find "${dir}" -name "libclang_rt.asan*.so" 2>/dev/null | head -n 1)
+      if [ -n "${FOUND}" ]; then
+        break
+      fi
+    done
   fi
 
-  if [ ! -f "$p" ]; then
-    echo "Couldn't find libasan.so"
-    return -1
+  if [ -n "${found}" ]; then
+    echo "libasan found: ${found}"
+  else
+    echo "libclang_rt.asan.so not found"
+    exit 1
   fi
-  echo "Found libasan at: $p"
 
-  export LD_PRELOAD="$p"
+  export LD_PRELOAD="${found}"
   echo "export LD_PRELOAD=\"$LD_PRELOAD\""
   export ASAN_OPTIONS=detect_leaks=0
   echo "turning off asan detection for running commands..."
