@@ -229,7 +229,7 @@ static CK_RV get_EC_evp_pubkey(CK_ATTRIBUTE_PTR ecparams, CK_ATTRIBUTE_PTR ecpoi
     }
 
 out:
-	OPENSSL_free(os);
+	ASN1_OCTET_STRING_free(os);
 	OSSL_PARAM_BLD_free(bld);
 	OSSL_PARAM_free(params);
 	EVP_PKEY_CTX_free(evp_ctx);
