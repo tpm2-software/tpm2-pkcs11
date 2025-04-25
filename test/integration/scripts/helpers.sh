@@ -2,7 +2,7 @@
 #!/usr/bin/env bash
 
 setup_asan() {
-  if [ "$ASAN_ENABLED" != "true" ]; then
+  if [ -z "$ASAN_ENABLED" ]; then
     return 0
   fi
 
