@@ -336,6 +336,13 @@ CK_RV object_find_init(session_ctx *ctx, CK_ATTRIBUTE_PTR templ, CK_ULONG count)
     token *tok = session_ctx_get_token(ctx);
     assert(tok);
 
+    session_ctx_delete_tobject_list(ctx);
+
+    int rc = init_tobjects(tok);
+    if (rc != SQLITE_OK) {
+       goto out;
+    }
+
     if (!tok->tobjects.head) {
         LOGV("Token %i contains no objects.", tok->id);
         goto empty;
