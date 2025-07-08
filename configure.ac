@@ -519,8 +519,7 @@ AS_IF([test x"$enable_hardening" != xno], [
   add_hardened_c_flag([-Wextra])
   AS_IF([test "x$ax_is_release" = "xno"], [add_hardened_c_flag([-Werror])])
 
-  add_hardened_c_flag([-Wformat])
-  add_hardened_c_flag([-Wformat-security])
+  add_hardened_c_flag([-Wformat -Wformat-security])
   add_hardened_c_flag([-Wstack-protector])
   add_hardened_c_flag([-fstack-protector-all])
   add_hardened_c_flag([-Wstrict-overflow=5])
