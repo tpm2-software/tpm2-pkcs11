@@ -33,7 +33,7 @@ If no existing store is found, it will:
    On failure, it continues to number 2.
 2. `/etc/tpm2_pkcs11` or whatever was configured at build time with --with-storedir.
 3. if `$HOME` is set, attempts to use that path directory. If the directory doesn't exist it will be created.
-   This almost always exceeds for most users, so this ends up as the default store most of the time. If it fails,
+   This almost always succeeds for most users, so this ends up as the default store most of the time. If it fails,
    continues on to number 4.
 4. Use the Current Working Directory.
 
