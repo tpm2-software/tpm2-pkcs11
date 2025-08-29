@@ -3,7 +3,7 @@
 In order to use the tpm2-pkcs11 library, you need to initialize a store. The store contains
 metadata for the library on what tokens and subordinate objects to expose.
 
-PKCS#11 was designed to work with smart cards, and has a few concepts that are pivital to understanding how to use it.
+PKCS#11 was designed to work with smart cards, and has a few concepts that are pivotal to understanding how to use it.
 The first concept is a *slot*. The slot, would be the physical smart card reader slot you would insert the smart card into.
 Then, for each slot, you can have a smart card inserted or not. So you could have N reader slots with X smart cards inserted
 where X <= N. For each smart card in X, it provides a *token*. The token is the actual device the PKCS#11 calls operate on.
