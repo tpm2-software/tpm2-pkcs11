@@ -72,6 +72,15 @@ rsa_verify() {
   echo "RSA signature tested"
 }
 
+# For OpenSSL 3 environments, set provider modules path once
+if [ "$OSSL3_DETECTED" -ne "0" ]; then
+  if ! openssl list -providers 2>/dev/null | grep -q tpm2; then
+    for _moddir in /usr/lib64/ossl-modules /usr/lib/ossl-modules; do
+      if [ -d "$_moddir" ]; then export OPENSSL_MODULES="$_moddir"; break; fi
+    done
+  fi
+fi
+
 export TPM2_PKCS11_STORE="$tempdir"
 
 echo "TPM2_PKCS11_STORE=$TPM2_PKCS11_STORE"
@@ -98,7 +107,8 @@ if [ "$OSSL3_DETECTED" -eq "0" ]; then
   fi
   tpm2tss_genkey -P"$handle" -a rsa -s 2048 "$tempdir/tss2-rsa-2048.pem"
 else
-  openssl genpkey -provider tpm2 -algorithm RSA -pkeyopt "parent:$handle" -pkeyopt bits:2048 -out "$tempdir/tss2-rsa-2048.pem"
+  openssl genpkey -provider tpm2 -provider default -propquery 'provider=tpm2' \
+    -algorithm RSA -pkeyopt "parent:$handle" -pkeyopt bits:2048 -out "$tempdir/tss2-rsa-2048.pem"
 fi
 
 # Link that key into the token
@@ -118,7 +128,8 @@ tpm2_ptool addtoken --pid="$pid" --label=linktokentransient --sopin=mysopin --us
 if [ "$OSSL3_DETECTED" -eq "0" ]; then
   tpm2tss_genkey "$tempdir/tss2-rsa-2048-transient.pem"
 else
-  openssl genpkey -provider tpm2 -algorithm RSA -pkeyopt bits:2048 -out "$tempdir/tss2-rsa-2048-transient.pem"
+  openssl genpkey -provider tpm2 -provider default -propquery 'provider=tpm2' \
+    -algorithm RSA -pkeyopt bits:2048 -out "$tempdir/tss2-rsa-2048-transient.pem"
 fi
 
 # Link that key into the token
@@ -141,7 +152,8 @@ tpm2_ptool addtoken --hierarchy-auth=newpass --pid="$pid" --label=linktokentrans
 if [ "$OSSL3_DETECTED" -eq "0" ]; then
   tpm2tss_genkey -o newpass "$tempdir/tss2-rsa-2048-transient.pem"
 else
-  openssl genpkey -provider tpm2 -algorithm RSA -pkeyopt "parent-auth:newpass" -pkeyopt bits:2048 -out "$tempdir/tss2-rsa-2048-transient.pem"
+  openssl genpkey -provider tpm2 -provider default -propquery 'provider=tpm2' \
+    -algorithm RSA -pkeyopt "parent-auth:newpass" -pkeyopt bits:2048 -out "$tempdir/tss2-rsa-2048-transient.pem"
 fi
 
 # Link that key into the token
