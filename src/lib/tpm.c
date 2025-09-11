@@ -2419,20 +2419,17 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
      */
     TPM2B_IV current_iv = iv ? *iv : empty_iv;
 
-    CK_ULONG offset = 0;
+    size_t offset = 0;
+    size_t remaining = (size_t)data_in_len;
 
-    while (offset < data_in_len) {
+    while (remaining != 0) {
 
-        TPM2B_MAX_BUFFER tpm_data_in = { 0 };
-
-        assert(offset <= data_in_len);
-
-        CK_ULONG data_left = data_in_len - offset;
-        assert(data_left != 0);
+        TPM2B_MAX_BUFFER tpm_data_in = (TPM2B_MAX_BUFFER){ 0 };
 
         /* How much can we encrypt in this part, bounded by TPM data structure sizes */
-        CK_ULONG part_len = data_left > sizeof(tpm_data_in.buffer) ?
-                sizeof(tpm_data_in.buffer) : data_left;
+        size_t part_len_sz = remaining > sizeof(tpm_data_in.buffer) ?
+                sizeof(tpm_data_in.buffer) : remaining;
+        CK_ULONG part_len = (CK_ULONG)part_len_sz;
 
         /* copy it into the structure and set size */
         tpm_data_in.size = part_len;
@@ -2448,8 +2445,49 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
             return CKR_GENERAL_ERROR;
         }
 
-        /* shuffle IVs */
-        current_iv = *tpm_iv_out;
+        /* shuffle/update IV for next iteration */
+        /*
+         * For CBC and CTR, derive the next IV locally to ensure
+         * consistent chaining semantics across TPM stacks.
+         * - CBC encrypt: next IV = last output block
+         * - CBC decrypt: next IV = last input block
+         * - CTR: increment 128-bit counter by number of 16-byte blocks
+         * For other modes (e.g., CFB/ECB), if TPM provided an IV, use it.
+         */
+        if (mode == TPM2_ALG_CBC) {
+            const CK_BYTE *src = NULL;
+            /* part_len should always be a multiple of 16 for CBC/CTR */
+            if (part_len >= 16) {
+                if (!is_decrypt) {
+                    /* encrypt: use last output block */
+                    src = &tpm_data_out->buffer[part_len - 16];
+                } else {
+                    /* decrypt: use last input block */
+                    src = &tpm_data_in.buffer[part_len - 16];
+                }
+                current_iv.size = 16;
+                memcpy(current_iv.buffer, src, 16);
+            }
+        } else if (mode == TPM2_ALG_CTR) {
+            /* For CTR, increment the 128-bit counter by blocks processed */
+            uint32_t blocks = part_len / 16;
+            if (blocks) {
+                size_t i = sizeof(current_iv.buffer);
+                uint32_t carry = blocks;
+                while (i > 0 && carry) {
+                    i--;
+                    unsigned int sum = (unsigned int)current_iv.buffer[i] + (carry & 0xFFu);
+                    current_iv.buffer[i] = (CK_BYTE)(sum & 0xFFu);
+                    carry = (sum >> 8) + (carry >> 8);
+                }
+                current_iv.size = (uint16_t)sizeof(current_iv.buffer);
+            }
+        } else {
+            /* ECB/CFB or other modes: prefer TPM-provided IV if available */
+            if (tpm_iv_out && tpm_iv_out->size) {
+                current_iv = *tpm_iv_out;
+            }
+        }
         Esys_Free(tpm_iv_out);
         tpm_iv_out = NULL;
 
@@ -2459,11 +2497,12 @@ static CK_RV encrypt_decrypt(tpm_ctx *ctx, uint32_t handle, twist objauth, TPMI_
         Esys_Free(tpm_data_out);
         tpm_data_out = NULL;
 
-        /* update the offset for the next go around */
-        offset += part_len;
+        /* update the offset and remaining for the next go around */
+        offset += part_len_sz;
+        remaining -= part_len_sz;
     }
 
-    assert(offset == data_in_len);
+    assert(offset == (size_t)data_in_len);
 
     /* update the operations IV */
     *iv = current_iv;
