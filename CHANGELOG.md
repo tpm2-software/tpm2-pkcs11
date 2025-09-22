@@ -6,18 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.9.2-rc0] - 2025-09-13
 ### Fixed:
-- tpm2\_ptool destroy removal error on persistent pobjects.
+- Fix tpm2\_ptool destroy command failures.
 - Warning "UserWarning: Unknown distribution option: 'tests\_require'" from setup.py.
 - Missing SHA1-RSA-PKCS from CKM\_ALLOWED\_MECHANISMS.
 - In tests requiring Python, don't override HOME as it may be needed for user installed packages.
-- Certificate finding login in pkcs11-tool usage where `--label` was used instead of  `--token-label`.
-- Configure Fix detection of javac.
-- Configure Fix detection of pkcs11 python module.
+- Certificate finding logic in pkcs11-tool usage where `--label` was used instead of `--token-label`.
+- Configure: Fix detection of javac.
+- Configure: Fix detection of pkcs11 python module.
 - Fix incorrect logging statement in create\_pkcs\_store.sh.
 - Fix links in documentation.
-- Fix OpenSuse Leap CI Builds.
-- Fix improper handling chunks across IV multi part handling.
+- Fix OpenSuse Leap CI builds.
+- Fix improper handling of chunks across IV multi-part handling.
 - Fix memory leak.
+
+### Added
+- Add support for importing persistent TPM2 keys with tpm2\_ptool.
 
 ## [1.9.1] - 2024-09-23
 ### Fixed
