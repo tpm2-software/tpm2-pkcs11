@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 Starting with release 1.8.0, The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.9.2-rc0] - 2025-09-13
+## [1.9.2] - 2025-09-29
 ### Fixed:
 - Fix tpm2\_ptool destroy command failures.
 - Warning "UserWarning: Unknown distribution option: 'tests\_require'" from setup.py.
