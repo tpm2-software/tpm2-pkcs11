@@ -84,7 +84,7 @@ class Tpm2(object):
         _, stderr = p.communicate()
         if (p.wait()):
             raise RuntimeError("Could not execute tpm2_createprimary: %s" %
-                               stderr)
+                               stderr.decode())
         return ctx
 
     def evictcontrol(self, hierarchyauth, ctx, handle=None):
@@ -103,13 +103,12 @@ class Tpm2(object):
         stdout, stderr = p.communicate()
         if (p.wait()):
             raise RuntimeError("Could not execute tpm2_evictcontrol: %s" %
-                               stderr)
+                               stderr.decode())
         return tr_file
 
     def evictcontrol_remove(self, hierarchyauth, ctx, handle=None):
 
-        # Only provide persistent handle when removing 
-        # persistent objects
+        # Only provide persistent handle when removing persistent objects
         cmd = ['tpm2_evictcontrol', '-c', str(ctx)]
 
         if hierarchyauth and len(hierarchyauth) > 0:
@@ -122,7 +121,7 @@ class Tpm2(object):
         stdout, stderr = p.communicate()
         if (p.wait()):
             raise RuntimeError("Could not execute tpm2_evictcontrol: %s" %
-                               stderr)
+                               stderr.decode())
         return stdout
 
     def readpublic(self, handle, get_tr_file=True, pub_blob_path=None):
@@ -141,7 +140,7 @@ class Tpm2(object):
         stdout, stderr = p.communicate()
         if (p.wait()):
             raise RuntimeError("Could not execute tpm2_readpublic: %s" %
-                               stderr)
+                               stderr.decode())
         return (stdout, tr_file if get_tr_file else None)
 
     def load(self, pctx, pauth, priv, pub):
@@ -174,7 +173,7 @@ class Tpm2(object):
         _, stderr = p.communicate()
         rc = p.wait()
         if rc:
-            raise RuntimeError("Could not execute tpm2_load: %s" % stderr)
+            raise RuntimeError("Could not execute tpm2_load: %s" % stderr.decode())
         return ctx
 
     def unseal(self, ctx, auth):
@@ -185,7 +184,7 @@ class Tpm2(object):
         stdout, stderr = p.communicate()
         rc = p.wait()
         if rc:
-            raise RuntimeError("Could not execute tpm2_unseal: %s" % stderr)
+            raise RuntimeError("Could not execute tpm2_unseal: %s" % stderr.decode())
         return stdout
 
     def _encryptdecrypt(self, ctx, auth, data, decrypt=False):
@@ -200,7 +199,7 @@ class Tpm2(object):
         rc = p.wait()
         if rc:
             raise RuntimeError("Could not execute tpm2_encryptdecrypt: %s" %
-                               stderr)
+                               stderr.decode())
         return stdout
 
     def encrypt(self, ctx, auth, data):
@@ -246,7 +245,7 @@ class Tpm2(object):
             os.remove(pub)
             os.remove(priv)
             raise RuntimeError("Could not execute tpm2_create: %s" %
-                               str(stderr))
+                               stderr.decode())
 
         return priv, pub, stdout
 
@@ -258,7 +257,7 @@ class Tpm2(object):
         stdout, stderr = p.communicate()
         rc = p.wait()
         if rc:
-            raise RuntimeError("Could not execute tpm2_getcap: %s" % stderr)
+            raise RuntimeError("Could not execute tpm2_getcap: %s" % stderr.decode())
         return stdout
 
     def importkey(self,
@@ -373,7 +372,7 @@ class Tpm2(object):
             os.remove(priv)
             print("command: %s" % str(" ".join(cmd)))
             raise RuntimeError("Could not execute tpm2_import: %s" %
-                               stderr)
+                               stderr.decode())
 
         return priv, pub, stdout
 
@@ -397,7 +396,7 @@ class Tpm2(object):
         _, stderr = p.communicate()
         rc = p.wait()
         if rc:
-            raise RuntimeError("Could not execute tpm2_changeauth: %s" % stderr)
+            raise RuntimeError("Could not execute tpm2_changeauth: %s" % stderr.decode())
 
         return newpriv
 
@@ -423,7 +422,7 @@ class Tpm2(object):
         if (rc != 0):
             print("command: %s" % str(" ".join(cmd)))
             raise RuntimeError("Could not execute tpm2_import: %s" %
-                               str(stderr))
+                               stderr.decode())
         data = open(sig, "rb").read()
         os.unlink(sig)
         return data
