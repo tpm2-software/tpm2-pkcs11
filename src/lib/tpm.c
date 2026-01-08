@@ -4020,6 +4020,7 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
         if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA_SHA384);
         if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA_SHA512);
 
+        if_add_mech(algs, TPM2_ALG_ECDH, CKM_ECDH1_DERIVE);
     }
 
     /* AES */
