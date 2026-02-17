@@ -573,6 +573,11 @@ class LinkCommand(NewKeyCommandBase):
             default='',
             help='The auth value for the key to link.\n'
         )
+        group_parser.add_argument(
+            '--policy',
+            default=None,
+            help='Signing policy (only "commandcode:sign,authvalue" is supported for now).\n'
+        )
 
     def new_key_init(self, label, sopin, userpin, hierarchyauth, pobj, sealobjects, tpm2, d):
 
@@ -711,13 +716,14 @@ class LinkCommand(NewKeyCommandBase):
         sys.exit("Expected one persistent handle or one or two keyblobs, got: {}".format(len(keypaths)))
 
     def get_extra_privattrs(self, keypaths):
+        extra_attrs = {}
         if len(keypaths) == 1 and LinkCommand.is_persistent_handle(keypaths[0]):
             handle = int(keypaths[0], 16)
             serialized_tr = get_serialized_tr(handle)
-            extra_attrs = { CKA_TPM2_SERIALIZED_TR: serialized_tr }
-            return extra_attrs
-        else:
-            return {}
+            extra_attrs[CKA_TPM2_SERIALIZED_TR] = serialized_tr
+        if self._policy:
+            extra_attrs[CKA_TPM2_POLICY] = binascii.hexlify(self._policy.encode()).decode()
+        return extra_attrs
 
     def is_persistent_handle(str):
         try:
@@ -728,6 +734,7 @@ class LinkCommand(NewKeyCommandBase):
 
     def __call__(self, args):
         self._auth = args['auth'] if 'auth' in args else None
+        self._policy = args.get('policy')
         objects = super(LinkCommand, self).__call__(args)
         NewKeyCommandBase.output(objects, 'link')
 

@@ -1407,6 +1407,57 @@ out:
     return rv;
 }
 
+static CK_RV create_policy_session(ESYS_CONTEXT *ectx, const char *policy, ESYS_TR *policy_rv) {
+    /*
+     * Currently this only supports the policy
+     *   policyCommandCode(TPM2_CC_Sign) + policyAuthValue
+     * identified by the string "commandcode:sign,authvalue"
+     * stored as CKA_TPM2_POLICY in the object attributes.
+     * This can be extended in the future with more specifiers
+     * and use of parsing to handle them here dynamically.
+     */
+
+    if (!policy || strcmp(policy, "commandcode:sign,authvalue") != 0) {
+        *policy_rv = ESYS_TR_NONE;
+        return CKR_OK;
+    }
+
+    ESYS_TR policy_session = ESYS_TR_NONE;
+    TPMT_SYM_DEF symmetric = { .algorithm = TPM2_ALG_NULL };
+
+    TSS2_RC rc = Esys_StartAuthSession(ectx,
+            ESYS_TR_NONE, ESYS_TR_NONE,
+            ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+            NULL,
+            TPM2_SE_POLICY, &symmetric, TPM2_ALG_SHA256,
+            &policy_session);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Esys_StartAuthSession(policy): %s", Tss2_RC_Decode(rc));
+        return CKR_GENERAL_ERROR;
+    }
+
+    rc = Esys_PolicyCommandCode(ectx, policy_session,
+            ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+            TPM2_CC_Sign);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Esys_PolicyCommandCode: %s", Tss2_RC_Decode(rc));
+        Esys_FlushContext(ectx, policy_session);
+        return CKR_GENERAL_ERROR;
+    }
+
+    rc = Esys_PolicyAuthValue(ectx, policy_session,
+            ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Esys_PolicyAuthValue: %s", Tss2_RC_Decode(rc));
+        Esys_FlushContext(ectx, policy_session);
+        return CKR_GENERAL_ERROR;
+    }
+
+    LOGV("Policy session created for sign with authvalue");
+    *policy_rv = policy_session;
+    return CKR_OK;
+}
+
 CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
     assert(opdata);
 
@@ -1461,20 +1512,39 @@ CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_
         }
     }
 
-    flags_turndown(opdata->ctx, TPMA_SESSION_ENCRYPT);
+    /* Only creates a policy session if the object has a policy set */
+    const char *policy = tobj->policy ? (const char *)tobj->policy : NULL;
+    ESYS_TR policy_session = ESYS_TR_NONE;
+    CK_RV rc = create_policy_session(ectx, policy, &policy_session);
+    if (rc != CKR_OK) {
+        return rc;
+    }
+
+    bool use_policy = (policy_session != ESYS_TR_NONE);
+    ESYS_TR sign_session = use_policy ? policy_session : session;
+
+    if (!use_policy) {
+        flags_turndown(opdata->ctx, TPMA_SESSION_ENCRYPT);
+    }
 
     TPMT_SIGNATURE *signature = NULL;
     TSS2_RC rval = Esys_Sign(
             ectx,
             handle,
-            session,
+            sign_session,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             &tdigest,
             scheme,
             &validation,
             &signature);
-    flags_restore(opdata->ctx);
+
+    if (use_policy) {
+        Esys_FlushContext(ectx, policy_session);
+    } else {
+        flags_restore(opdata->ctx);
+    }
+
     if (rval != TPM2_RC_SUCCESS) {
         LOGE("Esys_Sign: %s", Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
