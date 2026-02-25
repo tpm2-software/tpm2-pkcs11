@@ -30,6 +30,7 @@ from .utils import dump_tsspem
 from .utils import dump_pubpem
 from .utils import get_serialized_tr
 from .utils import validate_policy
+from .utils import calculate_policy_digest
 
 from .tpm2 import Tpm2
 
@@ -209,7 +210,7 @@ class NewKeyCommandBase(Command):
                     pobj, sealobjects, tpm2, d)
 
                 tertiarypriv, tertiarypub, tertiarypubdata = self.new_key_create(
-                    pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d)
+                    pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d, policy=policy)
 
                 # handle options that can add additional attributes
                 always_auth = args['attr_always_authenticate']
@@ -254,7 +255,7 @@ class ImportCommand(NewKeyCommandBase):
             required=False)
 
     # Imports a new key
-    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d):
+    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d, policy=None):
 
         pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
 
@@ -265,8 +266,20 @@ class ImportCommand(NewKeyCommandBase):
             objattrs = 'userwithauth|sign|decrypt'
             alg = 'keyedhash'
 
+        policy_digest = None
+        if policy is not None:
+            policy_digest = calculate_policy_digest(policy, tpm2.tmpdir)
+            if objattrs is None:
+                # Default attributes for tpm2_import usually include userwithauth
+                objattrs = "fixedtpm|fixedparent|sensitivedataorigin|decrypt|sign"
+            else:
+                objattrs = objattrs.replace('userwithauth', '')
+                objattrs = objattrs.replace('||', '|')
+                objattrs = objattrs.strip('|')
+
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.importkey(
-            pobj_handle, pobj['objauth'], objauth, privkey=privkey, alg=alg, passin=passin, objattrs=objattrs)
+            pobj_handle, pobj['objauth'], objauth, privkey=privkey, alg=alg, passin=passin,
+            objattrs=objattrs, policy=policy_digest)
 
         # We have no way of knowing the keylength of an hmac key
         if alg and alg.startswith('hmac') or alg == 'keyedhash':
@@ -295,12 +308,21 @@ class AddKeyCommand(NewKeyCommandBase):
             required=True)
 
     # Creates a new key
-    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d):
+    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d, policy=None):
 
         pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
 
+        objattrs = None
+        policy_digest = None
+        if policy is not None:
+            policy_digest = calculate_policy_digest(policy, tpm2.tmpdir)
+            # Default attributes for tpm2_create usually include userwithauth
+            # We must explicitly set them WITHOUT userwithauth
+            objattrs = "fixedtpm|fixedparent|sensitivedataorigin|noda|decrypt|sign"
+
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.create(
-            pobj_handle, pobj['objauth'], objauth, alg=alg)
+            pobj_handle, pobj['objauth'], objauth, alg=alg, objattrs=objattrs,
+            policy=policy_digest)
 
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 
@@ -764,7 +786,7 @@ class LinkCommand(NewKeyCommandBase):
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 
     # Links a new key
-    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, keypaths, passin, d):
+    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, keypaths, passin, d, policy=None):
 
         if keypaths is None:
             sys.exit("Keypath must be specified")

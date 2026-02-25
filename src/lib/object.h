@@ -12,6 +12,10 @@
 #include "pkcs11.h"
 #include "twist.h"
 
+#ifdef HAVE_POLICY
+#include <tss2/tss2_policy.h>
+#endif
+
 typedef struct session_ctx session_ctx;
 typedef struct pobject pobject;
 
@@ -42,6 +46,10 @@ struct tobject {
     twist tpm_serialized_tr; /** serialized ESYS_TR **/
 
     bool is_authenticated; /** true if a context specific login has authenticated use of the object */
+
+#ifdef HAVE_POLICY
+    TSS2_POLICY_CTX *policy; /** policy for authorization */
+#endif
 };
 
 tobject *tobject_new(void);

@@ -178,13 +178,23 @@ static CK_RV policy_is_satisfied(tpm_ctx *tctx, tobject *tobj, uint32_t handle) 
         return CKR_GENERAL_ERROR;
     }
 
-    CK_RV rv = tpm2_execute_policy(tctx, policy_ctx, handle);
+    UNUSED(handle);
+
+    CK_RV rv = tpm_auth_session_start(tctx, TPM2_SE_POLICY);
+    if (rv != CKR_OK) {
+         Tss2_PolicyFinalize(&policy_ctx);
+         return rv;
+    }
+
+    rv = tpm2_execute_policy(tctx, policy_ctx);
     if (rv != CKR_OK) {
         LOGE("Could not execute policy.");
         Tss2_PolicyFinalize(&policy_ctx);
+        tpm_auth_session_stop(tctx);
         return CKR_GENERAL_ERROR;
     }
 
+    tpm_auth_session_stop(tctx);
     Tss2_PolicyFinalize(&policy_ctx);
     return CKR_OK;
 #endif

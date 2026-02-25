@@ -78,6 +78,7 @@ AS_IF([test "$have_policy" = "1"], [
     AC_DEFINE([HAVE_POLICY], [1], [Should respect policies and libpolicy is found.])
     AC_SUBST(TSS2_POLICY_DEP, [tss2-policy])
 ])
+AM_CONDITIONAL([HAVE_POLICY], [test "$have_policy" = "1"])
 
 # Macro that checks for existence of a python module
 AC_DEFUN([AC_PYTHON_MODULE],

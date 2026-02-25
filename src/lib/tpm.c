@@ -167,6 +167,7 @@ struct tpm_ctx {
     ESYS_CONTEXT *esys_ctx;
     bool esapi_manage_session_flags;
     ESYS_TR hmac_session;
+    ESYS_TR auth_session;
     TPMA_SESSION old_flags;
     TPMA_SESSION original_flags;
     TPMS_CAPABILITY_DATA *tpms_fixed_property_cache;
@@ -219,6 +220,8 @@ struct tpm_op_data {
         } ecc;
     };
 };
+
+CK_RV tpm_ctx_new_fromtcti(void *tcti, tpm_ctx **tctx);
 
 static inline tpm_op_data *tpm_opdata_new(mdetail *mdtl, CK_MECHANISM_PTR mech) {
     tpm_op_data *opdata = (tpm_op_data *)calloc(1, sizeof(tpm_op_data));
@@ -285,6 +288,10 @@ void tpm_ctx_free(tpm_ctx *ctx) {
 
     if (!ctx) {
         return;
+    }
+
+    if (ctx->auth_session) {
+        (void)tpm_auth_session_stop(ctx);
     }
 
     /* free the per-tpm caches of properties */
@@ -414,6 +421,44 @@ CK_RV tpm_session_stop(tpm_ctx *ctx) {
     }
 
     ctx->hmac_session = 0;
+
+    return CKR_OK;
+}
+
+CK_RV tpm_auth_session_start(tpm_ctx *ctx, TPM2_SE type) {
+
+    assert(!ctx->auth_session);
+
+    TPMT_SYM_DEF symmetric = {
+        .algorithm = TPM2_ALG_AES,
+        .keyBits = { .aes = 128 },
+        .mode = { .aes = TPM2_ALG_CFB }
+    };
+
+    TSS2_RC rc = Esys_StartAuthSession(ctx->esys_ctx, ESYS_TR_NONE, ESYS_TR_NONE,
+            ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, NULL,
+            type, &symmetric, TPM2_ALG_SHA256, &ctx->auth_session);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Esys_StartAuthSession: %s", Tss2_RC_Decode(rc));
+        return CKR_GENERAL_ERROR;
+    }
+
+    return CKR_OK;
+}
+
+CK_RV tpm_auth_session_stop(tpm_ctx *ctx) {
+
+    if (!ctx->auth_session) {
+        return CKR_OK;
+    }
+
+    TSS2_RC rc = Esys_FlushContext(ctx->esys_ctx, ctx->auth_session);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Esys_FlushContext: %s", Tss2_RC_Decode(rc));
+        return CKR_GENERAL_ERROR;
+    }
+
+    ctx->auth_session = 0;
 
     return CKR_OK;
 }
@@ -1451,6 +1496,24 @@ CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_
         return CKR_GENERAL_ERROR;
     }
 
+#ifdef HAVE_POLICY
+    if (opdata->tobj->policy) {
+        CK_RV rv = tpm_auth_session_start(opdata->ctx, TPM2_SE_POLICY);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+
+        rv = tpm2_execute_policy(opdata->ctx, opdata->tobj->policy);
+        if (rv != CKR_OK) {
+            (void)tpm_auth_session_stop(opdata->ctx);
+            return rv;
+        }
+    }
+#endif
+
+    ESYS_TR sh1 = opdata->ctx->auth_session ? opdata->ctx->auth_session : session;
+    ESYS_TR sh2 = opdata->ctx->auth_session ? session : ESYS_TR_NONE;
+
     TPMT_TK_HASHCHECK validation = {
         .tag = TPM2_ST_HASHCHECK,
         .hierarchy = TPM2_RH_NULL,
@@ -1470,8 +1533,8 @@ CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_
     TSS2_RC rval = Esys_Sign(
             ectx,
             handle,
-            session,
-            ESYS_TR_NONE,
+            sh1,
+            sh2,
             ESYS_TR_NONE,
             &tdigest,
             scheme,
@@ -1480,12 +1543,19 @@ CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_
     flags_restore(opdata->ctx);
     if (rval != TPM2_RC_SUCCESS) {
         LOGE("Esys_Sign: %s", Tss2_RC_Decode(rval));
+        if (opdata->ctx->auth_session) {
+            (void)tpm_auth_session_stop(opdata->ctx);
+        }
         return CKR_GENERAL_ERROR;
     }
 
     CK_RV rv = sig_flatten(signature, scheme, sig, siglen);
 
     Esys_Free(signature);
+
+    if (opdata->ctx->auth_session) {
+        (void)tpm_auth_session_stop(opdata->ctx);
+    }
 
     return rv;
 }
@@ -2240,13 +2310,31 @@ CK_RV tpm_rsa_decrypt(tpm_op_data *tpm_enc_data,
         return CKR_GENERAL_ERROR;
     }
 
+#ifdef HAVE_POLICY
+    if (tpm_enc_data->tobj->policy) {
+        rv = tpm_auth_session_start(ctx, TPM2_SE_POLICY);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+
+        rv = tpm2_execute_policy(ctx, tpm_enc_data->tobj->policy);
+        if (rv != CKR_OK) {
+            (void)tpm_auth_session_stop(ctx);
+            return rv;
+        }
+    }
+#endif
+
+    ESYS_TR sh1 = ctx->auth_session ? ctx->auth_session : ctx->hmac_session;
+    ESYS_TR sh2 = ctx->auth_session ? ctx->hmac_session : ESYS_TR_NONE;
+
     TPM2B_PUBLIC_KEY_RSA *tpm_ptext;
 
     TSS2_RC rc = Esys_RSA_Decrypt(
             ctx->esys_ctx,
             handle,
-            ctx->hmac_session,
-            ESYS_TR_NONE,
+            sh1,
+            sh2,
             ESYS_TR_NONE,
             &tpm_ctext,
             scheme,
@@ -2254,6 +2342,9 @@ CK_RV tpm_rsa_decrypt(tpm_op_data *tpm_enc_data,
             &tpm_ptext);
     if (rc != TPM2_RC_SUCCESS) {
         LOGE("Esys_RSA_Decrypt: %s", Tss2_RC_Decode(rc));
+        if (ctx->auth_session) {
+            (void)tpm_auth_session_stop(ctx);
+        }
         return CKR_GENERAL_ERROR;
     }
 
@@ -2276,6 +2367,10 @@ CK_RV tpm_rsa_decrypt(tpm_op_data *tpm_enc_data,
 
 out:
     Esys_Free(tpm_ptext);
+
+    if (ctx->auth_session) {
+        (void)tpm_auth_session_stop(ctx);
+    }
 
     return rv;
 }
@@ -3308,6 +3403,56 @@ static CK_RV handle_sensitive(CK_ATTRIBUTE_PTR attr, void *udata) {
     return handle_extractable_common(attr, false, udata);
 }
 
+static CK_RV handle_policy(CK_ATTRIBUTE_PTR attr, void *udata) {
+
+    tpm_key_data *tpmdat = (tpm_key_data *)udata;
+
+#ifndef HAVE_POLICY
+    UNUSED(attr);
+    UNUSED(tpmdat);
+    LOGW("Policy attribute found, but support for enforcing it wasn't compiled in");
+    return CKR_OK;
+#else
+    TSS2_RC rc;
+    TSS2_POLICY_CTX *policy_ctx = NULL;
+
+    /* attr->pValue is hex-encoded string of JSON policy */
+    twist policy_json = twistbin_new(attr->pValue, attr->ulValueLen);
+    if (!policy_json) {
+        return CKR_HOST_MEMORY;
+    }
+
+    char *json_str = strdup((const char *)policy_json);
+    twist_free(policy_json);
+    if (!json_str) {
+        return CKR_HOST_MEMORY;
+    }
+
+    rc = Tss2_PolicyInit(json_str, TPM2_ALG_SHA256, &policy_ctx);
+    free(json_str);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Tss2_PolicyInit: 0x%x", rc);
+        return CKR_GENERAL_ERROR;
+    }
+
+    TPM2B_DIGEST digest = { .size = sizeof(digest.buffer) };
+    rc = Tss2_PolicyGetCalculatedDigest(policy_ctx, &digest);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("Tss2_PolicyGetCalculatedDigest: 0x%x", rc);
+        Tss2_PolicyFinalize(&policy_ctx);
+        return CKR_GENERAL_ERROR;
+    }
+
+    tpmdat->pub.publicArea.authPolicy = digest;
+    /* remove userwithauth */
+    tpmdat->pub.publicArea.objectAttributes &= ~TPMA_OBJECT_USERWITHAUTH;
+
+    Tss2_PolicyFinalize(&policy_ctx);
+
+    return CKR_OK;
+#endif
+}
+
 static CK_RV handle_key_type(CK_ATTRIBUTE_PTR attr, void *udata) {
 
     tpm_key_data *keydat = (tpm_key_data *)udata;
@@ -3370,6 +3515,7 @@ static const attr_handler tpm_handlers[] = {
     { CKA_SIGN_RECOVER,      generic_bbool_false },
     { CKA_VERIFY_RECOVER,    generic_bbool_false },
     { CKA_DERIVE,            generic_bbool_any },
+    { CKA_TPM2_POLICY_JSON,  handle_policy },
 };
 
 static CK_RV tpm_data_init(
@@ -4100,18 +4246,11 @@ static TSS2_RC tpm2_policy_get_pcr(TSS2_POLICY_PCR_SELECTION *selection,
     return TSS2_RC_SUCCESS;
 }
 
-CK_RV tpm2_execute_policy(tpm_ctx *ctx, TSS2_POLICY_CTX *policy_ctx, uint32_t handle)
+CK_RV tpm2_execute_policy(tpm_ctx *ctx, TSS2_POLICY_CTX *policy_ctx)
 {
 
     check_pointer(ctx);
     check_pointer(policy_ctx);
-    check_num(handle);
-
-    TPMT_SYM_DEF symmetric = {
-        .algorithm = TPM2_ALG_AES,
-        .keyBits = { .aes = 128 },
-        .mode = { .aes = TPM2_ALG_CFB }
-    };
 
     TSS2_POLICY_CALC_CALLBACKS calc_callbacks = {0};
     calc_callbacks.cbpcr = &tpm2_policy_get_pcr;
@@ -4125,30 +4264,10 @@ CK_RV tpm2_execute_policy(tpm_ctx *ctx, TSS2_POLICY_CTX *policy_ctx, uint32_t ha
         return CKR_GENERAL_ERROR;
     }
 
-    /* XXX should we cache the session or running multiple policies is unlikely? */
-    ESYS_TR policy_session = ESYS_TR_NONE;
-    rc = Esys_StartAuthSession(ctx->esys_ctx,
-            handle,
-            handle,
-            ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
-            NULL,
-            TPM2_SE_POLICY, &symmetric, TPM2_ALG_SHA256,
-            &policy_session);
-    if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Esys_StartAuthSession: %s", Tss2_RC_Decode(rc));
-        return CKR_GENERAL_ERROR;
-    }
-
-    TSS2_RC result = Tss2_PolicyExecute(policy_ctx, ctx->esys_ctx, policy_session);
+    TSS2_RC result = Tss2_PolicyExecute(policy_ctx, ctx->esys_ctx, ctx->auth_session);
     if (result != TSS2_RC_SUCCESS) {
         LOGE("Tss2_PolicyExecute: %s:", Tss2_RC_Decode(result));
         /* continue and stop the session */
-    }
-
-    rc = Esys_FlushContext(ctx->esys_ctx, policy_session);
-    if (rc != TSS2_RC_SUCCESS) {
-        LOGE("Esys_FlushContext: %s", Tss2_RC_Decode(rc));
-        return CKR_GENERAL_ERROR;
     }
 
     return result;

@@ -22,6 +22,11 @@ integration_scripts += \
     test/integration/pkcs11-tool-init-fapi.sh.fapi
 endif
 
+if HAVE_POLICY
+integration_scripts += \
+    test/integration/test_policy.sh
+endif
+
 EXTRA_DIST += \
     $(integration_scripts) \
     test/integration/test.h \

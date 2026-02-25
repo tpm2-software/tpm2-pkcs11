@@ -214,7 +214,8 @@ class Tpm2(object):
                objauth=None,
                objattrs=None,
                seal=None,
-               alg=None):
+               alg=None,
+               policy=None):
         # tpm2_create -Q -C context.out -g $gAlg -G $GAlg -u key.pub -r key.priv
         privfd, priv = mkstemp(prefix='', suffix='.priv', dir=self._tmp)
         os.close(privfd)
@@ -237,6 +238,9 @@ class Tpm2(object):
 
         if alg != None:
             cmd.extend(['-G', alg])
+
+        if policy != None:
+            cmd.extend(['-L', policy])
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, stdin=PIPE, env=os.environ)
         stdout, stderr = p.communicate(input=str2bytes(seal))
@@ -268,7 +272,8 @@ class Tpm2(object):
                   objattrs=None,
                   seal=None,
                   alg=None,
-                  passin=None):
+                  passin=None,
+                  policy=None):
 
         if privkey and len(privkey) > 0:
             exists = os.path.isfile(privkey)
@@ -361,6 +366,9 @@ class Tpm2(object):
 
         if passin is not None:
             cmd.extend(['--passin', passin])
+
+        if policy != None:
+            cmd.extend(['-L', policy])
 
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, stdin=PIPE, env=os.environ)
         stdout, stderr = p.communicate(input=seal)
