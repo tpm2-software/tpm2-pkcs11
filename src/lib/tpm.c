@@ -1061,7 +1061,7 @@ twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth) {
 
     t = twistbin_new(unsealed_data->buffer, unsealed_data->size);
 
-    free(unsealed_data);
+    Esys_Free(unsealed_data);
 out:
 
     flags_restore(ctx);
@@ -1559,9 +1559,9 @@ static CK_RV get_oaep_mgf1_alg(tpm_ctx *tpm, uint32_t handle, CK_RSA_PKCS_MGF_TY
         rv = CKR_GENERAL_ERROR;
     }
 
-    free(public);
-    free(name);
-    free(qualified_name);
+    Esys_Free(public);
+    Esys_Free(name);
+    Esys_Free(qualified_name);
 
     return rv;
 }
@@ -2275,7 +2275,7 @@ CK_RV tpm_rsa_decrypt(tpm_op_data *tpm_enc_data,
     rv = CKR_OK;
 
 out:
-    free(tpm_ptext);
+    Esys_Free(tpm_ptext);
 
     return rv;
 }
@@ -2849,13 +2849,13 @@ CK_RV tpm_changeauth(tpm_ctx *ctx, uint32_t parent_handle, uint32_t object_handl
     rval = Tss2_MU_TPM2B_PRIVATE_Marshal(newprivate, serialized,
             sizeof(*newprivate), &offset);
     if (rval != TSS2_RC_SUCCESS) {
-        free(newprivate);
+        Esys_Free(newprivate);
         LOGE("Tss2_MU_TPM2B_PRIVATE_Marshal: %s", Tss2_RC_Decode(rval));
         return CKR_GENERAL_ERROR;
     }
 
     *newblob = twistbin_new(serialized, offset);
-    free(newprivate);
+    Esys_Free(newprivate);
 
     return *newblob ? CKR_OK : CKR_HOST_MEMORY;
 }
@@ -3080,8 +3080,8 @@ out:
         }
     }
 
-    free(newpriv);
-    free(newpub);
+    Esys_Free(newpriv);
+    Esys_Free(newpub);
 
     return rv;
 }
@@ -4087,16 +4087,16 @@ static TSS2_RC tpm2_policy_get_pcr(TSS2_POLICY_PCR_SELECTION *selection,
                  &pcr_values);
     if (rc != TSS2_RC_SUCCESS) {
         LOGE("Esys_PCR_Read: %s:", Tss2_RC_Decode(rc));
-        free(pcr_selection);
-        free(pcr_values);
+        Esys_Free(pcr_selection);
+        Esys_Free(pcr_values);
         return rc;
     }
 
     *out_selection = *pcr_selection;
     *out_digest = *pcr_values;
 
-    free(pcr_selection);
-    free(pcr_values);
+    Esys_Free(pcr_selection);
+    Esys_Free(pcr_values);
     return TSS2_RC_SUCCESS;
 }
 
