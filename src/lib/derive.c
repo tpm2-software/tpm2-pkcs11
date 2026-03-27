@@ -8,6 +8,11 @@
 #include <openssl/ecdsa.h>
 #include <openssl/evp.h>
 
+#if (OPENSSL_VERSION_NUMBER >= 0x30000000)
+#include <openssl/kdf.h>
+#include <openssl/core_names.h>
+#endif
+
 #include "attrs.h"
 #include "backend.h"
 #include "checks.h"
@@ -255,6 +260,47 @@ CK_RV derive(session_ctx* ctx,  CK_MECHANISM_PTR mechanism, /* public EC point *
         shared_secret_attr.ulValueLen = z_point_len;
         shared_secret_attr.pValue = z_point;
     }
+#if (OPENSSL_VERSION_NUMBER >= 0x30000000)
+    else if (mecha_params->kdf == CKD_SHA1_KDF) {
+        /* Use a KDF to generate a shared secret of arbitrary length.
+         * The length is taken from the supplied template. */
+
+        shared_secret_attr.ulValueLen = udata.len;
+        shared_secret_attr.pValue = calloc(shared_secret_attr.ulValueLen,
+                                           sizeof(CK_BYTE));
+
+        EVP_KDF *kdf = EVP_KDF_fetch(NULL, OSSL_KDF_NAME_X963KDF, NULL);
+        EVP_KDF_CTX *kctx = EVP_KDF_CTX_new(kdf);
+
+        OSSL_PARAM params[4], *p = params;
+
+        *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST,
+            "SHA1", 0);
+        *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY,
+            (void *)z_point, z_point_len);
+
+        if (mecha_params->shared_data && mecha_params->shared_data_len) {
+            *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO,
+                (void *)mecha_params->shared_data, mecha_params->shared_data_len);
+        }
+
+        *p = OSSL_PARAM_construct_end();
+
+        if (EVP_KDF_derive(kctx, shared_secret_attr.pValue,
+                           shared_secret_attr.ulValueLen, params) != 1) {
+            rv = CKR_GENERAL_ERROR;
+        }
+
+        free(z_point);
+        EVP_KDF_CTX_free(kctx);
+        EVP_KDF_free(kdf);
+
+        if (rv != CKR_OK) {
+            tobject_user_decrement(tobj);
+            goto out;
+        }
+    }
+#endif
     else {
         free(z_point);
         tobject_user_decrement(tobj);
