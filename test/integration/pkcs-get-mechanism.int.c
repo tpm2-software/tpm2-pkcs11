@@ -61,7 +61,7 @@ void test_get_mechanism_list_good(void **state) {
     // Only return the number of mechanisms
     CK_RV rv = C_GetMechanismList(slot_id, NULL, &mech_cnt);
     assert_int_equal(rv, CKR_OK);
-    assert_in_range(mech_cnt, 1, ARRAY_LEN(mechs));
+    assert_uint_in_range(mech_cnt, 1, ARRAY_LEN(mechs));
 
     // Return List of mechanisms
     rv = C_GetMechanismList(slot_id, mechs, &mech_cnt);
@@ -150,7 +150,7 @@ void test_get_mechanism_info_good(void **state) {
         assert_int_equal(rv, CKR_OK);
 
         assert_int_equal(mech_info.ulMinKeySize, 1024);
-        assert_in_range(mech_info.ulMaxKeySize, 2048, 3072);
+        assert_uint_in_range(mech_info.ulMaxKeySize, 2048, 3072);
         assert_int_equal(mech_info.flags, rsa_mechs[i].flags);
     }
 
@@ -167,8 +167,8 @@ void test_get_mechanism_info_good(void **state) {
         rv = C_GetMechanismInfo(slot_id, ecc_mechs[i].mech, &mech_info);
         assert_int_equal(rv, CKR_OK);
 
-        assert_in_range(mech_info.ulMinKeySize, 192, 256);
-        assert_in_range(mech_info.ulMaxKeySize, 384, 638);
+        assert_uint_in_range(mech_info.ulMinKeySize, 192, 256);
+        assert_uint_in_range(mech_info.ulMaxKeySize, 384, 638);
         assert_int_equal(mech_info.flags, ecc_mechs[i].flags);
     }
 
