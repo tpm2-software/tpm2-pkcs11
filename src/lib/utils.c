@@ -240,7 +240,7 @@ twist aes256_gcm_decrypt(const twist key, const twist objauth) {
 
     char *iv = (char *)objcopy;
 
-    char *tag = strchr(objcopy, ':');
+    char *tag = strchr(iv, ':');
     if (!tag) {
         LOGE("Could not find : to split tag");
         goto out;
