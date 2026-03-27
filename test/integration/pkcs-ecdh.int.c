@@ -226,11 +226,25 @@ static void test_ecc_derive_nist_p256_templ_none(void **state) {
     test_ecc_derive_nist_p256_templ(state, 0, CKD_NULL, 32);
 }
 
+#if (OPENSSL_VERSION_NUMBER >= 0x30000000)
+static void test_ecc_derive_nist_p256_templ_sha1(void **state) {
+    /* The KDF can generate shared secrets of arbitrary length.
+     * Demonstrate that by generating 50 bytes, which is not divisble
+     * by the 32 bytes a P-256 point provides or the 20 byte output
+     * of SHA1 */
+    test_ecc_derive_nist_p256_templ(state, 2, CKD_SHA1_KDF, 50);
+}
+#endif
+
 int main() {
 
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_ecc_derive_nist_p256_templ_none,
                                         test_setup, test_teardown),
+#if (OPENSSL_VERSION_NUMBER >= 0x30000000)
+        cmocka_unit_test_setup_teardown(test_ecc_derive_nist_p256_templ_sha1,
+                                        test_setup, test_teardown),
+#endif
     };
 
     return cmocka_run_group_tests(tests, group_setup, group_teardown);
