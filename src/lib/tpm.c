@@ -4681,9 +4681,9 @@ out:
     return rv;
 }
 
-CK_RV tpm_ec_ecdh1_derive(tpm_ctx *tctx, tobject *tobj, uint8_t *ecc_point,
-                          size_t ecc_point_len, uint8_t **secret,
-                          size_t *secret_len)
+CK_RV tpm_ec_ecdh_zgen(tpm_ctx *tctx, tobject *tobj, uint8_t *ecc_point,
+                       size_t ecc_point_len, uint8_t **secret,
+                       size_t *secret_len)
 {
     TPM2B_ECC_POINT *out_point = NULL;
     TPM2B_ECC_POINT in_point = { };

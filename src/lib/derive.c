@@ -229,10 +229,10 @@ CK_RV derive(session_ctx* ctx,  CK_MECHANISM_PTR mechanism, /* public EC point *
 
     /* Get the shaed secret */
     CK_BYTE* shared_secret = NULL;
-    rv = tpm_ec_ecdh1_derive(tok->tctx, tobj, /* EC private */
-                             mecha_params->public_data, /* EC point */
-                             mecha_params->public_data_len,
-                             &shared_secret, &udata.len);
+    rv = tpm_ec_ecdh_zgen(tok->tctx, tobj, /* EC private */
+                          mecha_params->public_data, /* EC point */
+                          mecha_params->public_data_len,
+                          &shared_secret, &udata.len);
     if (rv != CKR_OK) {
          tobject_user_decrement(tobj);
          return rv;
