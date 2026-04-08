@@ -17,6 +17,7 @@
 #include "session_ctx.h"
 #include "ssl_util.h"
 #include "token.h"
+#include "tpm.h"
 #include "utils.h"
 
 typedef struct tobject_match_list tobject_match_list;
@@ -875,6 +876,26 @@ static bool tobject_is_busy(tobject *tobj) {
     return tobj->active > 0;
 }
 
+static CK_RV flush_tobject_handle(token *tok, tobject *tobj) {
+
+    assert(tok);
+    assert(tobj);
+
+    if (!tobj->tpm_esys_tr || tobj->tpm_serialized_tr) {
+        return CKR_OK;
+    }
+
+    bool result = tpm_flushcontext(tok->tctx, tobj->tpm_esys_tr);
+    if (!result) {
+        LOGE("Could not flush object handle for tobject id: %u", tobj->id);
+        return CKR_GENERAL_ERROR;
+    }
+
+    tobj->tpm_esys_tr = 0;
+
+    return CKR_OK;
+}
+
 CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object) {
 
     token *tok = session_ctx_get_token(ctx);
@@ -889,6 +910,11 @@ CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object) {
     bool is_busy = tobject_is_busy(tobj);
     if (is_busy) {
         return CKR_FUNCTION_FAILED;
+    }
+
+    rv = flush_tobject_handle(tok, tobj);
+    if (rv != CKR_OK) {
+        return rv;
     }
 
     rv = backend_rm_tobject(tok, tobj);
