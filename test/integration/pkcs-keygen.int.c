@@ -1,15 +1,74 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 
-#include <openssl/evp.h>
-#include <openssl/rsa.h>
-#include <openssl/err.h>
+#include <inttypes.h>
 
+#include <openssl/evp.h>
+#include <openssl/err.h>
+#include <openssl/rsa.h>
+
+#include <tss2/tss2_esys.h>
+#include <tss2/tss2_tcti.h>
+#include <tss2/tss2_tctildr.h>
+
+#include "tpm.h"
 #include "test.h"
 
 struct test_info {
     CK_SESSION_HANDLE handle;
     CK_SLOT_ID slot_id;
 };
+
+static ESYS_CONTEXT *_g_ectx = NULL;
+static TSS2_TCTI_CONTEXT *_g_tcti = NULL;
+
+static void get_prop(TPM2_PT needle, UINT32 *value) {
+
+    TPMS_CAPABILITY_DATA *cap_data = NULL;
+    TPMI_YES_NO more_data = TPM2_NO;
+    TSS2_RC rc = Esys_GetCapability(_g_ectx,
+            ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+            TPM2_CAP_TPM_PROPERTIES,
+            TPM2_PT_VAR,
+            TPM2_MAX_TPM_PROPERTIES,
+            &more_data, &cap_data);
+    assert_int_equal(rc, TSS2_RC_SUCCESS);
+
+    UINT32 count = cap_data->data.tpmProperties.count;
+    TPMS_TAGGED_PROPERTY *props = cap_data->data.tpmProperties.tpmProperty;
+
+    UINT32 i;
+    for(i=0; i < count; i++) {
+        if (props[i].property == needle) {
+            *value = props[i].value;
+            Esys_Free(cap_data);
+            return;
+        }
+    }
+
+    Esys_Free(cap_data);
+    fail_msg("No property: %" PRIu32, needle);
+}
+
+static int _group_setup(void **state) {
+
+    const char *config = getenv(TPM2_PKCS11_TCTI);
+
+    TSS2_RC rc = Tss2_TctiLdr_Initialize(config, &_g_tcti);
+    assert_int_equal(rc, TSS2_RC_SUCCESS);
+
+    rc = Esys_Initialize(&_g_ectx, _g_tcti, NULL);
+    assert_int_equal(rc, TSS2_RC_SUCCESS);
+
+    return group_setup(state);
+}
+
+static int _group_teardown(void **state) {
+
+    Esys_Finalize(&_g_ectx);
+    Tss2_TctiLdr_Finalize(&_g_tcti);
+
+    return group_teardown(state);
+}
 
 static test_info *test_info_new(void) {
 
@@ -918,6 +977,37 @@ static CK_RV create_rsa_keypair(CK_SESSION_HANDLE session, CK_UTF8CHAR *label,
             pubkey, privkey);
 }
 
+static void test_destroy_releases_transient_handles(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+    CK_UTF8CHAR label[] = "test_destroy_releases_transient_handles";
+
+    user_login(session);
+
+    UINT32 baseline = 0;
+    get_prop(TPM2_PT_HR_TRANSIENT_AVAIL, &baseline);
+
+    unsigned i;
+    for(i=0; i < 4; i++) {
+        CK_OBJECT_HANDLE pubkey;
+        CK_OBJECT_HANDLE privkey;
+
+        CK_RV rv = create_rsa_keypair(session, label, &pubkey, &privkey);
+        assert_int_equal(rv, CKR_OK);
+
+        rv = C_DestroyObject(session, pubkey);
+        assert_int_equal(rv, CKR_OK);
+
+        rv = C_DestroyObject(session, privkey);
+        assert_int_equal(rv, CKR_OK);
+    }
+
+    UINT32 current = 0;
+    get_prop(TPM2_PT_HR_TRANSIENT_AVAIL, &current);
+    assert_int_equal(current, baseline);
+}
+
 static void test_non_common_template_attrs(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -1316,6 +1406,8 @@ int main() {
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_destroy_rsa_pkcs,
                 test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_destroy_releases_transient_handles,
+                test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_ecc_keygen_p11tool_templ,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_rsa_keygen_p11tool_templ,
@@ -1334,5 +1426,5 @@ int main() {
                 test_setup, test_teardown),
     };
 
-    return cmocka_run_group_tests(tests, group_setup, group_teardown);
+    return cmocka_run_group_tests(tests, _group_setup, _group_teardown);
 }
