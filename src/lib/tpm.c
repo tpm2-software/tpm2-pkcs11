@@ -1037,7 +1037,7 @@ twist tpm_unseal(tpm_ctx *ctx, uint32_t handle, twist objauth) {
 
     bool result = set_esys_auth(ctx->esys_ctx, handle, objauth);
     if (!result) {
-        return false;
+        return NULL;
     }
 
     TPM2B_SENSITIVE_DATA *unsealed_data = NULL;
