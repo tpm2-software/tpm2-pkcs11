@@ -576,7 +576,9 @@ class LinkCommand(NewKeyCommandBase):
         group_parser.add_argument(
             '--policy',
             default=None,
-            help='Signing policy (only "commandcode:sign,authvalue" is supported for now).\n'
+            help='Policy for key operations. Supported values:\n'
+                 '  "commandcode:sign,authvalue" - only allows signing\n'
+                 '  "commandcode:sign+rsa_decrypt,authvalue" - allows signing and RSA decrypt (PKCS7)\n'
         )
 
     def new_key_init(self, label, sopin, userpin, hierarchyauth, pobj, sealobjects, tpm2, d):
