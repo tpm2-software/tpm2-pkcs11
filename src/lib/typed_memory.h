@@ -20,5 +20,6 @@ CK_BYTE type_from_ptr(void *ptr, size_t len);
 CK_RV type_mem_dup(void *in, size_t len, void **dup);
 void type_mem_cpy(void *dest, void *in, size_t size);
 const char *type_to_str(CK_BYTE type);
+CK_BYTE change_type(void *ptr, size_t len, CK_BYTE new_type);
 
 #endif /* SRC_LIB_TYPED_MEMORY_H_ */

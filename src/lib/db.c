@@ -40,7 +40,7 @@
 #define TPM2_PKCS11_STORE_DIR "/etc/tpm2_pkcs11"
 #endif
 
-#define DB_VERSION 8
+#define DB_VERSION 9
 
 #define goto_oom(x, l) if (!x) { LOGE("oom"); goto l; }
 #define goto_error(x, l) if (x) { goto l; }
@@ -2168,17 +2168,7 @@ error:
     return rv;
 }
 
-static CK_RV dbup_handler_from_7_to_8(sqlite3 *updb) {
-
-    /*
-     * Between version 7 and 8 of the DB the following changes need to be made:
-     *
-     * Table tobjects:
-     *
-     * The YAML attributes for a int sequence has to be a yaml sequence.
-     */
-
-
+static CK_RV fix_CKA_ALLOWED_MECHANISMS_emitting(sqlite3 *updb, bool apply_fix) {
     CK_RV rv = CKR_GENERAL_ERROR;
     sqlite3_stmt *stmt = NULL;
 
@@ -2209,6 +2199,14 @@ static CK_RV dbup_handler_from_7_to_8(sqlite3 *updb) {
         if (a) {
             CK_BYTE type = type_from_ptr(a->pValue, a->ulValueLen);
             if (type != TYPE_BYTE_INT_SEQ) {
+                /*
+                 * Fun this PR didn't do anything, as it didn't change the
+                 * type so the emitter didn't know to change the format.
+                 * See PR #808
+                 */
+                if (apply_fix) {
+                    change_type(a->pValue, a->ulValueLen, TYPE_BYTE_INT_SEQ);
+                }
                 rv = _db_update_tobject_attrs(updb, tobj->id, tobj->attrs);
             }
         } else {
@@ -2233,6 +2231,35 @@ out:
 error:
     sqlite3_finalize(stmt);
     return rv;
+
+}
+
+static CK_RV dbup_handler_from_7_to_8(sqlite3 *updb) {
+
+    /*
+     * Between version 7 and 8 of the DB the following changes need to be made:
+     *
+     * Table tobjects:
+     *
+     * The YAML attributes for a int sequence has to be a yaml sequence.
+     */
+
+    return fix_CKA_ALLOWED_MECHANISMS_emitting(updb, false);
+}
+
+static CK_RV dbup_handler_from_8_to_9(sqlite3 *updb) {
+
+    /*
+     * Between version 8 and 9 of the DB the following changes need to be made:
+     *
+     * Table tobjects:
+     *
+     * The YAML attributes for a int sequence has to be a yaml sequence. This is the
+     * same as 7 to 8, but should actually change the type to an integer sequence so
+     * YAML outputs it as a sequence (list) of integers.
+     */
+
+    return fix_CKA_ALLOWED_MECHANISMS_emitting(updb, true);
 }
 
 
@@ -2311,7 +2338,8 @@ static CK_RV db_update(sqlite3 **xdb, const char *dbpath, unsigned old_version, 
             dbup_handler_from_4_to_5,
             dbup_handler_from_5_to_6,
             dbup_handler_from_6_to_7,
-            dbup_handler_from_7_to_8
+            dbup_handler_from_7_to_8,
+            dbup_handler_from_8_to_9
     };
 
     /*

@@ -110,3 +110,10 @@ const char *type_to_str(CK_BYTE type) {
         return "unknown";
     }
 }
+
+CK_BYTE change_type(void *ptr, size_t len, CK_BYTE new_type) {
+    CK_BYTE old = type_from_ptr(ptr, len);
+    CK_BYTE_PTR b = (CK_BYTE_PTR)ptr;
+    b[len] = new_type;
+    return old;
+}
