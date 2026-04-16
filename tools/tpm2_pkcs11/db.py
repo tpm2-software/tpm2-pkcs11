@@ -22,7 +22,7 @@ from .pkcs11t import (
     CKM_ECDSA_SHA512
 )
 
-VERSION = 8
+VERSION = 9
 
 #
 # With Db() as db:
@@ -521,6 +521,20 @@ class Db(object):
             if CKA_KEY_TYPE not in attrs:
                 continue
 
+            # Fix issue: https://github.com/tpm2-software/tpm2-pkcs11/issues/805
+            # Where the CKA_ALLOWED_MECHANISMS list might be a mix of types between str and int,
+            # when it should be all int's. This prevents this update code from executing, which is
+            # why we add it here and not as a separate update handler.
+            if CKA_ALLOWED_MECHANISMS in attrs:
+                normalized_attrs = []
+                for v in attrs[CKA_ALLOWED_MECHANISMS]:
+                    normalized_attrs.append(int(v))
+                if len(normalized_attrs) > 0:
+                    # update the runtime attrs for the object (processing further down needs it)
+                    attrs[CKA_ALLOWED_MECHANISMS] = normalized_attrs
+                    # make it so in the db
+                    Db._updatetertiary(dbbakcon, t['id'], attrs)
+
             cka_class = attrs[CKA_CLASS]
             cka_key_type = attrs[CKA_KEY_TYPE]
             if cka_class in [ CKO_SECRET_KEY, CKO_PRIVATE_KEY ] and \
@@ -560,6 +574,18 @@ class Db(object):
                         attrs[attr] = list_hexa
 
             Db._updatetertiary(dbbakcon, t['id'], attrs)
+
+    def _update_on_9(self, dbbakcon):
+        '''
+        Between version 8 and 9 of the DB the following changes need to be made:
+        Nothing in the Python code. If the DB was upgraded from 7 to 8, a bug in
+        PR #808, the C code never actually applied the fix. So the update from 8
+        to 9, to fix the hex encoded buffer of allowed mechanisms to a list never
+        occured through the library path and ONLY the Python path. Thus, if the DB
+        version is 8, it's possible the Python tooling didn't get a chance to upgrade
+        it so do it again.
+        '''
+        self._update_on_8(dbbakcon)
 
     def update_db(self, old_version, new_version=VERSION):
 
