@@ -199,7 +199,7 @@ static CK_RV get_EC_evp_pubkey(CK_ATTRIBUTE_PTR ecparams, CK_ATTRIBUTE_PTR ecpoi
     }
 
     if (OSSL_PARAM_BLD_push_octet_string(bld, OSSL_PKEY_PARAM_PUB_KEY,
-    		os->data, os->length) != 1) {
+    		ASN1_STRING_get0_data(os), ASN1_STRING_length(os)) != 1) {
     	SSL_UTIL_LOGE("OSSL_PARAM_BLD_push_octet_string(OSSL_PKEY_PARAM_PUB_KEY)");
     	goto out;
     }
@@ -313,8 +313,8 @@ static CK_RV get_EC_evp_pubkey(CK_ATTRIBUTE_PTR ecparams, CK_ATTRIBUTE_PTR ecpoi
     x = ecpoint->pValue;
     ASN1_OCTET_STRING *os = d2i_ASN1_OCTET_STRING(NULL, &x, ecpoint->ulValueLen);
     if (os) {
-        x = os->data;
-        k = o2i_ECPublicKey(&ecc, &x, os->length);
+        x = ASN1_STRING_get0_data(os);
+        k = o2i_ECPublicKey(&ecc, &x, ASN1_STRING_length(os));
         ASN1_STRING_free(os);
         if (!k) {
             SSL_UTIL_LOGE("Could not update key with EC Points");
