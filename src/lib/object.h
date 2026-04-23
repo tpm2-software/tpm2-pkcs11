@@ -40,6 +40,7 @@ struct tobject {
 
     uint32_t tpm_esys_tr;     /** loaded ESYS_TR */
     twist tpm_serialized_tr; /** serialized ESYS_TR **/
+    twist policy;            /** signing policy string (only "commandcode:sign,authvalue" is supported for now) */
 
     bool is_authenticated; /** true if a context specific login has authenticated use of the object */
 };

@@ -172,6 +172,7 @@ static attr_handler2 attr_handlers[] = {
     ADD_ATTR_HANDLER(CKA_TPM2_PRIV_BLOB, TYPE_BYTE_HEX_STR),
     ADD_ATTR_HANDLER(CKA_TPM2_ENC_BLOB, TYPE_BYTE_HEX_STR),
     ADD_ATTR_HANDLER(CKA_TPM2_SERIALIZED_TR, TYPE_BYTE_HEX_STR),
+    ADD_ATTR_HANDLER(CKA_TPM2_POLICY, TYPE_BYTE_HEX_STR),
 };
 
 static attr_handler2 default_handler = { .memtype = 0, .name="UNKNOWN" };
