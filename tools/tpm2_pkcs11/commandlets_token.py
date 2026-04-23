@@ -256,6 +256,7 @@ class AddTokenCommand(Command):
                 pobject['objauth'],
                 usersealauth['hash'],
                 seal=wrappingkey)
+
             sosealpriv, sosealpub, _ = tpm2.create(
                 pobj_handle,
                 pobject['objauth'],

@@ -2,6 +2,7 @@
 import binascii
 import hashlib
 import io
+import json
 import os
 import argparse
 import sys
@@ -564,3 +565,52 @@ def get_serialized_tr(tpm2_handle):
         
         return hex_string
     
+def validate_policy(policy):
+    try:
+        # discarding result as this is just a JSON sanity check
+        json.loads(policy)
+    except json.JSONDecodeError:
+        sys.exit('Object policy must be a valid JSON')
+
+def calculate_policy_digest(policy_json, tmpdir):
+    import subprocess
+
+    pj = json.loads(policy_json)
+    policy_list = pj.get('policy', [])
+
+    if len(policy_list) != 1:
+        sys.exit("Error: Unsupported multiple policies")
+
+    policy_file = os.path.join(tmpdir, "policy.digest")
+    pcrfile = os.path.join(tmpdir, "policy.pcrfile")
+
+    # For now, support PCR policy
+    # {"description":"pcr policy","policy":[{"type":"pcr","pcrs":[{"pcr":0,"hashAlg":"sha256","digest":"'$PCR0'"}]}]}
+    # TODO: Should allow to leave out the digest bits, so it can grab current
+    # PCR's if wanted.
+    for policy in policy_list:
+        bank = None
+        pcrs = []
+        if policy.get('type') == 'pcr':
+            pcr_obj = policy.get('pcrs', [])
+            with open(pcrfile, "wb") as f:
+                for pcr in pcr_obj:
+                    pcrs.append(str(pcr.get('pcr')))
+                    hashAlg = pcr.get('hashAlg')
+                    if bank is None:
+                        bank = hashAlg
+                    if bank != hashAlg:
+                        sys.exit("Can't mix banks!")
+                    f.write(binascii.unhexlify(pcr.get('digest')))
+        else:
+            sys.exit("Unsupported policy type!")
+
+        # tpm2_createpolicy --policy-pcr -l sha256:0 -L policy.digest
+        cmd = ['tpm2_createpolicy', '--policy-pcr',
+               '--pcr-list={}:{}'.format(bank, ",".join(pcrs)),
+               '--pcr={}'.format(pcrfile),
+               '--policy={}'.format(policy_file)]
+        subprocess.run(cmd, check=True, capture_output=True, env=os.environ)
+        return policy_file
+
+    sys.exit("Error: Unsupported policy type for calculate_policy_digest")

@@ -59,6 +59,13 @@ void tobject_free(tobject *tobj) {
 
     attr_list *a = tobject_get_attrs(tobj);
     attr_list_free(a);
+
+#ifdef HAVE_POLICY
+    if (tobj->policy) {
+        Tss2_PolicyFinalize(&tobj->policy);
+    }
+#endif
+
     free(tobj);
 }
 
@@ -1327,6 +1334,17 @@ CK_RV object_init_from_attrs(tobject *tobj) {
             goto error;
         }
     }
+
+#ifdef HAVE_POLICY
+    a = attr_get_attribute_by_type(tobj->attrs, CKA_TPM2_POLICY_JSON);
+    if (a && a->pValue && a->ulValueLen) {
+        TSS2_RC rc = Tss2_PolicyInit(a->pValue, TPM2_ALG_SHA256, &tobj->policy);
+        if (rc != TSS2_RC_SUCCESS) {
+            LOGE("Tss2_PolicyInit: 0x%x", rc);
+            goto error;
+        }
+    }
+#endif
 
     return CKR_OK;
 

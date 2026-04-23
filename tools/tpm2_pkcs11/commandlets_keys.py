@@ -29,6 +29,8 @@ from .utils import dump_blobs
 from .utils import dump_tsspem
 from .utils import dump_pubpem
 from .utils import get_serialized_tr
+from .utils import validate_policy
+from .utils import calculate_policy_digest
 
 from .tpm2 import Tpm2
 
@@ -59,6 +61,9 @@ class NewKeyCommandBase(Command):
             '--hierarchy-auth',
             help='The hierarchyauth, required for transient pobjects.\n',
             default='')
+        group_parser.add_argument(
+            '--policy',
+            help='Policy to apply on using the key (in JSON format).\n')
         pinopts = group_parser.add_mutually_exclusive_group()
         pinopts.add_argument('--sopin', help='The Administrator pin.\n'),
         pinopts.add_argument('--userpin', help='The User pin.\n'),
@@ -177,6 +182,7 @@ class NewKeyCommandBase(Command):
                 key_label = args['key_label']
                 tid = args['id']
                 hierarchyauth = args['hierarchy_auth']
+                policy = args['policy']
                 passin = args['passin'] if 'passin' in args else None
 
                 privkey = None
@@ -204,12 +210,16 @@ class NewKeyCommandBase(Command):
                     pobj, sealobjects, tpm2, d)
 
                 tertiarypriv, tertiarypub, tertiarypubdata = self.new_key_create(
-                    pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d)
+                    pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d, policy=policy)
 
                 # handle options that can add additional attributes
                 always_auth = args['attr_always_authenticate']
                 priv_attrs = {CKA_ALWAYS_AUTHENTICATE : always_auth}
                 priv_attrs.update(self.get_extra_privattrs(privkey))
+                if policy is not None:
+                    validate_policy(policy)
+                    priv_attrs[CKA_TPM2_POLICY_JSON] = binascii.hexlify(policy.encode()).decode()
+
                 override_keylen = getattr(self, '_override_keylen', None)
 
                 return NewKeyCommandBase.new_key_save(
@@ -245,7 +255,7 @@ class ImportCommand(NewKeyCommandBase):
             required=False)
 
     # Imports a new key
-    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d):
+    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d, policy=None):
 
         pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
 
@@ -256,8 +266,20 @@ class ImportCommand(NewKeyCommandBase):
             objattrs = 'userwithauth|sign|decrypt'
             alg = 'keyedhash'
 
+        policy_digest = None
+        if policy is not None:
+            policy_digest = calculate_policy_digest(policy, tpm2.tmpdir)
+            if objattrs is None:
+                # Default attributes for tpm2_import usually include userwithauth
+                objattrs = "fixedtpm|fixedparent|sensitivedataorigin|decrypt|sign"
+            else:
+                objattrs = objattrs.replace('userwithauth', '')
+                objattrs = objattrs.replace('||', '|')
+                objattrs = objattrs.strip('|')
+
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.importkey(
-            pobj_handle, pobj['objauth'], objauth, privkey=privkey, alg=alg, passin=passin, objattrs=objattrs)
+            pobj_handle, pobj['objauth'], objauth, privkey=privkey, alg=alg, passin=passin,
+            objattrs=objattrs, policy=policy_digest)
 
         # We have no way of knowing the keylength of an hmac key
         if alg and alg.startswith('hmac') or alg == 'keyedhash':
@@ -286,12 +308,21 @@ class AddKeyCommand(NewKeyCommandBase):
             required=True)
 
     # Creates a new key
-    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d):
+    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, privkey, passin, d, policy=None):
 
         pobj_handle = get_pobject(pobj, tpm2, hierarchyauth, d)
 
+        objattrs = None
+        policy_digest = None
+        if policy is not None:
+            policy_digest = calculate_policy_digest(policy, tpm2.tmpdir)
+            # Default attributes for tpm2_create usually include userwithauth
+            # We must explicitly set them WITHOUT userwithauth
+            objattrs = "fixedtpm|fixedparent|sensitivedataorigin|noda|decrypt|sign"
+
         tertiarypriv, tertiarypub, tertiarypubdata = tpm2.create(
-            pobj_handle, pobj['objauth'], objauth, alg=alg)
+            pobj_handle, pobj['objauth'], objauth, alg=alg, objattrs=objattrs,
+            policy=policy_digest)
 
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 
@@ -555,6 +586,67 @@ class ObjDel(Command):
 
         ObjDel.delete(path, args['id'])
 
+@commandlet("objpol")
+class ObjPol(Command):
+    '''
+    Gets/sets/removes object's policy.
+    '''
+
+    @classmethod
+    def objpol(cls, path, tid, policy, delete):
+
+        with Db(path) as db:
+            obj = db.getobject(tid)
+            if obj is None:
+                sys.exit('Not found, object with id: {}'.format(tid))
+        s = obj['attrs']
+        obj_attrs = yaml.safe_load(s)
+
+        # print policy when neither --policy nor --delete is specified
+        if policy is None and not delete:
+            if CKA_TPM2_POLICY_JSON not in obj_attrs:
+                sys.exit('The object has no policy set')
+
+            x = obj_attrs[CKA_TPM2_POLICY_JSON]
+            print(binascii.unhexlify(x).decode())
+            sys.exit()
+
+        if delete:
+            # remove the policy even if it's wasn't yet set
+            obj_attrs.pop(CKA_TPM2_POLICY_JSON, None)
+        else:
+            # set policy if --policy is a well-formed JSON
+            validate_policy(policy)
+            obj_attrs[CKA_TPM2_POLICY_JSON] = binascii.hexlify(policy.encode()).decode()
+
+        with Db(path) as db:
+            db.updatetertiary(obj['id'], obj_attrs)
+
+    # adhere to an interface
+    def generate_options(self, group_parser):
+
+        group_parser.add_argument(
+            '--id',
+            help='The id of the object to use.\n', required=True)
+        group_parser.add_argument(
+            '--policy',
+            help='New policy value as JSON.\n')
+        group_parser.add_argument(
+            '--delete',
+            action='store_true',
+            help='Removes policy if the object has it.\n')
+
+    def __call__(self, args):
+
+        path = args['path']
+        policy = args['policy']
+        delete = args['delete']
+
+        if policy and delete:
+            sys.exit("Cannot specify --policy with --delete")
+
+        ObjPol.objpol(path, args['id'], policy, delete)
+
 @commandlet("link")
 class LinkCommand(NewKeyCommandBase):
     '''
@@ -694,7 +786,7 @@ class LinkCommand(NewKeyCommandBase):
         return (tertiarypriv, tertiarypub, tertiarypubdata)
 
     # Links a new key
-    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, keypaths, passin, d):
+    def new_key_create(self, pobj, objauth, hierarchyauth, tpm2, alg, keypaths, passin, d, policy=None):
 
         if keypaths is None:
             sys.exit("Keypath must be specified")
@@ -791,7 +883,7 @@ class Export(Command):
             
     def generate_options(self, group_parser):
         group_parser.add_argument(
-            '--id', help='The id of the object to add (mutually exclusive with --label and --key-label).\n',
+            '--id', help='The id of the object to export (mutually exclusive with --label and --key-label).\n',
             type=int)
 
         group_parser.add_argument(
