@@ -2568,7 +2568,7 @@ CK_RV db_init_new(sqlite3 *db) {
 static CK_RV db_verify_update_ok(const char *dbpath) {
 
     char buf[PATH_MAX];
-    unsigned l = snprintf(buf, sizeof(buf), "%s.old", dbpath);
+    unsigned l = snprintf(buf, sizeof(buf), "%s.bak", dbpath);
     if (l >= sizeof(buf)) {
         LOGE("Backup DB path is longer than PATH_MAX");
         return CKR_GENERAL_ERROR;
