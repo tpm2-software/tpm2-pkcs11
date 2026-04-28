@@ -52,3 +52,8 @@ mv $TPM2_PKCS11_STORE/tpm2_pkcs11.sqlite3.old $TPM2_PKCS11_STORE/tpm2_pkcs11.sql
 
 If you you roll back the DB, it would be best to also roll back the tpm2-pkcs11 version to the
 last version successfully used.
+
+## Known Bugs
+
+1. [#805](https://github.com/tpm2-software/tpm2-pkcs11/issues/805) - native type size and byte ordering issues. This will only happen if you cange your host architecture
+          without upgrading to DB version 8 or higher.
