@@ -115,7 +115,8 @@ static void gen_nistp256(CK_SESSION_HANDLE session, CK_BYTE id,
 
 static void ecdh1_derive(CK_SESSION_HANDLE session, CK_BYTE id,
                          uint8_t *pubkey, size_t pubkey_len,
-                         uint8_t *secret, size_t secret_len) {
+                         uint8_t *secret, size_t secret_len,
+                         ck_ec_kdf_t kdf) {
 
     CK_MECHANISM mechanism = { CKM_ECDH1_DERIVE, NULL, 0 };
     CK_ATTRIBUTE secret_template[] = {
@@ -142,7 +143,7 @@ static void ecdh1_derive(CK_SESSION_HANDLE session, CK_BYTE id,
         ATTR_VAR(CKA_VALUE, secret, secret_len),
     };
     CK_ECDH1_DERIVE_PARAMS params = {
-        .kdf = CKD_NULL,
+        .kdf = kdf,
         .ulSharedDataLen = 0,
         .pSharedData = secret,
         .ulPublicDataLen = 0,
@@ -184,38 +185,66 @@ static void ecdh1_derive(CK_SESSION_HANDLE session, CK_BYTE id,
     assert_int_equal(rv, CKR_OK);
 }
 
-static void test_ecc_derive_nist_p256_templ(void **state) {
+static void test_ecc_derive_nist_p256_templ(void **state, CK_BYTE id_base, ck_ec_kdf_t kdf, size_t shr_len) {
 
     test_info *ti = test_info_from_state(state);
     CK_SESSION_HANDLE session = ti->handle;
 
     /* NIST P-256: 32 bytes */
     struct {
-        CK_BYTE shr[32];    /* Shared secret is the length of the key */
+        CK_BYTE *shr;       /* Shared secret */
         CK_BYTE pub[70];    /* Allocate extra space for encoding      */
         size_t plen;
         CK_BYTE id;
     } key[] = {
-        [0] = { .id = 0x00, .shr = { 0 }, .pub = { 0 }, .plen = 70 },
-        [1] = { .id = 0x01, .shr = { 1 }, .pub = { 1 }, .plen = 70 },
+        [0] = { .id = id_base, .shr = NULL, .pub = { 0 }, .plen = 70 },
+        [1] = { .id = id_base + 1, .shr = NULL, .pub = { 1 }, .plen = 70 },
     };
+
+    key[0].shr = malloc(shr_len);
+    key[1].shr = malloc(shr_len);
+    memset(key[0].shr, 0, shr_len);
+    memset(key[0].shr, 1, shr_len);
 
     user_login(session);
 
     gen_nistp256(session, key[0].id, key[0].pub, &key[0].plen);
     gen_nistp256(session, key[1].id, key[1].pub, &key[1].plen);
 
-    ecdh1_derive(session, key[0].id, key[1].pub, key[1].plen, key[0].shr, 32);
-    ecdh1_derive(session, key[1].id, key[0].pub, key[0].plen, key[1].shr, 32);
+    ecdh1_derive(session, key[0].id, key[1].pub, key[1].plen, key[0].shr, shr_len, kdf);
+    ecdh1_derive(session, key[1].id, key[0].pub, key[0].plen, key[1].shr, shr_len, kdf);
 
-    assert(memcmp(key[0].shr, key[1].shr, 32) == 0);
+    assert(memcmp(key[0].shr, key[1].shr, shr_len) == 0);
+
+    free(key[0].shr);
+    free(key[1].shr);
 }
+
+static void test_ecc_derive_nist_p256_templ_none(void **state) {
+    /* The CKD_NONE generates a shared secrets of 32 bytes when using
+     * a P-256 curve. */
+    test_ecc_derive_nist_p256_templ(state, 0, CKD_NULL, 32);
+}
+
+#if (OPENSSL_VERSION_NUMBER >= 0x30000000)
+static void test_ecc_derive_nist_p256_templ_sha1(void **state) {
+    /* The KDF can generate shared secrets of arbitrary length.
+     * Demonstrate that by generating 50 bytes, which is not divisble
+     * by the 32 bytes a P-256 point provides or the 20 byte output
+     * of SHA1 */
+    test_ecc_derive_nist_p256_templ(state, 2, CKD_SHA1_KDF, 50);
+}
+#endif
 
 int main() {
 
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup_teardown(test_ecc_derive_nist_p256_templ,
+        cmocka_unit_test_setup_teardown(test_ecc_derive_nist_p256_templ_none,
                                         test_setup, test_teardown),
+#if (OPENSSL_VERSION_NUMBER >= 0x30000000)
+        cmocka_unit_test_setup_teardown(test_ecc_derive_nist_p256_templ_sha1,
+                                        test_setup, test_teardown),
+#endif
     };
 
     return cmocka_run_group_tests(tests, group_setup, group_teardown);

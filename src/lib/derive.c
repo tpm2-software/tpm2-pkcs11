@@ -8,6 +8,11 @@
 #include <openssl/ecdsa.h>
 #include <openssl/evp.h>
 
+#if (OPENSSL_VERSION_NUMBER >= 0x30000000)
+#include <openssl/kdf.h>
+#include <openssl/core_names.h>
+#endif
+
 #include "attrs.h"
 #include "backend.h"
 #include "checks.h"
@@ -193,10 +198,6 @@ CK_RV derive(session_ctx* ctx,  CK_MECHANISM_PTR mechanism, /* public EC point *
     CK_ECDH1_DERIVE_PARAMS_PTR mecha_params;
     SAFE_CAST(mechanism, mecha_params);
 
-    if (mecha_params->kdf != CKD_NULL) {
-        return CKR_MECHANISM_PARAM_INVALID;
-    }
-
     /* 2. Uncompressed EC_POINT: is a DER OCTECT string of 04||x||y */
     if (!mecha_params->public_data_len ||
         (mecha_params->public_data_len - 1) != 2 * keysize) {
@@ -227,22 +228,85 @@ CK_RV derive(session_ctx* ctx,  CK_MECHANISM_PTR mechanism, /* public EC point *
         return rv;
     }
 
-    /* Get the shaed secret */
-    CK_BYTE* shared_secret = NULL;
-    rv = tpm_ec_ecdh1_derive(tok->tctx, tobj, /* EC private */
-                             mecha_params->public_data, /* EC point */
-                             mecha_params->public_data_len,
-                             &shared_secret, &udata.len);
+    /* Perform an Elliptic Curve Diffie Helman key exchange using the TPM resident
+     * private key and a supplied public key.
+     * This establishes a shared secret ECC point z_point between us and the owner
+     * of the private key belonging to the supplied public key.
+     *
+     * The result can either be used as a shared secret directly (CKD_NULL) or as
+     * the input to a key derivation function, to optain a shared secret of arbitrary
+     * length (i.e. CKD_SHA1_KDF). */
+    CK_BYTE* z_point = NULL;
+    size_t z_point_len = 0;
+    rv = tpm_ec_ecdh_zgen(tok->tctx, tobj, /* EC private */
+                          mecha_params->public_data, /* EC point */
+                          mecha_params->public_data_len,
+                          &z_point, &z_point_len);
     if (rv != CKR_OK) {
          tobject_user_decrement(tobj);
          return rv;
     }
 
     CK_ATTRIBUTE shared_secret_attr = {
-        .ulValueLen = udata.len,
-        .pValue = shared_secret,
+        .ulValueLen = 0,
+        .pValue = NULL,
         .type = CKA_VALUE,
     };
+
+    if (mecha_params->kdf == CKD_NULL) {
+        /* Use the shared z_point as is.
+         * Without a KDF the output length depends on the ECC algorithm used
+         * and the value in the supplied template is ignored. */
+        shared_secret_attr.ulValueLen = z_point_len;
+        shared_secret_attr.pValue = z_point;
+    }
+#if (OPENSSL_VERSION_NUMBER >= 0x30000000)
+    else if (mecha_params->kdf == CKD_SHA1_KDF) {
+        /* Use a KDF to generate a shared secret of arbitrary length.
+         * The length is taken from the supplied template. */
+
+        shared_secret_attr.ulValueLen = udata.len;
+        shared_secret_attr.pValue = calloc(shared_secret_attr.ulValueLen,
+                                           sizeof(CK_BYTE));
+
+        EVP_KDF *kdf = EVP_KDF_fetch(NULL, OSSL_KDF_NAME_X963KDF, NULL);
+        EVP_KDF_CTX *kctx = EVP_KDF_CTX_new(kdf);
+
+        OSSL_PARAM params[4], *p = params;
+
+        *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST,
+            "SHA1", 0);
+        *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY,
+            (void *)z_point, z_point_len);
+
+        if (mecha_params->shared_data && mecha_params->shared_data_len) {
+            *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO,
+                (void *)mecha_params->shared_data, mecha_params->shared_data_len);
+        }
+
+        *p = OSSL_PARAM_construct_end();
+
+        if (EVP_KDF_derive(kctx, shared_secret_attr.pValue,
+                           shared_secret_attr.ulValueLen, params) != 1) {
+            rv = CKR_GENERAL_ERROR;
+        }
+
+        free(z_point);
+        EVP_KDF_CTX_free(kctx);
+        EVP_KDF_free(kdf);
+
+        if (rv != CKR_OK) {
+            tobject_user_decrement(tobj);
+            goto out;
+        }
+    }
+#endif
+    else {
+        free(z_point);
+        tobject_user_decrement(tobj);
+
+        return CKR_MECHANISM_PARAM_INVALID;
+    }
 
     /* Return the shared secret in a CKO_SECRET_KEY class object */
     rv = object_create(ctx, secret_template, secret_template_count, secret);
@@ -258,6 +322,6 @@ CK_RV derive(session_ctx* ctx,  CK_MECHANISM_PTR mechanism, /* public EC point *
     }
 
 out:
-    free(shared_secret);
+    free(shared_secret_attr.pValue);
     return rv;
 }
