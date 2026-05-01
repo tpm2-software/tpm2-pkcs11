@@ -86,9 +86,19 @@ echo "Initializing temporary NSS DB"
 certutil -N -d . --empty-password
 
 echo "Adding PKCS11 module in $modpath to NSS configuration"
-#modutil will first ask about a running browser which we acknowledge with \n
-#sometimes it will then ask because p11-kit already knows tpm2 which we then abort with q\n
-echo -ne "\nq\n" | modutil -add tpm2 -libfile "$modpath" -dbdir .
+# modutil prompts about some warnings adding the tpm2 provider.
+# Typically we just sent enters via echo, but that didn't work
+# on newer versions, so use expect so we can send the response
+# only when prompted.
+expect << EOF
+set timeout 10
+spawn modutil -add tpm2 -libfile "${modpath}" -dbdir .
+
+expect {
+    -re ".+" { send "\n"; exp_continue }
+    eof
+}
+EOF
 
 echo "Adding S/MIME trust for test CA"
 certutil -A -d . -n testca -t ,C, -a -i "$CA_PEM"
