@@ -1623,7 +1623,7 @@ static CK_RV dbup_handler_from_2_to_3(sqlite3 *updb) {
 static CK_RV dbup_handler_from_3_to_4(sqlite3 *updb) {
 
     /*
-     * Between version 3 and 1 of the DB the following changes need to be made:
+     * Between version 3 and 4 of the DB the following changes need to be made:
      * Table pobjects:
      *  - column handle of type blob was changes to config of type string
      *
@@ -1808,7 +1808,7 @@ static CK_RV handle_AES_add_cbc_ctr_modes(tobject *tobj) {
 static CK_RV dbup_handler_from_4_to_5(sqlite3 *updb) {
 
     /*
-     * Between version 3 and 4 of the DB the following changes need to be made:
+     * Between version 4 and 5 of the DB the following changes need to be made:
      *
      * Table tobjects:
      *
@@ -1959,7 +1959,7 @@ static CK_RV handle_ECDSA_5_to_6(tobject *tobj) {
 static CK_RV dbup_handler_from_5_to_6(sqlite3 *updb) {
 
     /*
-     * Between version 3 and 4 of the DB the following changes need to be made:
+     * Between version 5 and 6 of the DB the following changes need to be made:
      *
      * Table tobjects:
      *
@@ -2107,7 +2107,7 @@ static CK_RV handle_EC_AES_drop_0_allowed_mechs(tobject *tobj) {
 static CK_RV dbup_handler_from_6_to_7(sqlite3 *updb) {
 
     /*
-     * Between version 3 and 4 of the DB the following changes need to be made:
+     * Between version 6 and 7 of the DB the following changes need to be made:
      *
      * Table tobjects:
      *

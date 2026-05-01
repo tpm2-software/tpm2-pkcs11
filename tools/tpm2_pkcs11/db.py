@@ -352,11 +352,16 @@ class Db(object):
             dbbakcon.execute(s)
 
     def _update_on_3(self, dbbakcon):
+        '''
+        Between version 2 and 3 of the DB the following changes need to be made:
+          - Drop the incorrect limit_tobjects TRIGGER.
+        '''
+
         dbbakcon.execute('DROP TRIGGER limit_tobjects;')
 
     def _update_on_4(self, dbbakcon):
         '''
-        Between version 3 and 1 of the DB the following changes need to be made:
+        Between version 3 and 4 of the DB the following changes need to be made:
         Table pobjects:
           - column handle of type blob was changes to config of type string
 
