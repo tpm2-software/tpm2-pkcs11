@@ -48,7 +48,8 @@ function cleanup() {
   fi
   cleanup_ca
   rm -f smimeclient.csr smimeclient.crt smimeclient.key smimeclient.pem \
-        pkcs11.txt cert9.db key4.db userpin.txt
+        pkcs11.txt cert9.db key4.db userpin.txt tpm2-client.csr.pem \
+	tpm2-client.csr.der tpm2-client.crt.der noise.bin objdata objdata2
 }
 trap cleanup EXIT
 
