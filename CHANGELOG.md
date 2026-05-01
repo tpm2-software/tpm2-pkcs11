@@ -4,13 +4,13 @@ All notable changes to this project will be documented in this file.
 Starting with release 1.8.0, The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.10.0-rc0] - TBD
+## [1.10.0-rc0] - 2026-05-01
 ### Added:
 - DB Schema Change from 8 to 9.
   - **Backup your DB before upgrading**
 
 ### Fixed:
-- Formatting of error cases
+- Formatting of error cases.
 - tpm backend: `tpm_unseal` returning false, instead of NULL. Fixes compiler warnings.
 - warning: src/lib/utils.c:243:17: error: initialization discards 'const' qualifier from pointer target type.
 - missing `ECDH1_DERIVE` in supported mechanisms. See PR #913 for details.
