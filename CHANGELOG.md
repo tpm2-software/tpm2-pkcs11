@@ -42,6 +42,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--enable-fapi` to `--with-fapi`. Note this is not a major version bump as its internal to builders only. However `--enable-fapi` left in place for backwards compat.
 
 ## [1.9.0] - 2023-01-31
+
+### Added
+- DB Schema Change from 7 to 8.
+  - **Backup your DB before upgrading**
+- Env varibale `PKCS11_SQL_LOCK` to allow setting a lock directory, eg for temprary directory so lock files do not persist across reboots.
+
 ### Fixed
 - Fix autoconf invocation on a release tarball not being a git repo for VERSION. VERSION file now generated and packaged as part of the release tarball from the git version information.
 - Fix TPM2_PKCS11_OWNER_AUTH not being used when a persistent SRK is needed in the C_InitToken path.
@@ -49,9 +55,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Leave the original db on upgrade failure, a bug caused the original db to be unlinked not the upgraded db.
 - A bug prevented the use of CreateLoaded if the TPM supports the command.
 - A bug when creating keys through the PKCS11 interface (not tpm2-ptool), the attributes for `CKA_ALLOWED_MECHANISMS` were encoded as a hex string and not a sequence of ints within the YAML. Correcting this will trigger a db upgrade to 8
-
-### Added
-- Env varibale `PKCS11_SQL_LOCK` to allow setting a lock directory, eg for temprary directory so lock files do not persist across reboots.
 
 ## [1.8.0 ] - 2022-03-21
 ### Fixed
@@ -69,10 +72,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - remove unused macro set_safe_rc
-
-### Added
-- Add support for OpenSSL 3. Note that calls through engine are no longer supported on OpenSSL3.
-- Add tpm2_ptool export commandlet for exporting token keys into PEM and TPM blob format.
 
 ### 1.7.0 - 2021-09-27
   * DB Schema Change from 5 to 7.
