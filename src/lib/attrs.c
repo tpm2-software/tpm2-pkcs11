@@ -1332,6 +1332,7 @@ CK_RV attr_list_append_entry(attr_list **attrs, CK_ATTRIBUTE_PTR untrusted_attr)
             *attrs,
             &new_item);
     if (!x) {
+        attr_list_free(new_item);
         return CKR_GENERAL_ERROR;
     }
 
