@@ -185,37 +185,45 @@ static void ecdh1_derive(CK_SESSION_HANDLE session, CK_BYTE id,
     assert_int_equal(rv, CKR_OK);
 }
 
-static void test_ecc_derive_nist_p256_templ(void **state, CK_BYTE id_base, ck_ec_kdf_t kdf) {
+static void test_ecc_derive_nist_p256_templ(void **state, CK_BYTE id_base, ck_ec_kdf_t kdf, size_t shr_len) {
 
     test_info *ti = test_info_from_state(state);
     CK_SESSION_HANDLE session = ti->handle;
 
     /* NIST P-256: 32 bytes */
     struct {
-        CK_BYTE shr[32];    /* Shared secret is the length of the key */
+        CK_BYTE *shr;       /* Shared secret */
         CK_BYTE pub[70];    /* Allocate extra space for encoding      */
         size_t plen;
         CK_BYTE id;
     } key[] = {
-        [0] = { .id = id_base, .shr = { 0 }, .pub = { 0 }, .plen = 70 },
-        [1] = { .id = id_base + 1, .shr = { 1 }, .pub = { 1 }, .plen = 70 },
+        [0] = { .id = id_base, .shr = NULL, .pub = { 0 }, .plen = 70 },
+        [1] = { .id = id_base + 1, .shr = NULL, .pub = { 1 }, .plen = 70 },
     };
 
     user_login(session);
 
-    gen_nistp256(session, key[0].id, key[0].pub, &key[0].plen);
-    gen_nistp256(session, key[1].id, key[1].pub, &key[1].plen);
+    for (size_t i=0; i <= 1; i++) {
+        key[i].shr = malloc(shr_len);
+        assert_non_null(key[i].shr);
+        memset(key[i].shr, i, shr_len);
 
-    ecdh1_derive(session, key[0].id, key[1].pub, key[1].plen, key[0].shr, 32, kdf);
-    ecdh1_derive(session, key[1].id, key[0].pub, key[0].plen, key[1].shr, 32, kdf);
+        gen_nistp256(session, key[i].id, key[i].pub, &key[i].plen);
+    }
 
-    assert(memcmp(key[0].shr, key[1].shr, 32) == 0);
+    ecdh1_derive(session, key[0].id, key[1].pub, key[1].plen, key[0].shr, shr_len, kdf);
+    ecdh1_derive(session, key[1].id, key[0].pub, key[0].plen, key[1].shr, shr_len, kdf);
+
+    assert(memcmp(key[0].shr, key[1].shr, shr_len) == 0);
+
+    free(key[0].shr);
+    free(key[1].shr);
 }
 
 static void test_ecc_derive_nist_p256_templ_none(void **state) {
     /* The CKD_NONE generates a shared secrets of 32 bytes when using
      * a P-256 curve. */
-    test_ecc_derive_nist_p256_templ(state, 0, CKD_NULL);
+    test_ecc_derive_nist_p256_templ(state, 0, CKD_NULL, 32);
 }
 
 int main() {
