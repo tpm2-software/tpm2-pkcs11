@@ -51,7 +51,7 @@ function get_deps() {
 	# older versions of clang cannot build the wheel, gcc is always present, use it.
 	OLD_CC="$CC"
 	CC=gcc
-	pip install tpm2-pytss
+	python3 -m pip install --break-system-packages pyasn1 pyasn1_modules python-pkcs11 tpm2-pytss
 	CC="$OLD_CC"
 
 	# leave the download location directory
