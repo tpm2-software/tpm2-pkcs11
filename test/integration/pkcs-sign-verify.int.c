@@ -433,7 +433,7 @@ static void test_sign_verify_CKM_ECDSA(void **state) {
             &siglen);
     assert_int_equal(rv, CKR_OK);
     /* the actual siglength may be smaller than the previously reported siglen */
-    assert_in_range(siglen, 1, tmp_len);
+    assert_uint_in_range(siglen, 1, tmp_len);
 
     /* try the public key verification */
     rv = C_VerifyInit(session, &mech, pubkey);
@@ -490,7 +490,7 @@ static void test_sign_verify_CKM_ECDSA_SHA1(void **state) {
             ckm_ecdsa_sha1_sig, &ckm_ecdsa_sha1_siglen);
     assert_int_equal(rv, CKR_OK);
     /* actual size must not be larger than previously indicated */
-    assert_in_range(ckm_ecdsa_sha1_siglen, 1, tmp_len);
+    assert_uint_in_range(ckm_ecdsa_sha1_siglen, 1, tmp_len);
 
     rv = C_VerifyInit(session, &mech, objhandles[0]);
     assert_int_equal(rv, CKR_OK);
@@ -546,7 +546,7 @@ static void test_sign_verify_CKM_ECDSA_SHA256(void **state) {
             ckm_ecdsa_sha256_sig, &ckm_ecdsa_sha256_siglen);
     assert_int_equal(rv, CKR_OK);
     /* actual size must not be larger than previously indicated */
-    assert_in_range(ckm_ecdsa_sha256_siglen, 1, tmp_len);
+    assert_uint_in_range(ckm_ecdsa_sha256_siglen, 1, tmp_len);
 
     rv = C_VerifyInit(session, &mech, objhandles[0]);
     assert_int_equal(rv, CKR_OK);
@@ -602,7 +602,7 @@ static void test_sign_verify_CKM_ECDSA_SHA384(void **state) {
             ckm_ecdsa_sha384_sig, &ckm_ecdsa_sha384_siglen);
     assert_int_equal(rv, CKR_OK);
     /* actual size must not be larger than previously indicated */
-    assert_in_range(ckm_ecdsa_sha384_siglen, 1, tmp_len);
+    assert_uint_in_range(ckm_ecdsa_sha384_siglen, 1, tmp_len);
 
     rv = C_VerifyInit(session, &mech, objhandles[0]);
     assert_int_equal(rv, CKR_OK);
@@ -658,7 +658,7 @@ static void test_sign_verify_CKM_ECDSA_SHA512(void **state) {
             ckm_ecdsa_sha512_sig, &ckm_ecdsa_sha512_siglen);
     assert_int_equal(rv, CKR_OK);
     /* actual size must not be larger than previously indicated */
-    assert_in_range(ckm_ecdsa_sha512_siglen, 1, tmp_len);
+    assert_uint_in_range(ckm_ecdsa_sha512_siglen, 1, tmp_len);
 
     rv = C_VerifyInit(session, &mech, objhandles[0]);
     assert_int_equal(rv, CKR_OK);
@@ -722,7 +722,7 @@ static void test_pss(CK_SESSION_HANDLE session,
             sig, &siglen);
     assert_int_equal(rv, CKR_OK);
     /* actual size must not be larger than previously indicated */
-    assert_in_range(siglen, 1, tmp_len);
+    assert_uint_in_range(siglen, 1, tmp_len);
 
     rv = C_VerifyInit(session, &mech, key[1]);
     assert_int_equal(rv, CKR_OK);
@@ -776,7 +776,7 @@ static void test_pss2(CK_SESSION_HANDLE session,
             sig, &siglen);
     assert_int_equal(rv, CKR_OK);
     /* actual size must not be larger than previously indicated */
-    assert_in_range(siglen, 1, tmp_len);
+    assert_uint_in_range(siglen, 1, tmp_len);
 
     rv = C_VerifyInit(session, &mech, key[1]);
     assert_int_equal(rv, CKR_OK);
