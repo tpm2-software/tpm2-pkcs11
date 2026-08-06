@@ -1,0 +1,74 @@
+name: "CodeQL"
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  schedule:
+    - cron: "48 11 * * 5"
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ python, cpp ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install Packages (cpp)
+        if: ${{ matrix.language == 'cpp' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes autoconf-archive libcurl4-openssl-dev libjson-c-dev libssl-dev uuid-dev acl
+
+      - name: Configure (cpp)
+        if: ${{ matrix.language == 'cpp' }}
+        run: |
+          ./bootstrap
+          ./configure --disable-ptool-checks
+
+      - name: After Prepare (cpp)
+        if: ${{ matrix.language == 'cpp' }}
+        run: |
+          cd "$RUNNER_TEMP"
+          mkdir installdir
+          git clone https://github.com/tpm2-software/tpm2-tss.git
+          cd tpm2-tss
+          ./bootstrap
+          ./configure --prefix="$RUNNER_TEMP/installdir/usr" --disable-doxygen-doc
+          make install
+          export PKG_CONFIG_PATH="$RUNNER_TEMP/installdir/usr/lib/pkgconfig:$PKG_CONFIG_PATH" && echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH" >> $GITHUB_ENV
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/installdir/usr/lib:$LD_LIBRARY_PATH" && echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          cd "$RUNNER_TEMP"
+          git clone https://github.com/tpm2-software/tpm2-tools.git
+          cd "tpm2-tools"
+          ./bootstrap
+          ./configure --prefix="$RUNNER_TEMP/installdir/usr"
+          make install
+          export PATH="$RUNNER_TEMP/installdir/usr/bin:$PATH" && echo "PATH=$PATH" >> $GITHUB_ENV
+          cd "$RUNNER_TEMP"
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: ${{ matrix.language }}
+          queries: +security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v2
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+        with:
+          category: "/language:${{ matrix.language }}"
