@@ -12,7 +12,7 @@ The project depends on:
     1. [gcc](https://www.gnu.org/software/gcc/)
     2. [clang](https://clang.llvm.org/)
 4. [SQLite3](https://www.sqlite.org/)
-5. [tpm2-tss](https://github.com/tpm2-software/tpm2-tss): **Requires >= 2.0, recommended >= 2.3.0**
+5. [tpm2-tss](https://github.com/tpm2-software/tpm2-tss): **Requires >= 2.0, recommended >= 4.0.1**
 6. A Resource Manager, one of:
   - [tpm2-abrmd](https://github.com/tpm2-software/tpm2-abrmd): **Requires version >= 2.1.0**
   - Linux kernel version >= 4.12 for `/dev/tpmrm[0-9]+` nodes.

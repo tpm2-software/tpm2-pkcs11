@@ -4,7 +4,7 @@ Name: tpm2-pkcs11
 Description: TPM2 PKCS#11 library
 URL: https://github.com/tpm2-software/tpm2-pkcs11
 Version: @VERSION@
-Requires.private: tss2-esys tss2-mu sqlite3 libcrypto
+Requires.private: @TSS2_POLICY_DEP@ tss2-esys tss2-mu sqlite3 libcrypto
 Cflags: @PTHREAD_CFLAGS@
 Libs: -L${p11_module_path} -ltpm2_pkcs11
 Libs.private: @PTHREAD_LIBS@
