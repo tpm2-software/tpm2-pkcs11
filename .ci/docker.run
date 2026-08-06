@@ -3,6 +3,8 @@
 
 set -e
 
+DOCKER_BUILD_DIR="${DOCKER_BUILD_DIR:-$PWD}"
+
 source $DOCKER_BUILD_DIR/.ci/docker-prelude.sh
 
 # export ptool location
