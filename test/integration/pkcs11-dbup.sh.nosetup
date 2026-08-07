@@ -85,7 +85,7 @@ test 1 -eq $v
 
 # do an upgrade
 echo "Generating RSA key pair"
-pkcs11_tool --slot=1 --label="myrsakey" --login --pin=myuserpin --keypairgen
+pkcs11_tool --token-label label --label="myrsakey" --login --pin=myuserpin --keypairgen
 echo "RSA Key pair generated"
 
 echo "Checking schema version as > 1"
@@ -96,7 +96,7 @@ test $v -ge 1
 echo "testdata">${tempdir}/data
 
 echo "Using key to ensure it still works"
-pkcs11_tool -v --sign --login --slot-index=0 --label="myrsakey" --pin myuserpin \
+pkcs11_tool -v --sign --login --token-label label --label="myrsakey" --pin myuserpin \
             --input-file ${tempdir}/data --output-file ${tempdir}/sig \
             --mechanism SHA256-RSA-PKCS
 echo "Successfully used key post schema upgrade"
