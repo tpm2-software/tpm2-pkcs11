@@ -55,10 +55,6 @@ if [[ "$CC" == clang* ]]; then
 else
   echo "Enabling Code Coverage"
   config_flags="--disable-hardening --enable-code-coverage"
-  # Ubuntu 26.04 ships a newer cmocka that deprecates assert_in_range; keep CI unblocked.
-  if [[ "$DOCKER_IMAGE" == ubuntu-26.04* ]]; then
-    export CFLAGS="${CFLAGS:+$CFLAGS }-Wno-error=deprecated-declarations"
-  fi
 fi
 
 # Bootstrap the project

@@ -184,7 +184,6 @@ static void test_get_attribute_value_multiple_fail(void **state) {
       {CKA_LABEL, NULL_PTR, 0},
       {0x0000FFFFUL, NULL_PTR, 0}, //Invalid
     };
-    LargestIntegralType expected_returns[] = {CKR_BUFFER_TOO_SMALL, CKR_ATTRIBUTE_TYPE_INVALID};
 
     test_info *ti = test_info_from_state(state);
 
@@ -208,8 +207,7 @@ static void test_get_attribute_value_multiple_fail(void **state) {
     template[2].ulValueLen = 10;
 
     rv = C_GetAttributeValue(ti->hSession, ti->hObject, template, 3);
-    // Return should be CKR_ATTRIBUTE_TYPE_INVALID or CKR_BUFFER_TOO_SMALL
-    assert_in_set(rv, expected_returns, 2);
+    assert_true(rv == CKR_BUFFER_TOO_SMALL || rv == CKR_ATTRIBUTE_TYPE_INVALID);
     assert_int_equal(template[0].ulValueLen, CK_UNAVAILABLE_INFORMATION);
     assert_string_equal(template[1].pValue, "mykeylabel");
     assert_int_equal(template[2].ulValueLen, CK_UNAVAILABLE_INFORMATION);
