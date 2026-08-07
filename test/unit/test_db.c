@@ -23,6 +23,11 @@
 
 #define BAD_PTR ((void *)0xDEADBEEF)
 
+#ifndef will_return_ptr_always
+#define will_return_ptr_always(function, value) \
+    will_return_always(function, cast_ptr_to_largest_integral_type(value))
+#endif
+
 typedef struct will_return_data will_return_data;
 struct will_return_data {
     bool call_real;
@@ -918,7 +923,7 @@ static void test_init_pobject_from_stmt_tpm_create_transient_primary_from_templa
         { .rv = CKR_GENERAL_ERROR     }, /* tpm_create_transient_primary_from_template */
     };
 
-    will_return_always(__wrap_strdup,                       &d[0]);
+    will_return_ptr_always(__wrap_strdup,                   &d[0]);
     will_return(__wrap_sqlite3_column_bytes,                &d[1]);
     will_return(__wrap_sqlite3_column_text,                 &d[2]);
     will_return(__wrap_sqlite3_column_text,                 &d[3]);
@@ -1190,11 +1195,11 @@ static void test_db_get_tokens_token_overcount_fail(void **state) {
         { .rc = SQLITE_OK             }, /* sqlite3_finalize */
     };
 
-    will_return_always(__wrap_sqlite3_prepare_v2,  &d[0]);
-    will_return_always(__wrap_sqlite3_step,        &d[1]);
-    will_return_always(__wrap_sqlite3_data_count,  &d[2]);
-    will_return_always(token_min_init,             &d[3]);
-    will_return_always(init_pobject,               &d[4]);
+    will_return_ptr_always(__wrap_sqlite3_prepare_v2,  &d[0]);
+    will_return_ptr_always(__wrap_sqlite3_step,        &d[1]);
+    will_return_ptr_always(__wrap_sqlite3_data_count,  &d[2]);
+    will_return_ptr_always(token_min_init,             &d[3]);
+    will_return_ptr_always(init_pobject,               &d[4]);
     will_return(__wrap_sqlite3_finalize,           &d[5]);
 
     CK_RV rv = db_get_tokens(tok, &len);
