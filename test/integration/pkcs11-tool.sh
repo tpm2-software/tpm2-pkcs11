@@ -28,28 +28,28 @@ echo "Found cert: $id"
 
 # a public key with a cert label should exist
 echo "Looking for public key with id: $id"
-pkcs11_tool --slot=1 --list-objects --type pubkey | grep "$id"
+pkcs11_tool --token-label label --list-objects --type pubkey | grep "$id"
 echo "Found pubkey"
 
 # a private key with a cert label should exist
 echo "Looking for private key with id: $id"
-pkcs11_tool --slot=1 --list-objects --type privkey --login --pin myuserpin | grep "$id"
+pkcs11_tool --token-label label --list-objects --type privkey --login --pin myuserpin | grep "$id"
 echo "Found privkey"
 
 # test pin change
 echo "Attempting pin change"
-pkcs11_tool --slot=1 --login --pin myuserpin --change-pin --new-pin mynewpin
+pkcs11_tool --token-label label --login --pin myuserpin --change-pin --new-pin mynewpin
 echo "Pin changed"
 
 # change userpin from sopin
 echo "Resetting pin"
-pkcs11_tool --slot=1 --init-pin --login --so-pin=mysopin --pin=myuserpin
+pkcs11_tool --token-label label --init-pin --login --so-pin=mysopin --pin=myuserpin
 echo "Pin Reset"
 
 # test getting random data w/o login
 if [[ "${DOCKER_IMAGE:-nodocker}" != "ubuntu-16.04" && "${DOCKER_IMAGE:-nodocker}" != "ubuntu-18.04" ]]; then
     echo "Getting random"
-    pkcs11_tool --slot=1 --generate-random 4 | xxd
+    pkcs11_tool --token-label label --generate-random 4 | xxd
     echo "Random got"
 else
     echo "Skipping pkcs11-tool --generate-random, not supported on ${DOCKER_IMAGE}"
@@ -57,30 +57,30 @@ fi
 
 # test generating RSA key pair
 echo "Generating RSA key pair"
-pkcs11_tool --slot=1 --label="myrsakey" --login --pin=myuserpin --keypairgen
+pkcs11_tool --token-label label --label="myrsakey" --login --pin=myuserpin --keypairgen
 echo "RSA Key pair generated"
 
 # test generating EC key pair
 echo "Generating EC key pair"
-pkcs11_tool --slot=1 --label="myecckey" --login --pin=myuserpin --keypairgen --usage-sign --key-type EC:prime256v1
+pkcs11_tool --token-label label --label="myecckey" --login --pin=myuserpin --keypairgen --usage-sign --key-type EC:prime256v1
 echo "EC Key pair generated"
 
 echo "Deleting privkey"
-pkcs11_tool --slot=1 --pin=myuserpin --login --delete-object --type=privkey --label=myecckey
+pkcs11_tool --token-label label --pin=myuserpin --login --delete-object --type=privkey --label=myecckey
 echo "Privkey deleted"
 
 echo "Deleting pubkey"
-pkcs11_tool --slot=1 --pin=myuserpin --login --delete-object --type=pubkey --label=myecckey
+pkcs11_tool --token-label label --pin=myuserpin --login --delete-object --type=pubkey --label=myecckey
 echo "Pubkey deleted"
 
 # test ECHD1 derive
 echo "Test ECDH1-DERIVE"
 echo "Create EC keys"
 tmp=$TPM2_PKCS11_STORE
-pkcs11_tool --slot=1 --keypairgen --login --pin myuserpin \
+pkcs11_tool --token-label label --keypairgen --login --pin myuserpin \
             --key-type EC:prime256v1 --id 01 --label key1
 
-pkcs11_tool --slot=1 --keypairgen --login --pin myuserpin \
+pkcs11_tool --token-label label --keypairgen --login --pin myuserpin \
             --key-type EC:prime256v1 --id 02 --label key2
 
 echo "Read public components"
@@ -111,18 +111,18 @@ echo "Writing certificate"
 # Not all versions of pkcs11-tool handle PEM to DER conversions, 0.15 doesn't, 0.19 does. So always
 # convert to DER
 openssl x509 -inform PEM -outform DER -in "$TPM2_PKCS11_STORE/cert.pem.rsa1" -out "$TPM2_PKCS11_STORE/cert.der.rsa1"
-pkcs11_tool --slot=1 -l --pin=myuserpin --write-object="$TPM2_PKCS11_STORE/cert.der.rsa1" \
+pkcs11_tool --token-label label -l --pin=myuserpin --write-object="$TPM2_PKCS11_STORE/cert.der.rsa1" \
     --type=cert --id=01 --label=device-cert
 echo "Certificate wrote"
 
 echo "Importing RSA pubkey"
 openssl genrsa -out "$TPM2_PKCS11_STORE/key-rsa-priv.pem" 2048
 openssl rsa -in "$TPM2_PKCS11_STORE/key-rsa-priv.pem" -pubout -out "$TPM2_PKCS11_STORE/key-rsa-pub.pem"
-pkcs11_tool --slot=1 -l --pin=myuserpin --write-object="$TPM2_PKCS11_STORE/key-rsa-pub.pem" --type=pubkey
+pkcs11_tool --token-label label -l --pin=myuserpin --write-object="$TPM2_PKCS11_STORE/key-rsa-pub.pem" --type=pubkey
 echo "RSA pubkey imported"
 
 echo "Trying to import RSA privkey (should fail)"
-if pkcs11_tool --slot=1 -l --pin=myuserpin --write-object="$TPM2_PKCS11_STORE/key-rsa-priv.pem" --type=privkey ; then
+if pkcs11_tool --token-label label -l --pin=myuserpin --write-object="$TPM2_PKCS11_STORE/key-rsa-priv.pem" --type=privkey ; then
     echo >&2 "Error: pkcs11_tool unexpectedly succeeded in importing a RSA private key"
     exit 1
 fi
@@ -161,7 +161,7 @@ else
     # python -c 'print("6d79727361333037326b6579".decode("hex"))'
     # myrsa3072key
     echo "testdata">${tempdir}/data
-    pkcs11_tool --sign --login --slot=1 --id="6d79727361333037326b6579" --pin="myuserpin" \
+    pkcs11_tool --sign --login --token-label label --id="6d79727361333037326b6579" --pin="myuserpin" \
                 --input-file ${tempdir}/data --output-file ${tempdir}/sig \
                 --mechanism SHA256-RSA-PKCS
 
@@ -169,12 +169,12 @@ else
     test "$size" -eq "384"
 
     # Test that we can generate a RSA3072 key via the CAPI
-    pkcs11_tool --slot=1 --login --pin=myuserpin --keypairgen --id="11223344556677889900" --label="myrsa3072CKey" --key-type rsa:3072
+    pkcs11_tool --token-label label --login --pin=myuserpin --keypairgen --id="11223344556677889900" --label="myrsa3072CKey" --key-type rsa:3072
 
     # validate key is 384 bytes and usable
     rm ${tempdir}/sig
     echo "testdata">${tempdir}/data
-    pkcs11_tool --sign --login --slot=1 --id="6d79727361333037326b6579" --pin="myuserpin" \
+    pkcs11_tool --sign --login --token-label label --id="6d79727361333037326b6579" --pin="myuserpin" \
                 --input-file ${tempdir}/data --output-file ${tempdir}/sig \
                 --mechanism SHA256-RSA-PKCS
 
