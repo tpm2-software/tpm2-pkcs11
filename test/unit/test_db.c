@@ -18,6 +18,7 @@
 #include "db.h"
 #include "debug.h"
 #include "object.h"
+#include "token.h"
 #include "twist.h"
 #include "utils.h"
 
@@ -2880,6 +2881,55 @@ static void test_db_get_lock_path(void **state) {
     unsetenv("PKCS11_SQL_LOCK");
 }
 
+/*
+ * Regression test for https://github.com/tpm2-software/tpm2-pkcs11/issues/931
+ *
+ * "Invalid state after deleting RSA key pair + Certificate and then creating a
+ * new RSA key pair."
+ *
+ * token_add_tobject() is supposed to assign the lowest free in-memory object
+ * handle and keep the tobject list sorted by handle. The original
+ * implementation assumed the list always started at handle 1 (it seeds its
+ * candidate index at 2 and bumps it once per node). That invariant only holds
+ * while the head object owns handle 1. token_rm_tobject() does not renumber the
+ * survivors, so deleting the head leaves a head with a handle > 1; the buggy
+ * code then handed the next object a handle that collided with an existing one,
+ * the reported "new key aliases an existing handle" bug.
+ *
+ * Two objects are the minimum that reproduces it: handles 1 and 2 are assigned,
+ * the head (handle 1) is removed, and a newly added object must reuse handle 1
+ * rather than alias the survivor still holding handle 2.
+ */
+static void test_token_add_tobject_handle_reuse_after_delete(void **state) {
+    UNUSED(state);
+
+    token tok = { 0 };
+
+    /* Two objects on an empty token are assigned handles 1 and 2. */
+    tobject objs[2] = { 0 };
+    assert_int_equal(token_add_tobject(&tok, &objs[0]), CKR_OK);
+    assert_int_equal(token_add_tobject(&tok, &objs[1]), CKR_OK);
+    assert_int_equal(objs[0].obj_handle, 1);
+    assert_int_equal(objs[1].obj_handle, 2);
+
+    /*
+     * Delete the head (handle 1). token_rm_tobject() does not renumber the
+     * survivor, so the list head now owns handle 2.
+     */
+    token_rm_tobject(&tok, &objs[0]);
+    assert_int_equal(tok.tobjects.head->obj_handle, 2);
+
+    /* The new object must reuse the freed handle 1, not alias the survivor. */
+    tobject fresh = { 0 };
+    assert_int_equal(token_add_tobject(&tok, &fresh), CKR_OK);
+    assert_int_not_equal(fresh.obj_handle, objs[1].obj_handle);
+
+    /* Its handle must resolve back to itself, not the aliased survivor. */
+    tobject *found = NULL;
+    assert_int_equal(token_find_tobject(&tok, fresh.obj_handle, &found), CKR_OK);
+    assert_ptr_equal(found, &fresh);
+}
+
 int main(int argc, char* argv[]) {
     (void) argc;
     (void) argv;
@@ -2994,6 +3044,7 @@ int main(int argc, char* argv[]) {
         cmocka_unit_test(test_db_add_token_sqlite3_bind_blob_2_fail),
         cmocka_unit_test(test_db_add_token_sqlite3_step_2_fail),
         cmocka_unit_test(test_db_get_lock_path),
+        cmocka_unit_test(test_token_add_tobject_handle_reuse_after_delete),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
