@@ -21,24 +21,29 @@
 
 #include "utils.h"
 
+#ifndef will_return_uint_maybe
+#define will_return_uint_maybe(function, value) \
+    will_return_maybe(function, (value))
+#endif
+
 static inline void set_default_tpm(void) {
-    will_return_maybe(__wrap_backend_fapi_init, CKR_GENERAL_ERROR);
-    will_return_maybe(__wrap_Esys_Initialize, TSS2_RC_SUCCESS);
-    will_return_maybe(__wrap_Tss2_TctiLdr_Initialize, TSS2_RC_SUCCESS);
-    will_return_maybe(__wrap_Tss2_TctiLdr_Finalize, TSS2_RC_SUCCESS);
-    will_return_maybe(__wrap_Esys_Finalize, TSS2_RC_SUCCESS);
-    will_return_maybe(__wrap_Esys_TR_FromTPMPublic, TSS2_RC_SUCCESS);
-    will_return_maybe(__wrap_Esys_TR_Serialize, TSS2_RC_SUCCESS);
-    will_return_maybe(__wrap_Esys_TR_Deserialize, TSS2_RC_SUCCESS);
-    will_return_maybe(__wrap_Esys_TR_SetAuth, TSS2_RC_SUCCESS);
-    will_return_maybe(__wrap_Esys_StartAuthSession, TSS2_RC_SUCCESS);
-    will_return_maybe(__wrap_Esys_TRSess_SetAttributes, TSS2_RC_SUCCESS);
-    will_return_maybe(__wrap_Esys_Create, TSS2_RC_SUCCESS);
-    will_return_maybe(__wrap_Esys_FlushContext, TSS2_RC_SUCCESS);
-    will_return_maybe(__wrap_Esys_Load, TSS2_RC_SUCCESS);
-    will_return_maybe(__wrap_Esys_TRSess_GetAttributes, TSS2_RC_SUCCESS);
-    will_return_maybe(__wrap_Esys_Unseal, TSS2_RC_SUCCESS);
-    will_return_maybe(__wrap_Esys_ObjectChangeAuth, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_backend_fapi_init, CKR_GENERAL_ERROR);
+    will_return_uint_maybe(__wrap_Esys_Initialize, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_Tss2_TctiLdr_Initialize, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_Tss2_TctiLdr_Finalize, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_Esys_Finalize, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_Esys_TR_FromTPMPublic, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_Esys_TR_Serialize, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_Esys_TR_Deserialize, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_Esys_TR_SetAuth, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_Esys_StartAuthSession, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_Esys_TRSess_SetAttributes, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_Esys_Create, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_Esys_FlushContext, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_Esys_Load, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_Esys_TRSess_GetAttributes, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_Esys_Unseal, TSS2_RC_SUCCESS);
+    will_return_uint_maybe(__wrap_Esys_ObjectChangeAuth, TSS2_RC_SUCCESS);
 }
 
 TSS2_RC __wrap_Esys_Create(
