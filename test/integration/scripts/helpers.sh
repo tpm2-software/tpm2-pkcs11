@@ -26,7 +26,13 @@ setup_asan() {
   p="/usr/lib/llvm-$minor_maj/lib/clang/$clang_version/lib/linux/libclang_rt.asan-$(arch).so"
   echo "Looking for libasan to LD_PRELOAD at: $p"
   if [ ! -f "$p" ]; then
+    p="$($CC --print-file-name=libclang_rt.asan-$(arch).so 2>/dev/null || true)"
+  fi
+  if [ ! -f "$p" ]; then
     p="/usr/lib/llvm-$maj/lib/clang/$clang_version/lib/linux/libclang_rt.asan-$(arch).so"
+  fi
+  if [ ! -f "$p" ]; then
+    p="/usr/lib/llvm-$maj/lib/clang/$maj/lib/linux/libclang_rt.asan-$(arch).so"
   fi
   if [ ! -f "$p" ]; then
     p="/usr/lib64/clang/$clang_version/lib/linux/libclang_rt.asan-$(arch).so"
