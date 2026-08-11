@@ -27,6 +27,12 @@ if [[ "$CC" == clang* ]]; then
   echo "Detecting clang, enable asan"
   config_flags="--enable-asan"
   export ASAN_ENABLED=true
+  if [[ "${DOCKER_IMAGE:-}" == "ubuntu-26.04-pkcs11" ]] ||
+    [[ "${DOCKER_IMAGE:-}" == "fedora-44-pkcs11" ]]; then
+    echo "${DOCKER_IMAGE} ships pkcs11-tool with RTLD_DEEPBIND and is incompatible with asan"
+    config_flags=""
+    export ASAN_ENABLED=false
+  fi
   echo "Exported ASAN_ENABLED=$ASAN_ENABLED"
   # To get line numbers set up the asan symbolizer
   clang_version=`$CC --version | head -n 1 | cut -d\  -f 3-3 | cut -d\. -f 1-2`
