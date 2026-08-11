@@ -5,17 +5,6 @@ if [ -z "$T" ]; then
     export T="$(cd "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
 
-#WARNING: If your system hangs on this test, then the reason is typically that
-#you are running clang on a fedora-30 or similar system that has a buggy combination
-#of p11-tool p11-kit and libasan (clang). Consider using gcc or exporting
-#ASAN_ENABLED=false
-
-if [[ "${DOCKER_IMAGE:-nodocker}" = "fedora-30" || "${DOCKER_IMAGE:-nodocker}" = "ubuntu-20.04" || "${DOCKER_IMAGE:-nodocker}" = "ubuntu-22.04" ]]; then
-  echo "p11-tool on fedora-30 or ubuntu-20.04/22.04 with clang is dysfunctional even without asan"
-  ASAN_ENABLED=false
-  #Even without ASAN the dlopen does not work on p11-tool/p11-kit at this moment
-fi
-
 export TPM2OPENSSL_TCTI="$TPM2TOOLS_TCTI"
 
 set -x
