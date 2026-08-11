@@ -57,15 +57,13 @@ while test $# -gt 0; do
 done
 
 # Check that tools is on path
-which tpm2_create > /dev/null
-if [ $? -ne 0 ]; then
+if ! command -v tpm2_create > /dev/null 2>&1; then
   echo "TPM2 TOOLS NOT ON PATH, ADD TO PATH"
   exit 1
 fi
 
 # check that tpm2_ptool is on path
-which tpm2_ptool > /dev/null
-if [ $? -ne 0 ]; then
+if ! command -v tpm2_ptool > /dev/null 2>&1; then
   echo "tpm2_ptool NOT ON PATH, ADD TO PATH"
   exit 1
 fi
