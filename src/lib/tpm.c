@@ -290,7 +290,9 @@ void tpm_ctx_free(tpm_ctx *ctx) {
     SAFE_ESYS_FREE(ctx->tpms_fixed_property_cache);
 
     Esys_Finalize(&ctx->esys_ctx);
-    Tss2_TctiLdr_Finalize(&ctx->tcti_ctx);
+    if (ctx->tcti_ctx) {
+        Tss2_TctiLdr_Finalize(&ctx->tcti_ctx);
+    }
 
     free(ctx);
 }
@@ -415,6 +417,7 @@ CK_RV tpm_session_stop(tpm_ctx *ctx) {
     return CKR_OK;
 }
 
+/* will not hold ownership of tcti */
 CK_RV tpm_ctx_new_fromtcti(void *tcti, tpm_ctx **tctx) {
 
     ESYS_CONTEXT *esys = NULL;
@@ -431,7 +434,6 @@ CK_RV tpm_ctx_new_fromtcti(void *tcti, tpm_ctx **tctx) {
 
     /* populate */
     t->esys_ctx = esys;
-    t->tcti_ctx = tcti;
 
     /*
      * allow TPM2_PKCS11_ESAPI_MANAGE_FLAGS to override the configure time default on whether or
@@ -450,6 +452,7 @@ error:
     return CKR_GENERAL_ERROR;
 }
 
+/* will initialize and own the tcti context */
 CK_RV tpm_ctx_new(const char *config, tpm_ctx **tctx) {
 
     TSS2_TCTI_CONTEXT *tcti = NULL;
@@ -465,7 +468,9 @@ CK_RV tpm_ctx_new(const char *config, tpm_ctx **tctx) {
         return CKR_GENERAL_ERROR;
     }
 
-    return tpm_ctx_new_fromtcti(tcti, tctx);
+    CK_RV rv = tpm_ctx_new_fromtcti(tcti, tctx);
+    (*tctx)->tcti_ctx = tcti;
+    return rv;
 }
 
 static CK_RV tpm_get_properties(tpm_ctx *ctx, TPMS_CAPABILITY_DATA **d) {
