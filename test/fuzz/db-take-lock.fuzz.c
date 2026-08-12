@@ -34,6 +34,7 @@ static void test_state_free(test_state **test) {
 
     if (test && *test) {
         test_state *t = *test;
+        free(t->tmp_dir);
         free(t->random_string);
         if (t->file) {
             fclose(t->file);
@@ -54,13 +55,14 @@ static test_state *test_state_new(const uint8_t *data, size_t len) {
 
     char tmp_key[] = "pkcs11_fuzztest_db_take_lock_XXXXXX";
     char *tmp_dir = mkdtemp(tmp_key);
-    if (!tmp_dir) {
+    if (!tmp_dir || !(tmp_dir = strdup(tmp_dir))) {
         free(null_term_data);
         return NULL;
     }
 
     test_state *t = calloc(1, sizeof(test_state));
     if (!t) {
+        free(tmp_dir);
         free(null_term_data);
         return NULL;
     }
