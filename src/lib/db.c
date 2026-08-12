@@ -1251,15 +1251,15 @@ static CK_RV handle_homexdg(char *path, size_t len, bool *skip) {
 
 static CK_RV handle_cwd(char *path, size_t len, bool *skip) {
 
+    char buf[PATH_MAX];
     *skip = false;
 
-    char *cwd_path = getcwd(NULL, 0);
+    char *cwd_path = getcwd(buf, sizeof(buf));
     if (!cwd_path) {
         return errno == ENOMEM ? CKR_HOST_MEMORY : CKR_GENERAL_ERROR;
     }
 
     unsigned l = snprintf(path, len, "%s/%s", cwd_path, DB_NAME);
-    free(cwd_path);
     if (l >= len) {
         LOGE("Completed DB path was over-length, got %d expected less than %lu",
                 l, len);
