@@ -64,7 +64,7 @@ jobs:
           PROJECT_NAME: ${{ github.event.repository.name }}
       - name: failure
         if: ${{ failure() }}
-        run: cat build/test-suite.log || true
+        run: find "${GITHUB_WORKSPACE}" -name test-suite.log -exec cat {} \; || true
   coverity-test:
     runs-on: ubuntu-latest
     if: contains(github.ref, 'coverity_scan')
