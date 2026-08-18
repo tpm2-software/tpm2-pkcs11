@@ -7,7 +7,7 @@ jobs:
     if: "!contains(github.ref, 'coverity_scan')"
     strategy:
       matrix:
-        docker_image: [ ubuntu-26.04-pkcs11, fedora-44-pkcs11, opensuse-leap-pkcs11 ]
+        docker_image: [ ubuntu-26.04-pkcs11, fedora-44-pkcs11, opensuse-leap-pkcs11, nixos-26.05-pkcs11 ]
         compiler: [gcc, clang]
         exclude:
           - docker_image: ubuntu-26.04-pkcs11
