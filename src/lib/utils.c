@@ -285,7 +285,7 @@ twist aes256_gcm_decrypt(const twist key, const twist objauth) {
         goto out;
     }
 
-    plaintext = twist_calloc(clen);
+    plaintext = twist_calloc(clen + EVP_MAX_BLOCK_LENGTH);
     if (!plaintext) {
         LOGE("oom");
         goto out;
@@ -318,9 +318,18 @@ twist aes256_gcm_decrypt(const twist key, const twist objauth) {
         goto out;
     }
 
-    ret = EVP_DecryptFinal_ex(ctx, &((CK_BYTE_PTR )plaintext)[len], &len);
+    int left = 0;
+    ret = EVP_DecryptFinal_ex(ctx, &((CK_BYTE_PTR )plaintext)[len], &left);
     if (!ret) {
         LOGE("AES GCM verification failed!");
+        goto out;
+    }
+
+    assert(left == 0);
+
+    plaintext = twist_truncate(plaintext, len);
+    if (!plaintext) {
+        LOGE("twist_truncate failed");
         goto out;
     }
 
