@@ -312,6 +312,10 @@ twist aes256_gcm_decrypt(const twist key, const twist objauth) {
         goto out;
     }
 
+    if (twist_len(tagbin) != 16) {
+        LOGE("Invalid tag length");
+        goto out;
+    }
     ret = EVP_CIPHER_CTX_ctrl (ctx, EVP_CTRL_GCM_SET_TAG, 16, (void *)tagbin);
     if (!ret) {
         LOGE("EVP_CIPHER_CTX_ctrl failed");
