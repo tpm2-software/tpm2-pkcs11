@@ -262,6 +262,11 @@ twist aes256_gcm_decrypt(const twist key, const twist objauth) {
         goto out;
     }
 
+    if (twist_len(ivbin) != 12) {
+        LOGE("Invalid IV length");
+        goto out;
+    }
+
     tagbin = twistbin_unhexlify(tag);
     if (!tagbin) {
         LOGE("oom");
