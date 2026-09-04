@@ -142,23 +142,35 @@ CK_RV token_add_tobject(token *tok, tobject *t) {
         return CKR_OK;
     }
 
-    /* minimum potential handle to add */
-    CK_OBJECT_HANDLE index = 2;
+    /*
+     * Gap before the head: the lowest handles were freed (token_rm_tobject does
+     * not renumber survivors), so handle 1 is available. Insert at the front.
+     * The previous implementation assumed the head always owned handle 1, which
+     * broke after deleting the lowest-numbered objects and led to a new object
+     * being assigned a handle that collided with an existing one.
+     */
+    if (tok->tobjects.head->obj_handle > 1) {
+        t->obj_handle = 1;
+        t->l.prev = NULL;
+        t->l.next = &tok->tobjects.head->l;
+        tok->tobjects.head->l.prev = &t->l;
+        tok->tobjects.head = t;
+        return CKR_OK;
+    }
 
     list *cur = &tok->tobjects.head->l;
     while(cur) {
-
-        if (index == 0) {
-            LOGE("Rollover, too many objects for token, id: %u, label: %*s", tok->id,
-                    (int)sizeof(tok->label), tok->label);
-            return CKR_OK;
-        }
 
         tobject *c = list_entry(cur, tobject, l);
 
         /* end of list, just add it updating the tail pointer */
         if (!c->l.next) {
-            t->obj_handle = index;
+            if (c->obj_handle == ~((CK_OBJECT_HANDLE)0)) {
+                LOGE("Too many objects for token, id: %u, label: %*s", tok->id,
+                        (int)sizeof(tok->label), tok->label);
+                return CKR_GENERAL_ERROR;
+            }
+            t->obj_handle = c->obj_handle + 1;
             t->l.prev = cur;
             cur->next = &t->l;
             tok->tobjects.tail = t;
@@ -167,10 +179,9 @@ CK_RV token_add_tobject(token *tok, tobject *t) {
 
         tobject *n = list_entry(c->l.next, tobject, l);
 
-        /* gap */
+        /* gap between two consecutive objects: reuse the lowest free handle */
         if (n->obj_handle - c->obj_handle > 1) {
-            assert(index < n->obj_handle && index > c->obj_handle);
-            t->obj_handle = index;
+            t->obj_handle = c->obj_handle + 1;
 
             /* new object should point to next and previous */
             t->l.next = &n->l;
@@ -185,7 +196,6 @@ CK_RV token_add_tobject(token *tok, tobject *t) {
             return CKR_OK;
         }
 
-        index++;
         cur = cur->next;
     }
 
