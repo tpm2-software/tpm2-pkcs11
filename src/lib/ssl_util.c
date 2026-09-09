@@ -81,6 +81,13 @@ CK_RV ssl_util_check_PKCS1_TYPE_2(const CK_BYTE_PTR inbuf, CK_ULONG inlen, CK_UL
 #if defined(LIB_TPM2_OPENSSL_OPENSSL_POST300)
 #include <openssl/core_names.h>
 #include <openssl/param_build.h>
+#if !defined(LIB_TPM2_OPENSSL_OPENSSL_POST400)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+#endif
+
+#if defined(LIB_TPM2_OPENSSL_OPENSSL_POST300)
 static CK_RV get_RSA_evp_pubkey(CK_ATTRIBUTE_PTR e_attr, CK_ATTRIBUTE_PTR n_attr, EVP_PKEY **out_pkey) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
@@ -126,8 +133,38 @@ static CK_RV get_RSA_evp_pubkey(CK_ATTRIBUTE_PTR e_attr, CK_ATTRIBUTE_PTR n_attr
     /* convert params to EVP key */
     evp_ctx = EVP_PKEY_CTX_new_from_name(NULL, "RSA", NULL);
     if (!evp_ctx) {
-        SSL_UTIL_LOGE("EVP_PKEY_CTX_new_id");
+#ifdef LIB_TPM2_OPENSSL_OPENSSL_POST400
+        SSL_UTIL_LOGE("EVP_PKEY_CTX_new_from_name");
         goto out;
+#else
+        RSA *rsa = RSA_new();
+        if (!rsa) {
+            SSL_UTIL_LOGE("RSA_new");
+            goto out;
+        }
+        if (!RSA_set0_key(rsa, n, e, NULL)) {
+            SSL_UTIL_LOGE("RSA_set0_key");
+            RSA_free(rsa);
+            goto out;
+        }
+        /* ownership of n/e transferred to rsa; avoid double-free below */
+        n = e = NULL;
+
+        EVP_PKEY *pkey = EVP_PKEY_new();
+        if (!pkey) {
+            SSL_UTIL_LOGE("EVP_PKEY_new");
+            RSA_free(rsa);
+            goto out;
+        }
+        if (EVP_PKEY_assign_RSA(pkey, rsa) != 1) {
+            RSA_free(rsa);
+            EVP_PKEY_free(pkey);
+            goto out;
+        }
+        *out_pkey = pkey;
+        rv = CKR_OK;
+        goto out;
+#endif
     }
 
     int rc = EVP_PKEY_fromdata_init(evp_ctx);
@@ -341,6 +378,11 @@ static CK_RV get_EC_evp_pubkey(CK_ATTRIBUTE_PTR ecparams, CK_ATTRIBUTE_PTR ecpoi
     *out_pkey = pkey;
     return CKR_OK;
 }
+#endif
+
+#if defined(LIB_TPM2_OPENSSL_OPENSSL_POST300) && \
+		!defined(LIB_TPM2_OPENSSL_OPENSSL_POST400)
+#pragma GCC diagnostic pop
 #endif
 
 CK_RV ssl_util_attrs_to_evp(attr_list *attrs, EVP_PKEY **outpkey) {
