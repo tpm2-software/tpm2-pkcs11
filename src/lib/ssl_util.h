@@ -27,6 +27,10 @@
 #define LIB_TPM2_OPENSSL_OPENSSL_POST300 0x1010100f
 #endif
 
+#if (OPENSSL_VERSION_NUMBER >= 0x40000000) /* OpenSSL 4.0.0 */
+#define LIB_TPM2_OPENSSL_OPENSSL_POST400 0x1010100f
+#endif
+
 #define SSL_UTIL_LOGE(m) LOGE("%s: %s", m, ERR_error_string(ERR_get_error(), NULL));
 
 CK_RV ssl_util_attrs_to_evp(attr_list *attrs, EVP_PKEY **outpkey);
