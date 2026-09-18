@@ -100,3 +100,9 @@ check_openssl_version()
   fi
 }
 
+ossl_engine_supported()
+{
+  local engine="${1:-pkcs11}"
+  local config="${2:-$TEST_FIXTURES/ossl.cnf}"
+  OPENSSL_CONF="$config" openssl engine -t -c "$engine" >/dev/null 2>&1
+}

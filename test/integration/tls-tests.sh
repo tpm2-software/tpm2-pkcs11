@@ -51,10 +51,7 @@ openssl ca -batch -keyfile "$CA_KEY" -cert "$CA_PEM" -in server.csr -out server.
 openssl x509 -in server.crt -out server.pem -outform pem
 
 # create and sign PKCS#11 cert for client
-if [ "$OSSL3_DETECTED" -eq "0" ]; then
-    export OPENSSL_CONF="$TEST_FIXTURES/ossl.cnf"
-    openssl req -new -engine pkcs11 -keyform engine -key "$PKCS11_KEY" -out client.csr -subj "/C=US/ST=Radius/L=Somewhere/O=Example Inc./CN=testing/emailAddress=testing@123.com"
-else
+if [ "$OSSL3_DETECTED" -eq "1" ]; then
     pushd $TPM2_PKCS11_STORE
     yaml_rsa0=$(tpm2_ptool export --label=label --userpin=myuserpin --key-label=rsa0 --path=$TPM2_PKCS11_STORE)
     popd
@@ -67,21 +64,37 @@ else
       -out client.csr
 fi
 
+if ossl_engine_supported; then
+    OPENSSL_CONF="$TEST_FIXTURES/ossl.cnf" \
+    openssl req -new -engine pkcs11 -keyform engine -key "$PKCS11_KEY" -out client.csr -subj "/C=US/ST=Radius/L=Somewhere/O=Example Inc./CN=testing/emailAddress=testing@123.com"
+fi
+
 openssl ca -batch -keyfile "$CA_KEY" -cert "$CA_PEM" -in client.csr -out client.crt -extensions xpclient_ext -extfile "$EXT_FILE" -config "$CLIENT_CNF"
 openssl x509 -in client.crt -out client_tpm.pem -outform pem
 
 # OpenSSL version 1.0.2g ends up in a state where it tries to read from stdin instead of the ssl connection.
 # Feeding it one byte as stdin avoids this condition which is described in more detail here:
 # https://github.com/tpm2-software/tpm2-pkcs11/pull/366
-openssl s_server -debug -CAfile "$CA_PEM" -cert server.pem -key server.key -Verify 1 <<< '1' &
-sleep 1
+openssl_s_server()
+{
+    openssl s_server -debug -naccept 1 -CAfile "$CA_PEM" -cert server.pem -key server.key -Verify 1 <<< '1' &
+    OPENSSL_S_SERVER_PID=$!
+    sleep 1
+}
 
 # default connects to 127.0.0.1:443
-if [ "$OSSL3_DETECTED" -eq "0" ]; then
+if ossl_engine_supported; then
+    openssl_s_server
+    OPENSSL_CONF="$TEST_FIXTURES/ossl.cnf" \
     openssl s_client -engine pkcs11 -keyform engine -key "$PKCS11_KEY" -CAfile "$CA_PEM" -cert client_tpm.pem <<< 'Q'
-else
+    wait "$OPENSSL_S_SERVER_PID"
+fi
+
+if [ "$OSSL3_DETECTED" -eq "1" ]; then
+    openssl_s_server
     TPM2OPENSSL_PARENT_AUTH="mypobjpin" openssl s_client -provider tpm2 -provider default \
       -key "$TPM2_PKCS11_STORE/rsa0.pem" -pass "pass:$auth_rsa0" -ignore_unexpected_eof \
       -CAfile "$CA_PEM" -cert client_tpm.pem <<< 'Q'
+    wait "$OPENSSL_S_SERVER_PID"
 fi
 exit 0
