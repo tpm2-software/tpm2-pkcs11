@@ -17,6 +17,19 @@ function get_deps() {
 	local github_deps=("tpm2-tss" "tpm2-abrmd" "tpm2-tools" "${engine_pkg}")
 	declare -A local config_flags=( ["tpm2-tss"]="--disable-doxygen-doc --enable-debug" ["tpm2-abrmd"]="--enable-debug" ["tpm2-tools"]="--disable-hardening --enable-debug" ["${engine_pkg}"]="${engine_flags}")
 	declare -A local versions=( ["tpm2-tss"]="master" ["tpm2-abrmd"]="master" ["tpm2-tools"]="master" ["${engine_pkg}"]="master")
+	local have_openssl_engine=no
+	if printf '#include <openssl/engine.h>\n' | ${CC:-cc} $(pkg-config \
+			--cflags libcrypto) -x c -c -o /dev/null - \
+			>/dev/null 2>&1; then
+		have_engine_header=yes
+	fi
+
+	if [ "$OSSL3_DETECTED" -eq "1" ] &&
+			[ "$have_engine_header" = "yes" ]; then
+		github_deps+=("tpm2-tss-engine")
+		config_flags["tpm2-tss-engine"]="--enable-tctienvvar"
+		versions["tpm2-tss-engine"]="master"
+	fi
 
 	echo "pwd starting: `pwd`"
 	pushd "$1"
