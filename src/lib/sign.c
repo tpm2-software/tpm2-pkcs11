@@ -36,7 +36,7 @@ struct sign_opdata {
     const EVP_MD *md;
 };
 
-static sign_opdata *sign_opdata_new(mdetail *mdtl, CK_MECHANISM_PTR mechanism, tobject *tobj) {
+static sign_opdata *sign_opdata_new(operation op, mdetail *mdtl, CK_MECHANISM_PTR mechanism, tobject *tobj) {
 
     int padding = 0;
     CK_RV rv = mech_get_padding(mdtl,
@@ -74,9 +74,11 @@ static sign_opdata *sign_opdata_new(mdetail *mdtl, CK_MECHANISM_PTR mechanism, t
     }
 
     EVP_PKEY *pkey = NULL;
-    rv = ssl_util_attrs_to_evp(tobj->attrs, &pkey);
-    if (rv != CKR_OK) {
-        return NULL;
+    if (op != operation_sign) {
+        rv = ssl_util_attrs_to_evp(tobj->attrs, &pkey);
+        if (rv != CKR_OK) {
+            return NULL;
+        }
     }
 
     sign_opdata *opdata = calloc(1, sizeof(sign_opdata));
@@ -226,7 +228,7 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
         }
     }
 
-    sign_opdata *opdata = sign_opdata_new(tok->mdtl,
+    sign_opdata *opdata = sign_opdata_new(op, tok->mdtl,
             mechanism, tobj);
     if (!opdata) {
         tpm_opdata_free(&tpm_opdata);
