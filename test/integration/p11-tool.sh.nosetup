@@ -252,11 +252,11 @@ EOF
   fi
   ECC_KEY_URL="${TOKENURL2};object=myecckey;type=private"
   OPENSSL_CONF="$cnf" \
-  openssl dgst -engine pkcs11 -keyform engine -sha1 -sign "$ECC_KEY_URL" \
+  openssl dgst -engine pkcs11 -keyform engine -sha256 -sign "$ECC_KEY_URL" \
           -out ${tempdir}/sig -passin pass:mynewuserpin "${tempdir}/data"
 
   OPENSSL_CONF="$cnf" \
-  openssl dgst -sha1 -verify "${tempdir}/eccpubkey.pem" \
+  openssl dgst -sha256 -verify "${tempdir}/eccpubkey.pem" \
                -signature "${tempdir}/sig" "${tempdir}/data"
 }
 
