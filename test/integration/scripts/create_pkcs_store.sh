@@ -153,10 +153,6 @@ echo "Adding 1 HMAC:SHA256 key under token \"label\""
 tpm2_ptool addkey --algorithm=hmac:sha256 --label="label" --key-label="hmac0" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 echo "Added HMAC Key"
 
-if [ "$OSSL3_DETECTED" -eq "0" ]; then
-    export OPENSSL_CONF="$TEST_FIXTURES/ossl.cnf"
-fi
-
 #
 # generate cert
 #
@@ -188,17 +184,19 @@ if [ "$OSSL3_DETECTED" -eq "1" ]; then
         -config "$TEST_FIXTURES/ossl-req-ca.cnf" -extensions ca_ext -out "$cert.rsa1"
 
 	# sign a certificate for rsa2 using the rsa1 key
-	TPM2OPENSSL_PARENT_AUTH="mypobjpin" openssl \
+    TPM2OPENSSL_PARENT_AUTH="mypobjpin" openssl \
 	    req -provider tpm2 -provider default -new -subj '/CN=my sub key/' -sha256 \
 	    -key "$TPM2_PKCS11_STORE/8.pem" --passin "pass:$auth_8" -out "$cert.csr.rsa2"
 
-	TPM2OPENSSL_PARENT_AUTH="mypobjpin" openssl \
+    TPM2OPENSSL_PARENT_AUTH="mypobjpin" openssl \
         x509 -provider tpm2 -provider default -req -days 365 -sha256 -in "$cert.csr.rsa2" \
     	-CA "$cert.rsa1" -CAkey "$TPM2_PKCS11_STORE/6.pem" --passin "pass:$auth_6"\
     	-CAcreateserial -extfile "$TEST_FIXTURES/ossl-req-cert.cnf" -extensions cert_ext \
     	-out "$cert.rsa2"
+fi
 
-else
+if ossl_engine_supported; then
+    export OPENSSL_CONF="$TEST_FIXTURES/ossl.cnf"
     # since we use the shared lib in a non-asan executable via dlopen() we need to set up
     # asan so we have defined symbols and we don't worry about leaks (since the tools are
     # often silly and leak.
@@ -211,13 +209,14 @@ else
         -config "$TEST_FIXTURES/ossl-req-ca.cnf" -extensions ca_ext -out "$cert.rsa1"
 
 	# sign a certificate for rsa2 using the rsa1 key
-	TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
+    TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
 	    req -new -subj '/CN=my sub key/' -sha256 -engine pkcs11 -keyform engine -key slot_1-label_rsa2 -out "$cert.csr.rsa2"
-	TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
+    TPM2_PKCS11_STORE="$TPM2_PKCS11_STORE" openssl \
     	x509 -req -days 365 -sha256 -in "$cert.csr.rsa2" -engine pkcs11 \
     	-CA "$cert.rsa1" -CAkeyform engine -CAkey slot_1-label_rsa1 -CAcreateserial \
     	-extfile "$TEST_FIXTURES/ossl-req-cert.cnf" -extensions cert_ext -out "$cert.rsa2"
-clear_asan
+    clear_asan
+    unset OPENSSL_CONF
 fi
 
 #
