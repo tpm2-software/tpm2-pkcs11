@@ -2,9 +2,7 @@
 
 [![Build Status](https://github.com/tpm2-software/tpm2-pkcs11/workflows/CI/badge.svg)](https://github.com/tpm2-software/tpm2-pkcs11/actions)
 [![Coverage Status](https://codecov.io/gh/tpm2-software/tpm2-pkcs11/branch/master/graph/badge.svg)](https://codecov.io/gh/tpm2-software/tpm2-pkcs11)
-[![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/tpm2-software/tpm2-pkcs11.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/tpm2-software/tpm2-pkcs11/context:cpp)
-[![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/tpm2-software/tpm2-pkcs11.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/tpm2-software/tpm2-pkcs11/context:python)
-[![Coverity Scan](src="https://img.shields.io/coverity/scan/16909.svg")](https://scan.coverity.com/projects/tpm2-pkcs11)
+[![Coverity Scan](https://scan.coverity.com/projects/16909/badge.svg)](https://scan.coverity.com/projects/tpm2-pkcs11)
 
 PKCS #11 is a Public-Key Cryptography Standard that defines a standard method to
 access cryptographic services from tokens/ devices such as hardware security
