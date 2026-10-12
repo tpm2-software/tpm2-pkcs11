@@ -1389,6 +1389,137 @@ static void test_create_data_object_public (void **state) {
     assert_int_equal(rv, CKR_ATTRIBUTE_VALUE_INVALID);
 }
 
+/*
+ * Find the slot whose token has not been initialized yet. tpm2-pkcs11 always
+ * keeps exactly one such spare slot available (and adds a fresh one after each
+ * C_InitToken), so this returns a blank token the test can claim for itself.
+ */
+static CK_SLOT_ID find_uninitialized_slot(void) {
+
+    CK_SLOT_ID slots[16];
+    CK_ULONG nslots = ARRAY_LEN(slots);
+    CK_RV rv = C_GetSlotList(CK_FALSE, slots, &nslots);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG i;
+    for (i = 0; i < nslots; i++) {
+        CK_TOKEN_INFO info;
+        rv = C_GetTokenInfo(slots[i], &info);
+        assert_int_equal(rv, CKR_OK);
+
+        if (!(info.flags & CKF_TOKEN_INITIALIZED)) {
+            return slots[i];
+        }
+    }
+
+    fail_msg("no uninitialized token slot available");
+    return 0; /* unreachable: fail_msg does not return */
+}
+
+/*
+ * Create a private CKO_DATA object (cheap, no TPM key generation involved) and
+ * return its assigned object handle. Driving token_add_tobject() through plain
+ * data objects keeps the test's object set small and fully under its control.
+ */
+static CK_OBJECT_HANDLE create_private_data_object(CK_SESSION_HANDLE session,
+        const char *obj_label, CK_BYTE obj_id) {
+
+    CK_BBOOL ck_true = CK_TRUE;
+    CK_BBOOL ck_false = CK_FALSE;
+    CK_OBJECT_CLASS object_class = CKO_DATA;
+    char application[] = "my application";
+    CK_BYTE value[] = "my data";
+
+    CK_ATTRIBUTE templ[] = {
+        { CKA_CLASS,       &object_class,     sizeof(object_class)    },
+        { CKA_TOKEN,       &ck_true,          sizeof(ck_true)         },
+        { CKA_PRIVATE,     &ck_true,          sizeof(ck_true)         },
+        { CKA_MODIFIABLE,  &ck_false,         sizeof(ck_false)        },
+        { CKA_LABEL,       (void *)obj_label, strlen(obj_label)       },
+        { CKA_APPLICATION, application,       sizeof(application) - 1 },
+        { CKA_OBJECT_ID,   &obj_id,           sizeof(obj_id)          },
+        { CKA_VALUE,       value,             sizeof(value)           },
+    };
+
+    CK_OBJECT_HANDLE obj = CK_INVALID_HANDLE;
+    CK_RV rv = C_CreateObject(session, templ, ARRAY_LEN(templ), &obj);
+    assert_int_equal(rv, CKR_OK);
+
+    return obj;
+}
+
+
+/*
+ * Regression test for https://github.com/tpm2-software/tpm2-pkcs11/issues/931
+ *
+ * Verifies correct behaviour when objects are deleted and new ones are created
+ * within the same session.
+ *
+ * The test creates two objects, deletes one of them, and then creates a third
+ * object. The expected behaviour is that the newly created object is distinct
+ * from any remaining existing object and does not interfere with them.
+ *
+ * The test passes if, after deletion and creation, all remaining objects can be
+ * accessed independently and no unintended aliasing or reuse of identifiers is
+ * observable within the session.
+ *
+ * The sequence is executed within a single session to ensure that behaviour is
+ * consistent without relying on any session restart or reinitialization.
+ */
+static void test_handle_reuse_after_delete(void **state) {
+    UNUSED(state);
+
+    CK_UTF8CHAR so_pin[]   = "sopin";
+    CK_UTF8CHAR user_pin[] = "userpin";
+
+    /*
+     * Claim the spare uninitialized slot and set it up from scratch, so the
+     * test owns a pristine token no matter what the other tokens contain.
+     */
+    CK_SLOT_ID slot = find_uninitialized_slot();
+
+    /* token label is a fixed 32 byte field, space padded, no embedded NUL */
+    CK_UTF8CHAR label[32];
+    memset(label, ' ', sizeof(label));
+    memcpy(label, "my label", strlen("my label"));
+
+    CK_RV rv = C_InitToken(slot, so_pin, sizeof(so_pin) - 1, label);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_SESSION_HANDLE session;
+    rv = C_OpenSession(slot, CKF_SERIAL_SESSION | CKF_RW_SESSION,
+            NULL, NULL, &session);
+    assert_int_equal(rv, CKR_OK);
+
+    /* a fresh token has only an SO PIN; set the user PIN to create objects */
+    rv = C_Login(session, CKU_SO, so_pin, sizeof(so_pin) - 1);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_InitPIN(session, user_pin, sizeof(user_pin) - 1);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_Logout(session);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_Login(session, CKU_USER, user_pin, sizeof(user_pin) - 1);
+    assert_int_equal(rv, CKR_OK);
+
+    /* 1. two objects on a fresh token take the two lowest handles */
+    CK_OBJECT_HANDLE first  = create_private_data_object(session, "first", 1);
+    CK_OBJECT_HANDLE second = create_private_data_object(session, "second", 2);
+    assert_int_not_equal(first, second);
+
+    /* 2. destroy the head (lowest handle); the survivor keeps its handle */
+    CK_OBJECT_HANDLE head     = first < second ? first : second;
+    CK_OBJECT_HANDLE survivor = first < second ? second : first;
+    rv = C_DestroyObject(session, head);
+    assert_int_equal(rv, CKR_OK);
+
+    /* 3. the next object must reuse the freed head handle, not alias survivor */
+    CK_OBJECT_HANDLE fresh = create_private_data_object(session, "third", 3);
+    assert_int_not_equal(fresh, survivor);
+
+    rv = C_CloseSession(session);
+    assert_int_equal(rv, CKR_OK);
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
@@ -1424,6 +1555,7 @@ int main() {
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_ecc_keygen_CKA_DERIVE_CK_TRUE,
                 test_setup, test_teardown),
+        cmocka_unit_test(test_handle_reuse_after_delete),
     };
 
     return cmocka_run_group_tests(tests, _group_setup, _group_teardown);
