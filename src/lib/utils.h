@@ -240,4 +240,7 @@ static bool _do_safe_arithmetic(void *r, BN_ULONG a, BN_ULONG b,
 #define safe_mul(r, a, b) do { if (_safe_mul(r, a, b)) { LOGE("overflow"); abort(); } } while(0)
 #define safe_mule(r, a)   do { if (_safe_mule(r, a)) { LOGE("overflow"); abort(); } } while(0)
 
+/* A TPM format-one response code without its parameter, handle or session; see utils.c */
+TSS2_RC utils_format_one_code(TSS2_RC rc);
+
 #endif /* SRC_PKCS11_UTILS_H_ */

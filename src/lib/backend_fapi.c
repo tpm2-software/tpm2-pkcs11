@@ -778,6 +778,25 @@ static TSS2_RC auth_cb(const char *path, char const *description, const char **a
     return TSS2_FAPI_RC_AUTHORIZATION_UNKNOWN;
 }
 
+/*
+ * What a failed Fapi_Unseal of the token's seal object says about the PIN, as for the esysdb backend:
+ * the TPM refusing the authorization is a wrong PIN, and its dictionary-attack lockout a locked one.
+ * An error from FAPI, ESYS or the TCTI, not the TPM, is none of these.
+ */
+static CK_RV unseal_refusal(TSS2_RC rc) {
+
+    if (rc == TPM2_RC_LOCKOUT) {
+        return CKR_PIN_LOCKED;
+    }
+
+    TSS2_RC code = utils_format_one_code(rc);
+    if (code == TPM2_RC_AUTH_FAIL || code == TPM2_RC_BAD_AUTH) {
+        return CKR_PIN_INCORRECT;
+    }
+
+    return CKR_GENERAL_ERROR;
+}
+
 /** Unseal a token's wrapping key.
  *
  * see backend_token_unseal_wrapping_key()
@@ -829,6 +848,7 @@ CK_RV backend_fapi_token_unseal_wrapping_key(token *tok, bool user, twist tpin) 
     }
     if (rc) {
         LOGE("Fapi_Unseal failed.");
+        rv = unseal_refusal(rc);
         goto error;
     }
 

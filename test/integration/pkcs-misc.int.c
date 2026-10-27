@@ -127,9 +127,9 @@ static void test_get_info(void **state) {
     rv = C_GetInfo(&info);
     assert_int_equal(rv, CKR_OK);
 
-    // check whether cryptoki version is correct
-    assert_int_equal(info.cryptokiVersion.major, 2);
-    assert_int_equal(info.cryptokiVersion.minor, 40);
+    // check whether cryptoki version is correct: the newest the library implements
+    assert_int_equal(info.cryptokiVersion.major, 3);
+    assert_int_equal(info.cryptokiVersion.minor, 2);
 
 
     CK_BYTE major;

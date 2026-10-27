@@ -17,6 +17,8 @@ struct digest_op_data {
     tobject *tobj;
     CK_MECHANISM mechanism;
     EVP_MD_CTX *mdctx;
+    /* C_DigestUpdate has run, so the operation is multi-part: C_Digest is refused. */
+    bool updated;
 };
 
 digest_op_data *digest_op_data_new(void);

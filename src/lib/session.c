@@ -76,26 +76,32 @@ CK_RV session_open(CK_SLOT_ID slot_id, CK_FLAGS flags, void *application,
 	    return CKR_SLOT_ID_INVALID;
 	}
 
+	/* The session table and the login state are the token's, shared with every other call. */
+	token_lock(t);
+
 	rv = check_max_sessions(t->s_table);
 	if (rv != CKR_OK) {
-	    return rv;
+	    goto out;
 	}
 
 	/*
 	 * Cannot open an R/O session when the SO is logged in
 	 */
 	if ((!(flags & CKF_RW_SESSION)) && (t->login_state == token_so_logged_in)) {
-	    return CKR_SESSION_READ_WRITE_SO_EXISTS;
+	    rv = CKR_SESSION_READ_WRITE_SO_EXISTS;
+	    goto out;
 	}
 
 	rv = session_table_new_entry(t->s_table, session, t, flags);
     if (rv != CKR_OK) {
-        return rv;
+        goto out;
     }
 
 	add_tokid_to_session_handle(t->id, session);
 
-	return CKR_OK;
+out:
+	token_unlock(t);
+	return rv;
 }
 
 CK_RV session_close(CK_SESSION_HANDLE session) {
@@ -104,7 +110,16 @@ CK_RV session_close(CK_SESSION_HANDLE session) {
     unsigned tokid = get_tokid_from_session_handle_and_cleanse(&session);
     check_slot_id(tokid, t, CKR_SESSION_HANDLE_INVALID);
 
-    return session_table_free_ctx(t, session);
+    /*
+     * Closing the last session logs out, which flushes the token's TPM objects through the ESYS
+     * context every other call uses: under the token lock, like them, or it races a call on
+     * another thread ("Esys called in bad sequence").
+     */
+    token_lock(t);
+    CK_RV rv = session_table_free_ctx(t, session);
+    token_unlock(t);
+
+    return rv;
 }
 
 CK_RV session_closeall(CK_SLOT_ID slot_id) {
@@ -112,7 +127,12 @@ CK_RV session_closeall(CK_SLOT_ID slot_id) {
     token *t;
     check_slot_id(slot_id, t, CKR_SLOT_ID_INVALID);
 
-    return session_table_free_ctx_all(t);
+    /* As session_close(). */
+    token_lock(t);
+    CK_RV rv = session_table_free_ctx_all(t);
+    token_unlock(t);
+
+    return rv;
 }
 
 CK_RV session_lookup(CK_SESSION_HANDLE session, token **tok, session_ctx **ctx) {
@@ -121,12 +141,17 @@ CK_RV session_lookup(CK_SESSION_HANDLE session, token **tok, session_ctx **ctx) 
     unsigned tokid = get_tokid_from_session_handle_and_cleanse(&session);
     check_slot_id(tokid, tmp, CKR_SESSION_HANDLE_INVALID);
 
+    /*
+     * Locked before the lookup: a session closed on another thread between the two would be freed
+     * under the caller.
+     */
+    token_lock(tmp);
+
     *ctx = session_table_lookup(tmp->s_table, session);
     if (!*ctx) {
+        token_unlock(tmp);
         return CKR_SESSION_HANDLE_INVALID;
     }
-
-    token_lock(tmp);
 
     *tok = tmp;
 

@@ -282,6 +282,14 @@ CK_BBOOL attr_list_get_CKA_PRIVATE(attr_list *attrs, CK_BBOOL defvalue);
 
 CK_BBOOL attr_list_get_CKA_TOKEN(attr_list *attrs, CK_BBOOL defvalue);
 
+CK_BBOOL attr_list_get_CKA_DECRYPT(attr_list *attrs, CK_BBOOL defvalue);
+
+CK_BBOOL attr_list_get_CKA_ENCRYPT(attr_list *attrs, CK_BBOOL defvalue);
+
+CK_BBOOL attr_list_get_CKA_SIGN(attr_list *attrs, CK_BBOOL defvalue);
+
+CK_BBOOL attr_list_get_CKA_VERIFY(attr_list *attrs, CK_BBOOL defvalue);
+
 CK_KEY_TYPE attr_list_get_CKA_KEY_TYPE(attr_list *attrs, CK_KEY_TYPE defvalue);
 
 CK_OBJECT_CLASS attr_list_get_CKA_CLASS(attr_list *attrs, CK_OBJECT_CLASS defvalue);
@@ -326,5 +334,7 @@ CK_RV attr_list_append_entry(attr_list **attrs, CK_ATTRIBUTE_PTR untrusted_attr)
 CK_RV attr_list_update_entry(attr_list *attrs, CK_ATTRIBUTE_PTR untrusted_attr);
 
 const char *attr_get_name(CK_ATTRIBUTE_TYPE t);
+
+CK_RV attr_refuse_token_set(CK_ATTRIBUTE_PTR templ, CK_ULONG count, bool importing);
 
 #endif /* SRC_LIB_ATTRS_H_ */

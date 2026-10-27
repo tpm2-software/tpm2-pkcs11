@@ -13,6 +13,7 @@
 #include "twist.h"
 
 typedef struct session_ctx session_ctx;
+typedef struct token token;
 typedef struct pobject pobject;
 
 typedef struct tobject tobject;
@@ -42,6 +43,9 @@ struct tobject {
     twist tpm_serialized_tr; /** serialized ESYS_TR **/
 
     bool is_authenticated; /** true if a context specific login has authenticated use of the object */
+
+    session_ctx *owner; /** the session that created a session object (CKA_TOKEN=false); NULL for a token object */
+    bool orphaned; /** a session object whose session closed while another session used it: it has no owner, nor a store */
 };
 
 tobject *tobject_new(void);
@@ -133,7 +137,36 @@ CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object);
 
 CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OBJECT_HANDLE *object);
 
+/* object_create() for a secret key the caller gives its CKA_VALUE once made (C_DeriveKey). */
+CK_RV object_create_valueless_secret(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count,
+        CK_OBJECT_HANDLE *object);
+
 WEAK CK_RV object_init_from_attrs(tobject *tobj);
+
+/**
+ * Keeps a new object: a token object (CKA_TOKEN=true, the default) in the token's persistent
+ * store; a session object only in memory, owned by ctx, which destroys it when it closes.
+ * @param tok
+ *  The token.
+ * @param ctx
+ *  The session creating the object.
+ * @param tobj
+ *  The new object.
+ * @return
+ *  CKR_OK on success.
+ */
+CK_RV object_store(token *tok, session_ctx *ctx, tobject *tobj);
+
+/**
+ * Removes a token object from the persistent store; a session object has nothing to remove.
+ */
+CK_RV object_unstore(token *tok, tobject *tobj);
+
+/**
+ * Destroys the session objects ctx created, as PKCS#11 has it when a session closes. One still in
+ * use by another session's operation is left to the token, which frees it at C_Finalize.
+ */
+void object_destroy_session_objects(token *tok, session_ctx *ctx);
 
 #ifdef TESTING
 tobject *__real_tobject_new(void);

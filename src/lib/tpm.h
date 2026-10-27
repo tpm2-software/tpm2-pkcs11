@@ -171,6 +171,57 @@ struct tpm_object_data {
 
 void tpm_objdata_free(tpm_object_data *objdata);
 
+/**
+ * Creates and loads an AES key under parent, for C_GenerateKey. Its mode is TPM2_ALG_NULL, so each
+ * operation names its own (CBC, CFB, ECB, CTR).
+ * @param key_bits
+ *  128, 192 or 256.
+ * @param encrypt
+ *  Whether the key encrypts (the TPM's sign attribute, for a symmetric key).
+ * @param decrypt
+ *  Whether the key decrypts.
+ * @param objdata
+ *  Receives the loaded handle (privhandle) and the public and private blobs.
+ * @return
+ *  CKR_OK on success.
+ */
+CK_RV tpm2_generate_aes_key(
+        tpm_ctx *tpm,
+        uint32_t parent,
+        twist parentauth,
+        twist newauthbin,
+        CK_ULONG key_bits,
+        bool encrypt,
+        bool decrypt,
+        tpm_object_data *objdata);
+
+/**
+ * Creates and loads an AES key holding value (C_CreateObject): 16, 24 or 32 bytes.
+ */
+CK_RV tpm2_import_aes_key(
+        tpm_ctx *tpm,
+        uint32_t parent,
+        twist parentauth,
+        twist newauthbin,
+        const CK_BYTE *value,
+        CK_ULONG value_len,
+        bool encrypt,
+        bool decrypt,
+        tpm_object_data *objdata);
+
+/**
+ * Creates and loads an HMAC key holding value (C_CreateObject), usable with any hash the TPM has.
+ * The TPM holds at most 128 bytes.
+ */
+CK_RV tpm2_import_hmac_key(
+        tpm_ctx *tpm,
+        uint32_t parent,
+        twist parentauth,
+        twist newauthbin,
+        const CK_BYTE *value,
+        CK_ULONG value_len,
+        tpm_object_data *objdata);
+
 CK_RV tpm2_generate_key(
         tpm_ctx *tpm,
 

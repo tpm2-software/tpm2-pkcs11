@@ -475,6 +475,17 @@ CK_RV ssl_util_encrypt(EVP_PKEY *pkey,
         return CKR_OK;
     }
 
+    /*
+     * The ciphertext is the size of the modulus. Checked here, since OpenSSL 3's provider reports
+     * a short buffer with its own reason (PROV_R_OUTPUT_BUFFER_TOO_SMALL), not EVP_R_BUFFER_TOO_SMALL,
+     * and the check below then answered it with CKR_GENERAL_ERROR.
+     */
+    CK_ULONG needed = EVP_PKEY_size(pkey);
+    if (*ctextlen < needed) {
+        *ctextlen = needed;
+        return CKR_BUFFER_TOO_SMALL;
+    }
+
     EVP_PKEY_CTX *pkey_ctx = EVP_PKEY_CTX_new(pkey, NULL);
     if (!pkey_ctx) {
         LOGE("OOM");

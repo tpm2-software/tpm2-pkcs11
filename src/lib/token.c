@@ -528,9 +528,15 @@ CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
     }
 
     /* we store the seal data in hex form, but it's in binary form in memory, so convert it */
+    if (!tok->wrappingkey) {
+        LOGE("No wrapping key: the SO login didn't unseal it");
+        rv = CKR_GENERAL_ERROR;
+        goto out;
+    }
     sealdata = twist_hexlify(tok->wrappingkey);
     if (!sealdata) {
         LOGE("oom");
+        rv = CKR_HOST_MEMORY;
         goto out;
     }
 

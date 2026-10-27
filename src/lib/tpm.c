@@ -34,6 +34,7 @@
 #include "pkcs11.h"
 #include "ssl_util.h"
 #include "tpm.h"
+#include "utils.h"
 
 #ifndef ESAPI_MANAGE_FLAGS
 #define ESAPI_MANAGE_FLAGS 0
@@ -550,13 +551,12 @@ CK_RV tpm_find_max_rsa_keysize(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR max
         TSS2_RC rval = Esys_TestParms(tctx->esys_ctx,
                 ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &input);
         if (rval != TSS2_RC_SUCCESS) {
-            if ((rval & (TPM2_RC_P | TPM2_RC_1)) == (TPM2_RC_P | TPM2_RC_1)) {
-                rval &= ~(TPM2_RC_P | TPM2_RC_1);
-                if (rval == TPM2_RC_KEY_SIZE || rval == TPM2_RC_VALUE) {
-                    continue;
-                } else {
-                    return CKR_MECHANISM_INVALID;
-                }
+            TSS2_RC refusal = utils_format_one_code(rval);
+            if (refusal == TPM2_RC_KEY_SIZE || refusal == TPM2_RC_VALUE) {
+                continue;
+            }
+            if (refusal & TPM2_RC_FMT1) {
+                return CKR_MECHANISM_INVALID;
             }
             return CKR_GENERAL_ERROR;
         }
@@ -572,6 +572,8 @@ CK_RV tpm_find_max_rsa_keysize(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR max
 
     return CKR_OK;
 }
+
+CK_RV tpm_get_algorithms(tpm_ctx *ctx, TPMS_CAPABILITY_DATA **capabilityData);
 
 static TPM2_ALGORITHM_ID nid_to_tpm2alg(int nid) {
 
@@ -605,11 +607,9 @@ CK_RV tpm_is_rsa_keysize_supported(tpm_ctx *tctx, CK_ULONG test_size) {
     TSS2_RC rval = Esys_TestParms(tctx->esys_ctx,
             ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &input);
     if (rval != TSS2_RC_SUCCESS) {
-        if ((rval & (TPM2_RC_P | TPM2_RC_1)) == (TPM2_RC_P | TPM2_RC_1)) {
-            rval &= ~(TPM2_RC_P | TPM2_RC_1);
-            if (rval == TPM2_RC_KEY_SIZE || rval == TPM2_RC_VALUE) {
-                return CKR_MECHANISM_INVALID;
-            }
+        TSS2_RC refusal = utils_format_one_code(rval);
+        if (refusal == TPM2_RC_KEY_SIZE || refusal == TPM2_RC_VALUE) {
+            return CKR_MECHANISM_INVALID;
         }
         return CKR_GENERAL_ERROR;
     }
@@ -634,11 +634,9 @@ CK_RV tpm_is_ecc_curve_supported(tpm_ctx *tctx, int nid) {
     TSS2_RC rval = Esys_TestParms(tctx->esys_ctx,
             ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &input);
     if (rval != TSS2_RC_SUCCESS) {
-        if ((rval & (TPM2_RC_P | TPM2_RC_1)) == (TPM2_RC_P | TPM2_RC_1)) {
-            rval &= ~(TPM2_RC_P | TPM2_RC_1);
-            if (rval == TPM2_RC_CURVE || rval == TPM2_RC_VALUE) {
-                return CKR_MECHANISM_INVALID;
-            }
+        TSS2_RC refusal = utils_format_one_code(rval);
+        if (refusal == TPM2_RC_CURVE || refusal == TPM2_RC_VALUE) {
+            return CKR_MECHANISM_INVALID;
         }
         return CKR_GENERAL_ERROR;
     }
@@ -686,14 +684,12 @@ CK_RV tpm_find_ecc_keysizes(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR max) {
         TSS2_RC rval = Esys_TestParms(tctx->esys_ctx,
                 ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &input);
         if (rval != TSS2_RC_SUCCESS) {
-            if ((rval & (TPM2_RC_P | TPM2_RC_1)) == (TPM2_RC_P | TPM2_RC_1)) {
-                rval &= ~(TPM2_RC_P | TPM2_RC_1);
-                if (rval == TPM2_RC_CURVE) {
-                    continue;
-                } else {
-                    return CKR_MECHANISM_INVALID;
-                }
+            /* A curve the TPM refuses is left out, as tpm_is_ecc_curve_supported() does. */
+            TSS2_RC refusal = utils_format_one_code(rval);
+            if (refusal == TPM2_RC_CURVE || refusal == TPM2_RC_VALUE) {
+                continue;
             }
+            LOGE("Esys_TestParms: %s", Tss2_RC_Decode(rval));
             return CKR_GENERAL_ERROR;
         }
 
@@ -711,6 +707,45 @@ CK_RV tpm_find_ecc_keysizes(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR max) {
     *min = found_min/8;
     cached = true;
 
+    return CKR_OK;
+}
+
+/*
+ * The largest AES key the TPM takes, by TPM2_TestParms, for a TPM that leaves the required
+ * TPM2_PT_CONTEXT_SYM_SIZE out of its fixed properties (wolfTPM's fwTPM, for one). Every TPM
+ * takes 128 bits, and CFB, the mode of a storage key.
+ */
+static CK_RV tpm_test_aes_max_keysize(tpm_ctx *tctx, CK_ULONG *bits) {
+
+    static const UINT16 sizes[] = { 256, 192 };
+
+    size_t i;
+    for (i = 0; i < ARRAY_LEN(sizes); i++) {
+        TPMT_PUBLIC_PARMS input = {
+            .type = TPM2_ALG_SYMCIPHER,
+            .parameters.symDetail.sym = {
+                .algorithm = TPM2_ALG_AES,
+                .keyBits.aes = sizes[i],
+                .mode.aes = TPM2_ALG_CFB,
+            },
+        };
+
+        TSS2_RC rval = Esys_TestParms(tctx->esys_ctx,
+                ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &input);
+        if (rval == TSS2_RC_SUCCESS) {
+            *bits = sizes[i];
+            return CKR_OK;
+        }
+
+        TSS2_RC refusal = utils_format_one_code(rval);
+        if (refusal != TPM2_RC_KEY_SIZE && refusal != TPM2_RC_VALUE
+                && refusal != TPM2_RC_SYMMETRIC) {
+            LOGE("Esys_TestParms: %s", Tss2_RC_Decode(rval));
+            return CKR_GENERAL_ERROR;
+        }
+    }
+
+    *bits = 128;
     return CKR_OK;
 }
 
@@ -733,6 +768,9 @@ CK_RV tpm_find_aes_keysizes(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR max) {
 
     rv = find_fixed_cap(fixed_property_data,
             TPM2_PT_CONTEXT_SYM_SIZE, &_max);
+    if (rv == CKR_MECHANISM_INVALID) {
+        rv = tpm_test_aes_max_keysize(tctx, &_max);
+    }
     if (rv != CKR_OK) {
         return rv;
     }
@@ -743,6 +781,12 @@ CK_RV tpm_find_aes_keysizes(tpm_ctx *tctx, CK_ULONG_PTR min, CK_ULONG_PTR max) {
     *max = _max/8;
 
     return CKR_OK;
+}
+
+static UINT32 fixed_prop_or_zero(TPMS_CAPABILITY_DATA *d, TPM2_PT property) {
+
+    CK_ULONG value = 0;
+    return find_fixed_cap(d, property, &value) == CKR_OK ? (UINT32)value : 0;
 }
 
 CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
@@ -757,15 +801,19 @@ CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
         return rv;
     }
 
-    TPMS_TAGGED_PROPERTY *tpmProperties = capabilityData->data.tpmProperties.tpmProperty;
+    /*
+     * A TPM can leave properties out of the list, so they're looked up by tag rather than
+     * by their offset from TPM2_PT_FIXED; a missing one reads as 0.
+     */
+#define fixed_prop(p) fixed_prop_or_zero(capabilityData, (p))
 
     // Use Spec revision as HW Version
-    UINT32 revision = tpmProperties[TPM2_PT_REVISION - TPM2_PT_FIXED].value;
+    UINT32 revision = fixed_prop(TPM2_PT_REVISION);
     info->hardwareVersion.major = revision / 100;
     info->hardwareVersion.minor = revision % 100;
 
     // Use Firmware Version as FW Version
-    UINT32 version = tpmProperties[TPM2_PT_FIRMWARE_VERSION_1 - TPM2_PT_FIXED].value;
+    UINT32 version = fixed_prop(TPM2_PT_FIRMWARE_VERSION_1);
     // Most vendors seem to use 00MM.00mm as format for TPM2_PT_FIRMWARE_VERSION_1
     // Unfortunately we only have 1 byte for major and minor each.
     info->firmwareVersion.major = (version >> 16) & 0xFF;
@@ -773,7 +821,7 @@ CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
 
     // Use Vendor ID as Manufacturer ID
     unsigned char manufacturerID[sizeof(UINT32)+1] = {0}; // 4 bytes + '\0' as temp storage
-    UINT32 manufacturer = ntohl(tpmProperties[TPM2_PT_MANUFACTURER - TPM2_PT_FIXED].value);
+    UINT32 manufacturer = ntohl(fixed_prop(TPM2_PT_MANUFACTURER));
     memcpy(manufacturerID, (unsigned char*) &manufacturer, sizeof(uint32_t));
     str_padded_copy(info->manufacturerID, manufacturerID);
 
@@ -788,12 +836,14 @@ CK_RV tpm_get_token_info (tpm_ctx *ctx, CK_TOKEN_INFO *info) {
 
     // Use Vendor String as Model description
     UINT32 vendor[4];
-    vendor[0] = ntohl(tpmProperties[TPM2_PT_VENDOR_STRING_1 - TPM2_PT_FIXED].value);
-    vendor[1] = ntohl(tpmProperties[TPM2_PT_VENDOR_STRING_2 - TPM2_PT_FIXED].value);
-    vendor[2] = ntohl(tpmProperties[TPM2_PT_VENDOR_STRING_3 - TPM2_PT_FIXED].value);
-    vendor[3] = ntohl(tpmProperties[TPM2_PT_VENDOR_STRING_4 - TPM2_PT_FIXED].value);
+    vendor[0] = ntohl(fixed_prop(TPM2_PT_VENDOR_STRING_1));
+    vendor[1] = ntohl(fixed_prop(TPM2_PT_VENDOR_STRING_2));
+    vendor[2] = ntohl(fixed_prop(TPM2_PT_VENDOR_STRING_3));
+    vendor[3] = ntohl(fixed_prop(TPM2_PT_VENDOR_STRING_4));
     _str_padded_copy(info->model, sizeof(info->model), (unsigned char*)
             &vendor, sizeof(vendor));
+
+#undef fixed_prop
 
     return CKR_OK;
 }
@@ -1136,13 +1186,16 @@ static CK_RV flatten_ecdsa(TPMS_SIGNATURE_ECDSA *ecdsa, CK_BYTE_PTR sig, CK_ULON
     /* this can't overflow, but it doesn't hurt */
     CK_ULONG rs = 0;
     safe_add(rs, R->size, S->size);
+
+    /* the caller's buffer length, before it's replaced by the signature's */
+    CK_ULONG capacity = *siglen;
     *siglen = rs;
 
     if (!sig) {
         return CKR_OK;
     }
 
-    if (rs > *siglen) {
+    if (rs > capacity) {
         return CKR_BUFFER_TOO_SMALL;
     }
 
@@ -1200,32 +1253,156 @@ static CK_RV sig_flatten(TPMT_SIGNATURE *signature, TPMT_SIG_SCHEME *scheme, CK_
     return CKR_GENERAL_ERROR;
 }
 
-static TPMI_ALG_HASH guess_hash_by_size(CK_ULONG len) {
-    switch(len) {
-    case 20:
-        return TPM2_ALG_SHA1;
-    case 32:
-        return TPM2_ALG_SHA256;
-    case 48:
-        return TPM2_ALG_SHA384;
-    case 64:
-        return TPM2_ALG_SHA512;
+/* Whether the TPM implements the algorithm alg, by its TPM2_CAP_ALGS list. */
+static CK_RV tpm_has_alg(tpm_ctx *ctx, TPM2_ALG_ID alg, bool *has) {
+
+    TPMS_CAPABILITY_DATA *algs = NULL;
+    CK_RV rv = tpm_get_algorithms(ctx, &algs);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    *has = false;
+    UINT32 i;
+    for (i = 0; i < algs->data.algorithms.count; i++) {
+        if (algs->data.algorithms.algProperties[i].alg == alg) {
+            *has = true;
+            break;
+        }
+    }
+
+    return CKR_OK;
+}
+
+/* The size in bits of the order of the curve nid names, or 0 for one the token doesn't know. */
+static unsigned ecc_order_bits(int nid) {
+    switch (nid) {
+    case NID_X9_62_prime192v1:
+        return 192;
+    case NID_secp224r1:
+        return 224;
+    case NID_X9_62_prime256v1:
+        return 256;
+    case NID_secp384r1:
+        return 384;
+    case NID_secp521r1:
+        return 521;
         /* no default */
     }
 
-    return TPM2_ALG_ERROR;
+    return 0;
 }
 
-static CK_RV ecc_fixup_halg(TPMT_SIG_SCHEME *sig, CK_ULONG datalen) {
-    if (sig->details.any.hashAlg == TPM2_ALG_ERROR) {
-        TPMI_ALG_HASH halg = guess_hash_by_size(datalen);
-        if (halg == TPM2_ALG_ERROR) {
-            LOGE("Cannot figure out hashing algorithm for signature of len: %lu", datalen);
-            return CKR_GENERAL_ERROR;
-        }
-        sig->details.any.hashAlg = halg;
+/*
+ * Fits an ECDSA digest to a hash the TPM implements. TPM2_Sign takes a digest only as long as its
+ * scheme's hash, and a TPM need not implement every hash (the TCG reference implementation has no
+ * SHA-512 by default). ECDSA signs the digest as an integer, its leftmost bitlen(n) bits (FIPS 186-5,
+ * 6.4.1), so the same signature comes from the digest cut to bitlen(n) bits when it's longer, and from
+ * the digest with zero bytes before it, under a hash no longer than the order. The digest's own hash
+ * (the mechanism's, or the one its length names for CKM_ECDSA) is used when the TPM has it, except SHA-1:
+ * a TPM may list SHA-1 and still refuse signatures with it (libtpms's no-sha1-signing, on a FIPS host),
+ * so a digest that fits a longer hash is signed under that, and SHA-1 is the last resort.
+ */
+static CK_RV ecdsa_fit_digest(tpm_op_data *opdata, TPMT_SIG_SCHEME *scheme, TPM2B_DIGEST *digest) {
+
+    /* in the order to try them: the shortest first, SHA-1 last */
+    static const struct {
+        TPMI_ALG_HASH halg;
+        UINT16 size;
+    } hashes[] = {
+        { TPM2_ALG_SHA256, SHA256_DIGEST_LENGTH },
+        { TPM2_ALG_SHA384, SHA384_DIGEST_LENGTH },
+        { TPM2_ALG_SHA512, SHA512_DIGEST_LENGTH },
+        { TPM2_ALG_SHA1,   SHA_DIGEST_LENGTH    },
+    };
+
+    CK_ATTRIBUTE_PTR ecparams = attr_get_attribute_by_type(opdata->tobj->attrs, CKA_EC_PARAMS);
+    if (!ecparams) {
+        LOGE("Expected EC key to have CKA_EC_PARAMS");
+        return CKR_GENERAL_ERROR;
     }
-    return CKR_OK;
+
+    int nid = 0;
+    CK_RV rv = ssl_util_params_to_nid(ecparams, &nid);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    unsigned order_bits = ecc_order_bits(nid);
+    if (!order_bits) {
+        LOGE("Unsupported curve, nid: %d", nid);
+        return CKR_GENERAL_ERROR;
+    }
+
+    /* The digest's own hash, when the TPM has it */
+    TPMI_ALG_HASH own = scheme->details.any.hashAlg;
+    size_t i;
+    for (i = 0; own == TPM2_ALG_ERROR && i < ARRAY_LEN(hashes); i++) {
+        if (hashes[i].size == digest->size) {
+            own = hashes[i].halg;
+        }
+    }
+
+    bool has = false;
+    if (own != TPM2_ALG_ERROR && own != TPM2_ALG_SHA1) {
+        rv = tpm_has_alg(opdata->ctx, own, &has);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+    }
+
+    if (has) {
+        scheme->details.any.hashAlg = own;
+        return CKR_OK;
+    }
+
+    /* Cut to the leftmost bitlen(n) bits; only P-521's order isn't whole bytes, and no digest is that long */
+    UINT16 full_size = digest->size;
+    if (digest->size * 8u > order_bits) {
+        if (order_bits % 8) {
+            LOGE("Cannot fit a %u-byte digest to a %u-bit order", digest->size, order_bits);
+            return CKR_DATA_LEN_RANGE;
+        }
+        digest->size = order_bits / 8;
+    }
+
+    /*
+     * The first hash the TPM has that fits: the digest's length, or a longer one the digest is zero-padded
+     * to if that is no longer than the order (or the zeros would be what the TPM keeps). A digest cut to
+     * the order can instead be a longer prefix of itself, for a hash no shorter than the order: the TPM
+     * cuts it to the same leftmost bits (P-224's 28 bytes fit no hash, say).
+     */
+    for (i = 0; i < ARRAY_LEN(hashes); i++) {
+        UINT16 size = hashes[i].size;
+        bool exact = size == digest->size;
+        bool padded = size > digest->size && size * 8u <= order_bits;
+        bool prefix = full_size > digest->size && size > digest->size && size <= full_size
+                && size * 8u >= order_bits;
+        if (!exact && !padded && !prefix) {
+            continue;
+        }
+
+        rv = tpm_has_alg(opdata->ctx, hashes[i].halg, &has);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+        if (!has) {
+            continue;
+        }
+
+        if (padded) {
+            UINT16 pad = size - digest->size;
+            memmove(&digest->buffer[pad], digest->buffer, digest->size);
+            memset(digest->buffer, 0, pad);
+        }
+        /* a prefix is still in the buffer, past the cut */
+        digest->size = size;
+        scheme->details.any.hashAlg = hashes[i].halg;
+        return CKR_OK;
+    }
+
+    LOGE("The TPM has no hash an ECDSA digest of %u bytes fits on a %u-bit curve", digest->size, order_bits);
+    return CKR_DATA_LEN_RANGE;
 }
 
 static CK_RV tpm_hmac_large(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_PTR sig, CK_ULONG_PTR siglen) {
@@ -1459,11 +1636,15 @@ CK_RV tpm_sign(tpm_op_data *opdata, CK_BYTE_PTR data, CK_ULONG datalen, CK_BYTE_
         .digest = TPM2B_EMPTY_INIT
     };
 
+    /* a copy: CKM_ECDSA's hash depends on each digest */
+    TPMT_SIG_SCHEME ecc_scheme;
     if (opdata->op_type == CKK_EC) {
-        CK_RV rv = ecc_fixup_halg(&opdata->ecc.sig, datalen);
+        ecc_scheme = *scheme;
+        CK_RV rv = ecdsa_fit_digest(opdata, &ecc_scheme, &tdigest);
         if (rv != CKR_OK) {
             return rv;
         }
+        scheme = &ecc_scheme;
     }
 
     flags_turndown(opdata->ctx, TPMA_SESSION_ENCRYPT);
@@ -1642,6 +1823,22 @@ CK_RV tpm_rsa_oaep_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, 
         return CKR_MECHANISM_PARAM_INVALID;
     }
 
+    /*
+     * The TPM hashes the label and runs MGF1 itself, so it decrypts only with a hash it implements (the
+     * TCG reference implementation has no SHA-512 by default): refuse another here, rather than fail
+     * the decryption with CKR_GENERAL_ERROR. Encryption, with the public key, is done in software and
+     * doesn't come here.
+     */
+    bool has = false;
+    rv = tpm_has_alg(tctx, opdata->rsa.raw.details.anySig.hashAlg, &has);
+    if (rv != CKR_OK || !has) {
+        if (rv == CKR_OK) {
+            LOGE("The TPM doesn't implement the OAEP hash 0x%lx", params->hashAlg);
+        }
+        tpm_opdata_free(&opdata);
+        return rv != CKR_OK ? rv : CKR_MECHANISM_PARAM_INVALID;
+    }
+
     if (params->ulSourceDataLen > sizeof(opdata->rsa.label.buffer)) {
         tpm_opdata_free(&opdata);
         return CKR_MECHANISM_PARAM_INVALID;
@@ -1650,6 +1847,17 @@ CK_RV tpm_rsa_oaep_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, 
     opdata->rsa.label.size = params->ulSourceDataLen;
     if (params->ulSourceDataLen) {
         if (!params->pSourceData) {
+            tpm_opdata_free(&opdata);
+            return CKR_MECHANISM_PARAM_INVALID;
+        }
+        /*
+         * The TPM takes only a label that is a NUL-terminated string, and refuses any other with
+         * TPM_RC_VALUE (TPM 2.0 Part 3, TPM2_RSA_Decrypt): refuse it here, as a parameter the
+         * token doesn't support, rather than fail the decryption with CKR_GENERAL_ERROR.
+         */
+        const CK_BYTE *label = params->pSourceData;
+        if (label[params->ulSourceDataLen - 1] != 0) {
+            LOGE("The TPM supports only an OAEP label that ends with a zero byte");
             tpm_opdata_free(&opdata);
             return CKR_MECHANISM_PARAM_INVALID;
         }
@@ -1917,7 +2125,7 @@ CK_RV tpm_ec_ecdsa_get_opdata(mdetail *mdtl,
 
     /*
      * we don't know the proper algorithm to set until ESys_Sign() is called,
-     * So we need to detect this case and guess the algorithm based on hash size.
+     * where ecdsa_fit_digest() picks it from the digest's length.
      */
     opdata->ecc.sig.details.any.hashAlg = TPM2_ALG_ERROR;
 
@@ -1968,12 +2176,16 @@ TPM_EC_ECDSA_GET_OPDATA(sha512, TPM2_ALG_SHA512)
 static CK_RV aes_common_opdata(tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data *opdata) {
 
     if (mech->ulParameterLen > sizeof(opdata->sym.iv.buffer) ||
-            mech->ulParameterLen % 8) {
+            mech->ulParameterLen % 8 ||
+            (mech->ulParameterLen && !mech->pParameter)) {
         return CKR_MECHANISM_PARAM_INVALID;
     }
 
+    /* ECB has no IV, and memcpy() takes no NULL pointer, even for nothing */
     opdata->sym.iv.size = mech->ulParameterLen;
-    memcpy(opdata->sym.iv.buffer, mech->pParameter, mech->ulParameterLen);
+    if (mech->ulParameterLen) {
+        memcpy(opdata->sym.iv.buffer, mech->pParameter, mech->ulParameterLen);
+    }
     opdata->tobj = tobj;
     opdata->ctx = tctx;
     opdata->op_type = CKK_AES;
@@ -2211,6 +2423,27 @@ void tpm_opdata_free(tpm_op_data **opdata) {
     }
 }
 
+/*
+ * What a TPM2_RSA_Decrypt refusal means to PKCS#11. The TPM checks the ciphertext (TPM_RC_VALUE: not below
+ * the modulus, or, for a padded scheme, badly padded; TPM_RC_SIZE: not the modulus' length) and may refuse
+ * the scheme itself (TPM_RC_SCHEME: a TPM restricted to FIPS-approved schemes refuses unpadded RSA, which
+ * PKCS#1 v1.5 here is built on). Anything else is the TPM failing.
+ */
+static CK_RV rsa_decrypt_refusal(TSS2_RC rc) {
+
+    /* the same format-one code with or without the parameter it's tied to */
+    switch (utils_format_one_code(rc)) {
+    case TPM2_RC_VALUE:
+        return CKR_ENCRYPTED_DATA_INVALID;
+    case TPM2_RC_SIZE:
+        return CKR_ENCRYPTED_DATA_LEN_RANGE;
+    case TPM2_RC_SCHEME:
+        return CKR_FUNCTION_FAILED;
+    default:
+        return CKR_GENERAL_ERROR;
+    }
+}
+
 CK_RV tpm_rsa_decrypt(tpm_op_data *tpm_enc_data,
         CK_BYTE_PTR ctext, CK_ULONG ctextlen,
         CK_BYTE_PTR ptext, CK_ULONG_PTR ptextlen) {
@@ -2256,7 +2489,7 @@ CK_RV tpm_rsa_decrypt(tpm_op_data *tpm_enc_data,
             &tpm_ptext);
     if (rc != TPM2_RC_SUCCESS) {
         LOGE("Esys_RSA_Decrypt: %s", Tss2_RC_Decode(rc));
-        return CKR_GENERAL_ERROR;
+        return rsa_decrypt_refusal(rc);
     }
 
     if (!ptext) {
@@ -2579,9 +2812,10 @@ static CK_RV do_buffered_encdec(tpm_op_data *tpm_enc_data,
             && extralen == 0
             && tpm_enc_data->mech.mechanism == CKM_AES_CBC_PAD;
 
+    /* the last block is held back, whatever the number before it */
     if (hold_block_back) {
         blocks--;
-        extralen = blocks == 0 ? 16 : blocks * 16;
+        extralen = 16;
         modified_full_buffer_len = blocks * 16;
     }
 
@@ -2788,6 +3022,38 @@ CK_RV tpm_decrypt(crypto_op_data *opdata,
     if (tpm_enc_data->op_type == CKK_RSA) {
         CK_BYTE buf[4096];
         CK_ULONG buf_len = sizeof(buf);
+
+        /*
+         * CKM_RSA_PKCS: a TPM with RSAES takes the padding off itself, so it needn't do raw RSA,
+         * which a FIPS profile may not. A copy, as encrypting with the private key shares the
+         * opdata's raw scheme.
+         */
+        tpm_op_data rsaes;
+        if (tpm_enc_data->mech.mechanism == CKM_RSA_PKCS) {
+            bool has = false;
+            CK_RV rv = tpm_has_alg(tpm_enc_data->ctx, TPM2_ALG_RSAES, &has);
+            if (rv != CKR_OK) {
+                return rv;
+            }
+            if (has) {
+                rsaes = *tpm_enc_data;
+                rsaes.rsa.raw.scheme = TPM2_ALG_RSAES;
+
+                rv = tpm_rsa_decrypt(&rsaes, ctext, ctextlen, buf, &buf_len);
+                if (rv != CKR_OK) {
+                    return rv;
+                }
+
+                if (ptext && *ptextlen < buf_len) {
+                    rv = CKR_BUFFER_TOO_SMALL;
+                } else if (ptext) {
+                    memcpy(ptext, buf, buf_len);
+                }
+                *ptextlen = buf_len;
+                OPENSSL_cleanse(buf, buf_len);
+                return rv;
+            }
+        }
 
         CK_RV rv = tpm_rsa_decrypt(tpm_enc_data, ctext, ctextlen, buf, &buf_len);
         if (rv != CKR_OK) {
@@ -3089,10 +3355,21 @@ out:
 }
 
 typedef struct tpm_key_data tpm_key_data;
+/* What the private key template asks of the key, for CKA_SIGN, CKA_DECRYPT and CKA_DERIVE. */
+typedef enum usage_request usage_request;
+enum usage_request {
+    usage_unset = -1,
+    usage_no = 0,
+    usage_yes = 1,
+};
+
 struct tpm_key_data {
     tpm_ctx *ctx;
     TPM2B_PUBLIC pub;
     TPM2B_SENSITIVE_CREATE priv;
+    usage_request sign;
+    usage_request decrypt;
+    usage_request derive;
 };
 
 static CK_RV generic_bbool_check(CK_ATTRIBUTE_PTR attr, CK_BBOOL check) {
@@ -3104,17 +3381,11 @@ static CK_RV generic_bbool_check(CK_ATTRIBUTE_PTR attr, CK_BBOOL check) {
     }
 
     if (value != check) {
-        LOGE("Expected attr 0x%lx to be %u, got %u", attr->type, value, check);
+        LOGE("Expected attr 0x%lx to be %u, got %u", attr->type, check, value);
         return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 
     return CKR_OK;
-}
-
-static CK_RV generic_bbool_true(CK_ATTRIBUTE_PTR attr, void *udata) {
-    UNUSED(udata);
-
-    return generic_bbool_check(attr, CK_TRUE);
 }
 
 static CK_RV generic_bbool_false(CK_ATTRIBUTE_PTR attr, void *udata) {
@@ -3188,9 +3459,7 @@ static CK_RV handle_ecparams(CK_ATTRIBUTE_PTR attr, void *udata) {
     return CKR_OK;
 }
 
-static CK_RV handle_encrypt(CK_ATTRIBUTE_PTR attr, void *udata) {
-
-    tpm_key_data *keydat = (tpm_key_data *)udata;
+static CK_RV record_usage(CK_ATTRIBUTE_PTR attr, usage_request *request) {
 
     CK_BBOOL value;
     CK_RV rv = attr_CK_BBOOL(attr, &value);
@@ -3198,29 +3467,78 @@ static CK_RV handle_encrypt(CK_ATTRIBUTE_PTR attr, void *udata) {
         return rv;
     }
 
-    if (value == CK_TRUE) {
-        keydat->pub.publicArea.objectAttributes |= TPMA_OBJECT_SIGN_ENCRYPT;
-    } else {
-        keydat->pub.publicArea.objectAttributes &= ~TPMA_OBJECT_SIGN_ENCRYPT;
-    }
-
+    *request = value == CK_TRUE ? usage_yes : usage_no;
     return CKR_OK;
 }
 
+static CK_RV handle_sign(CK_ATTRIBUTE_PTR attr, void *udata) {
+    return record_usage(attr, &((tpm_key_data *)udata)->sign);
+}
+
 static CK_RV handle_decrypt(CK_ATTRIBUTE_PTR attr, void *udata) {
+    return record_usage(attr, &((tpm_key_data *)udata)->decrypt);
+}
 
-    tpm_key_data *keydat = (tpm_key_data *)udata;
+static CK_RV handle_derive(CK_ATTRIBUTE_PTR attr, void *udata) {
+    return record_usage(attr, &((tpm_key_data *)udata)->derive);
+}
 
-    CK_BBOOL value;
-    CK_RV rv = attr_CK_BBOOL(attr, &value);
-    if (rv != CKR_OK) {
-        return rv;
+static void set_object_attribute(TPMA_OBJECT *attrs, TPMA_OBJECT attr, bool set) {
+    if (set) {
+        *attrs |= attr;
+    } else {
+        *attrs &= ~attr;
+    }
+}
+
+/*
+ * Sets the TPM key's sign and decrypt attributes from what the private key template asked for, once
+ * the whole template is read, so the order of its attributes doesn't matter:
+ *  - CKA_SIGN is the TPM's sign attribute.
+ *  - For RSA, CKA_DECRYPT and CKA_SIGN set the TPM's decrypt attribute. RSA keys can't derive.
+ *  - For EC, CKA_DERIVE is the TPM's decrypt attribute, which TPM2_ECDH_ZGen needs. CKA_DECRYPT=true
+ *    asks for it too, as keys asked for ECDH before CKA_DERIVE was mapped; EC keys don't decrypt.
+ * The public key's CKA_VERIFY and CKA_ENCRYPT ask nothing of the TPM: verifying and encrypting with
+ * the public key happen in software.
+ */
+static CK_RV apply_usage(tpm_key_data *keydat) {
+
+    TPMA_OBJECT *attrs = &keydat->pub.publicArea.objectAttributes;
+
+    if (keydat->sign != usage_unset) {
+        set_object_attribute(attrs, TPMA_OBJECT_SIGN_ENCRYPT, keydat->sign == usage_yes);
     }
 
-    if (value == CK_TRUE) {
-        keydat->pub.publicArea.objectAttributes |= TPMA_OBJECT_DECRYPT;
+    if (keydat->pub.publicArea.type == TPM2_ALG_ECC) {
+        if (keydat->derive == usage_no && keydat->decrypt == usage_yes) {
+            LOGE("An EC key with CKA_DECRYPT=true can derive, but the template has CKA_DERIVE=false");
+            return CKR_TEMPLATE_INCONSISTENT;
+        }
+        /* ECDH only when the template asks for it: a key made to sign doesn't derive too */
+        set_object_attribute(attrs, TPMA_OBJECT_DECRYPT,
+                keydat->derive == usage_yes || keydat->decrypt == usage_yes);
     } else {
-        keydat->pub.publicArea.objectAttributes &= ~TPMA_OBJECT_DECRYPT;
+        if (keydat->derive == usage_yes) {
+            LOGE("RSA keys can't derive: CKA_DERIVE=true not supported");
+            return CKR_ATTRIBUTE_VALUE_INVALID;
+        }
+        /*
+         * A signing key needs the decrypt attribute too: a signature scheme the TPM doesn't do
+         * natively (raw PKCS#1 v1.5, PSS with another salt length) is padded in software and
+         * computed with TPM2_RSA_Decrypt. Then CKA_DECRYPT=false is enforced by C_DecryptInit
+         * rather than by the TPM.
+         */
+        if (keydat->decrypt == usage_yes || (*attrs & TPMA_OBJECT_SIGN_ENCRYPT)) {
+            set_object_attribute(attrs, TPMA_OBJECT_DECRYPT, true);
+        } else if (keydat->decrypt == usage_no) {
+            set_object_attribute(attrs, TPMA_OBJECT_DECRYPT, false);
+        }
+    }
+
+    /* The TPM refuses a key that can do neither. */
+    if (!(*attrs & (TPMA_OBJECT_SIGN_ENCRYPT | TPMA_OBJECT_DECRYPT))) {
+        LOGE("The private key template allows neither signing nor decrypting or deriving");
+        return CKR_TEMPLATE_INCONSISTENT;
     }
 
     return CKR_OK;
@@ -3354,13 +3672,10 @@ static CK_RV sanity_check_mech(CK_MECHANISM_PTR mechanism) {
     return CKR_OK;
 }
 
-static const attr_handler tpm_handlers[] = {
-    { CKA_TOKEN,           generic_bbool_true    },
+/* The public key template's attributes the TPM key depends on. */
+static const attr_handler tpm_public_handlers[] = {
+    { CKA_TOKEN,           generic_bbool_any     },
     { CKA_PRIVATE,         generic_bbool_any     },
-    { CKA_VERIFY,          handle_decrypt        }, // Verify is same as decrypt
-    { CKA_ENCRYPT,         handle_encrypt        },
-    { CKA_DECRYPT,         handle_decrypt        },
-    { CKA_SIGN,            handle_encrypt        }, // SIGN_ENCRYPT are same in TPM, depends on SCHEME
     { CKA_MODULUS_BITS,    handle_modulus        },
     { CKA_PUBLIC_EXPONENT, handle_exp            },
     { CKA_SENSITIVE,       handle_sensitive      },
@@ -3374,6 +3689,25 @@ static const attr_handler tpm_handlers[] = {
     { CKA_DERIVE,            generic_bbool_any },
 };
 
+/* The private key template's; its usage attributes are applied by apply_usage(). */
+static const attr_handler tpm_private_handlers[] = {
+    { CKA_TOKEN,           generic_bbool_any     },
+    { CKA_PRIVATE,         generic_bbool_any     },
+    { CKA_SIGN,            handle_sign           },
+    { CKA_DECRYPT,         handle_decrypt        },
+    { CKA_DERIVE,          handle_derive         },
+    { CKA_MODULUS_BITS,    handle_modulus        },
+    { CKA_PUBLIC_EXPONENT, handle_exp            },
+    { CKA_SENSITIVE,       handle_sensitive      },
+    { CKA_CLASS,           handle_ckobject_class },
+    { CKA_EXTRACTABLE,     handle_extractable    },
+    { CKA_EC_PARAMS,       handle_ecparams       },
+    { CKA_KEY_TYPE,        handle_key_type       },
+    { CKA_TRUSTED,           generic_bbool_false },
+    { CKA_SIGN_RECOVER,      generic_bbool_false },
+    { CKA_VERIFY_RECOVER,    generic_bbool_false },
+};
+
 static CK_RV tpm_data_init(
         CK_MECHANISM_PTR mechanism,
         attr_list *pubattrs,
@@ -3382,6 +3716,7 @@ static CK_RV tpm_data_init(
 
     memset(&tpmdat->priv, 0, sizeof(tpmdat->priv));
     memset(&tpmdat->pub,  0, sizeof(tpmdat->pub));
+    tpmdat->sign = tpmdat->decrypt = tpmdat->derive = usage_unset;
 
     switch(mechanism->mechanism) {
         case CKM_RSA_PKCS_KEY_PAIR_GEN:
@@ -3399,18 +3734,18 @@ static CK_RV tpm_data_init(
     }
 
     CK_RV rv = attr_list_invoke_handlers(pubattrs,
-            tpm_handlers, ARRAY_LEN(tpm_handlers), tpmdat);
+            tpm_public_handlers, ARRAY_LEN(tpm_public_handlers), tpmdat);
     if (rv != CKR_OK) {
         return rv;
     }
 
     rv = attr_list_invoke_handlers(privattrs,
-            tpm_handlers, ARRAY_LEN(tpm_handlers), tpmdat);
+            tpm_private_handlers, ARRAY_LEN(tpm_private_handlers), tpmdat);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    return CKR_OK;
+    return apply_usage(tpmdat);
 }
 
 static CK_RV uint32_to_BN(uint32_t value, void **bytes, CK_ULONG_PTR len) {
@@ -3607,13 +3942,12 @@ static CK_RV tpm_object_data_populate_ecc(TPM2B_PUBLIC *out_pub, tpm_object_data
 
     /*
      * Build a DER encoded uncompressed representation of the points
-     * per X9.62.
-     *
-     * TODO get better link to documentation around this or build
-     * with OSSL.
+     * per X9.62: an OCTET STRING. A length of 128 or more (P-521's point is 133
+     * bytes) takes the long form, 0x81 then the length.
      */
+    size_t header = len < 128 ? 2 : 3;
     size_t tmp = 0;
-    safe_add(tmp, len, 2);
+    safe_add(tmp, len, header);
     char *padded_data = malloc(tmp);
     if (!padded_data) {
         LOGE("oom");
@@ -3621,10 +3955,15 @@ static CK_RV tpm_object_data_populate_ecc(TPM2B_PUBLIC *out_pub, tpm_object_data
     }
 
     padded_data[0] = 4;
-    padded_data[1] = len;
-    memcpy(&padded_data[2], mydata, len);
+    if (header == 2) {
+        padded_data[1] = len;
+    } else {
+        padded_data[1] = (char)0x81;
+        padded_data[2] = len;
+    }
+    memcpy(&padded_data[header], mydata, len);
 
-    safe_adde(len, 2);
+    safe_adde(len, header);
     bool r = attr_list_add_buf(objdata->attrs, CKA_EC_POINT,
             (CK_BYTE_PTR)padded_data, len);
     free(padded_data);
@@ -3713,7 +4052,7 @@ CK_RV tpm2_generate_key(
     TPM2B_PUBLIC *out_pub = NULL;
     TPM2B_PRIVATE *out_priv = NULL;
 
-    ESYS_TR out_handle = 0;
+    ESYS_TR out_handle = ESYS_TR_NONE;
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -3794,6 +4133,10 @@ CK_RV tpm2_generate_key(
         goto error;
     }
 
+    /* freed with objdata on error */
+    objdata->privblob = tmppriv;
+    objdata->pubblob = tmppub;
+
     switch(mechanism->mechanism) {
     case CKM_RSA_PKCS_KEY_PAIR_GEN:
         rv = tpm_object_data_populate_rsa(out_pub, objdata);
@@ -3812,7 +4155,8 @@ CK_RV tpm2_generate_key(
         goto error;
     }
 
-    /* everything common*/
+    /* everything common; what goto_error_false() means is running out of memory */
+    rv = CKR_HOST_MEMORY;
     TPMA_OBJECT objattrs = out_pub->publicArea.objectAttributes;
 
     CK_BBOOL extractable = !!!(objattrs & (TPMA_OBJECT_FIXEDTPM|TPMA_OBJECT_FIXEDPARENT));
@@ -3833,25 +4177,37 @@ CK_RV tpm2_generate_key(
     r = attr_list_add_bool(objdata->attrs, CKA_LOCAL, local);
     goto_error_false(r);
 
-    /* conditional block */
-    CK_BBOOL decrypt = !!(objattrs & TPMA_OBJECT_DECRYPT);
-    r = attr_list_add_bool(objdata->attrs, CKA_DECRYPT, decrypt);
-    goto_error_false(r);
-
-    /* decrypt and verify are the same */
-    r = attr_list_add_bool(objdata->attrs, CKA_VERIFY, decrypt);
-    goto_error_false(r);
-
+    /*
+     * conditional block: what the key pair can do, for attr_add_missing_attrs() to check against the
+     * templates or fill in. The public key verifies what the private key signs, and encrypts what it
+     * decrypts. An EC key's decrypt attribute is for ECDH: it derives, and doesn't encrypt.
+     */
+    bool is_ec = out_pub->publicArea.type == TPM2_ALG_ECC;
     CK_BBOOL sign = !!(objattrs & TPMA_OBJECT_SIGN_ENCRYPT);
+    CK_BBOOL tpm_decrypt = !!(objattrs & TPMA_OBJECT_DECRYPT);
+    /*
+     * CKA_DECRYPT is what the template asked for: an RSA signing key has the TPM's decrypt
+     * attribute anyway (see apply_usage()), and an EC key's means it derives.
+     */
+    CK_BBOOL decrypt = tpmdat.decrypt != usage_unset ? tpmdat.decrypt == usage_yes
+            : (is_ec ? CK_FALSE : tpm_decrypt);
+    CK_BBOOL derive = is_ec ? tpm_decrypt : CK_FALSE;
+
     r = attr_list_add_bool(objdata->attrs, CKA_SIGN, sign);
     goto_error_false(r);
 
-    /* sign and encrypt are same */
-    r = attr_list_add_bool(objdata->attrs, CKA_ENCRYPT, sign);
+    r = attr_list_add_bool(objdata->attrs, CKA_VERIFY, sign);
     goto_error_false(r);
 
-    objdata->privblob = tmppriv;
-    objdata->pubblob = tmppub;
+    r = attr_list_add_bool(objdata->attrs, CKA_DECRYPT, decrypt);
+    goto_error_false(r);
+
+    r = attr_list_add_bool(objdata->attrs, CKA_ENCRYPT, is_ec ? CK_FALSE : decrypt);
+    goto_error_false(r);
+
+    r = attr_list_add_bool(objdata->attrs, CKA_DERIVE, derive);
+    goto_error_false(r);
+
     objdata->privhandle = out_handle;
 
     rv = CKR_OK;
@@ -3861,10 +4217,183 @@ error:
     Esys_Free(out_priv);
 
     if (rv != CKR_OK) {
+        /*
+         * The objects stay loaded otherwise, counting against the TPM's (or resource manager's) slots.
+         * A failed Esys_CreateLoaded leaves the handle ESYS_TR_NONE, not 0.
+         */
+        if (out_handle != ESYS_TR_NONE && out_handle) {
+            tpm_flushcontext(tpm, out_handle);
+        }
+        if (objdata->pubhandle) {
+            tpm_flushcontext(tpm, objdata->pubhandle);
+            objdata->pubhandle = 0;
+        }
         tpm_objdata_free(objdata);
     }
 
     return rv;
+}
+
+/*
+ * Creates and loads a secret key under parent from pub. With value, the key is that value
+ * (sensitiveDataOrigin must then be clear); without, the TPM makes it.
+ */
+static CK_RV create_secret_key(
+        tpm_ctx *tpm,
+        uint32_t parent,
+        twist parentauth,
+        twist newauthbin,
+        const TPM2B_PUBLIC *pub,
+        const CK_BYTE *value,
+        CK_ULONG value_len,
+        tpm_object_data *objdata) {
+
+    assert(objdata);
+
+    TPM2B_PUBLIC *out_pub = NULL;
+    TPM2B_PRIVATE *out_priv = NULL;
+    ESYS_TR out_handle = 0;
+
+    TPM2B_SENSITIVE_CREATE priv = { 0 };
+    size_t len = twist_len(newauthbin);
+    if (len > sizeof(priv.sensitive.userAuth.buffer)) {
+        return CKR_GENERAL_ERROR;
+    }
+    priv.sensitive.userAuth.size = len;
+    memcpy(priv.sensitive.userAuth.buffer, newauthbin, len);
+
+    /*
+     * MAX_SYM_DATA, TPM 2.0 Part 2: the most sensitive data a TPM takes, whatever room the TSS's
+     * structure has (256 bytes).
+     */
+    static const CK_ULONG max_sym_data = 128;
+
+    if (value) {
+        if (value_len > max_sym_data) {
+            LOGE("The TPM holds at most %lu bytes of key, got %lu", max_sym_data, value_len);
+            return CKR_ATTRIBUTE_VALUE_INVALID;
+        }
+        priv.sensitive.data.size = value_len;
+        memcpy(priv.sensitive.data.buffer, value, value_len);
+    }
+
+    CK_RV rv = CKR_GENERAL_ERROR;
+
+    bool res = set_esys_auth(tpm->esys_ctx, parent, parentauth);
+    if (!res) {
+        goto out;
+    }
+
+    TSS2_RC rc = create_loaded(tpm, parent, tpm->hmac_session, &priv, pub,
+            &out_handle, &out_pub, &out_priv);
+    if (rc != TSS2_RC_SUCCESS) {
+        LOGE("create_loaded %s", Tss2_RC_Decode(rc));
+        goto out;
+    }
+
+    rv = serialize_pub_priv_blobs(out_pub, out_priv, &objdata->pubblob, &objdata->privblob);
+    if (rv != CKR_OK) {
+        tpm_flushcontext(tpm, out_handle);
+        goto out;
+    }
+
+    objdata->privhandle = out_handle;
+    rv = CKR_OK;
+
+out:
+    /* the caller's key, copied into the TPM command */
+    OPENSSL_cleanse(&priv, sizeof(priv));
+    Esys_Free(out_pub);
+    Esys_Free(out_priv);
+
+    return rv;
+}
+
+/* An AES key: for a symmetric key, the sign attribute is encrypt. Its mode is TPM2_ALG_NULL, so each
+ * operation names its own. */
+static TPM2B_PUBLIC aes_template(CK_ULONG key_bits, bool encrypt, bool decrypt, bool imported) {
+
+    TPM2B_PUBLIC pub = {
+        .publicArea = {
+            .type = TPM2_ALG_SYMCIPHER,
+            .nameAlg = TPM2_ALG_SHA256,
+            .objectAttributes =
+                TPMA_OBJECT_FIXEDTPM
+                | TPMA_OBJECT_FIXEDPARENT
+                | TPMA_OBJECT_USERWITHAUTH
+                | (imported ? 0 : TPMA_OBJECT_SENSITIVEDATAORIGIN)
+                | (encrypt ? TPMA_OBJECT_SIGN_ENCRYPT : 0)
+                | (decrypt ? TPMA_OBJECT_DECRYPT : 0),
+            .parameters.symDetail.sym = {
+                .algorithm = TPM2_ALG_AES,
+                .keyBits.aes = key_bits,
+                .mode.aes = TPM2_ALG_NULL,
+            },
+        },
+    };
+
+    return pub;
+}
+
+CK_RV tpm2_generate_aes_key(
+        tpm_ctx *tpm,
+        uint32_t parent,
+        twist parentauth,
+        twist newauthbin,
+        CK_ULONG key_bits,
+        bool encrypt,
+        bool decrypt,
+        tpm_object_data *objdata) {
+
+    TPM2B_PUBLIC pub = aes_template(key_bits, encrypt, decrypt, false);
+    return create_secret_key(tpm, parent, parentauth, newauthbin, &pub, NULL, 0, objdata);
+}
+
+CK_RV tpm2_import_aes_key(
+        tpm_ctx *tpm,
+        uint32_t parent,
+        twist parentauth,
+        twist newauthbin,
+        const CK_BYTE *value,
+        CK_ULONG value_len,
+        bool encrypt,
+        bool decrypt,
+        tpm_object_data *objdata) {
+
+    TPM2B_PUBLIC pub = aes_template(value_len * 8, encrypt, decrypt, true);
+    return create_secret_key(tpm, parent, parentauth, newauthbin, &pub, value, value_len, objdata);
+}
+
+/*
+ * An HMAC key, as tpm2_ptool makes one for any hash: a keyed hash object with sign and decrypt set and
+ * a NULL scheme, so TPM2_HMAC takes the hash of each operation.
+ */
+CK_RV tpm2_import_hmac_key(
+        tpm_ctx *tpm,
+        uint32_t parent,
+        twist parentauth,
+        twist newauthbin,
+        const CK_BYTE *value,
+        CK_ULONG value_len,
+        tpm_object_data *objdata) {
+
+    TPM2B_PUBLIC pub = {
+        .publicArea = {
+            .type = TPM2_ALG_KEYEDHASH,
+            .nameAlg = TPM2_ALG_SHA256,
+            .objectAttributes =
+                TPMA_OBJECT_FIXEDTPM
+                | TPMA_OBJECT_FIXEDPARENT
+                | TPMA_OBJECT_USERWITHAUTH
+                | TPMA_OBJECT_SIGN_ENCRYPT
+                | TPMA_OBJECT_DECRYPT,
+            .parameters.keyedHashDetail.scheme = {
+                .scheme = TPM2_ALG_NULL,
+            },
+        },
+    };
+
+    return create_secret_key(tpm, parent, parentauth, newauthbin, &pub, value, value_len, objdata);
 }
 
 void tpm_objdata_free(tpm_object_data *objdata) {
@@ -3873,10 +4402,14 @@ void tpm_objdata_free(tpm_object_data *objdata) {
         return;
     }
 
+    /* the pointers are cleared, as a caller may free it again (tpm2_generate_key(), then key_gen()) */
     attr_list_free(objdata->attrs);
+    objdata->attrs = NULL;
 
     twist_free(objdata->privblob);
+    objdata->privblob = NULL;
     twist_free(objdata->pubblob);
+    objdata->pubblob = NULL;
 }
 
 CK_RV tpm_get_algorithms(tpm_ctx *ctx, TPMS_CAPABILITY_DATA **capabilityData) {

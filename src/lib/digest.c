@@ -157,7 +157,10 @@ CK_RV digest_init_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_MECHA
 
 CK_RV digest_update_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_BYTE_PTR part, CK_ULONG part_len) {
 
-    check_pointer(part);
+    /* Empty data may come without a buffer. */
+    if (!part && part_len) {
+        return CKR_ARGUMENTS_BAD;
+    }
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -170,6 +173,8 @@ CK_RV digest_update_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_BYT
     } else {
         opdata = supplied_opdata;
     }
+
+    opdata->updated = true;
 
     return digest_sw_update(opdata, part, part_len);
 }
@@ -219,9 +224,24 @@ CK_RV digest_oneshot(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_B
     CK_ULONG min_len = 0;
     CK_RV rv = digest_get_min_size(ctx, NULL, &min_len);
     if (rv != CKR_OK) {
-        /* fatal error ends digest state */
-        session_ctx_opdata_clear(ctx);
+        /* fatal error ends digest state, but no other operation */
+        session_ctx_cancel(ctx, CKF_DIGEST);
         return rv;
+    }
+
+    /*
+     * C_Digest is single-part: after C_DigestUpdate it is refused, and, as any C_Digest but a length
+     * query, ends the operation.
+     */
+    digest_op_data *opdata = NULL;
+    rv = session_ctx_opdata_get(ctx, operation_digest, &opdata);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+    if (opdata->updated) {
+        LOGE("C_Digest after C_DigestUpdate: use C_DigestFinal to end a multi-part digest");
+        session_ctx_cancel(ctx, CKF_DIGEST);
+        return CKR_OPERATION_NOT_INITIALIZED;
     }
 
     if (!digest) {
@@ -234,6 +254,7 @@ CK_RV digest_oneshot(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_B
 
     rv = digest_update(ctx, data, data_len);
     if (rv != CKR_OK) {
+        session_ctx_cancel(ctx, CKF_DIGEST);
         return rv;
     }
 

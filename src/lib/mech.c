@@ -658,42 +658,51 @@ CK_RV rsa_pss_hash_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs
     return has_raw_rsa(attrs);
 }
 
+/*
+ * The key-pair generation validators, for key_gen(): the mechanisms take no parameter, and the public
+ * template's key size or curve must be one the TPM has (found when the token was loaded, see
+ * mdetail_new()). A template without it is left for key generation to complain about.
+ */
 CK_RV rsa_keygen_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
 
-    /* this requires no argument */
-    if (!mech->pParameter || !mech->ulParameterLen) {
+    if (mech->pParameter || mech->ulParameterLen) {
         return CKR_MECHANISM_PARAM_INVALID;
     }
 
-    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(attrs, CKA_MODULUS);
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(attrs, CKA_MODULUS_BITS);
     if (!a) {
-        return CKR_TEMPLATE_INCOMPLETE;
+        return CKR_OK;
     }
 
     CK_ULONG bits = 0;
-    safe_mul(bits, a->ulValueLen, 8);
+    CK_RV rv = attr_CK_ULONG(a, &bits);
+    if (rv != CKR_OK) {
+        return rv;
+    }
 
     CK_ULONG i;
-    for (i=0; i < m->mdetail_len; i++) {
+    for (i=0; i < m->rsa_detail_len; i++) {
         if (m->rsa_entries[i].bits == bits) {
-            return m->rsa_entries[i].supported ?
-                    CKR_OK : CKR_ATTRIBUTE_VALUE_INVALID;
+            if (m->rsa_entries[i].supported) {
+                return CKR_OK;
+            }
+            break;
         }
     }
 
+    LOGE("The TPM doesn't make RSA keys of %lu bits", bits);
     return CKR_ATTRIBUTE_VALUE_INVALID;
 }
 
 CK_RV ecc_keygen_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
 
-    /* this requires no argument */
-    if (!mech->pParameter || !mech->ulParameterLen) {
+    if (mech->pParameter || mech->ulParameterLen) {
         return CKR_MECHANISM_PARAM_INVALID;
     }
 
     CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(attrs, CKA_EC_PARAMS);
     if (!a) {
-        return CKR_TEMPLATE_INCOMPLETE;
+        return CKR_OK;
     }
 
     int nid = 0;
@@ -705,12 +714,15 @@ CK_RV ecc_keygen_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) 
     CK_ULONG i;
     for (i=0; i < m->nid_detail_len; i++) {
         if (m->nid_entries[i].nid == nid) {
-            return m->nid_entries[i].supported ?
-                    CKR_OK : CKR_MECHANISM_INVALID;
+            if (m->nid_entries[i].supported) {
+                return CKR_OK;
+            }
+            break;
         }
     }
 
-    return CKR_MECHANISM_INVALID;
+    LOGE("The TPM doesn't have the curve of CKA_EC_PARAMS (nid %d)", nid);
+    return CKR_CURVE_NOT_SUPPORTED;
 }
 
 CK_RV ecdsa_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
@@ -985,6 +997,46 @@ CK_RV rsa_pss_synthesizer(mdetail *mdtl,
     return CKR_OK;
 }
 
+/*
+ * The DER prefixes of a DigestInfo, the hash's OID and then the digest, per RFC 8017 section 9.2
+ * note 1. CKM_<HASH>_RSA_PKCS pads a DigestInfo; CKM_RSA_PKCS is given one.
+ */
+typedef struct pkcs1_5_digest_info pkcs1_5_digest_info;
+struct pkcs1_5_digest_info {
+    CK_MECHANISM_TYPE mech;
+    CK_BYTE hdr[19];
+    size_t hdr_len;
+};
+
+static const pkcs1_5_digest_info pkcs1_5_digest_infos[] = {
+    { CKM_SHA1_RSA_PKCS, {
+        0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a,
+        0x05, 0x00, 0x04, 0x14,
+    }, 15 },
+    { CKM_SHA256_RSA_PKCS, {
+        0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20,
+    }, 19 },
+    { CKM_SHA384_RSA_PKCS, {
+        0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x02, 0x05, 0x00, 0x04, 0x30,
+    }, 19 },
+    { CKM_SHA512_RSA_PKCS, {
+        0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x03, 0x05, 0x00, 0x04, 0x40,
+    }, 19 },
+};
+
+static const pkcs1_5_digest_info *digest_info_for(CK_MECHANISM_TYPE mech) {
+    size_t i;
+    for (i = 0; i < ARRAY_LEN(pkcs1_5_digest_infos); i++) {
+        if (pkcs1_5_digest_infos[i].mech == mech) {
+            return &pkcs1_5_digest_infos[i];
+        }
+    }
+    return NULL;
+}
+
 CK_RV rsa_pkcs_hash_synthesizer(mdetail *mdtl,
         CK_MECHANISM_PTR mech, attr_list *attrs, CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen) {
@@ -992,53 +1044,13 @@ CK_RV rsa_pkcs_hash_synthesizer(mdetail *mdtl,
     assert(mech);
     assert(outlen);
 
-    /* These headers are defined in the following RFC
-     *   - https://www.ietf.org/rfc/rfc3447.txt
-     *     - Page 42
-     */
-    static const CK_BYTE pkcs1_5_hdr_sha1[15] = {
-        0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a,
-        0x05, 0x00, 0x04, 0x14,
-    };
-
-    static const CK_BYTE pkcs1_5_hdr_sha256[19] = {
-        0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
-        0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20,
-    };
-
-    static const CK_BYTE pkcs1_5_hdr_sha384[19] = {
-        0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
-        0x04, 0x02, 0x02, 0x05, 0x00, 0x04, 0x30,
-    };
-
-    static const CK_BYTE pkcs1_5_hdr_sha512[19] = {
-        0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
-        0x04, 0x02, 0x03, 0x05, 0x00, 0x04, 0x40,
-    };
-
-    const CK_BYTE *hdr;
-    size_t hdr_size;
-
-    switch(mech->mechanism) {
-    case CKM_SHA1_RSA_PKCS:
-        hdr = pkcs1_5_hdr_sha1;
-        hdr_size = sizeof(pkcs1_5_hdr_sha1);
-        break;
-    case CKM_SHA256_RSA_PKCS:
-        hdr = pkcs1_5_hdr_sha256;
-        hdr_size = sizeof(pkcs1_5_hdr_sha256);
-        break;
-    case CKM_SHA384_RSA_PKCS:
-        hdr = pkcs1_5_hdr_sha384;
-        hdr_size = sizeof(pkcs1_5_hdr_sha384);
-        break;
-    case CKM_SHA512_RSA_PKCS:
-        hdr = pkcs1_5_hdr_sha512;
-        hdr_size = sizeof(pkcs1_5_hdr_sha512);
-        break;
-    default:
+    const pkcs1_5_digest_info *info = digest_info_for(mech->mechanism);
+    if (!info) {
         return CKR_MECHANISM_INVALID;
     }
+
+    const CK_BYTE *hdr = info->hdr;
+    size_t hdr_size = info->hdr_len;
 
     size_t hash_len = utils_get_halg_size(mech->mechanism);
     if (!hash_len) {
@@ -1049,6 +1061,7 @@ CK_RV rsa_pkcs_hash_synthesizer(mdetail *mdtl,
     if (inlen != hash_len) {
         LOGE("Expected input hash length to match expected hash length,"
                 "got: %lu, expected: %lu", inlen, hash_len);
+        return CKR_GENERAL_ERROR;
     }
 
     size_t total_size = 0;
@@ -1068,6 +1081,42 @@ CK_RV rsa_pkcs_hash_synthesizer(mdetail *mdtl,
     memcpy(&hdr_buf[hdr_size], inbuf, hash_len);
 
     return rsa_pkcs_synthesizer(mdtl, mech, attrs, hdr_buf, total_size, outbuf, outlen);
+}
+
+/*
+ * CKM_RSA_PKCS signs what it is given, usually a DigestInfo. When that is the DigestInfo of a hash
+ * whose CKM_<HASH>_RSA_PKCS the TPM signs natively, *hash_mech is that mechanism and *hdr_len the
+ * length of the prefix before the digest: TPM2_Sign with RSASSA pads the digest the same way, and
+ * doesn't need raw RSA, which a TPM may not do (a FIPS profile, say). Otherwise *hash_mech is 0.
+ */
+CK_RV mech_rsa_pkcs_native_sign(mdetail *m, CK_BYTE_PTR in, CK_ULONG inlen,
+        CK_MECHANISM_TYPE *hash_mech, CK_ULONG *hdr_len) {
+
+    check_pointer(m);
+    check_pointer(hash_mech);
+    check_pointer(hdr_len);
+
+    *hash_mech = 0;
+    *hdr_len = 0;
+
+    size_t i;
+    for (i = 0; i < ARRAY_LEN(pkcs1_5_digest_infos); i++) {
+        const pkcs1_5_digest_info *info = &pkcs1_5_digest_infos[i];
+        size_t hash_len = utils_get_halg_size(info->mech);
+        if (!in || inlen != info->hdr_len + hash_len
+                || memcmp(in, info->hdr, info->hdr_len)) {
+            continue;
+        }
+
+        mdetail_entry *d = mlookup(m, info->mech);
+        if (d && (d->flags & mf_tpm_supported)) {
+            *hash_mech = info->mech;
+            *hdr_len = info->hdr_len;
+        }
+        break;
+    }
+
+    return CKR_OK;
 }
 
 static CK_RV aes_cbc_synthesizer(mdetail *mdtl,

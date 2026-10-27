@@ -283,7 +283,8 @@ static void test_all_priv_ecc_obj_attrs(void **state) {
         CK_OBJECT_HANDLE h = handles[i];
 
         /* verify missing attrs */
-        verify_missing_priv_attrs_common(session, keytype, h, CK_FALSE);
+        /* tpm2_ptool makes its keys able to decrypt, which for an EC key means ECDH */
+        verify_missing_priv_attrs_common(session, keytype, h, CK_FALSE, CK_TRUE);
         verify_missing_priv_attrs_ecc(session, h);
     }
 }
@@ -355,7 +356,7 @@ static void test_all_priv_rsa_obj_attrs(void **state) {
         CK_OBJECT_HANDLE h = handles[i];
 
         /* verify missing attrs */
-        verify_missing_priv_attrs_common(session, keytype, h, CK_FALSE);
+        verify_missing_priv_attrs_common(session, keytype, h, CK_FALSE, CK_TRUE);
         verify_missing_priv_attrs_rsa(session, h);
     }
 }

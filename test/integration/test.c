@@ -332,7 +332,7 @@ void verify_missing_priv_attrs_ecc(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE h
     assert_int_equal(count, ARRAY_LEN(attrs));
 }
 
-void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE keytype, CK_OBJECT_HANDLE h, CK_BBOOL extractable) {
+void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE keytype, CK_OBJECT_HANDLE h, CK_BBOOL extractable, CK_BBOOL decrypt) {
 
     CK_BYTE tmp[10][256] = { 0 };
 
@@ -394,13 +394,18 @@ void verify_missing_priv_attrs_common(CK_SESSION_HANDLE session, CK_KEY_TYPE key
             assert_int_equal(v, !extractable);
             count++;
         } break;
-        case CKA_SIGN:
-            /* fall-thru */
-        case CKA_DECRYPT: {
+        case CKA_SIGN: {
             CK_BBOOL v = CK_FALSE;
             rv = attr_CK_BBOOL(a, &v);
             assert_int_equal(rv, CKR_OK);
             assert_int_equal(v, CK_TRUE);
+            count++;
+        } break;
+        case CKA_DECRYPT: {
+            CK_BBOOL v = !decrypt;
+            rv = attr_CK_BBOOL(a, &v);
+            assert_int_equal(rv, CKR_OK);
+            assert_int_equal(v, decrypt);
             count++;
         } break;
         case CKA_SIGN_RECOVER:

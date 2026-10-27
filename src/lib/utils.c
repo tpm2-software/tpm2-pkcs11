@@ -485,14 +485,23 @@ CK_RV apply_pkcs7_pad(const CK_BYTE_PTR in, CK_ULONG inlen,
 CK_RV remove_pkcs7_pad(CK_BYTE_PTR in, CK_ULONG inlen,
         CK_BYTE_PTR out, CK_ULONG_PTR outlen) {
 
-    if (inlen % 16) {
-        LOGE("AES_CBC_PAD data should be block sized, got: %lu", inlen);
+    if (!inlen || inlen % 16) {
+        LOGE("AES_CBC_PAD data should be a whole number of blocks, got: %lu", inlen);
         return CKR_ENCRYPTED_DATA_LEN_RANGE;
     }
 
+    /*
+     * Every padding byte must be the pad value, not just the last. Checked over the whole last
+     * block whatever the pad value, so the time taken says nothing about where the padding broke.
+     */
     CK_BYTE pad_value = in[inlen - 1];
-    if (pad_value < 1 || pad_value > 16) {
-        LOGE("Nonsensical pad value, got: %u, expected 1-16", pad_value);
+    unsigned bad = (pad_value < 1) | (pad_value > 16);
+    for (CK_ULONG i = 0; i < 16; i++) {
+        unsigned in_pad = i < pad_value;
+        bad |= in_pad & (in[inlen - 1 - i] != pad_value);
+    }
+    if (bad) {
+        LOGE("Invalid PKCS#7 padding");
         return CKR_ENCRYPTED_DATA_INVALID;
     }
 
@@ -630,4 +639,19 @@ CK_RV utils_uncompressed_ecpoint_to_tpm2b(uint8_t* from, TPM2B_ECC_POINT* to, si
     to->size = to->point.y.size + to->point.x.size;
 
     return CKR_OK;
+}
+
+/*
+ * A TPM's format-one error code without the parameter, handle or session it was tied to, to compare with
+ * TPM2_RC_VALUE and the like: a TPM2_TestParms refusal should say "parameter 1" (TPM2_RC_P | TPM2_RC_1),
+ * but not every TPM does (wolfTPM's fwTPM, for one, returns the bare code). Anything else (a format-zero
+ * code, or an error from another layer) comes back as it was, so it can't match a format-one code.
+ */
+TSS2_RC utils_format_one_code(TSS2_RC rval) {
+
+    if ((rval & ~0xFFFu) || !(rval & TPM2_RC_FMT1)) {
+        return rval;
+    }
+
+    return rval & (TPM2_RC_FMT1 | 0x3F);
 }

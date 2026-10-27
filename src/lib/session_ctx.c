@@ -175,6 +175,62 @@ void session_ctx_opdata_clear(session_ctx *ctx) {
     session_ctx_opdata_set(ctx, operation_none, NULL, NULL, NULL);
 }
 
+/* The CK_MECHANISM_INFO flag C_SessionCancel names an operation by. */
+static CK_FLAGS operation_flag(operation op) {
+
+    switch (op) {
+    case operation_find:
+        return CKF_FIND_OBJECTS;
+    case operation_sign:
+        return CKF_SIGN;
+    case operation_verify:
+    case operation_verify_signature:
+        return CKF_VERIFY;
+    case operation_verify_recover:
+        return CKF_VERIFY_RECOVER;
+    case operation_encrypt:
+        return CKF_ENCRYPT;
+    case operation_decrypt:
+        return CKF_DECRYPT;
+    case operation_digest:
+        return CKF_DIGEST;
+    default:
+        return 0;
+    }
+}
+
+CK_RV session_ctx_cancel(session_ctx *ctx, CK_FLAGS flags) {
+
+    CK_FLAGS active = operation_flag(ctx->opdata.op);
+    if (!(active & flags)) {
+        return CKR_OK;
+    }
+
+    /* What ending the operation normally does: the key it loaded is released. */
+    tobject *tobj = ctx->opdata.tobj;
+    session_ctx_opdata_clear(ctx);
+    if (!tobj) {
+        return CKR_OK;
+    }
+
+    tobj->is_authenticated = false;
+    return tobject_user_decrement(tobj);
+}
+
+CK_RV session_ctx_get_validation_flags(session_ctx *ctx, CK_SESSION_VALIDATION_FLAGS_TYPE type,
+        CK_FLAGS *flags) {
+
+    UNUSED(ctx);
+    check_pointer(flags);
+
+    if (type != CKS_LAST_VALIDATION_OK) {
+        return CKR_ARGUMENTS_BAD;
+    }
+
+    *flags = 0;
+    return CKR_OK;
+}
+
 static bool is_user(CK_USER_TYPE user) {
     return user == CKU_USER || user == CKU_CONTEXT_SPECIFIC;
 }
@@ -384,4 +440,20 @@ CK_RV session_ctx_tobject_authenticated(session_ctx *ctx) {
     }
 
     return CKR_OK;
+}
+
+CK_RV session_ctx_login_user(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK_ULONG pinlen,
+        CK_UTF8CHAR_PTR username, CK_ULONG username_len) {
+
+    if (username_len && !username) {
+        return CKR_ARGUMENTS_BAD;
+    }
+
+    /* A PIN only authenticates the token's one user or SO; a user name can't be checked against anything. */
+    if (username_len) {
+        LOGE("The token has no user names; use C_Login or C_LoginUser without one");
+        return CKR_ARGUMENTS_BAD;
+    }
+
+    return session_ctx_login(ctx, user, pin, pinlen);
 }

@@ -34,6 +34,11 @@ struct sign_opdata {
     int padding;
     EVP_PKEY *pkey;
     const EVP_MD *md;
+
+    /* C_VerifySignatureInit's signature */
+    twist signature;
+    /* a C_*Update has run, so the single-part call is refused */
+    bool updated;
 };
 
 static sign_opdata *sign_opdata_new(operation op, mdetail *mdtl, CK_MECHANISM_PTR mechanism, tobject *tobj) {
@@ -108,6 +113,8 @@ static void sign_opdata_free(sign_opdata **opdata) {
         encrypt_op_data_free(&(*opdata)->crypto_opdata);
     }
 
+    twist_free((*opdata)->signature);
+
     free(*opdata);
 
     *opdata = NULL;
@@ -168,36 +175,58 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
     token *tok = session_ctx_get_token(ctx);
     assert(tok);
 
+    /* From here on, a failure goes through error, which releases the key and what was made. */
     tobject *tobj = NULL;
     rv = token_load_object(tok, key, &tobj);
     if (rv != CKR_OK) {
         return rv;
     }
 
-    rv = mech_validate(tok->mdtl, mechanism, tobj->attrs);
-    if (rv != CKR_OK) {
-        return rv;
+    digest_op_data *digest_opdata = NULL;
+    tpm_op_data *tpm_opdata = NULL;
+    sign_opdata *opdata = NULL;
+
+    /*
+     * A key's TPM attributes may allow more than its CKA_SIGN or CKA_VERIFY: an HMAC key has the TPM's
+     * sign attribute for both, whatever they say. A key without the attribute predates this, and is let
+     * through.
+     */
+    if (op == operation_sign || op == operation_verify || op == operation_verify_signature) {
+        CK_BBOOL allowed = op == operation_sign
+                ? attr_list_get_CKA_SIGN(tobj->attrs, CK_TRUE)
+                : attr_list_get_CKA_VERIFY(tobj->attrs, CK_TRUE);
+        if (!allowed) {
+            LOGE("The key doesn't allow %s (%s=false)",
+                    op == operation_sign ? "signing" : "verification",
+                    op == operation_sign ? "CKA_SIGN" : "CKA_VERIFY");
+            rv = CKR_KEY_FUNCTION_NOT_PERMITTED;
+            goto error;
+        }
     }
 
-    digest_op_data *digest_opdata = NULL;
+    rv = mech_validate(tok->mdtl, mechanism, tobj->attrs);
+    if (rv != CKR_OK) {
+        goto error;
+    }
+
     bool is_hashing_needed = false;
     rv = mech_is_hashing_needed(tok->mdtl,
             mechanism, &is_hashing_needed);
     if (rv != CKR_OK) {
-        return rv;
+        goto error;
     }
 
     if (is_hashing_needed) {
 
         digest_opdata = digest_op_data_new();
         if (!digest_opdata) {
-            return CKR_HOST_MEMORY;
+            rv = CKR_HOST_MEMORY;
+            goto error;
         }
 
         rv = digest_init_op(ctx, digest_opdata, mechanism);
         if (rv != CKR_OK) {
-            digest_op_data_free(&digest_opdata);
-            return rv;
+            goto error;
         }
     }
 
@@ -210,39 +239,40 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
     rv = mech_is_HMAC(tok->mdtl, mechanism, &is_hmac);
     if (rv != CKR_OK) {
         LOGE("Could not determine if algorithm is HMAC or not");
-        return rv;
+        goto error;
     }
 
-    tpm_op_data *tpm_opdata = NULL;
     if (op == operation_sign || is_hmac) {
 
         rv = update_pss_sig_state(tok, tobj);
         if (rv != CKR_OK) {
-            return rv;
+            goto error;
         }
 
         rv = mech_get_tpm_opdata(tok->mdtl,
                 tok->tctx, mechanism, tobj, &tpm_opdata);
         if (rv != CKR_OK) {
-            return rv;
+            goto error;
         }
     }
 
-    sign_opdata *opdata = sign_opdata_new(op, tok->mdtl,
+    opdata = sign_opdata_new(op, tok->mdtl,
             mechanism, tobj);
     if (!opdata) {
-        tpm_opdata_free(&tpm_opdata);
-        return CKR_HOST_MEMORY;
+        rv = CKR_HOST_MEMORY;
+        goto error;
     }
 
     opdata->do_hash = is_hashing_needed;
     memcpy(&opdata->mech, mechanism, sizeof(opdata->mech));
+    /* opdata owns it now */
     opdata->digest_opdata = digest_opdata;
+    digest_opdata = NULL;
 
     opdata->crypto_opdata = encrypt_op_data_new();
     if (!opdata->crypto_opdata) {
-        sign_opdata_free(&opdata);
-        return CKR_HOST_MEMORY;
+        rv = CKR_HOST_MEMORY;
+        goto error;
     }
 
     /* Use SW Verify if it's an asymmetric key with pkey set */
@@ -251,11 +281,12 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
         rv = sw_encrypt_data_init(tok->mdtl,
                 mechanism, tobj, &opdata->crypto_opdata->cryptopdata.sw_enc_data);
         if (rv != CKR_OK) {
-            sign_opdata_free(&opdata);
-            return rv;
+            goto error;
         }
     } else {
+        /* opdata owns it now */
         opdata->crypto_opdata->cryptopdata.tpm_opdata = tpm_opdata;
+        tpm_opdata = NULL;
     }
 
     /*
@@ -264,11 +295,27 @@ static CK_RV common_init(operation op, session_ctx *ctx, CK_MECHANISM_PTR mechan
     session_ctx_opdata_set(ctx, op, tobj, opdata, (opdata_free_fn)sign_opdata_free);
 
     return CKR_OK;
+
+error:
+    if (opdata) {
+        sign_opdata_free(&opdata);
+    }
+    digest_op_data_free(&digest_opdata);
+    tpm_opdata_free(&tpm_opdata);
+    tobject_user_decrement(tobj);
+
+    return rv;
 }
+
+/* Where empty data without a buffer is kept from: twistbin_new() takes no NULL, even for no bytes. */
+static const CK_BYTE nothing[1];
 
 static CK_RV common_update(operation op, session_ctx *ctx, CK_BYTE_PTR part, CK_ULONG part_len) {
 
-    check_pointer(part);
+    /* Empty data may come without a buffer. */
+    if (!part && part_len) {
+        return CKR_ARGUMENTS_BAD;
+    }
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -289,7 +336,7 @@ static CK_RV common_update(operation op, session_ctx *ctx, CK_BYTE_PTR part, CK_
             return rv;
         }
     } else {
-        twist tmp = twistbin_append(opdata->buffer, part, part_len);
+        twist tmp = twistbin_append(opdata->buffer, part ? part : nothing, part_len);
         if (!tmp) {
             return CKR_HOST_MEMORY;
         }
@@ -304,9 +351,47 @@ CK_RV sign_init(session_ctx *ctx, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key)
     return common_init(operation_sign, ctx, mechanism, key);
 }
 
+/*
+ * The first step of C_Sign/C_Verify, or C_SignUpdate/C_VerifyUpdate (multi_part): an error ends the
+ * operation, and C_*Update makes it multi-part, so the single-part call is refused after it.
+ */
+static CK_RV update_or_end(operation op, CK_FLAGS flag, session_ctx *ctx, CK_BYTE_PTR part,
+        CK_ULONG part_len, bool multi_part) {
+
+    sign_opdata *opdata = NULL;
+    CK_RV rv = session_ctx_opdata_get(ctx, op, &opdata);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    if (!multi_part && opdata->updated) {
+        LOGE("Single-part call after an update: end a multi-part operation with its *Final");
+        session_ctx_cancel(ctx, flag);
+        return CKR_OPERATION_NOT_INITIALIZED;
+    }
+
+    /*
+     * A key with CKA_ALWAYS_AUTHENTICATE that wants its context-specific login keeps the operation,
+     * for that C_Login(CKU_CONTEXT_SPECIFIC) to authenticate, and the call to be made again.
+     */
+    rv = common_update(op, ctx, part, part_len);
+    if (rv != CKR_OK) {
+        if (rv != CKR_USER_NOT_LOGGED_IN) {
+            session_ctx_cancel(ctx, flag);
+        }
+        return rv;
+    }
+
+    if (multi_part) {
+        opdata->updated = true;
+    }
+
+    return CKR_OK;
+}
+
 CK_RV sign_update(session_ctx *ctx, CK_BYTE_PTR part, CK_ULONG part_len) {
 
-    return common_update(operation_sign, ctx, part, part_len);
+    return update_or_end(operation_sign, CKF_SIGN, ctx, part, part_len, true);
 }
 
 CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signature_len, bool is_oneshot) {
@@ -403,6 +488,33 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
         digest_buf_len = expected_sig_len;
     }
 
+    /* a DigestInfo the TPM can sign with RSASSA needs no raw RSA, see mech_rsa_pkcs_native_sign() */
+    if (opdata->mech.mechanism == CKM_RSA_PKCS) {
+        CK_MECHANISM native = { 0, NULL, 0 };
+        CK_ULONG hdr_len = 0;
+        rv = mech_rsa_pkcs_native_sign(tok->mdtl, (CK_BYTE_PTR)digest_buf, digest_buf_len,
+                &native.mechanism, &hdr_len);
+        if (rv != CKR_OK) {
+            goto session_out;
+        }
+
+        if (native.mechanism) {
+            tpm_op_data *native_opdata = NULL;
+            rv = mech_get_tpm_opdata(tok->mdtl, tok->tctx, &native, tobj, &native_opdata);
+            if (rv != CKR_OK) {
+                goto session_out;
+            }
+
+            rv = tpm_sign(native_opdata, (CK_BYTE_PTR)digest_buf + hdr_len,
+                    digest_buf_len - hdr_len, signature, signature_len);
+            tpm_opdata_free(&native_opdata);
+            if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
+                goto session_out;
+            }
+            goto out;
+        }
+    }
+
     rv = mech_synthesize(
             tok->mdtl,
             &opdata->mech, tobj->attrs,
@@ -442,18 +554,19 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
 
         rv = decrypt_oneshot_op(ctx, encrypt_opdata, syn_buf, syn_buf_len, signature, signature_len);
         encrypt_op_data_free(&encrypt_opdata);
-        if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
-            goto session_out;
-        }
 
         /* WORKAROUND / TODO:
            decrypt_init_op above increments the usage counter by one, but never decremented.
            if called for size, decrypt_finalize is never called, thus no decrement.
            if not called for size, decrypt_finalize does not decrement as supplied data was set
            Without reworking the whole logic and breaking other valid use cases it is the easiest
-           to decrement the usage counter here.
+           to decrement the usage counter here, whatever the result: a failed signature that
+           didn't would leave the key busy, so it could never be destroyed.
         */
         CK_RV rv_tmp = tobject_user_decrement(tobj);
+        if (rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
+            goto session_out;
+        }
         if (rv_tmp != CKR_OK) {
             rv = rv_tmp;
             goto session_out;
@@ -527,7 +640,7 @@ session_out:
 
 CK_RV sign(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG *signature_len) {
 
-    CK_RV rv = sign_update(ctx, data, data_len);
+    CK_RV rv = update_or_end(operation_sign, CKF_SIGN, ctx, data, data_len, false);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -541,18 +654,16 @@ CK_RV verify_init (session_ctx *ctx, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE k
 
 CK_RV verify_update (session_ctx *ctx, CK_BYTE_PTR part, CK_ULONG part_len) {
 
-    return common_update(operation_verify, ctx, part, part_len);
+    return update_or_end(operation_verify, CKF_VERIFY, ctx, part, part_len, true);
 }
 
-CK_RV verify_final (session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG signature_len) {
-
-    check_pointer(signature);
-    check_pointer(signature_len);
+/* Checks the signature over the data the operation collected, and ends the operation. */
+static CK_RV verify_final_op(operation op, session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG signature_len) {
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
     sign_opdata *opdata = NULL;
-    rv = session_ctx_opdata_get(ctx, operation_verify, &opdata);
+    rv = session_ctx_opdata_get(ctx, op, &opdata);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -606,14 +717,117 @@ out:
     return rv;
 }
 
+CK_RV verify_final (session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG signature_len) {
+
+    /*
+     * A signature of the wrong length, empty even, is an invalid signature, not a bad argument; and
+     * C_VerifyFinal ends the operation whatever the result.
+     */
+    if (!signature && signature_len) {
+        session_ctx_cancel(ctx, CKF_VERIFY);
+        return CKR_ARGUMENTS_BAD;
+    }
+
+    return verify_final_op(operation_verify, ctx, signature, signature_len);
+}
+
 CK_RV verify(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR signature, CK_ULONG signature_len) {
 
-    CK_RV rv = verify_update(ctx, data, data_len);
+    CK_RV rv = update_or_end(operation_verify, CKF_VERIFY, ctx, data, data_len, false);
     if (rv != CKR_OK) {
         return rv;
     }
 
     return verify_final(ctx, signature, signature_len);
+}
+
+CK_RV verify_signature_init (session_ctx *ctx, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key,
+        CK_BYTE_PTR signature, CK_ULONG signature_len) {
+
+    /* An empty signature is an invalid one, which C_VerifySignature will say. */
+    if (!signature && signature_len) {
+        return CKR_ARGUMENTS_BAD;
+    }
+
+    CK_RV rv = common_init(operation_verify_signature, ctx, mechanism, key);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    sign_opdata *opdata = NULL;
+    rv = session_ctx_opdata_get(ctx, operation_verify_signature, &opdata);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    opdata->signature = twistbin_new(signature ? signature : nothing, signature_len);
+    if (!opdata->signature) {
+        LOGE("oom");
+        session_ctx_cancel(ctx, CKF_VERIFY);
+        return CKR_HOST_MEMORY;
+    }
+
+    return CKR_OK;
+}
+
+CK_RV verify_signature_update (session_ctx *ctx, CK_BYTE_PTR part, CK_ULONG part_len) {
+
+    sign_opdata *opdata = NULL;
+    CK_RV rv = session_ctx_opdata_get(ctx, operation_verify_signature, &opdata);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    opdata->updated = true;
+
+    /* An error ends the operation. */
+    rv = common_update(operation_verify_signature, ctx, part, part_len);
+    if (rv != CKR_OK) {
+        session_ctx_cancel(ctx, CKF_VERIFY);
+    }
+
+    return rv;
+}
+
+CK_RV verify_signature_final (session_ctx *ctx) {
+
+    sign_opdata *opdata = NULL;
+    CK_RV rv = session_ctx_opdata_get(ctx, operation_verify_signature, &opdata);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    return verify_final_op(operation_verify_signature, ctx,
+            (CK_BYTE_PTR)opdata->signature, twist_len(opdata->signature));
+}
+
+CK_RV verify_signature (session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len) {
+
+    sign_opdata *opdata = NULL;
+    CK_RV rv = session_ctx_opdata_get(ctx, operation_verify_signature, &opdata);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    /*
+     * C_VerifySignature is single-part only, and always ends the operation: after
+     * C_VerifySignatureUpdate it is refused, and the operation ended.
+     */
+    if (opdata->updated) {
+        session_ctx_cancel(ctx, CKF_VERIFY);
+        return CKR_OPERATION_NOT_INITIALIZED;
+    }
+
+    /* as update_or_end(), a context-specific login still to come keeps the operation */
+    rv = common_update(operation_verify_signature, ctx, data, data_len);
+    if (rv != CKR_OK) {
+        if (rv != CKR_USER_NOT_LOGGED_IN) {
+            session_ctx_cancel(ctx, CKF_VERIFY);
+        }
+        return rv;
+    }
+
+    return verify_signature_final(ctx);
 }
 
 CK_RV verify_recover_init (session_ctx *ctx, CK_MECHANISM *mechanism, CK_OBJECT_HANDLE key) {

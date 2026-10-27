@@ -11,6 +11,7 @@
 #include "checks.h"
 #include "db.h"
 #include "emitter.h"
+#include "key.h"
 #include "log.h"
 #include "object.h"
 #include "pkcs11.h"
@@ -654,6 +655,59 @@ CK_RV object_get_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
     return rv;
 }
 
+/* Whether the backend stores the object: a token object does, a session object (even orphaned) doesn't. */
+static bool is_stored(tobject *tobj) {
+    return !tobj->owner && !tobj->orphaned;
+}
+
+/*
+ * What C_SetAttributeValue can't change on a private or secret key. The TPM fixes a key's attributes when
+ * it makes it, and they can be wider than the PKCS#11 ones (an RSA signing key can decrypt, see
+ * apply_usage()), so the PKCS#11 usage attributes are what hold the key to its use: they can be turned
+ * off, not on. And as PKCS#11 has it, CKA_SENSITIVE can only become true, and CKA_EXTRACTABLE false.
+ */
+static CK_RV check_key_attr_change(tobject *tobj, CK_OBJECT_CLASS clazz, CK_ATTRIBUTE_PTR t) {
+
+    static const CK_ATTRIBUTE_TYPE usages[] = {
+        CKA_ENCRYPT, CKA_DECRYPT, CKA_SIGN, CKA_VERIFY, CKA_SIGN_RECOVER, CKA_VERIFY_RECOVER,
+        CKA_WRAP, CKA_UNWRAP, CKA_DERIVE,
+    };
+
+    if (clazz != CKO_PRIVATE_KEY && clazz != CKO_SECRET_KEY) {
+        return CKR_OK;
+    }
+
+    bool usage = false;
+    size_t i;
+    for (i = 0; i < ARRAY_LEN(usages); i++) {
+        usage = usage || usages[i] == t->type;
+    }
+
+    if (!usage && t->type != CKA_SENSITIVE && t->type != CKA_EXTRACTABLE) {
+        return CKR_OK;
+    }
+
+    CK_BBOOL value = CK_FALSE;
+    if (attr_CK_BBOOL(t, &value) != CKR_OK) {
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    CK_BBOOL current = CK_FALSE;
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, t->type);
+    if (a && attr_CK_BBOOL(a, &current) != CKR_OK) {
+        return CKR_GENERAL_ERROR;
+    }
+
+    /* CKA_SENSITIVE widens the key by becoming false, the others by becoming true */
+    CK_BBOOL wider = t->type == CKA_SENSITIVE ? CK_FALSE : CK_TRUE;
+    if (value != current && value == wider) {
+        LOGE("%s can't be changed to %s", attr_get_name(t->type), value ? "true" : "false");
+        return CKR_ATTRIBUTE_READ_ONLY;
+    }
+
+    return CKR_OK;
+}
+
 CK_RV object_set_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIBUTE *templ, CK_ULONG count) {
 
     token *tok = session_ctx_get_token(ctx);
@@ -702,6 +756,11 @@ CK_RV object_set_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
 
         CK_ATTRIBUTE_PTR t = &templ[i];
 
+        rv = check_key_attr_change(tobj, clazz, t);
+        if (rv != CKR_OK) {
+            goto error;
+        }
+
         /* CKA_VALUE fields are encrypted for CKO_DATA objects */
         if (t->type == CKA_VALUE && clazz == CKO_DATA && cka_private) {
             rv = wrap_protected_cka_value(tok, tmp);
@@ -730,10 +789,12 @@ CK_RV object_set_attributes(session_ctx *ctx, CK_OBJECT_HANDLE object, CK_ATTRIB
         is_backed_up = true;
     }
 
-    /* in memory is updated, so update the persistent store */
-    rv = backend_update_tobject_attrs(tok, tobj, tmp);
-    if (rv != CKR_OK) {
-        goto error;
+    /* in memory is updated, so update the persistent store; a session object has none */
+    if (is_stored(tobj)) {
+        rv = backend_update_tobject_attrs(tok, tobj, tmp);
+        if (rv != CKR_OK) {
+            goto error;
+        }
     }
 
     if (is_backed_up) {
@@ -917,7 +978,7 @@ CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object) {
         return rv;
     }
 
-    rv = backend_rm_tobject(tok, tobj);
+    rv = object_unstore(tok, tobj);
     if (rv != CKR_OK) {
         return rv;
     }
@@ -928,6 +989,49 @@ CK_RV object_destroy(session_ctx *ctx, CK_OBJECT_HANDLE object) {
     rv = CKR_OK;
 
     return rv;
+}
+
+CK_RV object_store(token *tok, session_ctx *ctx, tobject *tobj) {
+
+    if (attr_list_get_CKA_TOKEN(tobj->attrs, CK_TRUE)) {
+        return backend_add_object(tok, tobj);
+    }
+
+    tobj->owner = ctx;
+    return CKR_OK;
+}
+
+CK_RV object_unstore(token *tok, tobject *tobj) {
+
+    return is_stored(tobj) ? backend_rm_tobject(tok, tobj) : CKR_OK;
+}
+
+void object_destroy_session_objects(token *tok, session_ctx *ctx) {
+
+    list *cur = tok->tobjects.head ? &tok->tobjects.head->l : NULL;
+    while (cur) {
+        tobject *tobj = list_entry(cur, tobject, l);
+        cur = cur->next;
+
+        if (tobj->owner != ctx) {
+            continue;
+        }
+
+        if (tobject_is_busy(tobj)) {
+            LOGW("Session object %lu is in use by another session; it stays until C_Finalize",
+                    tobj->obj_handle);
+            tobj->owner = NULL;
+            tobj->orphaned = true;
+            continue;
+        }
+
+        if (flush_tobject_handle(tok, tobj) != CKR_OK) {
+            LOGW("Could not flush session object %lu", tobj->obj_handle);
+        }
+
+        token_rm_tobject(tok, tobj);
+        tobject_free(tobj);
+    }
 }
 
 static CK_RV handle_rsa_public(CK_ATTRIBUTE_PTR templ, CK_ULONG count, attr_list **new_attrs) {
@@ -1130,7 +1234,29 @@ static CK_RV handle_secret_object(CK_ATTRIBUTE_PTR templ, CK_ULONG count, attr_l
     return rv;
 }
 
-CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OBJECT_HANDLE *object) {
+/*
+ * Whether a template asks for a value that can be read back, CKA_EXTRACTABLE=true or CKA_SENSITIVE=false,
+ * which a key in the TPM can't honour. A generic secret like that (a password, a blob) stays a plain
+ * object holding its value, as it did before such keys went to the TPM.
+ */
+static bool wants_readable_value(CK_ATTRIBUTE_PTR templ, CK_ULONG count) {
+
+    CK_BBOOL b = CK_FALSE;
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type_raw(templ, count, CKA_EXTRACTABLE);
+    if (a && attr_CK_BBOOL(a, &b) == CKR_OK && b == CK_TRUE) {
+        return true;
+    }
+
+    a = attr_get_attribute_by_type_raw(templ, count, CKA_SENSITIVE);
+    return a && attr_CK_BBOOL(a, &b) == CKR_OK && b == CK_FALSE;
+}
+
+/*
+ * value_later: the object is a secret key whose CKA_VALUE the caller sets once it's made, as C_DeriveKey
+ * does; through C_CreateObject a secret key needs its value.
+ */
+static CK_RV object_create_common(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count,
+        CK_OBJECT_HANDLE *object, bool value_later) {
     assert(ctx);
     check_pointer(templ);
     check_pointer(object);
@@ -1207,6 +1333,27 @@ CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OB
     assert(tok);
     attr_list *new_attrs = NULL;
 
+    /*
+     * A secret key with its value is made in the TPM, so it can be used. One without, as C_DeriveKey
+     * creates before setting its value, stays a plain object holding the value.
+     */
+    bool has_value = attr_get_attribute_by_type_raw(templ, count, CKA_VALUE) != NULL;
+    if (clazz == CKO_SECRET_KEY && !has_value && !value_later) {
+        LOGE("A secret key needs its CKA_VALUE");
+        return CKR_TEMPLATE_INCOMPLETE;
+    }
+
+    /* C_DeriveKey sets the value: a template's own would be what the key really holds */
+    if (has_value && value_later) {
+        LOGE("A derived key's template can't have CKA_VALUE");
+        return CKR_TEMPLATE_INCONSISTENT;
+    }
+
+    if (clazz == CKO_SECRET_KEY && key_is_tpm_secret(key_type) && has_value
+            && !(key_type == CKK_GENERIC_SECRET && wants_readable_value(templ, count))) {
+        return key_import_secret(ctx, key_type, templ, count, object);
+    }
+
     if (key_type == CKK_RSA && clazz == CKO_PUBLIC_KEY) {
         rv = handle_rsa_public(templ, count, &new_attrs);
     } else if (clazz == CKO_DATA) {
@@ -1254,8 +1401,8 @@ CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OB
         is_backed_up = true;
     }
 
-    /* add the object to the db */
-    rv = backend_add_object(tok, new_tobj);
+    /* add the object to the db, unless it's a session object */
+    rv = object_store(tok, ctx, new_tobj);
     if (rv != CKR_OK) {
         goto out;
     }
@@ -1282,6 +1429,15 @@ out:
     tobject_free(new_tobj);
 
     return rv;
+}
+
+CK_RV object_create(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count, CK_OBJECT_HANDLE *object) {
+    return object_create_common(ctx, templ, count, object, false);
+}
+
+CK_RV object_create_valueless_secret(session_ctx *ctx, CK_ATTRIBUTE *templ, CK_ULONG count,
+        CK_OBJECT_HANDLE *object) {
+    return object_create_common(ctx, templ, count, object, true);
 }
 
 CK_RV object_init_from_attrs(tobject *tobj) {

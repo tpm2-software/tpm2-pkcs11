@@ -22,6 +22,7 @@ enum operation {
     operation_encrypt,
     operation_decrypt,
     operation_digest,
+    operation_verify_signature,
     operation_count
 };
 
@@ -188,6 +189,32 @@ CK_RV _session_ctx_opdata_get(session_ctx *ctx, operation op, void **data);
  *  CKR_OK on success, anything else is a failure.
  */
 CK_RV session_ctx_login(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK_ULONG pinlen);
+
+/**
+ * C_LoginUser: the token has no user names, so a call without one is C_Login, and one with a user
+ * name is refused.
+ */
+CK_RV session_ctx_login_user(session_ctx *ctx, CK_USER_TYPE user, CK_BYTE_PTR pin, CK_ULONG pinlen,
+        CK_UTF8CHAR_PTR username, CK_ULONG username_len);
+
+/**
+ * Ends the session's active operation if flags name it (CKF_ENCRYPT, CKF_SIGN, CKF_FIND_OBJECTS, ...),
+ * as C_SessionCancel and a C_*Init with a NULL mechanism do; otherwise does nothing.
+ * @param ctx
+ *  The session context.
+ * @param flags
+ *  The CK_MECHANISM_INFO flags of the operations to end.
+ * @return
+ *  CKR_OK, or the error releasing the operation's key reported.
+ */
+CK_RV session_ctx_cancel(session_ctx *ctx, CK_FLAGS flags);
+
+/**
+ * C_GetSessionValidationFlags: the token has no validation (FIPS 140-3 or otherwise) to indicate, so
+ * the flags are 0.
+ */
+CK_RV session_ctx_get_validation_flags(session_ctx *ctx, CK_SESSION_VALIDATION_FLAGS_TYPE type,
+        CK_FLAGS *flags);
 
 /**
  * Generates a logout event to be propagated throughout the token.

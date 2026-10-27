@@ -7,6 +7,7 @@
 #include "mutex.h"
 #include "pkcs11.h"
 #include "session_ctx.h"
+#include "object.h"
 #include "session_table.h"
 #include "token.h"
 #include "utils.h"
@@ -108,6 +109,13 @@ static CK_RV session_table_free_ctx_by_ctx(token *t, session_ctx **ctx) {
     session_table *stable = t->s_table;
 
     CK_RV rv = CKR_OK;
+
+    /*
+     * End the session's operation as if cancelled, so its key is released rather than left busy
+     * for good, then destroy the session objects it created.
+     */
+    session_ctx_cancel(*ctx, ~(CK_FLAGS)0);
+    object_destroy_session_objects(t, *ctx);
 
     CK_STATE state = session_ctx_state_get(*ctx);
     if(state == CKS_RW_PUBLIC_SESSION

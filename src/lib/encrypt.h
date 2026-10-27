@@ -24,6 +24,8 @@ union crypto_op_data{
 struct encrypt_op_data {
     bool use_sw;
     crypto_op_data cryptopdata;
+    /* C_EncryptUpdate/C_DecryptUpdate has run, so C_Encrypt/C_Decrypt is refused */
+    bool updated;
 };
 
 struct sw_encrypt_data {
@@ -45,9 +47,8 @@ static inline CK_RV encrypt_init(session_ctx *ctx, CK_MECHANISM *mechanism, CK_O
 }
 
 CK_RV encrypt_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len);
-static inline CK_RV encrypt_update (session_ctx *ctx, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
-    return encrypt_update_op (ctx, NULL, part, part_len, encrypted_part, encrypted_part_len);
-}
+/* C_EncryptUpdate: makes the operation multi-part. */
+CK_RV encrypt_update (session_ctx *ctx, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len);
 
 CK_RV encrypt_final_ex (session_ctx *ctx, encrypt_op_data *supplied_opdata, unsigned char *last_encrypted_part, unsigned long *last_encrypted_part_len, bool is_oneshot);
 
@@ -61,9 +62,8 @@ static inline CK_RV decrypt_init (session_ctx *ctx, CK_MECHANISM *mechanism, CK_
 }
 
 CK_RV decrypt_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len);
-static inline CK_RV decrypt_update (session_ctx *ctx, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len) {
-        return decrypt_update_op (ctx, NULL, part, part_len, encrypted_part, encrypted_part_len);
-}
+/* C_DecryptUpdate: makes the operation multi-part. */
+CK_RV decrypt_update (session_ctx *ctx, unsigned char *part, unsigned long part_len, unsigned char *encrypted_part, unsigned long *encrypted_part_len);
 
 CK_RV decrypt_final_ex(session_ctx *ctx, encrypt_op_data *supplied_opdata, unsigned char *last_part, unsigned long *last_part_len, bool is_oneshot);
 

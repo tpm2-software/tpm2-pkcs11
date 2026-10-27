@@ -234,7 +234,7 @@ static void test_rsa_keygen_missing_attributes(void **state) {
     verify_missing_pub_attrs_common(session, CKK_RSA, pub_handle_dup);
     verify_missing_pub_attrs_rsa(session, pub_handle_dup);
 
-    verify_missing_priv_attrs_common(session, CKK_RSA, priv_handle_dup, CK_FALSE);
+    verify_missing_priv_attrs_common(session, CKK_RSA, priv_handle_dup, CK_FALSE, CK_TRUE);
     verify_missing_priv_attrs_rsa(session, priv_handle_dup);
 }
 static void test_rsa_keygen_p11tool_templ(void **state) {
@@ -340,7 +340,7 @@ static void test_rsa_keygen_p11tool_templ(void **state) {
     verify_missing_pub_attrs_common(session, CKK_RSA, pub_handle_dup);
     verify_missing_pub_attrs_rsa(session, pub_handle_dup);
 
-    verify_missing_priv_attrs_common(session, CKK_RSA, priv_handle_dup, CK_TRUE);
+    verify_missing_priv_attrs_common(session, CKK_RSA, priv_handle_dup, CK_TRUE, CK_TRUE);
     verify_missing_priv_attrs_rsa(session, priv_handle_dup);
 }
 
@@ -466,7 +466,8 @@ static void test_ecc_keygen_p11tool_templ(void **state) {
 
     /* verify missing attrs */
     verify_missing_pub_attrs_common(session, CKK_EC, pub_handle_dup);
-    verify_missing_priv_attrs_common(session, CKK_EC, priv_handle_dup, CK_TRUE);
+    /* an EC key derives (CKA_DECRYPT) only when its template asks */
+    verify_missing_priv_attrs_common(session, CKK_EC, priv_handle_dup, CK_TRUE, CK_FALSE);
 
     verify_missing_pub_attrs_ecc(session, pub_handle_dup);
     verify_missing_priv_attrs_ecc(session, priv_handle_dup);

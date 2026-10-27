@@ -58,6 +58,9 @@ CK_RV mech_get_digester(mdetail *mdtl,
 CK_RV mech_get_tpm_opdata(mdetail *mdtl, tpm_ctx *tctx,
         CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
 
+CK_RV mech_rsa_pkcs_native_sign(mdetail *mdtl, CK_BYTE_PTR in, CK_ULONG inlen,
+        CK_MECHANISM_TYPE *hash_mech, CK_ULONG *hdr_len);
+
 CK_RV mech_get_info(mdetail *mdtl, tpm_ctx *tctx,
         CK_MECHANISM_TYPE mech_type, CK_MECHANISM_INFO_PTR info);
 
