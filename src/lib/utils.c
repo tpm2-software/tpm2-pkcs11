@@ -485,14 +485,23 @@ CK_RV apply_pkcs7_pad(const CK_BYTE_PTR in, CK_ULONG inlen,
 CK_RV remove_pkcs7_pad(CK_BYTE_PTR in, CK_ULONG inlen,
         CK_BYTE_PTR out, CK_ULONG_PTR outlen) {
 
-    if (inlen % 16) {
-        LOGE("AES_CBC_PAD data should be block sized, got: %lu", inlen);
+    if (!inlen || inlen % 16) {
+        LOGE("AES_CBC_PAD data should be a whole number of blocks, got: %lu", inlen);
         return CKR_ENCRYPTED_DATA_LEN_RANGE;
     }
 
+    /*
+     * Every padding byte must be the pad value, not just the last. Checked over the whole last
+     * block whatever the pad value, so the time taken says nothing about where the padding broke.
+     */
     CK_BYTE pad_value = in[inlen - 1];
-    if (pad_value < 1 || pad_value > 16) {
-        LOGE("Nonsensical pad value, got: %u, expected 1-16", pad_value);
+    unsigned bad = (pad_value < 1) | (pad_value > 16);
+    for (CK_ULONG i = 0; i < 16; i++) {
+        unsigned in_pad = i < pad_value;
+        bad |= in_pad & (in[inlen - 1 - i] != pad_value);
+    }
+    if (bad) {
+        LOGE("Invalid PKCS#7 padding");
         return CKR_ENCRYPTED_DATA_INVALID;
     }
 
@@ -630,4 +639,72 @@ CK_RV utils_uncompressed_ecpoint_to_tpm2b(uint8_t* from, TPM2B_ECC_POINT* to, si
     to->size = to->point.y.size + to->point.x.size;
 
     return CKR_OK;
+}
+
+/* The DER header of an OCTET STRING of len bytes, len < 256: short form, or 0x81 then the length */
+static CK_ULONG der_octet_string_header(CK_ULONG len) {
+    return len < 128 ? 2 : 3;
+}
+
+CK_ULONG utils_ec_point_der_len(CK_ULONG field_size) {
+
+    CK_ULONG raw_len = 2 * field_size + 1;
+    return der_octet_string_header(raw_len) + raw_len;
+}
+
+/*
+ * PKCS#11 says a token MUST accept the other party's ECDH point raw and MAY accept it as a DER-encoded
+ * ECPoint, the same as CKA_EC_POINT; both are taken. The raw form is told apart by its length.
+ */
+bool utils_ec_point_unwrap(CK_BYTE_PTR data, CK_ULONG len, CK_ULONG field_size,
+        CK_BYTE_PTR *point, CK_ULONG *point_len) {
+
+    CK_ULONG raw_len = 2 * field_size + 1;
+    if (len == raw_len && data[0] == 0x04) {
+        *point = data;
+        *point_len = len;
+        return true;
+    }
+
+    /* DER OCTET STRING, definite length in short or long form. */
+    if (len < 2 || data[0] != 0x04) {
+        return false;
+    }
+
+    CK_ULONG header = 2;
+    CK_ULONG content = data[1];
+    if (data[1] & 0x80) {
+        CK_ULONG octets = data[1] & 0x7f;
+        if (octets < 1 || octets > 2 || len < 2 + octets) {
+            return false;
+        }
+        content = 0;
+        for (CK_ULONG i = 0; i < octets; i++) {
+            content = (content << 8) | data[2 + i];
+        }
+        header += octets;
+    }
+
+    if (content != raw_len || len != header + content || data[header] != 0x04) {
+        return false;
+    }
+
+    *point = &data[header];
+    *point_len = content;
+    return true;
+}
+
+/*
+ * A TPM's format-one error code without the parameter, handle or session it was tied to, to compare with
+ * TPM2_RC_VALUE and the like: a TPM2_TestParms refusal should say "parameter 1" (TPM2_RC_P | TPM2_RC_1),
+ * but not every TPM does (wolfTPM's fwTPM, for one, returns the bare code). Anything else (a format-zero
+ * code, or an error from another layer) comes back as it was, so it can't match a format-one code.
+ */
+TSS2_RC utils_format_one_code(TSS2_RC rval) {
+
+    if ((rval & ~0xFFFu) || !(rval & TPM2_RC_FMT1)) {
+        return rval;
+    }
+
+    return rval & (TPM2_RC_FMT1 | 0x3F);
 }

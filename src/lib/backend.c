@@ -4,6 +4,7 @@
 #include "backend.h"
 #include "backend_esysdb.h"
 #include "backend_fapi.h"
+#include "object.h"
 
 enum backend {
     backend_error,
@@ -208,6 +209,16 @@ CK_RV backend_get_tokens(token **tok, size_t *len) {
         LOGW("Too many tokens, must have less than %d to show empty tokens", MAX_TOKEN_CNT - 1);
         token_free_list(&tmp, len);
         return CKR_GENERAL_ERROR;
+    }
+
+    /* objects stored without a CKA_UNIQUE_ID, as tpm2_ptool's, get one now, and keep it */
+    size_t n;
+    for (n = 0; n < *len; n++) {
+        rv = object_add_missing_unique_ids(&tmp[n]);
+        if (rv != CKR_OK) {
+            token_free_list(&tmp, len);
+            return rv;
+        }
     }
 
     token *t = &tmp[*len];

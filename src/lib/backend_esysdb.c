@@ -329,7 +329,9 @@ CK_RV backend_esysdb_token_unseal_wrapping_key(token *tok, bool user, twist tpin
         tok->wrappingkey = twistbin_unhexlify(wrappingkeyhex);
         twist_free(wrappingkeyhex);
         if (!tok->wrappingkey) {
+            /* The TPM unsealed something that isn't the key: the login must fail, not succeed. */
             LOGE("Expected internal wrapping key in base 16 format");
+            rv = CKR_GENERAL_ERROR;
             goto error;
         }
     }

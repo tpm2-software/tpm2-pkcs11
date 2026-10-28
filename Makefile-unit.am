@@ -9,7 +9,8 @@ check_PROGRAMS += \
     test/unit/test_parser \
     test/unit/test_attr \
     test/unit/test_db \
-    test/unit/test_utils
+    test/unit/test_utils \
+    test/unit/test_interface
 
 test_unit_test_twist_CFLAGS    = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
 test_unit_test_twist_LDADD     = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
@@ -42,6 +43,8 @@ test_unit_test_db_LDFLAGS      = -Wl,--wrap=sqlite3_column_bytes \
                                  -Wl,--wrap=calloc
 test_unit_test_utils_CFLAGS      = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
 test_unit_test_utils_LDADD       = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
+test_unit_test_interface_CFLAGS  = $(AM_CFLAGS) $(CMOCKA_CFLAGS)
+test_unit_test_interface_LDADD   = $(CMOCKA_LIBS) $(libtpm2_test_internal) $(libtpm2_test_pkcs11)
                                  
 endif
 # END UNIT

@@ -257,6 +257,30 @@ tpm2_ptool addkey --algorithm=ecc256 --label="empty-pin" --key-label="ecc_key" -
 # Import an HMAC key under "label" so its easy to get at in C code test
 tpm2_ptool import --algorithm="hmac" --privkey="$TEST_FIXTURES/hmac.hex.key" --key-label="imported_hmac_key" --label="label" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
 
+#
+# An EC key under "label" as stores made before CKA_DECAPSULATE hold one that C_GenerateKeyPair made to
+# derive with CKA_DECRYPT=true: CKA_DERIVE=false, no CKA_DECAPSULATE, and CKM_ECDH1_DERIVE allowed.
+# tpm2_ptool gives it the first two; objmod adds the mechanism.
+#
+echo "Adding 1 EC p256 key that derives as a legacy key under token \"label\""
+tpm2_ptool addkey --algorithm=ecc256 --label="label" --key-label="ec-legacy-ecdh" --userpin=myuserpin --path=$TPM2_PKCS11_STORE
+legacy_ecdh_id=$(tpm2_ptool listobjects --label="label" --path=$TPM2_PKCS11_STORE | "${PYTHON_INTERPRETER:-python3}" -c '
+import sys, yaml
+for x in yaml.load(sys.stdin, Loader=yaml.BaseLoader):
+    if x["CKA_LABEL"] == "ec-legacy-ecdh" and x["CKA_CLASS"] == "CKO_PRIVATE_KEY":
+        print(x["id"])
+')
+tpm2_ptool objmod --id="$legacy_ecdh_id" --path=$TPM2_PKCS11_STORE | "${PYTHON_INTERPRETER:-python3}" -c '
+import sys, yaml
+attrs = yaml.safe_load(sys.stdin)
+# CKA_ALLOWED_MECHANISMS and CKM_ECDH1_DERIVE
+attrs[0x40000600].append(0x1050)
+assert 0x634 not in attrs, "a legacy key has no CKA_DECAPSULATE"
+print(yaml.safe_dump(attrs, default_flow_style=False))
+' > "$TPM2_PKCS11_STORE/legacy-ecdh.attrs.yaml"
+tpm2_ptool objmod --id="$legacy_ecdh_id" --path=$TPM2_PKCS11_STORE "$TPM2_PKCS11_STORE/legacy-ecdh.attrs.yaml"
+echo "Added the legacy EC key"
+
 # verify the token and all the objects
 echo "Verifying the token \"label\""
 tpm2_ptool verify --label=label --sopin=mysopin --userpin=myuserpin --path=$TPM2_PKCS11_STORE

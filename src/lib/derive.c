@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <stdlib.h>
 
+#include <openssl/crypto.h>
 #include <openssl/ec.h>
 #include <openssl/ecdsa.h>
 #include <openssl/evp.h>
@@ -21,6 +22,8 @@
 #include "session_ctx.h"
 #include "token.h"
 #include "tpm.h"
+#include "utils.h"
+#include "wrap.h"
 
 typedef struct sanity_check_data sanity_check_data;
 struct sanity_check_data {
@@ -40,24 +43,40 @@ CK_RV handle_class(const CK_ATTRIBUTE_PTR attr, void* userdat) {
     CK_OBJECT_CLASS value = 0;
     UNUSED(userdat);
     CK_RV rv = attr_CK_OBJECT_CLASS(attr, &value);
+    if (rv != CKR_OK) {
+        return rv;
+    }
 
-    if (value != CKO_SECRET_KEY)
-        rv = CKR_ARGUMENTS_BAD;
+    LOGV("attr: name %s, \t\t val = 0x%lx", attr_get_name(attr->type), value);
 
-    LOGV("attr: name %s, \t\t val = %s", attr_get_name(attr->type), "CKO_SECRET_KEY");
-    return rv;
+    if (value != CKO_SECRET_KEY) {
+        LOGE("The derived key can only be a CKO_SECRET_KEY, got CKA_CLASS 0x%lx", value);
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    return CKR_OK;
 }
 
+/*
+ * The derived secret is kept as the object's CKA_VALUE, not as a TPM key, so it is a generic secret:
+ * an AES key, say, couldn't be used.
+ */
 CK_RV handle_key_type(const CK_ATTRIBUTE_PTR attr, void* userdat) {
     CK_KEY_TYPE value;
     UNUSED(userdat);
     CK_RV rv = attr_CK_KEY_TYPE(attr, &value);
+    if (rv != CKR_OK) {
+        return rv;
+    }
 
-    if (value != CKK_GENERIC_SECRET)
-        rv = CKR_ARGUMENTS_BAD;
+    LOGV("attr: name %s,\t val = 0x%lx", attr_get_name(attr->type), value);
 
-    LOGV("attr: name %s,\t val = %s", attr_get_name(attr->type), "CKK_GENERIC_SECRET");
-    return rv;
+    if (value != CKK_GENERIC_SECRET) {
+        LOGE("The derived key can only be a CKK_GENERIC_SECRET, got CKA_KEY_TYPE 0x%lx", value);
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
+
+    return CKR_OK;
 }
 
 CK_RV handle_sensitive(const CK_ATTRIBUTE_PTR attr, void* userdat) {
@@ -122,6 +141,23 @@ CK_RV handle_value_len(const CK_ATTRIBUTE_PTR attr, void* userdat) {
     return rv;
 }
 
+CK_RV ecdh1_params_get(CK_MECHANISM_PTR mechanism, CK_ECDH1_DERIVE_PARAMS_PTR *params) {
+
+    if (!mechanism->pParameter || mechanism->ulParameterLen != sizeof(CK_ECDH1_DERIVE_PARAMS)) {
+        LOGE("Expected a CK_ECDH1_DERIVE_PARAMS");
+        return CKR_MECHANISM_PARAM_INVALID;
+    }
+
+    CK_ECDH1_DERIVE_PARAMS_PTR p = (CK_ECDH1_DERIVE_PARAMS_PTR)mechanism->pParameter;
+    if (p->kdf != CKD_NULL) {
+        LOGE("Only CKD_NULL is supported as the ECDH1 KDF, got 0x%lx", p->kdf);
+        return CKR_MECHANISM_PARAM_INVALID;
+    }
+
+    *params = p;
+    return CKR_OK;
+}
+
 CK_RV derive(session_ctx* ctx,  CK_MECHANISM_PTR mechanism, /* public EC point */
              CK_OBJECT_HANDLE tpm_key,   /* private key */
              CK_ATTRIBUTE_PTR secret_template, CK_ULONG secret_template_count,
@@ -140,67 +176,81 @@ CK_RV derive(session_ctx* ctx,  CK_MECHANISM_PTR mechanism, /* public EC point *
     if (session_ctx_opdata_is_active(ctx))
         return CKR_OPERATION_ACTIVE;
 
+    /* before the TPM derives anything: the secret's CKA_UNIQUE_ID is the token's to give */
+    rv = attr_refuse_unique_id(secret_template, secret_template_count);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
     token* tok = session_ctx_get_token(ctx);
     assert(tok);
 
+    /* From here on, every return goes through out, which releases the key. */
     tobject* tobj = NULL;
     rv = token_load_object(tok, tpm_key, &tobj);
     if (rv != CKR_OK) {
         return rv;
     }
 
+    CK_BYTE* shared_secret = NULL;
+
     rv = object_mech_is_supported(tobj, mechanism);
     if (rv != CKR_OK) {
-        tobject_user_decrement(tobj);
-        return rv;
+        goto out;
+    }
+
+    /*
+     * CKA_DERIVE=false is enforced on a key made by this token, which stores CKA_DECAPSULATE on every
+     * key pair it makes (attrs.c) and a CKA_DERIVE that says whether the template asked for ECDH
+     * (tpm.c). Such a key with the TPM's decrypt attribute for decapsulating alone doesn't derive, nor
+     * does its copy, or the key itself, once CKA_DECAPSULATE is turned off: Z would give the value of
+     * every key it ever decapsulated, the unextractable ones too. A key without CKA_DECAPSULATE was
+     * stored before it was known, by an older version of this token or by tpm2_ptool, with
+     * CKA_DERIVE=false whatever it was made for (objects.py, and the old keygen default): it derives
+     * through the TPM's decrypt attribute alone, as it always did.
+     */
+    if (!attr_list_get_CKA_DERIVE(tobj->attrs, CK_TRUE)
+            && attr_get_attribute_by_type(tobj->attrs, CKA_DECAPSULATE)) {
+        LOGE("The key doesn't allow derivation (CKA_DERIVE=false)");
+        rv = CKR_KEY_FUNCTION_NOT_PERMITTED;
+        goto out;
     }
 
     /*  Validate the keysize against the one provided by the mechanism */
     CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_EC_PARAMS);
     if (!a) {
         LOGE("Expected tobject to have attribute CKA_EC_PARAMS");
-        return CKR_GENERAL_ERROR;
+        rv = CKR_GENERAL_ERROR;
+        goto out;
     }
 
-    int nid = 0;
-    rv = ssl_util_params_to_nid(a, &nid);
+    CK_ULONG keysize = 0;
+    rv = ssl_util_ec_field_size(a, &keysize);
     if (rv != CKR_OK) {
-        return rv;
-    }
-
-    unsigned keysize;
-    switch (nid) {
-        case NID_X9_62_prime192v1:
-            keysize = 24;
-            break;
-        case NID_secp224r1:
-            keysize = 28;
-            break;
-        case NID_X9_62_prime256v1:
-            keysize = 32;
-            break;
-        case NID_secp384r1:
-            keysize = 48;
-            break;
-        case NID_secp521r1:
-            keysize = 66;
-            break;
-        default:
-            return CKR_CURVE_NOT_SUPPORTED;
+        goto out;
     }
 
     /* 1. Get the public EC point to use in the derivation from the mechanism */
-    CK_ECDH1_DERIVE_PARAMS_PTR mecha_params;
-    SAFE_CAST(mechanism, mecha_params);
-
-    if (mecha_params->kdf != CKD_NULL) {
-        return CKR_MECHANISM_PARAM_INVALID;
+    CK_ECDH1_DERIVE_PARAMS_PTR mecha_params = NULL;
+    rv = ecdh1_params_get(mechanism, &mecha_params);
+    if (rv != CKR_OK) {
+        goto out;
     }
 
-    /* 2. Uncompressed EC_POINT: is a DER OCTECT string of 04||x||y */
-    if (!mecha_params->public_data_len ||
-        (mecha_params->public_data_len - 1) != 2 * keysize) {
-        return CKR_MECHANISM_PARAM_INVALID;
+    /* 2. Uncompressed EC_POINT 04||x||y, raw or DER-encoded */
+    if (!mecha_params->pPublicData) {
+        rv = CKR_MECHANISM_PARAM_INVALID;
+        goto out;
+    }
+
+    CK_BYTE_PTR point = NULL;
+    CK_ULONG point_len = 0;
+    if (!utils_ec_point_unwrap(mecha_params->pPublicData, mecha_params->ulPublicDataLen, keysize,
+            &point, &point_len)) {
+        LOGE("Expected the peer's uncompressed point for a %lu-byte field, raw or DER-encoded, "
+                "got %lu bytes", keysize, mecha_params->ulPublicDataLen);
+        rv = CKR_MECHANISM_PARAM_INVALID;
+        goto out;
     }
 
     /* Validate the shared secret attributes */
@@ -223,19 +273,19 @@ CK_RV derive(session_ctx* ctx,  CK_MECHANISM_PTR mechanism, /* public EC point *
                                        ARRAY_LEN(secret_check_handlers),
                                        &udata);
     if (rv != CKR_OK) {
-        tobject_user_decrement(tobj);
-        return rv;
+        goto out;
     }
 
     /* Get the shaed secret */
-    CK_BYTE* shared_secret = NULL;
     rv = tpm_ec_ecdh1_derive(tok->tctx, tobj, /* EC private */
-                             mecha_params->public_data, /* EC point */
-                             mecha_params->public_data_len,
+                             point, point_len,
                              &shared_secret, &udata.len);
+    if (rv == CKR_DATA_INVALID) {
+        /* the TPM says the point isn't on the curve */
+        rv = CKR_MECHANISM_PARAM_INVALID;
+    }
     if (rv != CKR_OK) {
-         tobject_user_decrement(tobj);
-         return rv;
+        goto out;
     }
 
     CK_ATTRIBUTE shared_secret_attr = {
@@ -245,19 +295,27 @@ CK_RV derive(session_ctx* ctx,  CK_MECHANISM_PTR mechanism, /* public EC point *
     };
 
     /* Return the shared secret in a CKO_SECRET_KEY class object */
-    rv = object_create(ctx, secret_template, secret_template_count, secret);
+    rv = object_create_valueless_secret(ctx, secret_template, secret_template_count, secret);
     if (rv != CKR_OK) {
-        tobject_user_decrement(tobj);
         goto out;
     }
 
-    rv = object_set_attributes(ctx, *secret, &shared_secret_attr, 1);
+    rv = object_set_derived_value(ctx, *secret, &shared_secret_attr);
     if (rv != CKR_OK) {
-        tobject_user_decrement(tobj);
         goto out;
     }
 
 out:
+    if (shared_secret) {
+        OPENSSL_cleanse(shared_secret, udata.len);
+    }
     free(shared_secret);
+
+    /* The base key is released whatever happened, or it stays busy and can't be destroyed. */
+    CK_RV tmp_rv = tobject_user_decrement(tobj);
+    if (tmp_rv != CKR_OK && rv == CKR_OK) {
+        rv = tmp_rv;
+    }
+
     return rv;
 }

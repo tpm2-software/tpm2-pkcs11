@@ -58,6 +58,9 @@ CK_RV mech_get_digester(mdetail *mdtl,
 CK_RV mech_get_tpm_opdata(mdetail *mdtl, tpm_ctx *tctx,
         CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
 
+CK_RV mech_rsa_pkcs_native_sign(mdetail *mdtl, CK_BYTE_PTR in, CK_ULONG inlen,
+        CK_MECHANISM_TYPE *hash_mech, CK_ULONG *hdr_len);
+
 CK_RV mech_get_info(mdetail *mdtl, tpm_ctx *tctx,
         CK_MECHANISM_TYPE mech_type, CK_MECHANISM_INFO_PTR info);
 
@@ -71,5 +74,24 @@ void mdetail_set_pss_status(mdetail *m, bool pss_sigs_good);
 CK_RV mech_is_HMAC(mdetail *m, CK_MECHANISM_PTR mech, bool *is_hmac);
 
 CK_RV mech_is_ecc(mdetail *m, CK_MECHANISM_TYPE mech_type, bool *is_ecc);
+
+/*
+ * Whether the mechanism signs with recovery (C_SignRecoverInit) and verifies with it: CKM_RSA_PKCS
+ * and CKM_RSA_X_509. CKR_MECHANISM_INVALID if it isn't one the token knows.
+ */
+CK_RV mech_is_sign_recover(mdetail *m, CK_MECHANISM_TYPE mech_type, bool *is_sign_recover);
+
+/*
+ * Whether the mechanism wraps keys (C_WrapKey), or with unwrap set unwraps them (C_UnwrapKey):
+ * CKM_RSA_PKCS_OAEP and CKM_AES_CBC_PAD. CKR_MECHANISM_INVALID if it isn't one the token knows.
+ */
+CK_RV mech_is_wrap(mdetail *m, CK_MECHANISM_TYPE mech_type, bool unwrap, bool *is_wrap);
+
+/*
+ * Whether the mechanism encapsulates keys (C_EncapsulateKey), or with decapsulate set decapsulates them
+ * (C_DecapsulateKey): CKM_RSA_PKCS_OAEP and CKM_ECDH1_DERIVE. CKR_MECHANISM_INVALID if it isn't one
+ * the token knows.
+ */
+CK_RV mech_is_kem(mdetail *m, CK_MECHANISM_TYPE mech_type, bool decapsulate, bool *is_kem);
 
 #endif /* SRC_LIB_MECH_H_ */

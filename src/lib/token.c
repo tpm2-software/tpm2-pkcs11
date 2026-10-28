@@ -310,7 +310,7 @@ CK_RV token_get_info (token *t, CK_TOKEN_INFO *info) {
     }
 
     // Support Flags
-    info->flags = CKF_RNG;
+    info->flags = CKF_RNG | CKF_DUAL_CRYPTO_OPERATIONS;
 
     if (!t->config.empty_user_pin) {
         info->flags |= CKF_LOGIN_REQUIRED;
@@ -528,9 +528,15 @@ CK_RV token_initpin(token *tok, CK_UTF8CHAR_PTR newpin, CK_ULONG newlen) {
     }
 
     /* we store the seal data in hex form, but it's in binary form in memory, so convert it */
+    if (!tok->wrappingkey) {
+        LOGE("No wrapping key: the SO login didn't unseal it");
+        rv = CKR_GENERAL_ERROR;
+        goto out;
+    }
     sealdata = twist_hexlify(tok->wrappingkey);
     if (!sealdata) {
         LOGE("oom");
+        rv = CKR_HOST_MEMORY;
         goto out;
     }
 
@@ -606,25 +612,29 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
         return rv;
     }
 
+    /* From here on, a failure releases the key again: a caller doesn't, it has no key. */
+
     /* this might not be the best place for this check */
     CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_CLASS);
     if (!a) {
         LOGE("All objects expected to have CKA_CLASS, missing"
                 " for tobj id: %u", tobj->id);
-        return CKR_GENERAL_ERROR;
+        rv = CKR_GENERAL_ERROR;
+        goto error;
     }
 
     CK_OBJECT_CLASS v;
     rv = attr_CK_OBJECT_CLASS(a, &v);
     if (rv != CKR_OK) {
-        return rv;
+        goto error;
     }
 
     if (v != CKO_PRIVATE_KEY
             && v != CKO_PUBLIC_KEY
             && v != CKO_SECRET_KEY) {
         LOGE("Cannot use tobj id %u in a crypto operation", tobj->id);
-        return CKR_KEY_HANDLE_INVALID;
+        rv = CKR_KEY_HANDLE_INVALID;
+        goto error;
     }
 
     /*
@@ -642,7 +652,8 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
                       tobj->tpm_serialized_tr,
                       &tobj->tpm_esys_tr);
         if (!ret) {
-            return CKR_GENERAL_ERROR;
+            rv = CKR_GENERAL_ERROR;
+            goto error;
         }
     } else {
         rv = tpm_loadobj(
@@ -651,7 +662,7 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
                 tobj->pub, tobj->priv,
                 &tobj->tpm_esys_tr);
         if (rv != CKR_OK) {
-            return rv;
+            goto error;
         }
     }
 
@@ -659,9 +670,15 @@ CK_RV token_load_object(token *tok, CK_OBJECT_HANDLE key, tobject **loaded_tobj)
             &tobj->unsealed_auth);
     if (rv != CKR_OK) {
         LOGE("Error unwrapping tertiary object auth");
-        return rv;
+        goto error;
     }
 
     *loaded_tobj = tobj;
     return CKR_OK;
+
+error:
+    tobject_user_decrement(tobj);
+    *loaded_tobj = NULL;
+
+    return rv;
 }

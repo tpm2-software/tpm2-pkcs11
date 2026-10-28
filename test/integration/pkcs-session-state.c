@@ -89,15 +89,6 @@ static void test_session_operation_state(void **state) {
         .ulParameterLen = 0
     };
 
-    CK_BYTE iv[16] = {0};
-
-    CK_MECHANISM emech = {
-        .mechanism = CKM_AES_CBC,
-        .pParameter = &iv,
-        .ulParameterLen = sizeof(iv)
-    };
-
-
     CK_RV rv = C_DigestInit(ti->session[0], &dmech);
     assert_int_equal(rv, CKR_OK);
 
@@ -113,7 +104,8 @@ static void test_session_operation_state(void **state) {
     rv = C_DigestInit(ti->session[1], &dmech);
     assert_int_equal(rv, CKR_OPERATION_ACTIVE);
 
-    rv = C_EncryptInit(ti->session[1], &emech, ti->key);
+    /* sign and encrypt are a dual pair (pkcs-dual.int), sign and verify aren't */
+    rv = C_VerifyInit(ti->session[1], &smech, ti->key);
     assert_int_equal(rv, CKR_OPERATION_ACTIVE);
 }
 

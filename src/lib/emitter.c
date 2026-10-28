@@ -123,6 +123,8 @@ WEAK char *emit_attributes_to_string(attr_list *attrs) {
 
             char keyvaluebuf[64] = { 0 };
             const char *keyvalue = NULL;
+            /* the hex string, freed once the scalar holds a copy (an empty value is one too) */
+            twist hexstr = NULL;
             if (type == TYPE_BYTE_INT) {
                 CK_ULONG_PTR v = (CK_ULONG_PTR)a->pValue;
                 snprintf(keyvaluebuf, sizeof(keyvaluebuf), "%lu", *v);
@@ -133,11 +135,15 @@ WEAK char *emit_attributes_to_string(attr_list *attrs) {
                 keyvalue = keyvaluebuf;
             } else if (type == TYPE_BYTE_HEX_STR) {
                 /* string*/
-                keyvalue = a->pValue ?
-                        twist_hex_new(a->pValue, a->ulValueLen) : "";
-                if (!keyvalue) {
-                   LOGE("oom");
-                   goto doc_delete;
+                if (a->pValue) {
+                    hexstr = twist_hex_new(a->pValue, a->ulValueLen);
+                    if (!hexstr) {
+                       LOGE("oom");
+                       goto doc_delete;
+                    }
+                    keyvalue = hexstr;
+                } else {
+                    keyvalue = "";
                 }
             } else {
                 /* impossible */
@@ -148,9 +154,7 @@ WEAK char *emit_attributes_to_string(attr_list *attrs) {
 
             node = yaml_document_add_scalar(&doc, yamltag,
                  (yaml_char_t *)keyvalue, -1, YAML_ANY_SCALAR_STYLE);
-            if (type == TYPE_BYTE_HEX_STR && strcmp(keyvalue, "")) {
-                twist_free(keyvalue);
-            }
+            twist_free(hexstr);
             if (!node) {
                 LOGE("yaml_document_add_scalar for value failed");
                 goto doc_delete;

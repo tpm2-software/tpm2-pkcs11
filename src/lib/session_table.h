@@ -36,6 +36,15 @@ CK_RV session_table_free_ctx_all(token *t);
 void session_table_login_event(session_table *s_table, CK_USER_TYPE user);
 
 /**
+ * Ends every cryptographic operation of every session of the token, as session_ctx_cancel() does:
+ * their keys are released. C_Logout does it first (PKCS#11 3.2 5.6.10). An object search uses no key
+ * and is left be, as it always was.
+ * @param tok
+ *  The token.
+ */
+void token_cancel_all_operations(token *tok);
+
+/**
  * performs a session_ctx_logout_event() call for each item in the table
  * with the session table lock held.
  * @param s_table

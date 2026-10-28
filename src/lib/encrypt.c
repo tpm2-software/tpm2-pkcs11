@@ -144,9 +144,9 @@ static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata,
     assert(tok);
 
     if (!supplied_opdata) {
-        bool is_active = session_ctx_opdata_is_active(ctx);
-        if (is_active) {
-            return CKR_OPERATION_ACTIVE;
+        CK_RV rv = session_ctx_opdata_can_start(ctx, op);
+        if (rv != CKR_OK) {
+            return rv;
         }
     }
 
@@ -160,6 +160,26 @@ static CK_RV common_init_op (session_ctx *ctx, encrypt_op_data *supplied_opdata,
     if (rv != CKR_OK) {
         tobject_user_decrement(tobj);
         return rv;
+    }
+
+    /*
+     * A key's TPM attributes may allow more than its CKA_ENCRYPT and CKA_DECRYPT: an RSA signing key
+     * has the TPM's decrypt attribute, for the signatures padded in software, and an AES key that
+     * allows neither still has one, since the TPM makes no key without. So C_EncryptInit and
+     * C_DecryptInit check them. The internal callers (supplied opdata) are those signatures. A key
+     * without the attribute predates this, and is let through.
+     */
+    if (!supplied_opdata) {
+        CK_BBOOL allowed = op == operation_decrypt
+                ? attr_list_get_CKA_DECRYPT(tobj->attrs, CK_TRUE)
+                : attr_list_get_CKA_ENCRYPT(tobj->attrs, CK_TRUE);
+        if (!allowed) {
+            LOGE("The key doesn't allow %s (%s=false)",
+                    op == operation_decrypt ? "decryption" : "encryption",
+                    op == operation_decrypt ? "CKA_DECRYPT" : "CKA_ENCRYPT");
+            tobject_user_decrement(tobj);
+            return CKR_KEY_FUNCTION_NOT_PERMITTED;
+        }
     }
 
     CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(tobj->attrs, CKA_CLASS);
@@ -229,7 +249,7 @@ static CK_RV common_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdat
             return rv;
         }
 
-        rv = session_ctx_tobject_authenticated(ctx);
+        rv = session_ctx_tobject_authenticated(ctx, op);
         if (rv != CKR_OK) {
             return rv;
         }
@@ -259,8 +279,19 @@ static CK_RV common_update_op (session_ctx *ctx, encrypt_op_data *supplied_opdat
         return CKR_GENERAL_ERROR;
     }
 
-    return fop(&opdata->cryptopdata, part, part_len,
+    rv = fop(&opdata->cryptopdata, part, part_len,
             encrypted_part, encrypted_part_len);
+
+    /*
+     * An error ends the operation, as PKCS#11 has it for C_EncryptUpdate/C_DecryptUpdate and for
+     * C_Encrypt/C_Decrypt, whose first step this is: else the next C_*Init, after a ciphertext the TPM
+     * refused, say, would find the operation still active.
+     */
+    if (!supplied_opdata && rv != CKR_OK && rv != CKR_BUFFER_TOO_SMALL) {
+        session_ctx_cancel(ctx, op == operation_encrypt ? CKF_ENCRYPT : CKF_DECRYPT);
+    }
+
+    return rv;
 }
 
 static CK_RV common_final_op(session_ctx *ctx, encrypt_op_data *supplied_opdata, operation op,
@@ -278,7 +309,7 @@ static CK_RV common_final_op(session_ctx *ctx, encrypt_op_data *supplied_opdata,
             return rv;
         }
 
-        rv = session_ctx_tobject_authenticated(ctx);
+        rv = session_ctx_tobject_authenticated(ctx, op);
         if (rv != CKR_OK) {
             return rv;
         }
@@ -286,8 +317,12 @@ static CK_RV common_final_op(session_ctx *ctx, encrypt_op_data *supplied_opdata,
 
     assert(opdata);
 
-    tobject *tobj = session_ctx_opdata_get_tobject(ctx);
-    assert(tobj);
+    /* the internal callers (supplied opdata) release their key themselves */
+    tobject *tobj = NULL;
+    if (!supplied_opdata) {
+        tobj = session_ctx_opdata_get_tobject(ctx, op);
+        assert(tobj);
+    }
 
     /* we may have some TPM symmetric data to deal with */
     if (!opdata->use_sw) {
@@ -299,11 +334,13 @@ static CK_RV common_final_op(session_ctx *ctx, encrypt_op_data *supplied_opdata,
             goto out;
         }
 
-    } else if (!last_part) {
-        /* For all other encrypt operations deal with 5.2 style returns */
-        if (last_part_len) {
-            *last_part_len = 0;
-        }
+    } else {
+        /*
+         * RSA with the public key, in software, holds nothing back: there is no last part, whether
+         * this is a length query or not. Else C_Encrypt would add the rest of the caller's buffer to
+         * the length of the ciphertext.
+         */
+        *last_part_len = 0;
     }
 
     rv = CKR_OK;
@@ -315,18 +352,24 @@ out:
      * We also don't want to decrement the tobject unless we're using session ctx
      * not internal routines.
      */
-    reset_ctx = (rv == CKR_BUFFER_TOO_SMALL || !last_part);
+    reset_ctx = (rv == CKR_BUFFER_TOO_SMALL || (!last_part && rv == CKR_OK));
     if (reset_ctx) {
         if (is_oneshot && !opdata->use_sw) {
             tpm_opdata_reset(opdata->cryptopdata.tpm_opdata);
         }
-        /* all is well, we reset the command context */
-        rv = CKR_OK;
+        /*
+         * all is well, we reset the command context; a buffer too small for C_EncryptFinal or
+         * C_DecryptFinal says so, for the call to be made again with a bigger one. A length query
+         * that fails, on bad padding say, ends the operation with its error, as any other call.
+         */
+        if (is_oneshot) {
+            rv = CKR_OK;
+        }
     } else if(!supplied_opdata) {
         /* end the command context */
         tobj->is_authenticated = false;
         if (!supplied_opdata) {
-            session_ctx_opdata_clear(ctx);
+            session_ctx_opdata_clear(ctx, op);
         }
 
         CK_RV tmp_rv = tobject_user_decrement(tobj);
@@ -368,9 +411,59 @@ CK_RV decrypt_final_ex (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_B
     return common_final_op(ctx, supplied_opdata, operation_decrypt, last_part, last_part_len, is_oneshot);
 }
 
+/* Marks the session's operation multi-part once an update succeeds. */
+static CK_RV session_update(operation op, session_ctx *ctx, CK_BYTE_PTR part, CK_ULONG part_len,
+        CK_BYTE_PTR out, CK_ULONG_PTR out_len) {
+
+    CK_RV rv = op == operation_encrypt
+            ? encrypt_update_op(ctx, NULL, part, part_len, out, out_len)
+            : decrypt_update_op(ctx, NULL, part, part_len, out, out_len);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    encrypt_op_data *opdata = NULL;
+    if (session_ctx_opdata_get(ctx, op, &opdata) == CKR_OK) {
+        opdata->updated = true;
+    }
+
+    return CKR_OK;
+}
+
+CK_RV encrypt_update (session_ctx *ctx, CK_BYTE_PTR part, CK_ULONG part_len, CK_BYTE_PTR encrypted_part, CK_ULONG_PTR encrypted_part_len) {
+    return session_update(operation_encrypt, ctx, part, part_len, encrypted_part, encrypted_part_len);
+}
+
+CK_RV decrypt_update (session_ctx *ctx, CK_BYTE_PTR part, CK_ULONG part_len, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
+    return session_update(operation_decrypt, ctx, part, part_len, data, data_len);
+}
+
+/*
+ * C_Encrypt/C_Decrypt are single-part: after an update they are refused, and, as any but a length
+ * query, end the operation.
+ */
+static CK_RV refuse_after_update(operation op, session_ctx *ctx) {
+
+    encrypt_op_data *opdata = NULL;
+    if (session_ctx_opdata_get(ctx, op, &opdata) == CKR_OK && opdata->updated) {
+        LOGE("Single-part call after an update: end a multi-part operation with its *Final");
+        session_ctx_cancel(ctx, op == operation_encrypt ? CKF_ENCRYPT : CKF_DECRYPT);
+        return CKR_OPERATION_NOT_INITIALIZED;
+    }
+
+    return CKR_OK;
+}
+
 CK_RV decrypt_oneshot_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR encrypted_data, CK_ULONG encrypted_data_len, CK_BYTE_PTR data, CK_ULONG_PTR data_len) {
 
     check_pointer(data_len);
+
+    if (!supplied_opdata) {
+        CK_RV rv = refuse_after_update(operation_decrypt, ctx);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+    }
 
     bool is_buffer_too_small = false;
     CK_ULONG tmp_len = *data_len;
@@ -401,6 +494,13 @@ CK_RV decrypt_oneshot_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK
 CK_RV encrypt_oneshot_op (session_ctx *ctx, encrypt_op_data *supplied_opdata, CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR encrypted_data, CK_ULONG_PTR encrypted_data_len) {
 
     check_pointer(encrypted_data_len);
+
+    if (!supplied_opdata) {
+        CK_RV rv = refuse_after_update(operation_encrypt, ctx);
+        if (rv != CKR_OK) {
+            return rv;
+        }
+    }
 
     bool is_buffer_too_small = false;
     CK_ULONG tmp_len = *encrypted_data_len;

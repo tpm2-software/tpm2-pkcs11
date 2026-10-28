@@ -124,6 +124,20 @@ CK_RV tpm_ec_ecdsa_sha384_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR
 CK_RV tpm_ec_ecdsa_sha512_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
 CK_RV tpm_ec_ecdh1_derive(tpm_ctx *tctx, tobject *tobj, unsigned char *pubkey, size_t pubkey_len, unsigned char **psec, size_t *pseclen);
 
+/*
+ * The encapsulating half of ECDH (C_EncapsulateKey): TPM2_ECDH_KeyGen makes an ephemeral key pair on
+ * the curve of the EC public key pubkey, loaded from its CKA_EC_POINT under TPM2_RH_NULL, and gives
+ * Z, the x-coordinate of the ephemeral private key times the public point, and the ephemeral point.
+ * @param z
+ *  Z, as long as a field element; the caller cleanses and frees it.
+ * @param ephemeral_point
+ *  The ephemeral public point, uncompressed in a DER OCTET STRING as CKA_EC_POINT has it.
+ * @return
+ *  CKR_OK on success, CKR_CURVE_NOT_SUPPORTED for a curve the TPM code doesn't know, CKR_DATA_INVALID
+ *  when the TPM refuses the public point.
+ */
+CK_RV tpm_ec_ecdh_keygen(tpm_ctx *tctx, tobject *pubkey, twist *z, twist *ephemeral_point);
+
 CK_RV tpm_aes_cbc_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
 CK_RV tpm_aes_cfb_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
 CK_RV tpm_aes_ecb_get_opdata(mdetail *m, tpm_ctx *tctx, CK_MECHANISM_PTR mech, tobject *tobj, tpm_op_data **opdata);
@@ -170,6 +184,57 @@ struct tpm_object_data {
 };
 
 void tpm_objdata_free(tpm_object_data *objdata);
+
+/**
+ * Creates and loads an AES key under parent, for C_GenerateKey. Its mode is TPM2_ALG_NULL, so each
+ * operation names its own (CBC, CFB, ECB, CTR).
+ * @param key_bits
+ *  128, 192 or 256.
+ * @param encrypt
+ *  Whether the key encrypts (the TPM's sign attribute, for a symmetric key).
+ * @param decrypt
+ *  Whether the key decrypts.
+ * @param objdata
+ *  Receives the loaded handle (privhandle) and the public and private blobs.
+ * @return
+ *  CKR_OK on success.
+ */
+CK_RV tpm2_generate_aes_key(
+        tpm_ctx *tpm,
+        uint32_t parent,
+        twist parentauth,
+        twist newauthbin,
+        CK_ULONG key_bits,
+        bool encrypt,
+        bool decrypt,
+        tpm_object_data *objdata);
+
+/**
+ * Creates and loads an AES key holding value (C_CreateObject): 16, 24 or 32 bytes.
+ */
+CK_RV tpm2_import_aes_key(
+        tpm_ctx *tpm,
+        uint32_t parent,
+        twist parentauth,
+        twist newauthbin,
+        const CK_BYTE *value,
+        CK_ULONG value_len,
+        bool encrypt,
+        bool decrypt,
+        tpm_object_data *objdata);
+
+/**
+ * Creates and loads an HMAC key holding value (C_CreateObject), usable with any hash the TPM has.
+ * The TPM holds at most 128 bytes.
+ */
+CK_RV tpm2_import_hmac_key(
+        tpm_ctx *tpm,
+        uint32_t parent,
+        twist parentauth,
+        twist newauthbin,
+        const CK_BYTE *value,
+        CK_ULONG value_len,
+        tpm_object_data *objdata);
 
 CK_RV tpm2_generate_key(
         tpm_ctx *tpm,

@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include <openssl/crypto.h>
 #include <openssl/obj_mac.h>
 #include <openssl/rand.h>
 #include <openssl/rsa.h>
@@ -37,6 +38,16 @@ enum mechanism_flags {
     mf_force_synthetic = 1 << 12,
     mf_hmac          = 1 << 13,
     mf_derive        = 1 << 14,
+    /* signs with recovery, and verifies with it */
+    mf_sign_recover  = 1 << 15,
+    /* wraps keys (C_WrapKey), and unwraps them (C_UnwrapKey) */
+    mf_wrap          = 1 << 16,
+    mf_unwrap        = 1 << 17,
+    /* encapsulates keys (C_EncapsulateKey), and decapsulates them (C_DecapsulateKey) */
+    mf_encapsulate   = 1 << 18,
+    mf_decapsulate   = 1 << 19,
+    /* the S32 mechanism tables have it sign and verify in single-part operations only */
+    mf_single_part   = 1 << 20,
 };
 
 typedef struct mdetail_entry mdetail_entry;
@@ -149,13 +160,13 @@ static const mdetail_entry _g_mechs_templ[] = {
     /* RSA */
     { .type = CKM_RSA_PKCS_KEY_PAIR_GEN, .validator = rsa_keygen_validator, .flags = mf_is_keygen|mf_rsa },
 
-    { .type = CKM_RSA_X_509, .flags = mf_is_synthetic|mf_sign|mf_verify|mf_encrypt|mf_decrypt|mf_rsa, .get_tpm_opdata = tpm_rsa_pkcs_get_opdata, .padding = RSA_NO_PADDING },
+    { .type = CKM_RSA_X_509, .flags = mf_is_synthetic|mf_single_part|mf_sign|mf_verify|mf_sign_recover|mf_encrypt|mf_decrypt|mf_rsa, .get_tpm_opdata = tpm_rsa_pkcs_get_opdata, .padding = RSA_NO_PADDING },
 
-    { .type = CKM_RSA_PKCS,      .flags = mf_force_synthetic|mf_sign|mf_verify|mf_encrypt|mf_decrypt|mf_rsa, .validator = rsa_pkcs_validator, .synthesizer = rsa_pkcs_synthesizer, .unsynthesizer = rsa_pkcs_unsynthesizer, .get_tpm_opdata = tpm_rsa_pkcs_get_opdata, .padding = RSA_PKCS1_PADDING },
+    { .type = CKM_RSA_PKCS,      .flags = mf_force_synthetic|mf_single_part|mf_sign|mf_verify|mf_sign_recover|mf_encrypt|mf_decrypt|mf_rsa, .validator = rsa_pkcs_validator, .synthesizer = rsa_pkcs_synthesizer, .unsynthesizer = rsa_pkcs_unsynthesizer, .get_tpm_opdata = tpm_rsa_pkcs_get_opdata, .padding = RSA_PKCS1_PADDING },
 
-    { .type = CKM_RSA_PKCS_PSS,  .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_validator, .synthesizer = rsa_pss_synthesizer, .get_digester = rsa_pss_get_digester, .get_tpm_opdata = tpm_rsa_pss_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
+    { .type = CKM_RSA_PKCS_PSS,  .flags = mf_single_part|mf_sign|mf_verify|mf_rsa, .validator = rsa_pss_validator, .synthesizer = rsa_pss_synthesizer, .get_digester = rsa_pss_get_digester, .get_tpm_opdata = tpm_rsa_pss_get_opdata, .padding = RSA_PKCS1_PSS_PADDING },
 
-    { .type = CKM_RSA_PKCS_OAEP, . flags = mf_encrypt|mf_decrypt|mf_rsa,  .validator = rsa_oaep_validator, .get_halg = rsa_oaep_get_halg, .get_digester = rsa_oaep_get_digester, .get_tpm_opdata = tpm_rsa_oaep_get_opdata, .padding = RSA_PKCS1_OAEP_PADDING },
+    { .type = CKM_RSA_PKCS_OAEP, . flags = mf_encrypt|mf_decrypt|mf_wrap|mf_unwrap|mf_encapsulate|mf_decapsulate|mf_rsa,  .validator = rsa_oaep_validator, .get_halg = rsa_oaep_get_halg, .get_digester = rsa_oaep_get_digester, .get_tpm_opdata = tpm_rsa_oaep_get_opdata, .padding = RSA_PKCS1_OAEP_PADDING },
 
     { .type = CKM_SHA1_RSA_PKCS,   .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pkcs_hash_validator, .synthesizer = rsa_pkcs_hash_synthesizer, .get_halg = sha1_get_halg, .get_digester = sha1_get_digester,     .get_tpm_opdata = tpm_rsa_pkcs_sha1_get_opdata,   .padding = RSA_PKCS1_PADDING },
     { .type = CKM_SHA256_RSA_PKCS, .flags = mf_sign|mf_verify|mf_rsa, .validator = rsa_pkcs_hash_validator, .synthesizer = rsa_pkcs_hash_synthesizer, .get_halg = sha256_get_halg, .get_digester = sha256_get_digester, .get_tpm_opdata = tpm_rsa_pkcs_sha256_get_opdata, .padding = RSA_PKCS1_PADDING },
@@ -170,20 +181,20 @@ static const mdetail_entry _g_mechs_templ[] = {
     /* EC */
     { .type = CKM_EC_KEY_PAIR_GEN, .flags = mf_is_keygen|mf_ecc,      .validator = ecc_keygen_validator },
 
-    { .type = CKM_ECDSA,           .flags = mf_sign|mf_verify|mf_ecc, .validator = ecdsa_validator, .get_tpm_opdata = tpm_ec_ecdsa_get_opdata },
+    { .type = CKM_ECDSA,           .flags = mf_single_part|mf_sign|mf_verify|mf_ecc, .validator = ecdsa_validator, .get_tpm_opdata = tpm_ec_ecdsa_get_opdata },
 
     { .type = CKM_ECDSA_SHA1,      .flags = mf_sign|mf_verify|mf_ecc, .validator = ecdsa_validator, .get_halg = sha1_get_halg, .get_digester = sha1_get_digester,     .get_tpm_opdata = tpm_ec_ecdsa_sha1_get_opdata },
     { .type = CKM_ECDSA_SHA256,    .flags = mf_sign|mf_verify|mf_ecc, .validator = ecdsa_validator, .get_halg = sha256_get_halg, .get_digester = sha256_get_digester, .get_tpm_opdata = tpm_ec_ecdsa_sha256_get_opdata },
     { .type = CKM_ECDSA_SHA384,    .flags = mf_sign|mf_verify|mf_ecc, .validator = ecdsa_validator, .get_halg = sha384_get_halg, .get_digester = sha384_get_digester, .get_tpm_opdata = tpm_ec_ecdsa_sha384_get_opdata },
     { .type = CKM_ECDSA_SHA512,    .flags = mf_sign|mf_verify|mf_ecc, .validator = ecdsa_validator, .get_halg = sha512_get_halg, .get_digester = sha512_get_digester, .get_tpm_opdata = tpm_ec_ecdsa_sha512_get_opdata },
 
-    { .type = CKM_ECDH1_DERIVE,    .flags = mf_derive | mf_ecc, .validator = ecdh1_validator },
+    { .type = CKM_ECDH1_DERIVE,    .flags = mf_derive | mf_encapsulate | mf_decapsulate | mf_ecc, .validator = ecdh1_validator },
 
     /* AES */
     { .type = CKM_AES_KEY_GEN, .flags = mf_is_keygen|mf_aes },
 
     { .type = CKM_AES_CBC,    .flags = mf_encrypt|mf_decrypt|mf_aes, .get_tpm_opdata = tpm_aes_cbc_get_opdata },
-    { .type = CKM_AES_CBC_PAD, .flags = mf_encrypt|mf_decrypt|mf_aes|mf_force_synthetic, .get_tpm_opdata = tpm_aes_cbc_get_opdata, .synthesizer = aes_cbc_synthesizer, .unsynthesizer = aes_cbc_unsynthesizer },
+    { .type = CKM_AES_CBC_PAD, .flags = mf_encrypt|mf_decrypt|mf_wrap|mf_unwrap|mf_aes|mf_force_synthetic, .get_tpm_opdata = tpm_aes_cbc_get_opdata, .synthesizer = aes_cbc_synthesizer, .unsynthesizer = aes_cbc_unsynthesizer },
     { .type = CKM_AES_CFB128, .flags = mf_encrypt|mf_decrypt|mf_aes, .get_tpm_opdata = tpm_aes_cfb_get_opdata },
     { .type = CKM_AES_ECB,    .flags = mf_encrypt|mf_decrypt|mf_aes, .get_tpm_opdata = tpm_aes_ecb_get_opdata },
     { .type = CKM_AES_CTR,    .flags = mf_encrypt|mf_decrypt|mf_aes, .get_tpm_opdata = tpm_aes_ctr_get_opdata },
@@ -658,42 +669,51 @@ CK_RV rsa_pss_hash_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs
     return has_raw_rsa(attrs);
 }
 
+/*
+ * The key-pair generation validators, for key_gen(): the mechanisms take no parameter, and the public
+ * template's key size or curve must be one the TPM has (found when the token was loaded, see
+ * mdetail_new()). A template without it is left for key generation to complain about.
+ */
 CK_RV rsa_keygen_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
 
-    /* this requires no argument */
-    if (!mech->pParameter || !mech->ulParameterLen) {
+    if (mech->pParameter || mech->ulParameterLen) {
         return CKR_MECHANISM_PARAM_INVALID;
     }
 
-    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(attrs, CKA_MODULUS);
+    CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(attrs, CKA_MODULUS_BITS);
     if (!a) {
-        return CKR_TEMPLATE_INCOMPLETE;
+        return CKR_OK;
     }
 
     CK_ULONG bits = 0;
-    safe_mul(bits, a->ulValueLen, 8);
+    CK_RV rv = attr_CK_ULONG(a, &bits);
+    if (rv != CKR_OK) {
+        return rv;
+    }
 
     CK_ULONG i;
-    for (i=0; i < m->mdetail_len; i++) {
+    for (i=0; i < m->rsa_detail_len; i++) {
         if (m->rsa_entries[i].bits == bits) {
-            return m->rsa_entries[i].supported ?
-                    CKR_OK : CKR_ATTRIBUTE_VALUE_INVALID;
+            if (m->rsa_entries[i].supported) {
+                return CKR_OK;
+            }
+            break;
         }
     }
 
+    LOGE("The TPM doesn't make RSA keys of %lu bits", bits);
     return CKR_ATTRIBUTE_VALUE_INVALID;
 }
 
 CK_RV ecc_keygen_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
 
-    /* this requires no argument */
-    if (!mech->pParameter || !mech->ulParameterLen) {
+    if (mech->pParameter || mech->ulParameterLen) {
         return CKR_MECHANISM_PARAM_INVALID;
     }
 
     CK_ATTRIBUTE_PTR a = attr_get_attribute_by_type(attrs, CKA_EC_PARAMS);
     if (!a) {
-        return CKR_TEMPLATE_INCOMPLETE;
+        return CKR_OK;
     }
 
     int nid = 0;
@@ -705,12 +725,15 @@ CK_RV ecc_keygen_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) 
     CK_ULONG i;
     for (i=0; i < m->nid_detail_len; i++) {
         if (m->nid_entries[i].nid == nid) {
-            return m->nid_entries[i].supported ?
-                    CKR_OK : CKR_MECHANISM_INVALID;
+            if (m->nid_entries[i].supported) {
+                return CKR_OK;
+            }
+            break;
         }
     }
 
-    return CKR_MECHANISM_INVALID;
+    LOGE("The TPM doesn't have the curve of CKA_EC_PARAMS (nid %d)", nid);
+    return CKR_CURVE_NOT_SUPPORTED;
 }
 
 CK_RV ecdsa_validator(mdetail *m, CK_MECHANISM_PTR mech, attr_list *attrs) {
@@ -916,18 +939,22 @@ CK_RV rsa_pkcs_unsynthesizer(mdetail *mdtl,
             buf, &buflen);
     if (rv != CKR_OK) {
         LOGE("Could not recover CKM_RSA_PKCS Padding");
-        return rv;
+        goto out;
     }
 
     if (!outbuf || buflen > *outlen) {
         *outlen = buflen;
-        return outbuf ? CKR_BUFFER_TOO_SMALL : CKR_OK;
+        rv = outbuf ? CKR_BUFFER_TOO_SMALL : CKR_OK;
+        goto out;
     }
 
     *outlen = buflen;
     memcpy(outbuf, buf, buflen);
 
-    return CKR_OK;
+out:
+    /* the plaintext */
+    OPENSSL_cleanse(buf, sizeof(buf));
+    return rv;
 }
 
 CK_RV rsa_pss_synthesizer(mdetail *mdtl,
@@ -985,6 +1012,46 @@ CK_RV rsa_pss_synthesizer(mdetail *mdtl,
     return CKR_OK;
 }
 
+/*
+ * The DER prefixes of a DigestInfo, the hash's OID and then the digest, per RFC 8017 section 9.2
+ * note 1. CKM_<HASH>_RSA_PKCS pads a DigestInfo; CKM_RSA_PKCS is given one.
+ */
+typedef struct pkcs1_5_digest_info pkcs1_5_digest_info;
+struct pkcs1_5_digest_info {
+    CK_MECHANISM_TYPE mech;
+    CK_BYTE hdr[19];
+    size_t hdr_len;
+};
+
+static const pkcs1_5_digest_info pkcs1_5_digest_infos[] = {
+    { CKM_SHA1_RSA_PKCS, {
+        0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a,
+        0x05, 0x00, 0x04, 0x14,
+    }, 15 },
+    { CKM_SHA256_RSA_PKCS, {
+        0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20,
+    }, 19 },
+    { CKM_SHA384_RSA_PKCS, {
+        0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x02, 0x05, 0x00, 0x04, 0x30,
+    }, 19 },
+    { CKM_SHA512_RSA_PKCS, {
+        0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x03, 0x05, 0x00, 0x04, 0x40,
+    }, 19 },
+};
+
+static const pkcs1_5_digest_info *digest_info_for(CK_MECHANISM_TYPE mech) {
+    size_t i;
+    for (i = 0; i < ARRAY_LEN(pkcs1_5_digest_infos); i++) {
+        if (pkcs1_5_digest_infos[i].mech == mech) {
+            return &pkcs1_5_digest_infos[i];
+        }
+    }
+    return NULL;
+}
+
 CK_RV rsa_pkcs_hash_synthesizer(mdetail *mdtl,
         CK_MECHANISM_PTR mech, attr_list *attrs, CK_BYTE_PTR inbuf, CK_ULONG inlen,
         CK_BYTE_PTR outbuf, CK_ULONG_PTR outlen) {
@@ -992,53 +1059,13 @@ CK_RV rsa_pkcs_hash_synthesizer(mdetail *mdtl,
     assert(mech);
     assert(outlen);
 
-    /* These headers are defined in the following RFC
-     *   - https://www.ietf.org/rfc/rfc3447.txt
-     *     - Page 42
-     */
-    static const CK_BYTE pkcs1_5_hdr_sha1[15] = {
-        0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a,
-        0x05, 0x00, 0x04, 0x14,
-    };
-
-    static const CK_BYTE pkcs1_5_hdr_sha256[19] = {
-        0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
-        0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20,
-    };
-
-    static const CK_BYTE pkcs1_5_hdr_sha384[19] = {
-        0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
-        0x04, 0x02, 0x02, 0x05, 0x00, 0x04, 0x30,
-    };
-
-    static const CK_BYTE pkcs1_5_hdr_sha512[19] = {
-        0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
-        0x04, 0x02, 0x03, 0x05, 0x00, 0x04, 0x40,
-    };
-
-    const CK_BYTE *hdr;
-    size_t hdr_size;
-
-    switch(mech->mechanism) {
-    case CKM_SHA1_RSA_PKCS:
-        hdr = pkcs1_5_hdr_sha1;
-        hdr_size = sizeof(pkcs1_5_hdr_sha1);
-        break;
-    case CKM_SHA256_RSA_PKCS:
-        hdr = pkcs1_5_hdr_sha256;
-        hdr_size = sizeof(pkcs1_5_hdr_sha256);
-        break;
-    case CKM_SHA384_RSA_PKCS:
-        hdr = pkcs1_5_hdr_sha384;
-        hdr_size = sizeof(pkcs1_5_hdr_sha384);
-        break;
-    case CKM_SHA512_RSA_PKCS:
-        hdr = pkcs1_5_hdr_sha512;
-        hdr_size = sizeof(pkcs1_5_hdr_sha512);
-        break;
-    default:
+    const pkcs1_5_digest_info *info = digest_info_for(mech->mechanism);
+    if (!info) {
         return CKR_MECHANISM_INVALID;
     }
+
+    const CK_BYTE *hdr = info->hdr;
+    size_t hdr_size = info->hdr_len;
 
     size_t hash_len = utils_get_halg_size(mech->mechanism);
     if (!hash_len) {
@@ -1049,6 +1076,7 @@ CK_RV rsa_pkcs_hash_synthesizer(mdetail *mdtl,
     if (inlen != hash_len) {
         LOGE("Expected input hash length to match expected hash length,"
                 "got: %lu, expected: %lu", inlen, hash_len);
+        return CKR_GENERAL_ERROR;
     }
 
     size_t total_size = 0;
@@ -1068,6 +1096,42 @@ CK_RV rsa_pkcs_hash_synthesizer(mdetail *mdtl,
     memcpy(&hdr_buf[hdr_size], inbuf, hash_len);
 
     return rsa_pkcs_synthesizer(mdtl, mech, attrs, hdr_buf, total_size, outbuf, outlen);
+}
+
+/*
+ * CKM_RSA_PKCS signs what it is given, usually a DigestInfo. When that is the DigestInfo of a hash
+ * whose CKM_<HASH>_RSA_PKCS the TPM signs natively, *hash_mech is that mechanism and *hdr_len the
+ * length of the prefix before the digest: TPM2_Sign with RSASSA pads the digest the same way, and
+ * doesn't need raw RSA, which a TPM may not do (a FIPS profile, say). Otherwise *hash_mech is 0.
+ */
+CK_RV mech_rsa_pkcs_native_sign(mdetail *m, CK_BYTE_PTR in, CK_ULONG inlen,
+        CK_MECHANISM_TYPE *hash_mech, CK_ULONG *hdr_len) {
+
+    check_pointer(m);
+    check_pointer(hash_mech);
+    check_pointer(hdr_len);
+
+    *hash_mech = 0;
+    *hdr_len = 0;
+
+    size_t i;
+    for (i = 0; i < ARRAY_LEN(pkcs1_5_digest_infos); i++) {
+        const pkcs1_5_digest_info *info = &pkcs1_5_digest_infos[i];
+        size_t hash_len = utils_get_halg_size(info->mech);
+        if (!in || inlen != info->hdr_len + hash_len
+                || memcmp(in, info->hdr, info->hdr_len)) {
+            continue;
+        }
+
+        mdetail_entry *d = mlookup(m, info->mech);
+        if (d && (d->flags & mf_tpm_supported)) {
+            *hash_mech = info->mech;
+            *hdr_len = info->hdr_len;
+        }
+        break;
+    }
+
+    return CKR_OK;
 }
 
 static CK_RV aes_cbc_synthesizer(mdetail *mdtl,
@@ -1536,12 +1600,23 @@ CK_RV mech_get_info(mdetail *m, tpm_ctx *tctx,
         info->flags |= CKF_HW;
     }
 
+    /*
+     * What signs or verifies does so message-based too. CKF_MULTI_MESSAGE, in several parts with
+     * C_*MessageBegin (S32 table 10), is for the mechanisms the S32 tables don't have single-part
+     * only, though C_SignUpdate and C_SignMessageNext still take those as they always did.
+     */
+    CK_FLAGS multi = (d->flags & mf_single_part) ? 0 : CKF_MULTI_MESSAGE;
+
     if (d->flags & mf_sign) {
-        info->flags |= CKF_SIGN;
+        info->flags |= CKF_SIGN | CKF_MESSAGE_SIGN | multi;
     }
 
     if (d->flags & mf_verify) {
-        info->flags |= CKF_VERIFY;
+        info->flags |= CKF_VERIFY | CKF_MESSAGE_VERIFY | multi;
+    }
+
+    if (d->flags & mf_sign_recover) {
+        info->flags |= CKF_SIGN_RECOVER | CKF_VERIFY_RECOVER;
     }
 
     if (d->flags & mf_encrypt) {
@@ -1550,6 +1625,22 @@ CK_RV mech_get_info(mdetail *m, tpm_ctx *tctx,
 
     if (d->flags & mf_decrypt) {
         info->flags |= CKF_DECRYPT;
+    }
+
+    if (d->flags & mf_wrap) {
+        info->flags |= CKF_WRAP;
+    }
+
+    if (d->flags & mf_unwrap) {
+        info->flags |= CKF_UNWRAP;
+    }
+
+    if (d->flags & mf_encapsulate) {
+        info->flags |= CKF_ENCAPSULATE;
+    }
+
+    if (d->flags & mf_decapsulate) {
+        info->flags |= CKF_DECAPSULATE;
     }
 
     /* functions below here return */
@@ -1583,6 +1674,60 @@ CK_RV mech_get_info(mdetail *m, tpm_ctx *tctx,
     LOGE("Unknown mechanism, got: 0x%lx", mech_type);
 
     return CKR_MECHANISM_INVALID;
+}
+
+CK_RV mech_is_sign_recover(mdetail *m, CK_MECHANISM_TYPE mech_type, bool *is_sign_recover) {
+
+    check_pointer(m);
+    check_pointer(is_sign_recover);
+
+    *is_sign_recover = false;
+
+    mdetail_entry *d = mlookup(m, mech_type);
+    if (!d) {
+        LOGE("Mechanism not supported, got: 0x%lx", mech_type);
+        return CKR_MECHANISM_INVALID;
+    }
+
+    *is_sign_recover = !!(d->flags & mf_sign_recover);
+
+    return CKR_OK;
+}
+
+CK_RV mech_is_wrap(mdetail *m, CK_MECHANISM_TYPE mech_type, bool unwrap, bool *is_wrap) {
+
+    check_pointer(m);
+    check_pointer(is_wrap);
+
+    *is_wrap = false;
+
+    mdetail_entry *d = mlookup(m, mech_type);
+    if (!d) {
+        LOGE("Mechanism not supported, got: 0x%lx", mech_type);
+        return CKR_MECHANISM_INVALID;
+    }
+
+    *is_wrap = !!(d->flags & (unwrap ? mf_unwrap : mf_wrap));
+
+    return CKR_OK;
+}
+
+CK_RV mech_is_kem(mdetail *m, CK_MECHANISM_TYPE mech_type, bool decapsulate, bool *is_kem) {
+
+    check_pointer(m);
+    check_pointer(is_kem);
+
+    *is_kem = false;
+
+    mdetail_entry *d = mlookup(m, mech_type);
+    if (!d) {
+        LOGE("Mechanism not supported, got: 0x%lx", mech_type);
+        return CKR_MECHANISM_INVALID;
+    }
+
+    *is_kem = !!(d->flags & (decapsulate ? mf_decapsulate : mf_encapsulate));
+
+    return CKR_OK;
 }
 
 CK_RV mech_is_ecc(mdetail *m, CK_MECHANISM_TYPE mech_type, bool *is_ecc) {

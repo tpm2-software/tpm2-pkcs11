@@ -66,7 +66,8 @@ CK_RV ssl_util_check_PKCS1_TYPE_2(const CK_BYTE_PTR inbuf, CK_ULONG inlen, CK_UL
     int rc = RSA_padding_check_PKCS1_type_2(outbuf, *outbuflen,
                inbuf, inlen, rsa_len);
     if (rc < 0) {
-        return CKR_GENERAL_ERROR;
+        /* the ciphertext doesn't decrypt to a PKCS#1 v1.5 block */
+        return CKR_ENCRYPTED_DATA_INVALID;
     }
 
     /* cannot be negative due to check above */
@@ -475,6 +476,17 @@ CK_RV ssl_util_encrypt(EVP_PKEY *pkey,
         return CKR_OK;
     }
 
+    /*
+     * The ciphertext is the size of the modulus. Checked here, since OpenSSL 3's provider reports
+     * a short buffer with its own reason (PROV_R_OUTPUT_BUFFER_TOO_SMALL), not EVP_R_BUFFER_TOO_SMALL,
+     * and the check below then answered it with CKR_GENERAL_ERROR.
+     */
+    CK_ULONG needed = EVP_PKEY_size(pkey);
+    if (*ctextlen < needed) {
+        *ctextlen = needed;
+        return CKR_BUFFER_TOO_SMALL;
+    }
+
     EVP_PKEY_CTX *pkey_ctx = EVP_PKEY_CTX_new(pkey, NULL);
     if (!pkey_ctx) {
         LOGE("OOM");
@@ -779,6 +791,7 @@ CK_RV ssl_util_verify_recover(EVP_PKEY *pkey,
             signature, signature_len);
     if (rc < 0) {
         SSL_UTIL_LOGE("EVP_PKEY_verify_recover failed");
+        rv = CKR_SIGNATURE_INVALID;
     } else if (rc == 1) {
         rv = CKR_OK;
     } else {
@@ -847,6 +860,38 @@ CK_RV ssl_util_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid) {
 
     *nid = OBJ_obj2nid(a);
     ASN1_OBJECT_free(a);
+
+    return CKR_OK;
+}
+
+CK_RV ssl_util_ec_field_size(CK_ATTRIBUTE_PTR ecparams, CK_ULONG *field_size) {
+
+    int nid = 0;
+    CK_RV rv = ssl_util_params_to_nid(ecparams, &nid);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    switch (nid) {
+    case NID_X9_62_prime192v1:
+        *field_size = 24;
+        break;
+    case NID_secp224r1:
+        *field_size = 28;
+        break;
+    case NID_X9_62_prime256v1:
+        *field_size = 32;
+        break;
+    case NID_secp384r1:
+        *field_size = 48;
+        break;
+    case NID_secp521r1:
+        *field_size = 66;
+        break;
+    default:
+        LOGE("Unsupported curve, nid: %d", nid);
+        return CKR_CURVE_NOT_SUPPORTED;
+    }
 
     return CKR_OK;
 }

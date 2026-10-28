@@ -538,6 +538,47 @@ static void test_rsa_oaep_encrypt_decrypt_oneshot_good(void **state) {
     assert_memory_equal(plaintext, plaintext2, sizeof(plaintext));
 }
 
+/* C_Encrypt with the public key, in software, gives the ciphertext's length, not the buffer's */
+static void test_rsa_oaep_encrypt_big_buffer(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_RSA_PKCS_OAEP_PARAMS params = {
+        .hashAlg = CKM_SHA256,
+        .source = CKZ_DATA_SPECIFIED,
+        .mgf = CKG_MGF1_SHA256
+    };
+
+    CK_MECHANISM mechanism = {
+        CKM_RSA_PKCS_OAEP, &params, sizeof(params)
+    };
+
+    CK_BYTE plaintext[] = { 'b', 'i', 'g', ' ', 'b', 'u', 'f', 'f', 'e', 'r' };
+
+    /* twice an RSA 2048 modulus */
+    CK_BYTE ciphertext[512] = { 0 };
+
+    CK_RV rv = C_EncryptInit(session, &mechanism, ti->objects.rsa.pub);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_ULONG ciphertext_len = sizeof(ciphertext);
+    rv = C_Encrypt(session, plaintext, sizeof(plaintext), ciphertext, &ciphertext_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(ciphertext_len, 256);
+
+    rv = C_DecryptInit(session, &mechanism, ti->objects.rsa.priv);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE plaintext2[256];
+    CK_ULONG plaintext2_len = sizeof(plaintext2);
+    rv = C_Decrypt(session, ciphertext, ciphertext_len, plaintext2, &plaintext2_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(plaintext2_len, sizeof(plaintext));
+    assert_memory_equal(plaintext, plaintext2, sizeof(plaintext));
+}
+
 static void test_aes_always_authenticate(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -1799,6 +1840,8 @@ int main() {
         cmocka_unit_test_setup_teardown(test_aes_encrypt_decrypt_oneshot_good,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_rsa_oaep_encrypt_decrypt_oneshot_good,
+                test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_rsa_oaep_encrypt_big_buffer,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_cert_no_good,
                 test_setup, test_teardown),

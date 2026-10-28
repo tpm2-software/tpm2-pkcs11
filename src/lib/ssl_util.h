@@ -80,4 +80,11 @@ twist ssl_util_hash_pass(const twist pin, const twist salt);
  */
 CK_RV ssl_util_params_to_nid(CK_ATTRIBUTE_PTR ecparams, int *nid);
 
+/*
+ * The field size in bytes of the curve CKA_EC_PARAMS names, one of the NIST curves the token knows.
+ * @return
+ *  CKR_OK on success, CKR_CURVE_NOT_SUPPORTED for another curve, or what ssl_util_params_to_nid() gives.
+ */
+CK_RV ssl_util_ec_field_size(CK_ATTRIBUTE_PTR ecparams, CK_ULONG *field_size);
+
 #endif /* SRC_LIB_SSL_UTIL_H_ */

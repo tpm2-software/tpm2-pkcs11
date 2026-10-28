@@ -43,7 +43,16 @@ check_PROGRAMS += \
     test/integration/pkcs-keygen.int \
     test/integration/pkcs-session-state.int \
     test/integration/pkcs-lockout.int \
-    test/integration/pkcs-ecdh.int
+    test/integration/pkcs-ecdh.int \
+    test/integration/pkcs-secret-persist.int \
+    test/integration/pkcs-dual.int \
+    test/integration/pkcs-object-copy.int \
+    test/integration/pkcs-set-attribute.int \
+    test/integration/pkcs-unique-id.int \
+    test/integration/pkcs-wrap.int \
+    test/integration/pkcs-kem.int \
+    test/integration/pkcs-message.int \
+    test/integration/pkcs-v3-refusals.int
 
 # add test scripts
 check_SCRIPTS += $(integration_scripts)
@@ -102,6 +111,42 @@ test_integration_pkcs_keygen_int_SOURCES = test/integration/pkcs-keygen.int.c te
 test_integration_pkcs_ecdh_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_ecdh_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
 test_integration_pkcs_ecdh_int_SOURCES = test/integration/pkcs-ecdh.int.c test/integration/test.c
+
+test_integration_pkcs_secret_persist_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_secret_persist_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_secret_persist_int_SOURCES = test/integration/pkcs-secret-persist.int.c test/integration/test.c
+
+test_integration_pkcs_dual_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_dual_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_dual_int_SOURCES = test/integration/pkcs-dual.int.c test/integration/test.c
+
+test_integration_pkcs_object_copy_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_object_copy_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_object_copy_int_SOURCES = test/integration/pkcs-object-copy.int.c test/integration/test.c
+
+test_integration_pkcs_set_attribute_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_set_attribute_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_set_attribute_int_SOURCES = test/integration/pkcs-set-attribute.int.c test/integration/test.c
+
+test_integration_pkcs_unique_id_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_unique_id_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_unique_id_int_SOURCES = test/integration/pkcs-unique-id.int.c test/integration/test.c
+
+test_integration_pkcs_wrap_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_wrap_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_wrap_int_SOURCES = test/integration/pkcs-wrap.int.c test/integration/test.c
+
+test_integration_pkcs_kem_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_kem_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_kem_int_SOURCES = test/integration/pkcs-kem.int.c test/integration/test.c
+
+test_integration_pkcs_message_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_message_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_message_int_SOURCES = test/integration/pkcs-message.int.c test/integration/test.c
+
+test_integration_pkcs_v3_refusals_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
+test_integration_pkcs_v3_refusals_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)
+test_integration_pkcs_v3_refusals_int_SOURCES = test/integration/pkcs-v3-refusals.int.c test/integration/test.c
 
 test_integration_pkcs_session_state_int_CFLAGS  = $(AM_CFLAGS) $(TESTS_CFLAGS)
 test_integration_pkcs_session_state_int_LDADD   = $(TESTS_LDADD)  $(SQLITE3_LIBS)

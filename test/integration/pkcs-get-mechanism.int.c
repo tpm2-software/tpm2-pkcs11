@@ -131,20 +131,32 @@ void test_get_mechanism_info_good(void **state) {
 
         assert_int_equal(mech_info.ulMinKeySize, 128/8);
         assert_int_equal(mech_info.ulMaxKeySize, 256/8);
-        assert_int_equal(mech_info.flags, CKF_ENCRYPT|CKF_DECRYPT|CKF_HW);
+        /* CKM_AES_CBC_PAD wraps keys too */
+        CK_FLAGS wrap = aes_mechs[i] == CKM_AES_CBC_PAD ? CKF_WRAP|CKF_UNWRAP : 0;
+        assert_int_equal(mech_info.flags, CKF_ENCRYPT|CKF_DECRYPT|CKF_HW|wrap);
     }
+
+    /*
+     * What signs and verifies does so message-based too, in one part (MSG1) or, unless the S32
+     * tables have the mechanism single-part only, several (MSG).
+     */
+    const CK_FLAGS MSG1 = CKF_MESSAGE_SIGN | CKF_MESSAGE_VERIFY;
+    const CK_FLAGS MSG = MSG1 | CKF_MULTI_MESSAGE;
 
     struct {
         CK_ULONG mech;
         CK_FLAGS flags;
     } rsa_mechs[] = {
         { CKM_RSA_PKCS_KEY_PAIR_GEN, CKF_HW | CKF_GENERATE_KEY_PAIR                             },
-        { CKM_RSA_PKCS,              CKF_HW | CKF_ENCRYPT | CKF_DECRYPT | CKF_SIGN | CKF_VERIFY },
-        { CKM_RSA_X_509,             CKF_HW | CKF_ENCRYPT | CKF_DECRYPT | CKF_SIGN | CKF_VERIFY },
-        { CKM_RSA_PKCS_OAEP,         CKF_HW | CKF_ENCRYPT | CKF_DECRYPT                         },
-        { CKM_SHA1_RSA_PKCS,         CKF_HW | CKF_SIGN    | CKF_VERIFY                          },
-        { CKM_SHA256_RSA_PKCS,       CKF_HW | CKF_SIGN    | CKF_VERIFY                          },
-        { CKM_SHA384_RSA_PKCS,       CKF_HW | CKF_SIGN    | CKF_VERIFY                          },
+        { CKM_RSA_PKCS,              CKF_HW | CKF_ENCRYPT | CKF_DECRYPT | CKF_SIGN | CKF_VERIFY
+                                     | CKF_SIGN_RECOVER | CKF_VERIFY_RECOVER | MSG1             },
+        { CKM_RSA_X_509,             CKF_HW | CKF_ENCRYPT | CKF_DECRYPT | CKF_SIGN | CKF_VERIFY
+                                     | CKF_SIGN_RECOVER | CKF_VERIFY_RECOVER | MSG1             },
+        { CKM_RSA_PKCS_OAEP,         CKF_HW | CKF_ENCRYPT | CKF_DECRYPT | CKF_WRAP | CKF_UNWRAP
+                                     | CKF_ENCAPSULATE | CKF_DECAPSULATE                        },
+        { CKM_SHA1_RSA_PKCS,         CKF_HW | CKF_SIGN    | CKF_VERIFY | MSG                    },
+        { CKM_SHA256_RSA_PKCS,       CKF_HW | CKF_SIGN    | CKF_VERIFY | MSG                    },
+        { CKM_SHA384_RSA_PKCS,       CKF_HW | CKF_SIGN    | CKF_VERIFY | MSG                    },
     };
     for (size_t i = 0; i < ARRAY_LEN(rsa_mechs); i++) {
         rv = C_GetMechanismInfo(slot_id, rsa_mechs[i].mech, &mech_info);
@@ -161,8 +173,8 @@ void test_get_mechanism_info_good(void **state) {
         CK_FLAGS flags;
     } ecc_mechs[] = {
         { CKM_EC_KEY_PAIR_GEN, CKF_HW | CKF_GENERATE_KEY_PAIR              },
-        { CKM_ECDSA,           CKF_HW | CKF_SIGN              | CKF_VERIFY },
-        { CKM_ECDSA_SHA1,      CKF_HW | CKF_SIGN              | CKF_VERIFY },
+        { CKM_ECDSA,           CKF_HW | CKF_SIGN              | CKF_VERIFY | MSG1 },
+        { CKM_ECDSA_SHA1,      CKF_HW | CKF_SIGN              | CKF_VERIFY | MSG },
     };
 
     for (size_t i = 0; i < ARRAY_LEN(ecc_mechs); i++) {

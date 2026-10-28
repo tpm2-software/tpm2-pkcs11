@@ -1014,6 +1014,72 @@ static void test_double_sign_final_call_for_size_SHA256(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
+/*
+ * C_SignUpdate, then C_SignFinal for its length (a NULL buffer, or too small a one), then
+ * C_SignFinal: S32 5.2 has the query leave the operation as it was, so the signature is over what
+ * C_SignUpdate fed, which C_Verify checks.
+ */
+static void sign_final_query_verified(CK_SESSION_HANDLE session, CK_MECHANISM_TYPE type,
+        CK_KEY_TYPE key_type, CK_BYTE_PTR msg, CK_ULONG msg_len, bool too_small) {
+
+    CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
+    CK_OBJECT_HANDLE priv = CK_INVALID_HANDLE;
+    get_keypair(session, key_type, &pub, &priv);
+
+    CK_MECHANISM mech = { type, NULL, 0 };
+    assert_true(msg_len > 10);
+
+    CK_RV rv = C_SignInit(session, &mech, priv);
+    assert_int_equal(rv, CKR_OK);
+
+    /* in two parts, a multi-part signature */
+    rv = C_SignUpdate(session, msg, 10);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_SignUpdate(session, msg + 10, msg_len - 10);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE sig[1024];
+    CK_ULONG sig_len = 0;
+    rv = C_SignFinal(session, NULL, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_true(sig_len > 1 && sig_len <= sizeof(sig));
+
+    if (too_small) {
+        CK_ULONG small_len = sig_len - 1;
+        rv = C_SignFinal(session, sig, &small_len);
+        assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
+        assert_int_equal(small_len, sig_len);
+    }
+
+    rv = C_SignFinal(session, sig, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_VerifyInit(session, &mech, pub);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_Verify(session, msg, msg_len, sig, sig_len);
+    assert_int_equal(rv, CKR_OK);
+}
+
+static void test_sign_final_length_query_after_update(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    user_login(session);
+
+    CK_BYTE msg[] = "the data C_SignUpdate fed, and only it";
+
+    sign_final_query_verified(session, CKM_ECDSA_SHA256, CKK_EC, msg, sizeof(msg), false);
+    sign_final_query_verified(session, CKM_ECDSA_SHA256, CKK_EC, msg, sizeof(msg), true);
+    sign_final_query_verified(session, CKM_SHA256_RSA_PKCS, CKK_RSA, msg, sizeof(msg), false);
+    sign_final_query_verified(session, CKM_SHA256_RSA_PKCS, CKK_RSA, msg, sizeof(msg), true);
+
+    /* a mechanism that collects the data, here a SHA-256 sized value, which the query kept already */
+    CK_BYTE hash[32];
+    memset(hash, 0x5a, sizeof(hash));
+    sign_final_query_verified(session, CKM_ECDSA, CKK_EC, hash, sizeof(hash), true);
+}
+
 static void test_double_sign_final_call_for_size_SHA512(void **state) {
 
     test_info *ti = test_info_from_state(state);
@@ -1682,6 +1748,463 @@ static void test_sign_verify_CKM_SHA512_HMAC(void **state) {
     assert_int_equal(rv, CKR_OK);
 }
 
+/*
+ * A token RSA key pair, made in a read-write session, whose private key has CKA_SIGN_RECOVER and
+ * CKA_ALWAYS_AUTHENTICATE as asked. The public key has CKA_VERIFY_RECOVER as CKA_SIGN_RECOVER, as
+ * NSS asks of a mechanism with CKF_VERIFY_RECOVER.
+ */
+static void sign_recover_keypair_ex(CK_SESSION_HANDLE session, CK_BBOOL sign_recover,
+        CK_BBOOL always_auth, CK_OBJECT_HANDLE *pubkey, CK_OBJECT_HANDLE *privkey) {
+
+    CK_BBOOL ck_true = CK_TRUE;
+    CK_UTF8CHAR label[] = "sign-recover";
+
+    CK_ATTRIBUTE pub[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_VERIFY,  ck_true),
+        ADD_ATTR_BASE(CKA_ENCRYPT, ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_VERIFY_RECOVER, sign_recover),
+    };
+
+    CK_ATTRIBUTE priv[] = {
+        ADD_ATTR_BASE(CKA_SIGN,    ck_true),
+        ADD_ATTR_BASE(CKA_DECRYPT, ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label),
+        ADD_ATTR_BASE(CKA_SIGN_RECOVER, sign_recover),
+        ADD_ATTR_BASE(CKA_ALWAYS_AUTHENTICATE, always_auth),
+    };
+
+    CK_MECHANISM mech = { CKM_RSA_PKCS_KEY_PAIR_GEN, NULL, 0 };
+
+    CK_RV rv = C_GenerateKeyPair(session, &mech, pub, ARRAY_LEN(pub),
+            priv, ARRAY_LEN(priv), pubkey, privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BBOOL got = !sign_recover;
+    CK_ATTRIBUTE a = ADD_ATTR_BASE(CKA_SIGN_RECOVER, got);
+    rv = C_GetAttributeValue(session, *privkey, &a, 1);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(got, sign_recover);
+
+    got = !sign_recover;
+    CK_ATTRIBUTE b = ADD_ATTR_BASE(CKA_VERIFY_RECOVER, got);
+    rv = C_GetAttributeValue(session, *pubkey, &b, 1);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(got, sign_recover);
+}
+
+static void sign_recover_keypair(CK_SESSION_HANDLE session, CK_BBOOL sign_recover,
+        CK_OBJECT_HANDLE *pubkey, CK_OBJECT_HANDLE *privkey) {
+    sign_recover_keypair_ex(session, sign_recover, CK_FALSE, pubkey, privkey);
+}
+
+static CK_SESSION_HANDLE rw_session(test_info *ti) {
+
+    CK_SESSION_HANDLE session = CK_INVALID_HANDLE;
+    CK_RV rv = C_OpenSession(ti->slot_id, CKF_SERIAL_SESSION | CKF_RW_SESSION,
+            NULL, NULL, &session);
+    assert_int_equal(rv, CKR_OK);
+
+    user_login(session);
+
+    return session;
+}
+
+/* C_SignRecover with mech over data, into sig; returns its CK_RV. */
+static CK_RV sign_recover_once(CK_SESSION_HANDLE session, CK_MECHANISM_TYPE type, CK_OBJECT_HANDLE key,
+        CK_BYTE_PTR data, CK_ULONG data_len, CK_BYTE_PTR sig, CK_ULONG_PTR sig_len) {
+
+    CK_MECHANISM mech = { type, NULL, 0 };
+    CK_RV rv = C_SignRecoverInit(session, &mech, key);
+    assert_int_equal(rv, CKR_OK);
+
+    return C_SignRecover(session, data, data_len, sig, sig_len);
+}
+
+/*
+ * Whether the TPM does unpadded RSA (TPM2_RSA_Decrypt with the NULL scheme): one restricted to what
+ * a FIPS host allows refuses it, and so CKM_RSA_X_509 and CKM_RSA_PKCS over what isn't a DigestInfo.
+ */
+static bool tpm_does_unpadded_rsa(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE pubkey,
+        CK_OBJECT_HANDLE privkey) {
+
+    CK_MECHANISM mech = { CKM_RSA_X_509, NULL, 0 };
+    CK_BYTE plain[256] = { 0 };
+    plain[255] = 42;
+    CK_BYTE cipher[256];
+    CK_ULONG cipher_len = sizeof(cipher);
+
+    CK_RV rv = C_EncryptInit(session, &mech, pubkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_Encrypt(session, plain, sizeof(plain), cipher, &cipher_len);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE out[256];
+    CK_ULONG out_len = sizeof(out);
+    rv = C_DecryptInit(session, &mech, privkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_Decrypt(session, cipher, cipher_len, out, &out_len);
+    if (rv == CKR_FUNCTION_FAILED) {
+        return false;
+    }
+    assert_int_equal(rv, CKR_OK);
+    return true;
+}
+
+static void test_sign_recover_rsa_pkcs_roundtrip(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = rw_session(ti);
+
+    CK_OBJECT_HANDLE pubkey, privkey;
+    sign_recover_keypair(session, CK_TRUE, &pubkey, &privkey);
+
+    /* a DigestInfo is signed with the TPM's RSASSA: the signature C_Sign makes, and any TPM does it */
+    CK_BYTE digest_info[19 + sizeof(_data_hash_sha256)] = {
+        0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20,
+    };
+    memcpy(&digest_info[19], _data_hash_sha256, sizeof(_data_hash_sha256));
+
+    CK_BYTE sig[256];
+    CK_ULONG sig_len = sizeof(sig);
+    CK_RV rv = sign_recover_once(session, CKM_RSA_PKCS, privkey, digest_info, sizeof(digest_info),
+            sig, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(sig_len, 256);
+
+    CK_BYTE expected[256];
+    CK_ULONG expected_len = sizeof(expected);
+    CK_MECHANISM sha256 = { CKM_SHA256_RSA_PKCS, NULL, 0 };
+    rv = C_SignInit(session, &sha256, privkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_Sign(session, (CK_BYTE_PTR)_data, sizeof(_data), expected, &expected_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(expected_len, sig_len);
+    assert_memory_equal(expected, sig, sig_len);
+
+    CK_MECHANISM mech = { CKM_RSA_PKCS, NULL, 0 };
+    CK_BYTE recovered[256];
+    CK_ULONG recovered_len = sizeof(recovered);
+    rv = C_VerifyRecoverInit(session, &mech, pubkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_VerifyRecover(session, sig, sig_len, recovered, &recovered_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(recovered_len, sizeof(digest_info));
+    assert_memory_equal(recovered, digest_info, sizeof(digest_info));
+
+    /* 20 bytes of anything is padded on the host and signed with unpadded RSA */
+    CK_BYTE data[20];
+    size_t i;
+    for (i = 0; i < sizeof(data); i++) {
+        data[i] = (CK_BYTE)(0xA0 + i);
+    }
+
+    /* the size, then too small a buffer: neither ends the operation */
+    rv = C_SignRecoverInit(session, &mech, privkey);
+    assert_int_equal(rv, CKR_OK);
+    sig_len = 0;
+    rv = C_SignRecover(session, data, sizeof(data), NULL, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(sig_len, 256);
+    sig_len = 10;
+    rv = C_SignRecover(session, data, sizeof(data), sig, &sig_len);
+    assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
+    assert_int_equal(sig_len, 256);
+
+    sig_len = sizeof(sig);
+    rv = C_SignRecover(session, data, sizeof(data), sig, &sig_len);
+    if (rv == CKR_FUNCTION_FAILED && !tpm_does_unpadded_rsa(session, pubkey, privkey)) {
+        /* refused as C_Sign refuses it, and the operation is over */
+        rv = C_SignRecover(session, data, sizeof(data), sig, &sig_len);
+        assert_int_equal(rv, CKR_OPERATION_NOT_INITIALIZED);
+        rv = C_DestroyObject(session, privkey);
+        assert_int_equal(rv, CKR_OK);
+        rv = C_DestroyObject(session, pubkey);
+        assert_int_equal(rv, CKR_OK);
+        skip();
+    }
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(sig_len, 256);
+
+    /* the operation ended */
+    rv = C_SignRecover(session, data, sizeof(data), sig, &sig_len);
+    assert_int_equal(rv, CKR_OPERATION_NOT_INITIALIZED);
+
+    recovered_len = sizeof(recovered);
+    rv = C_VerifyRecoverInit(session, &mech, pubkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_VerifyRecover(session, sig, sig_len, recovered, &recovered_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(recovered_len, sizeof(data));
+    assert_memory_equal(recovered, data, sizeof(data));
+
+    /* raw RSA: the data is a number, so it comes back as k bytes, zeros first */
+    CK_MECHANISM raw = { CKM_RSA_X_509, NULL, 0 };
+    sig_len = sizeof(sig);
+    rv = sign_recover_once(session, CKM_RSA_X_509, privkey, data, sizeof(data), sig, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(sig_len, 256);
+
+    recovered_len = sizeof(recovered);
+    rv = C_VerifyRecoverInit(session, &raw, pubkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_VerifyRecover(session, sig, sig_len, recovered, &recovered_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(recovered_len, 256);
+    CK_BYTE zeros[256 - sizeof(data)] = { 0 };
+    assert_memory_equal(recovered, zeros, sizeof(zeros));
+    assert_memory_equal(&recovered[sizeof(zeros)], data, sizeof(data));
+
+    /* more than k-11 bytes for PKCS#1 v1.5, more than k for raw RSA */
+    CK_BYTE big[257] = { 0 };
+    sig_len = sizeof(sig);
+    rv = sign_recover_once(session, CKM_RSA_PKCS, privkey, big, 256 - 10, sig, &sig_len);
+    assert_int_equal(rv, CKR_DATA_LEN_RANGE);
+    rv = C_SignRecover(session, big, 1, sig, &sig_len);
+    assert_int_equal(rv, CKR_OPERATION_NOT_INITIALIZED);
+    rv = sign_recover_once(session, CKM_RSA_X_509, privkey, big, sizeof(big), sig, &sig_len);
+    assert_int_equal(rv, CKR_DATA_LEN_RANGE);
+
+    /* a NULL mechanism ends it */
+    rv = C_SignRecoverInit(session, &mech, privkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_SignRecoverInit(session, &mech, privkey);
+    assert_int_equal(rv, CKR_OPERATION_ACTIVE);
+    rv = C_SignRecoverInit(session, NULL, privkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_SignRecover(session, data, sizeof(data), sig, &sig_len);
+    assert_int_equal(rv, CKR_OPERATION_NOT_INITIALIZED);
+
+    rv = C_DestroyObject(session, privkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_DestroyObject(session, pubkey);
+    assert_int_equal(rv, CKR_OK);
+}
+
+/*
+ * C_VerifyRecover for its length (a NULL buffer, or too small a one), then with a buffer to fit:
+ * S32 5.2 has the query leave the operation as it was, so the data comes back from the third call.
+ */
+static void test_verify_recover_length_query_keeps_operation(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = rw_session(ti);
+
+    CK_OBJECT_HANDLE pubkey, privkey;
+    sign_recover_keypair(session, CK_TRUE, &pubkey, &privkey);
+
+    /* a DigestInfo is signed with the TPM's RSASSA, which any TPM does */
+    CK_BYTE digest_info[19 + sizeof(_data_hash_sha256)] = {
+        0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20,
+    };
+    memcpy(&digest_info[19], _data_hash_sha256, sizeof(_data_hash_sha256));
+
+    CK_BYTE sig[256];
+    CK_ULONG sig_len = sizeof(sig);
+    CK_RV rv = sign_recover_once(session, CKM_RSA_PKCS, privkey, digest_info, sizeof(digest_info),
+            sig, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_MECHANISM mech = { CKM_RSA_PKCS, NULL, 0 };
+    rv = C_VerifyRecoverInit(session, &mech, pubkey);
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE recovered[256];
+    CK_ULONG recovered_len = 0;
+    rv = C_VerifyRecover(session, sig, sig_len, NULL, &recovered_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_true(recovered_len >= sizeof(digest_info) && recovered_len <= sizeof(recovered));
+
+    recovered_len = sizeof(digest_info) - 1;
+    rv = C_VerifyRecover(session, sig, sig_len, recovered, &recovered_len);
+    assert_int_equal(rv, CKR_BUFFER_TOO_SMALL);
+    assert_int_equal(recovered_len, sizeof(digest_info));
+
+    recovered_len = sizeof(recovered);
+    rv = C_VerifyRecover(session, sig, sig_len, recovered, &recovered_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(recovered_len, sizeof(digest_info));
+    assert_memory_equal(recovered, digest_info, sizeof(digest_info));
+
+    /* that ended it */
+    recovered_len = sizeof(recovered);
+    rv = C_VerifyRecover(session, sig, sig_len, recovered, &recovered_len);
+    assert_int_equal(rv, CKR_OPERATION_NOT_INITIALIZED);
+
+    /* the key was released: it can be destroyed */
+    rv = C_DestroyObject(session, privkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_DestroyObject(session, pubkey);
+    assert_int_equal(rv, CKR_OK);
+}
+
+/* A CKA_ALWAYS_AUTHENTICATE key keeps the operation for its context-specific login, as C_Sign does. */
+static void test_sign_recover_context_specific(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = rw_session(ti);
+
+    CK_OBJECT_HANDLE pubkey, privkey;
+    sign_recover_keypair_ex(session, CK_TRUE, CK_TRUE, &pubkey, &privkey);
+
+    CK_BYTE digest_info[19 + sizeof(_data_hash_sha256)] = {
+        0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20,
+    };
+    memcpy(&digest_info[19], _data_hash_sha256, sizeof(_data_hash_sha256));
+
+    CK_BYTE sig[256];
+    CK_ULONG sig_len = sizeof(sig);
+    CK_RV rv = sign_recover_once(session, CKM_RSA_PKCS, privkey, digest_info, sizeof(digest_info),
+            sig, &sig_len);
+    assert_int_equal(rv, CKR_USER_NOT_LOGGED_IN);
+
+    context_login(session);
+
+    rv = C_SignRecover(session, digest_info, sizeof(digest_info), sig, &sig_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(sig_len, 256);
+
+    CK_MECHANISM mech = { CKM_RSA_PKCS, NULL, 0 };
+    CK_BYTE recovered[256];
+    CK_ULONG recovered_len = sizeof(recovered);
+    rv = C_VerifyRecoverInit(session, &mech, pubkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_VerifyRecover(session, sig, sig_len, recovered, &recovered_len);
+    assert_int_equal(rv, CKR_OK);
+    assert_int_equal(recovered_len, sizeof(digest_info));
+    assert_memory_equal(recovered, digest_info, sizeof(digest_info));
+
+    rv = C_DestroyObject(session, privkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_DestroyObject(session, pubkey);
+    assert_int_equal(rv, CKR_OK);
+}
+
+static void test_sign_recover_needs_attr(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = rw_session(ti);
+
+    CK_OBJECT_HANDLE pubkey, privkey;
+    sign_recover_keypair(session, CK_FALSE, &pubkey, &privkey);
+
+    CK_MECHANISM mech = { CKM_RSA_PKCS, NULL, 0 };
+    CK_RV rv = C_SignRecoverInit(session, &mech, privkey);
+    assert_int_equal(rv, CKR_KEY_FUNCTION_NOT_PERMITTED);
+
+    /* nothing was started */
+    CK_BYTE sig[256];
+    CK_ULONG sig_len = sizeof(sig);
+    rv = C_SignRecover(session, sig, 20, sig, &sig_len);
+    assert_int_equal(rv, CKR_OPERATION_NOT_INITIALIZED);
+
+    /* CKA_SIGN is for C_Sign alone */
+    rv = C_SignInit(session, &mech, privkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_SignInit(session, NULL, privkey);
+    assert_int_equal(rv, CKR_OK);
+
+    rv = C_DestroyObject(session, privkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_DestroyObject(session, pubkey);
+    assert_int_equal(rv, CKR_OK);
+}
+
+static void test_sign_recover_pss_invalid(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = rw_session(ti);
+
+    CK_OBJECT_HANDLE pubkey, privkey;
+    sign_recover_keypair(session, CK_TRUE, &pubkey, &privkey);
+
+    CK_RSA_PKCS_PSS_PARAMS params = { CKM_SHA256, CKG_MGF1_SHA256, 32 };
+    CK_MECHANISM pss = { CKM_RSA_PKCS_PSS, &params, sizeof(params) };
+    CK_RV rv = C_SignRecoverInit(session, &pss, privkey);
+    assert_int_equal(rv, CKR_MECHANISM_INVALID);
+
+    CK_MECHANISM sha256 = { CKM_SHA256_RSA_PKCS, NULL, 0 };
+    rv = C_SignRecoverInit(session, &sha256, privkey);
+    assert_int_equal(rv, CKR_MECHANISM_INVALID);
+
+    rv = C_DestroyObject(session, privkey);
+    assert_int_equal(rv, CKR_OK);
+    rv = C_DestroyObject(session, pubkey);
+    assert_int_equal(rv, CKR_OK);
+}
+
+static void test_sign_recover_ec_keygen_refused(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = rw_session(ti);
+
+    CK_BBOOL ck_true = CK_TRUE;
+    CK_BYTE ec_params[] = {
+        0x06, 0x08, 0x2a, 0x86, 0x48,
+        0xce, 0x3d, 0x03, 0x01, 0x07
+    };
+
+    CK_ATTRIBUTE pub[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_VERIFY,  ck_true),
+        ADD_ATTR_ARRAY(CKA_EC_PARAMS, ec_params),
+    };
+
+    CK_ATTRIBUTE priv[] = {
+        ADD_ATTR_BASE(CKA_SIGN,    ck_true),
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_SIGN_RECOVER, ck_true),
+    };
+
+    CK_MECHANISM mech = { CKM_EC_KEY_PAIR_GEN, NULL, 0 };
+    CK_OBJECT_HANDLE pubkey, privkey;
+    CK_RV rv = C_GenerateKeyPair(session, &mech, pub, ARRAY_LEN(pub),
+            priv, ARRAY_LEN(priv), &pubkey, &privkey);
+    assert_int_equal(rv, CKR_ATTRIBUTE_VALUE_INVALID);
+
+    /* nor does its public key verify with recovery */
+    CK_ATTRIBUTE pub_vr[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_BASE(CKA_VERIFY,  ck_true),
+        ADD_ATTR_ARRAY(CKA_EC_PARAMS, ec_params),
+        ADD_ATTR_BASE(CKA_VERIFY_RECOVER, ck_true),
+    };
+    rv = C_GenerateKeyPair(session, &mech, pub_vr, ARRAY_LEN(pub_vr),
+            priv, ARRAY_LEN(priv) - 1, &pubkey, &privkey);
+    assert_int_equal(rv, CKR_ATTRIBUTE_VALUE_INVALID);
+}
+
+static void test_mechinfo_sign_recover_flags(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+
+    CK_MECHANISM_INFO info;
+    CK_RV rv = C_GetMechanismInfo(ti->slot_id, CKM_RSA_PKCS, &info);
+    assert_int_equal(rv, CKR_OK);
+    assert_true(info.flags & CKF_SIGN_RECOVER);
+    assert_true(info.flags & CKF_VERIFY_RECOVER);
+
+    rv = C_GetMechanismInfo(ti->slot_id, CKM_RSA_X_509, &info);
+    assert_int_equal(rv, CKR_OK);
+    assert_true(info.flags & CKF_SIGN_RECOVER);
+    assert_true(info.flags & CKF_VERIFY_RECOVER);
+
+    rv = C_GetMechanismInfo(ti->slot_id, CKM_SHA256_RSA_PKCS, &info);
+    assert_int_equal(rv, CKR_OK);
+    assert_false(info.flags & (CKF_SIGN_RECOVER | CKF_VERIFY_RECOVER));
+
+    rv = C_GetMechanismInfo(ti->slot_id, CKM_RSA_PKCS_PSS, &info);
+    assert_int_equal(rv, CKR_OK);
+    assert_false(info.flags & (CKF_SIGN_RECOVER | CKF_VERIFY_RECOVER));
+}
+
 int main() {
 
     const struct CMUnitTest tests[] = {
@@ -1699,6 +2222,8 @@ int main() {
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_double_sign_call_for_size_SHA256,
             test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_final_length_query_after_update,
+                test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_double_sign_final_call_for_size_SHA256,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_RSA_PKCS_sha256,
@@ -1730,6 +2255,20 @@ int main() {
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_SHA256_HMAC_imported_large,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_sign_verify_CKM_SHA512_HMAC,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_recover_rsa_pkcs_roundtrip,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_verify_recover_length_query_keeps_operation,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_recover_context_specific,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_recover_needs_attr,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_recover_pss_invalid,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_sign_recover_ec_keygen_refused,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_mechinfo_sign_recover_flags,
             test_setup, test_teardown),
     };
 

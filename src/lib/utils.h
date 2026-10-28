@@ -146,6 +146,16 @@ void parse_lib_version(const char *buf, CK_BYTE *major, CK_BYTE *minor);
 CK_RV utils_uncompressed_ecpoint_to_tpm2b(uint8_t* from, TPM2B_ECC_POINT* to, size_t len);
 
 /*
+ * An uncompressed EC point (04 || x || y) for a field of field_size bytes, raw or in a DER OCTET STRING
+ * (CKA_EC_POINT's form): point is set to the raw point inside data. False if data is neither.
+ */
+bool utils_ec_point_unwrap(CK_BYTE_PTR data, CK_ULONG len, CK_ULONG field_size,
+        CK_BYTE_PTR *point, CK_ULONG *point_len);
+
+/* How long an uncompressed point for a field of field_size bytes is in a DER OCTET STRING */
+CK_ULONG utils_ec_point_der_len(CK_ULONG field_size);
+
+/*
  * Work around bugs in clang not including the builtins, and when asan is enabled
  * ending up in a nightmare of having both the ASAN and BUILTINS defined and linked
  * properly.
@@ -239,5 +249,8 @@ static bool _do_safe_arithmetic(void *r, BN_ULONG a, BN_ULONG b,
 #define safe_adde(r, a)   do { if (_safe_adde(r, a)) { LOGE("overflow"); abort(); } } while(0)
 #define safe_mul(r, a, b) do { if (_safe_mul(r, a, b)) { LOGE("overflow"); abort(); } } while(0)
 #define safe_mule(r, a)   do { if (_safe_mule(r, a)) { LOGE("overflow"); abort(); } } while(0)
+
+/* A TPM format-one response code without its parameter, handle or session; see utils.c */
+TSS2_RC utils_format_one_code(TSS2_RC rc);
 
 #endif /* SRC_PKCS11_UTILS_H_ */

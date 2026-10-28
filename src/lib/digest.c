@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <openssl/err.h>
 
@@ -119,9 +120,9 @@ CK_RV digest_init_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_MECHA
     CK_RV rv = CKR_GENERAL_ERROR;
 
     if (!supplied_opdata) {
-        bool is_active = session_ctx_opdata_is_active(ctx);
-        if (is_active) {
-            return CKR_OPERATION_ACTIVE;
+        rv = session_ctx_opdata_can_start(ctx, operation_digest);
+        if (rv != CKR_OK) {
+            return rv;
         }
     }
 
@@ -157,7 +158,10 @@ CK_RV digest_init_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_MECHA
 
 CK_RV digest_update_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_BYTE_PTR part, CK_ULONG part_len) {
 
-    check_pointer(part);
+    /* Empty data may come without a buffer. */
+    if (!part && part_len) {
+        return CKR_ARGUMENTS_BAD;
+    }
 
     CK_RV rv = CKR_GENERAL_ERROR;
 
@@ -171,7 +175,61 @@ CK_RV digest_update_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_BYT
         opdata = supplied_opdata;
     }
 
+    opdata->updated = true;
+
     return digest_sw_update(opdata, part, part_len);
+}
+
+CK_RV digest_key(session_ctx *ctx, CK_OBJECT_HANDLE key) {
+
+    digest_op_data *opdata = NULL;
+    CK_RV rv = session_ctx_opdata_get(ctx, operation_digest, &opdata);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    token *tok = session_ctx_get_token(ctx);
+    assert(tok);
+
+    tobject *tobj = NULL;
+    rv = token_find_tobject(tok, key, &tobj);
+    if (rv != CKR_OK) {
+        return CKR_KEY_HANDLE_INVALID;
+    }
+
+    /*
+     * A key that can't be digested leaves the digest as it was, so the application can go on with it.
+     */
+    CK_OBJECT_CLASS clazz = attr_list_get_CKA_CLASS(tobj->attrs, CK_OBJECT_CLASS_BAD);
+    if (clazz != CKO_SECRET_KEY) {
+        LOGE("Only a secret key can be digested");
+        return CKR_KEY_INDIGESTIBLE;
+    }
+
+    rv = tobject_user_increment(tobj);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
+    /* a sensitive key the host holds can be: a digest doesn't reveal its value */
+    twist value = NULL;
+    rv = object_get_host_value(tok, tobj, &value);
+    if (rv == CKR_KEY_HANDLE_INVALID) {
+        LOGE("The key's value isn't on the host, it can't be digested");
+        rv = CKR_KEY_INDIGESTIBLE;
+    }
+    if (rv != CKR_OK) {
+        goto out;
+    }
+
+    rv = digest_update_op(ctx, opdata, (CK_BYTE_PTR)value, twist_len(value));
+    OPENSSL_cleanse((void *)value, twist_len(value));
+    twist_free(value);
+
+out:
+    tobject_user_decrement(tobj);
+
+    return rv;
 }
 
 CK_RV digest_final_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_BYTE_PTR digest, CK_ULONG_PTR digest_len) {
@@ -208,7 +266,7 @@ CK_RV digest_final_op(session_ctx *ctx, digest_op_data *supplied_opdata, CK_BYTE
 
 error:
     if (!supplied_opdata) {
-        session_ctx_opdata_clear(ctx);
+        session_ctx_opdata_clear(ctx, operation_digest);
     }
 
     return rv;
@@ -219,9 +277,24 @@ CK_RV digest_oneshot(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_B
     CK_ULONG min_len = 0;
     CK_RV rv = digest_get_min_size(ctx, NULL, &min_len);
     if (rv != CKR_OK) {
-        /* fatal error ends digest state */
-        session_ctx_opdata_clear(ctx);
+        /* fatal error ends digest state, but no other operation */
+        session_ctx_cancel(ctx, CKF_DIGEST);
         return rv;
+    }
+
+    /*
+     * C_Digest is single-part: after C_DigestUpdate it is refused, and, as any C_Digest but a length
+     * query, ends the operation.
+     */
+    digest_op_data *opdata = NULL;
+    rv = session_ctx_opdata_get(ctx, operation_digest, &opdata);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+    if (opdata->updated) {
+        LOGE("C_Digest after C_DigestUpdate: use C_DigestFinal to end a multi-part digest");
+        session_ctx_cancel(ctx, CKF_DIGEST);
+        return CKR_OPERATION_NOT_INITIALIZED;
     }
 
     if (!digest) {
@@ -234,6 +307,7 @@ CK_RV digest_oneshot(session_ctx *ctx, CK_BYTE_PTR data, CK_ULONG data_len, CK_B
 
     rv = digest_update(ctx, data, data_len);
     if (rv != CKR_OK) {
+        session_ctx_cancel(ctx, CKF_DIGEST);
         return rv;
     }
 
