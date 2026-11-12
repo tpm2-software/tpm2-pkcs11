@@ -4023,11 +4023,14 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
     /* ECC */
     if (is_algorithm_supported(algs, TPM2_ALG_ECC)) {
         add_mech(CKM_EC_KEY_PAIR_GEN);
-        if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA);
-        if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA_SHA1);
-        if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA_SHA256);
-        if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA_SHA384);
-        if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA_SHA512);
+        if (is_algorithm_supported(algs, TPM2_ALG_ECDSA)) {
+            add_mech(CKM_ECDSA);
+            /* like RSA: only advertise hash variants the TPM can hash */
+            if_add_mech(algs, TPM2_ALG_SHA1, CKM_ECDSA_SHA1);
+            if_add_mech(algs, TPM2_ALG_SHA256, CKM_ECDSA_SHA256);
+            if_add_mech(algs, TPM2_ALG_SHA384, CKM_ECDSA_SHA384);
+            if_add_mech(algs, TPM2_ALG_SHA512, CKM_ECDSA_SHA512);
+        }
 
         if_add_mech(algs, TPM2_ALG_ECDH, CKM_ECDH1_DERIVE);
     }
