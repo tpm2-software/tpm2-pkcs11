@@ -1217,14 +1217,18 @@ static TPMI_ALG_HASH guess_hash_by_size(CK_ULONG len) {
 }
 
 static CK_RV ecc_fixup_halg(TPMT_SIG_SCHEME *sig, CK_ULONG datalen) {
-    if (sig->details.any.hashAlg == TPM2_ALG_ERROR) {
-        TPMI_ALG_HASH halg = guess_hash_by_size(datalen);
-        if (halg == TPM2_ALG_ERROR) {
-            LOGE("Cannot figure out hashing algorithm for signature of len: %lu", datalen);
-            return CKR_GENERAL_ERROR;
-        }
-        sig->details.any.hashAlg = halg;
+    /*
+     * The TPM checks that the digest size matches the scheme's hashAlg.
+     * The digest may have been truncated to the curve size (see sign.c),
+     * so always pick hashAlg from the actual length. ECDSA only uses the
+     * digest value, so the signature is the same.
+     */
+    TPMI_ALG_HASH halg = guess_hash_by_size(datalen);
+    if (halg == TPM2_ALG_ERROR) {
+        LOGE("Cannot figure out hashing algorithm for signature of len: %lu", datalen);
+        return CKR_GENERAL_ERROR;
     }
+    sig->details.any.hashAlg = halg;
     return CKR_OK;
 }
 
@@ -4019,11 +4023,14 @@ CK_RV tpm2_getmechanisms(tpm_ctx *ctx, CK_MECHANISM_TYPE *mechanism_list, CK_ULO
     /* ECC */
     if (is_algorithm_supported(algs, TPM2_ALG_ECC)) {
         add_mech(CKM_EC_KEY_PAIR_GEN);
-        if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA);
-        if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA_SHA1);
-        if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA_SHA256);
-        if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA_SHA384);
-        if_add_mech(algs, TPM2_ALG_ECDSA, CKM_ECDSA_SHA512);
+        if (is_algorithm_supported(algs, TPM2_ALG_ECDSA)) {
+            add_mech(CKM_ECDSA);
+            /* like RSA: only advertise hash variants the TPM can hash */
+            if_add_mech(algs, TPM2_ALG_SHA1, CKM_ECDSA_SHA1);
+            if_add_mech(algs, TPM2_ALG_SHA256, CKM_ECDSA_SHA256);
+            if_add_mech(algs, TPM2_ALG_SHA384, CKM_ECDSA_SHA384);
+            if_add_mech(algs, TPM2_ALG_SHA512, CKM_ECDSA_SHA512);
+        }
 
         if_add_mech(algs, TPM2_ALG_ECDH, CKM_ECDH1_DERIVE);
     }
