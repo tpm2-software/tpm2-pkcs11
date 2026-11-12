@@ -241,17 +241,23 @@ def asn1_format_ec_point_uncompressed(x, y):
     len_y = len_y // 2
     len_x = len_x // 2
 
-    # ensure that the binary representation fits into a byte
+    # ensure that the binary representation fits into a one-byte DER length
     total_len = len_y + len_x + 1
     if (total_len > 255):
         raise RuntimeError(
             "Length of X and Y plus uncompressed format byte greater than 255")
 
-    # The uncompressed point format is:
+    # The uncompressed point format is a DER OCTET STRING:
     # <asn1 octet hdr> <len> <uncompressed point format byte> <X> <Y>
-    # 04 <len> <X> <Y>
+    # 04 <len> 04 <X> <Y>
+    # DER uses the short length form below 128 bytes and the long form
+    # (81 <len>) above, e.g. for the 133-byte NIST P-521 point.
+    if total_len < 0x80:
+        der_len = "{:02x}".format(total_len)
+    else:
+        der_len = "81{:02x}".format(total_len)
 
-    s = "04{len:02x}04{X}{Y}".format(len=total_len, X=x, Y=y)
+    s = "04{len}04{X}{Y}".format(len=der_len, X=x, Y=y)
 
     return s
 

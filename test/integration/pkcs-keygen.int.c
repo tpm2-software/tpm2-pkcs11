@@ -2,6 +2,7 @@
 
 #include <inttypes.h>
 
+#include <openssl/asn1.h>
 #include <openssl/evp.h>
 #include <openssl/err.h>
 #include <openssl/rsa.h>
@@ -534,6 +535,78 @@ static void test_ecc_keygen_CKA_DERIVE_CK_TRUE(void **state) {
     mech.mechanism =  CKM_ECDSA;
     rv = C_SignInit(session, &mech, privkey);
     assert_int_equal(rv, CKR_OK);
+}
+
+/*
+ * CKA_EC_POINT must be a DER OCTET STRING. The 133-byte NIST P-521 point needs
+ * the long length form (0x04 0x81 0x85 ...), which a one-byte length gets wrong.
+ */
+static void test_ecc_keygen_p521_ec_point_is_der(void **state) {
+
+    test_info *ti = test_info_from_state(state);
+    CK_SESSION_HANDLE session = ti->handle;
+
+    CK_BBOOL ck_true = CK_TRUE;
+    CK_BYTE id[] = "p521-ec-point-id";
+    CK_UTF8CHAR label[] = "p521-ec-point-label";
+
+    /* secp521r1 */
+    CK_BYTE ec_params[] = {
+        0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x23
+    };
+
+    CK_ATTRIBUTE pub[] = {
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_ARRAY(CKA_ID, id),
+        ADD_ATTR_BASE(CKA_VERIFY, ck_true),
+        ADD_ATTR_ARRAY(CKA_EC_PARAMS, ec_params),
+        ADD_ATTR_STR(CKA_LABEL, label)
+    };
+
+    CK_ATTRIBUTE priv[] = {
+        ADD_ATTR_ARRAY(CKA_ID, id),
+        ADD_ATTR_BASE(CKA_SIGN, ck_true),
+        ADD_ATTR_BASE(CKA_PRIVATE, ck_true),
+        ADD_ATTR_BASE(CKA_TOKEN,   ck_true),
+        ADD_ATTR_STR(CKA_LABEL, label)
+    };
+
+    CK_MECHANISM mech = {
+        .mechanism = CKM_EC_KEY_PAIR_GEN,
+        .pParameter = NULL,
+        .ulParameterLen = 0
+    };
+
+    CK_OBJECT_HANDLE pubkey;
+    CK_OBJECT_HANDLE privkey;
+
+    user_login(session);
+
+    CK_RV rv = C_GenerateKeyPair (session,
+            &mech,
+            pub, ARRAY_LEN(pub),
+            priv, ARRAY_LEN(priv),
+            &pubkey, &privkey);
+    if (rv == CKR_CURVE_NOT_SUPPORTED || rv == CKR_ATTRIBUTE_VALUE_INVALID) {
+        skip(); /* the TPM does not implement NIST P-521 */
+    }
+    assert_int_equal(rv, CKR_OK);
+
+    CK_BYTE ec_point[256];
+    CK_ATTRIBUTE a = { CKA_EC_POINT, ec_point, sizeof(ec_point) };
+    rv = C_GetAttributeValue(session, pubkey, &a, 1);
+    assert_int_equal(rv, CKR_OK);
+
+    /* 0x04 0x81 0x85 followed by the uncompressed point 0x04 || X || Y */
+    assert_int_equal(a.ulValueLen, 3 + 133);
+
+    const unsigned char *p = ec_point;
+    ASN1_OCTET_STRING *os = d2i_ASN1_OCTET_STRING(NULL, &p, a.ulValueLen);
+    assert_non_null(os);
+    assert_int_equal(p - ec_point, a.ulValueLen);
+    assert_int_equal(ASN1_STRING_length(os), 133);
+    assert_int_equal(ASN1_STRING_get0_data(os)[0], 0x04);
+    ASN1_OCTET_STRING_free(os);
 }
 
 static void test_destroy(void **state) {
@@ -1409,6 +1482,8 @@ int main() {
         cmocka_unit_test_setup_teardown(test_destroy_releases_transient_handles,
                 test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_ecc_keygen_p11tool_templ,
+            test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_ecc_keygen_p521_ec_point_is_der,
             test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_rsa_keygen_p11tool_templ,
             test_setup, test_teardown),
