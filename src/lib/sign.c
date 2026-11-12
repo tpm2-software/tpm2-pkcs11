@@ -398,9 +398,14 @@ CK_RV sign_final_ex(session_ctx *ctx, CK_BYTE_PTR signature, CK_ULONG_PTR signat
         return rv;
     }
 
-    if (is_ecc && (digest_buf_len > expected_sig_len)) {
-        LOGV("Truncating hash for EC Signature from %lu to %lu", digest_buf_len, expected_sig_len);
-        digest_buf_len = expected_sig_len;
+    /*
+     * ECDSA uses only the leftmost bits of the hash, up to the curve size.
+     * expected_sig_len is the size of R||S, i.e. twice the curve size.
+     */
+    CK_ULONG ec_field_len = expected_sig_len / 2;
+    if (is_ecc && (digest_buf_len > ec_field_len)) {
+        LOGV("Truncating hash for EC Signature from %lu to %lu", digest_buf_len, ec_field_len);
+        digest_buf_len = ec_field_len;
     }
 
     rv = mech_synthesize(

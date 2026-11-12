@@ -1217,14 +1217,18 @@ static TPMI_ALG_HASH guess_hash_by_size(CK_ULONG len) {
 }
 
 static CK_RV ecc_fixup_halg(TPMT_SIG_SCHEME *sig, CK_ULONG datalen) {
-    if (sig->details.any.hashAlg == TPM2_ALG_ERROR) {
-        TPMI_ALG_HASH halg = guess_hash_by_size(datalen);
-        if (halg == TPM2_ALG_ERROR) {
-            LOGE("Cannot figure out hashing algorithm for signature of len: %lu", datalen);
-            return CKR_GENERAL_ERROR;
-        }
-        sig->details.any.hashAlg = halg;
+    /*
+     * The TPM checks that the digest size matches the scheme's hashAlg.
+     * The digest may have been truncated to the curve size (see sign.c),
+     * so always pick hashAlg from the actual length. ECDSA only uses the
+     * digest value, so the signature is the same.
+     */
+    TPMI_ALG_HASH halg = guess_hash_by_size(datalen);
+    if (halg == TPM2_ALG_ERROR) {
+        LOGE("Cannot figure out hashing algorithm for signature of len: %lu", datalen);
+        return CKR_GENERAL_ERROR;
     }
+    sig->details.any.hashAlg = halg;
     return CKR_OK;
 }
 
