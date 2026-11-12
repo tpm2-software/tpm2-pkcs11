@@ -3600,34 +3600,30 @@ static CK_RV tpm_object_data_populate_ecc(TPM2B_PUBLIC *out_pub, tpm_object_data
         goto out;
     }
 
-    if (len > 255) {
-        LOGE("Length must fit within a byte, got %zd", len);
-        goto out;
-    }
-
     /*
-     * Build a DER encoded uncompressed representation of the points
-     * per X9.62.
-     *
-     * TODO get better link to documentation around this or build
-     * with OSSL.
+     * CKA_EC_POINT is the DER encoding of the X9.62 ECPoint, an OCTET STRING
+     * holding the uncompressed point. Let OpenSSL encode it: DER needs the long
+     * length form for 128 bytes or more, e.g. 0x04 0x81 0x85 for the 133-byte
+     * NIST P-521 point, which a hand-built "0x04 <len>" header gets wrong.
      */
-    size_t tmp = 0;
-    safe_add(tmp, len, 2);
-    char *padded_data = malloc(tmp);
-    if (!padded_data) {
+    ASN1_OCTET_STRING *os = ASN1_OCTET_STRING_new();
+    if (!os || !ASN1_OCTET_STRING_set(os, mydata, len)) {
+        ASN1_OCTET_STRING_free(os);
         LOGE("oom");
         goto out;
     }
 
-    padded_data[0] = 4;
-    padded_data[1] = len;
-    memcpy(&padded_data[2], mydata, len);
+    unsigned char *der = NULL;
+    int derlen = i2d_ASN1_OCTET_STRING(os, &der);
+    ASN1_OCTET_STRING_free(os);
+    if (derlen <= 0) {
+        SSL_UTIL_LOGE("i2d_ASN1_OCTET_STRING");
+        goto out;
+    }
 
-    safe_adde(len, 2);
     bool r = attr_list_add_buf(objdata->attrs, CKA_EC_POINT,
-            (CK_BYTE_PTR)padded_data, len);
-    free(padded_data);
+            (CK_BYTE_PTR)der, derlen);
+    OPENSSL_free(der);
     if (!r) {
         goto out;
     }
