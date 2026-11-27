@@ -1286,6 +1286,19 @@ CK_RV attr_list_update_entry(attr_list *attrs, CK_ATTRIBUTE_PTR untrusted_attr) 
         return CKR_GENERAL_ERROR;
     }
 
+    /*
+     * Validate the untrusted value size against the attribute's declared type
+     * before resizing/overwriting the stored buffer, mirroring the check that
+     * attr_list_append_entry() already performs. Without this a caller can set
+     * an existing fixed-width attribute (e.g. a CK_ULONG like CKA_CLASS) to a
+     * shorter value, after which readers that cast pValue to the typed width
+     * (e.g. the YAML emitter) read past the shrunken allocation.
+     */
+    CK_RV rv = check_attr(untrusted_attr, handler->memtype);
+    if (rv != CKR_OK) {
+        return rv;
+    }
+
     void *pValue = untrusted_attr->pValue;
     CK_ULONG ulValueLen = untrusted_attr->ulValueLen;
 
